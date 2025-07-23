@@ -1,0 +1,98 @@
+[package]
+name = "hermes-dec-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Rust-based high-level decompiler for Hermes bytecode"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/hermes-dec-rs"
+keywords = ["decompiler", "hermes", "bytecode", "javascript", "react-native"]
+categories = ["development-tools", "parsing"]
+
+[dependencies]
+# Binary parsing
+scroll = { version = "0.13", features = ["derive"] }
+
+# Graph algorithms and CFG
+petgraph = "0.8"
+
+# OXC ecosystem for AST and code generation
+oxc_ast = "0.77.3"
+oxc_ast_visit = "0.77.3"
+oxc_parser = "0.77.3"
+oxc_codegen = "0.77.3"
+oxc_allocator = "0.77.3"
+oxc_span = "0.77.3"
+oxc_syntax = "0.77.3"
+
+# Parallelism
+rayon = "1.8"
+
+# Error handling and diagnostics
+thiserror = "1.0"
+miette = { version = "7.0", features = ["fancy"] }
+
+# CLI interface
+clap = { version = "4.4", features = ["derive"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Utilities
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.10"
+once_cell = "1.19"
+regex = "1.10" 
+
+# Async runtime for build scripts
+tokio = { version = "1.0", features = ["full"] }
+
+# Date/time for build timestamps
+chrono = { version = "0.4", features = ["serde"] }
+
+# Force compatible proc-macro dependencies
+syn = "2.0.48"
+quote = "1.0.35"
+proc-macro2 = "1.0.69"
+
+# HTTP client for fetching source files
+reqwest = { version = "0.11", features = ["json"] }
+
+# Git operations
+git2 = "0.18"
+num-bigint = "0.4.6"
+indicatif = "0.18.0"
+
+[dev-dependencies]
+criterion = "0.5"
+tempfile = "3.8"
+assert_cmd = "2.0"
+predicates = "3.0"
+
+[[bench]]
+name = "decompilation_benchmark"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 1
+
+[features]
+default = []
+generated_instructions = []
+
+# Build script dependencies
+[build-dependencies]
+tokio = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+git2 = "0.18"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+regex = "1.10" 

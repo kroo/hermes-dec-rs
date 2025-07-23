@@ -1,0 +1,27 @@
+{
+  "versions": [
+    { "version": 51, "tag": "v0.0.1", "commit": null, "release_date": null },
+    { "version": 58, "tag": "v0.0.3", "commit": null, "release_date": null },
+    { "version": 59, "tag": "v0.1.0", "commit": null, "release_date": null },
+    { "version": 61, "tag": null, "commit": "ee7a2db", "release_date": "2019-08-03" },
+    { "version": 62, "tag": "v0.2.1", "commit": null, "release_date": "2019-08-29" },
+    { "version": 68, "tag": null, "commit": "883eb4d", "release_date": "2019-10-15" },
+    { "version": 69, "tag": null, "commit": "5a402ac", "release_date": "2019-10-15" },
+    { "version": 70, "tag": null, "commit": "51969f2", "release_date": "2019-10-15" },
+    { "version": 72, "tag": null, "commit": "d1637f2", "release_date": "2019-11-26" },
+    { "version": 73, "tag": null, "commit": "ecded4d", "release_date": "2019-12-19" },
+    { "version": 80, "tag": null, "commit": "e70045d", "release_date": "2021-01-13" },
+    { "version": 81, "tag": null, "commit": "40aa0f7", "release_date": "2021-01-14" },
+    { "version": 82, "tag": null, "commit": "65de349", "release_date": "2021-01-26" },
+    { "version": 83, "tag": "v0.8.0", "commit": null, "release_date": "2021-04-29" },
+    { "version": 84, "tag": "v0.9.0", "commit": null, "release_date": "2021-09-02" },
+    { "version": 85, "tag": "v0.11.0", "commit": null, "release_date": "2022-01-27" },
+    { "version": 86, "tag": null, "commit": "b823515", "release_date": "2022-06-28" },
+    { "version": 87, "tag": null, "commit": "41752c6", "release_date": "2022-07-09" },
+    { "version": 89, "tag": "v0.12.0", "commit": null, "release_date": "2022-08-24" },
+    { "version": 90, "tag": null, "commit": "0763eee", "release_date": "2022-10-07" },
+    { "version": 92, "tag": null, "commit": "b544ff4", "release_date": "2023-02-14" },
+    { "version": 95, "tag": null, "commit": "f6b56d3", "release_date": "2023-03-29" },
+    { "version": 96, "tag": null, "commit": "e0fc671", "release_date": "2023-08-16" }
+  ]
+}

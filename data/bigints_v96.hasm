@@ -1,0 +1,42 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: dd710631b7985f55a4ea12394251a6c3f1dfc0ce
+  Function count: 1
+  String count: 5
+  BigInt count: 1
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 2..7] #1C35E808: global
+s1[ASCII, 0..2] #00018270: log
+s2[ASCII, 6..6] #6FA5A548: a
+s3[ASCII, 8..13] #629A2BFD: BigInt
+s4[ASCII, 14..20] console
+
+Global BigInt Table:
+  0[0..12]: 123456789012345678901234567890
+
+Array Buffer:
+
+Function<global>0(1 params, 12 registers, 0 symbols):
+  DeclareGlobalVar  "a"
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "BigInt"
+  LoadConstUndefined r2
+  LoadConstBigInt   r1, 123456789012345678901234567890
+  Call2             r1, r3, r2, r1
+  PutById           r0, r1, 1, "a"
+  TryGetById        r2, r0, 2, "console"
+  GetByIdShort      r1, r2, 3, "log"
+  GetByIdShort      r0, r0, 4, "a"
+  Call2             r0, r1, r2, r0
+  Ret               r0
+

@@ -1,0 +1,460 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 8e18faba4a52f75aad883d74e613944f5ce5e24e
+  Function count: 2
+  String count: 113
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 29
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..-1] #F3091991: 
+s1[ASCII, 0..2] #F3C95ECD:  : 
+s2[ASCII, 2..11] #6109FC58:   padded  
+s3[ASCII, 12..25] #110082E7: (123)-456-7890
+s4[ASCII, 26..38] #1100B6AC: (?:(?!abc).)*
+s5[ASCII, 32..34] #7EEDC6E6: abc
+s6[ASCII, 39..72] #63D87C1C: (?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}
+s7[ASCII, 73..90] #2CC2B0DA: (?<!\d)\d{3}(?!\d)
+s8[ASCII, 91..107] #629A2BFD: (?<=^|\s)#[\w]+\b
+s9[ASCII, 106..118] #C93542E8: \b[A-Za-z]+\b
+s10[ASCII, 119..129] #713A6BCE: (?<=foo)\w+
+s11[ASCII, 130..155] #1C35E808: (\d{1,3}(,\d{3})*)(\.\d+)?
+s12[ASCII, 151..153] #85BBF6F9: \d+
+s13[ASCII, 156..162] #CB8DFA65: (\w)\1+
+s14[ASCII, 163..177] #D6BF59DA: (a(b(c)))\3\2\1
+s15[ASCII, 177..188] 1,234,567.89
+s16[ASCII, 189..198] 2023-04-01
+s17[ASCII, 198..202] 12345
+s18[ASCII, 203..214] 192.168.0.42
+s19[ASCII, 214..252] 2001:0db8:85a3:0000:0000:8a2e:0370:7334
+s20[ASCII, 253..261] ABCdefGHI
+s21[ASCII, 262..270] AZ_global
+s22[ASCII, 265..265] g
+s23[ASCII, 265..270] global
+s24[ASCII, 273..286] isoThreeDigits
+s25[ASCII, 287..294] Abcdef1g
+s26[ASCII, 294..295] gy
+s27[ASCII, 294..300] gyCombo
+s28[ASCII, 299..305] boooook
+s29[ASCII, 306..353] [$_\p{ID_Start}][$_\u200C\u200D\p{ID_Continue}]*
+s30[ASCII, 354..359] [A-Z]+
+s31[ASCII, 360..381] \p{Emoji_Presentation}
+s32[ASCII, 382..390] \u{1F600}
+s33[ASCII, 391..416] ^(?!.*\b(cat|dog)\b).{6,}$
+s34[ASCII, 417..507] ^(?:\+?1\s*(?:[.-]\s*)?)?(?:\(\s*\d{3}\s*\)|\d{3})\s*(?:[.-]\s*)?\d{3}\s*(?:[.-]\s*)?\d{4}$
+s35[ASCII, 508..549] ^(?:https?):\/\/(www\.)?[^\s/$.?#].[^\s]*$
+s36[ASCII, 550..595] ^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})$
+s37[ASCII, 554..554] y
+s38[ASCII, 569..569] m
+s39[ASCII, 596..633] ^(?=\D*\d)(?=.*[A-Z])(?=.*[a-z]).{8,}$
+s40[ASCII, 634..663] ^([0-9a-f]{2}:){5}[0-9a-f]{2}$
+s41[ASCII, 664..686] ^(\d{1,3}\.){3}\d{1,3}$
+s42[ASCII, 687..694] ^.{0,5}$
+s43[ASCII, 695..726] ^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$
+s44[ASCII, 727..768] ^\s*import\s+[\s\S]+?from\s+['"].+?['"];?$
+s45[ASCII, 731..731] i
+s46[ASCII, 769..777] ^\s+|\s+$
+s47[ASCII, 778..846] ^rgba?\(\s*(\d{1,3}%?\s*,\s*){2}\d{1,3}%?\s*(?:,\s*(0|1|0?\.\d+))?\)$
+s48[ASCII, 847..852] xyzabc
+s49[ASCII, 850..855] abccba
+s50[ASCII, 855..856] a+
+s51[ASCII, 857..861] aaaaa
+s52[ASCII, 860..876] aa:bb:cc:dd:ee:ff
+s53[ASCII, 876..882] foo/bar
+s54[ASCII, 882..901] rgba(255, 0, 0, 0.5)
+s55[ASCII, 902..908] jsIdent
+s56[ASCII, 910..919] sticky_abc
+s57[ASCII, 917..922] abcabc
+s58[ASCII, 920..928] abc123def
+s59[ASCII, 928..935] foo\/bar
+s60[ASCII, 937..945] namedDate
+s61[ASCII, 944..957] temperedGreedy
+s62[ASCII, 958..966] asciiWord
+s63[ASCII, 966..971] digits
+s64[ASCII, 971..971] s
+s65[ASCII, 972..977] cssRGB
+s66[ASCII, 978..986] noPetsPwd
+s67[ASCII, 986..995] dotAllMax5
+s68[ASCII, 1002..1010] emojiProp
+s69[ASCII, 1010..1022] posLookbehind
+s70[ASCII, 1022..1033] doubleLetter
+s71[ASCII, 1043..1047] email
+s72[ASCII, 1046..1056] ilovecoffee
+s73[ASCII, 1056..1069] emojiCodepoint
+s74[ASCII, 1069..1074] trimWS
+s75[ASCII, 1080..1089] use strict
+s76[ASCII, 1099..1110] escapedSlash
+s77[ASCII, 1110..1114] hello
+s78[ASCII, 1116..1124] foobarbaz
+s79[ASCII, 1125..1134] importStmt
+s80[ASCII, 1134..1152] tweet with #hashtag
+s81[ASCII, 1146..1152] hashtag
+s82[ASCII, 1153..1176] https://example.org/path
+s83[ASCII, 1176..1182] httpURL
+s84[ASCII, 1183..1207] import fs from 'node:fs';
+s85[ASCII, 1208..1211] ipv4
+s86[ASCII, 1212..1220] ipv6Chunk
+s87[ASCII, 1221..1234] me@example.com
+s88[ASCII, 1234..1240] macAddr
+s89[ASCII, 1241..1245] money
+s90[ASCII, 1246..1246] u
+s91[ASCII, 1246..1252] usPhone
+s92[ASCII, 1251..1264] nestedBackRefs
+s93[ASCII, 1265..1273] pwdPolicy
+s94[UTF-16, 1300..1304] \x0020\x0020\x0009\x2192\x0020
+s95[UTF-16, 1308..1320] \x0020\x0020\x2011\x002D\x003E\x0020\x0020\x0074\x0068\x0072\x0065\x0077\x003A
+s96[UTF-16, 1334..1339] \x03C0\x0056\x0061\x006C\x0075\x0065
+s97[UTF-16, 1346..1347] \xD83D\xDE00
+s98[ASCII, 265..274] globalThis
+s99[ASCII, 554..557] year
+s100[ASCII, 569..573] month
+s101[ASCII, 585..587] day
+s102[ASCII, 908..911] test
+s103[ASCII, 935..937] run
+s104[ASCII, 996..1002] message
+s105[ASCII, 1032..1036] error
+s106[ASCII, 1037..1043] console
+s107[ASCII, 1074..1079] String
+s108[ASCII, 1089..1099] toUpperCase
+s109[ASCII, 1113..1115] log
+s110[ASCII, 1274..1287] HermesInternal
+s111[ASCII, 1288..1293] concat
+s112[ASCII, 1294..1299] padEnd
+
+Array Buffer:
+[String 63]
+[String 62]
+[String 71]
+[String 83]
+[String 85]
+[String 88]
+[String 91]
+[String 74]
+[String 70]
+[String 92]
+[String 60]
+[String 69]
+[String 24]
+[String 61]
+[String 68]
+[String 73]
+[String 81]
+[String 89]
+[String 66]
+[String 67]
+[String 56]
+[String 21]
+[String 27]
+[String 86]
+[String 93]
+[String 79]
+[String 65]
+[String 76]
+[String 55]
+Object Key Buffer:
+[String 99]
+[String 100]
+[String 101]
+Object Value Buffer:
+[int 1]
+[int 2]
+[int 3]
+
+Function<global>0(1 params, 27 registers, 0 symbols):
+  DeclareGlobalVar  "run"
+  LoadConstUndefined r6
+  LoadConstUndefined r7
+  LoadConstUndefined r8
+  LoadConstUndefined r9
+  CreateEnvironment r0
+  CreateClosure     r0, r0, Function<run>1
+  GetGlobalObject   r5
+  PutById           r5, r0, 1, "run"
+  LoadConstString   r0, "use strict"
+  NewArrayWithBuffer r2, 3, 1, 0
+  CreateRegExp      r1, "\d+", "", 0
+  PutOwnByIndex     r2, r1, 1
+  LoadConstString   r1, "12345"
+  PutOwnByIndex     r2, r1, 2
+  NewArray          r1, 29
+  PutOwnByIndex     r1, r2, 0
+  NewArrayWithBuffer r2, 3, 1, 3
+  CreateRegExp      r3, "\b[A-Za-z]+\b", "", 1
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "hello"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 1
+  NewArrayWithBuffer r2, 3, 1, 5
+  CreateRegExp      r3, "^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$", "", 2
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "me@example.com"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 2
+  NewArrayWithBuffer r2, 3, 1, 7
+  CreateRegExp      r3, "^(?:https?):\/\/(www\.)?[^\s/$.?#].[^\s]*$", "i", 3
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "https://example.org/path"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 3
+  NewArrayWithBuffer r2, 3, 1, 9
+  CreateRegExp      r3, "^(\d{1,3}\.){3}\d{1,3}$", "", 4
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "192.168.0.42"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 4
+  NewArrayWithBuffer r2, 3, 1, 11
+  CreateRegExp      r3, "^([0-9a-f]{2}:){5}[0-9a-f]{2}$", "i", 5
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "aa:bb:cc:dd:ee:ff"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 5
+  NewArrayWithBuffer r2, 3, 1, 13
+  CreateRegExp      r3, "^(?:\+?1\s*(?:[.-]\s*)?)?(?:\(\s*\d{3}\s*\)|\d{3})\s*(?:[.-]\s*)?\d{3}\s*(?:[.-]\s*)?\d{4}$", "", 6
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "(123)-456-7890"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 6
+  NewArrayWithBuffer r2, 3, 1, 15
+  CreateRegExp      r3, "^\s+|\s+$", "g", 7
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "  padded  "
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 7
+  NewArrayWithBuffer r2, 3, 1, 17
+  CreateRegExp      r3, "(\w)\1+", "", 8
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "boooook"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 8
+  NewArrayWithBuffer r2, 3, 1, 19
+  CreateRegExp      r3, "(a(b(c)))\3\2\1", "", 9
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "abccba"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 9
+  CreateRegExp      r3, "^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})$", "", 10
+  NewObjectWithBuffer r18, 3, 3, 0, 0
+  Mov               r19, r3
+  CallBuiltin       r2, 50, 3
+  NewArrayWithBuffer r2, 3, 1, 21
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "2023-04-01"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 10
+  NewArrayWithBuffer r2, 3, 1, 23
+  CreateRegExp      r3, "(?<=foo)\w+", "", 11
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "foobarbaz"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 11
+  NewArrayWithBuffer r2, 3, 1, 25
+  CreateRegExp      r3, "(?<!\d)\d{3}(?!\d)", "", 12
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "abc123def"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 12
+  NewArrayWithBuffer r2, 3, 1, 27
+  CreateRegExp      r3, "(?:(?!abc).)*", "s", 13
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "xyzabc"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 13
+  NewArrayWithBuffer r2, 3, 1, 29
+  CreateRegExp      r3, "\p{Emoji_Presentation}", "u", 14
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "😀"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 14
+  NewArrayWithBuffer r2, 3, 1, 31
+  CreateRegExp      r4, "\u{1F600}", "u", 15
+  PutOwnByIndex     r2, r4, 1
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 15
+  NewArrayWithBuffer r2, 3, 1, 33
+  CreateRegExp      r3, "(?<=^|\s)#[\w]+\b", "", 16
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "tweet with #hashtag"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 16
+  NewArrayWithBuffer r2, 3, 1, 35
+  CreateRegExp      r3, "(\d{1,3}(,\d{3})*)(\.\d+)?", "", 17
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "1,234,567.89"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 17
+  NewArrayWithBuffer r2, 3, 1, 37
+  CreateRegExp      r3, "^(?!.*\b(cat|dog)\b).{6,}$", "i", 18
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "ilovecoffee"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 18
+  NewArrayWithBuffer r2, 3, 1, 39
+  CreateRegExp      r3, "^.{0,5}$", "s", 19
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "abc"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 19
+  NewArrayWithBuffer r2, 3, 1, 41
+  CreateRegExp      r3, "abc", "y", 20
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "abcabc"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 20
+  NewArrayWithBuffer r2, 3, 1, 43
+  CreateRegExp      r3, "[A-Z]+", "g", 21
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "ABCdefGHI"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 21
+  NewArrayWithBuffer r2, 3, 1, 45
+  CreateRegExp      r3, "a+", "gy", 22
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "aaaaa"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 22
+  NewArrayWithBuffer r2, 3, 1, 47
+  CreateRegExp      r3, "(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}", "i", 23
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 23
+  NewArrayWithBuffer r2, 3, 1, 49
+  CreateRegExp      r3, "^(?=\D*\d)(?=.*[A-Z])(?=.*[a-z]).{8,}$", "", 24
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "Abcdef1g"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 24
+  NewArrayWithBuffer r2, 3, 1, 51
+  CreateRegExp      r3, "^\s*import\s+[\s\S]+?from\s+['"].+?['"];?$", "m", 25
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "import fs from 'node:fs';"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 25
+  NewArrayWithBuffer r2, 3, 1, 53
+  CreateRegExp      r3, "^rgba?\(\s*(\d{1,3}%?\s*,\s*){2}\d{1,3}%?\s*(?:,\s*(0|1|0?\.\d+))?\)$", "", 26
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "rgba(255, 0, 0, 0.5)"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 26
+  NewArrayWithBuffer r2, 3, 1, 55
+  CreateRegExp      r3, "foo\/bar", "", 27
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "foo/bar"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 27
+  NewArrayWithBuffer r2, 3, 1, 57
+  CreateRegExp      r3, "[$_\p{ID_Start}][$_\u200C\u200D\p{ID_Continue}]*", "u", 28
+  PutOwnByIndex     r2, r3, 1
+  LoadConstString   r3, "πValue"
+  PutOwnByIndex     r2, r3, 2
+  PutOwnByIndex     r1, r2, 28
+  Mov               r4, r1
+  IteratorBegin     r2, r4
+  LoadConstString   r3, ""
+  LoadConstString   r1, "  ‑->  threw:"
+L7:
+  IteratorNext      r11, r2, r4
+  Mov               r10, r2
+  JStrictEqualLong  L1, r10, r6
+  Mov               r13, r11
+  IteratorBegin     r10, r13
+  LoadConstUndefined r11
+  LoadConstUndefined r12
+  IteratorNext      r14, r10, r13
+  Mov               r15, r10
+  StrictEq          r15, r15, r6
+  Mov               r11, r15
+  JmpTrue           L2, r15
+  Mov               r12, r14
+L2:
+  Mov               r7, r12
+  LoadConstUndefined r12
+  Mov               r14, r11
+  JmpTrue           L3, r14
+  IteratorNext      r14, r10, r13
+  Mov               r15, r10
+  StrictEq          r15, r15, r6
+  Mov               r11, r15
+  JmpTrue           L3, r15
+  Mov               r12, r14
+L3:
+  Mov               r8, r12
+  LoadConstUndefined r12
+  Mov               r14, r11
+  JmpTrue           L4, r14
+  IteratorNext      r13, r10, r13
+  Mov               r14, r10
+  StrictEq          r14, r14, r6
+  Mov               r11, r14
+  JmpTrue           L4, r14
+  Mov               r12, r13
+L4:
+  Mov               r9, r12
+  JmpTrue           L5, r11
+  IteratorClose     r10, 0
+L5:
+  GetByIdShort      r13, r5, 1, "run"
+  Mov               r12, r7
+  Mov               r11, r8
+  Mov               r10, r9
+  Call4             r0, r13, r6, r12, r11, r10
+  Jmp               L6
+  Catch             r10
+  TryGetById        r11, r5, 2, "globalThis"
+  GetByIdShort      r13, r11, 3, "console"
+  GetByIdShort      r12, r13, 4, "error"
+  Mov               r14, r7
+  TryGetById        r11, r5, 5, "HermesInternal"
+  GetByIdShort      r11, r11, 6, "concat"
+  Call3             r11, r11, r3, r14, r1
+  GetByIdShort      r10, r10, 7, "message"
+  Call3             r0, r12, r13, r11, r10
+L6:
+  JmpLong           L7
+  Catch             r1
+  IteratorClose     r2, 1
+  Throw             r1
+L1:
+  Ret               r0
+
+Exception Handlers:
+0: start = L1280, end = L1301, target = L1303
+1: start = L0, end = L0, target = L0
+
+Function<run>1(4 params, 22 registers, 0 symbols):
+  LoadParam         r6, 1
+  LoadParam         r9, 2
+  GetByIdShort      r1, r9, 1, "test"
+  LoadParam         r0, 3
+  Call2             r5, r1, r9, r0
+  GetGlobalObject   r1
+  TryGetById        r0, r1, 2, "globalThis"
+  GetByIdShort      r3, r0, 3, "console"
+  GetByIdShort      r2, r3, 4, "log"
+  GetByIdShort      r4, r6, 5, "padEnd"
+  LoadConstUInt8    r0, 20
+  Call2             r8, r4, r6, r0
+  TryGetById        r4, r1, 6, "String"
+  LoadConstUndefined r0
+  Call2             r5, r4, r0, r5
+  GetByIdShort      r4, r5, 7, "toUpperCase"
+  Call1             r12, r4, r5
+  TryGetById        r1, r1, 8, "HermesInternal"
+  GetByIdShort      r6, r1, 9, "concat"
+  LoadConstString   r15, ""
+  LoadConstString   r13, " : "
+  LoadConstString   r11, "  	→ "
+  Mov               r14, r8
+  Mov               r10, r9
+  Call              r1, r6, 6
+  Call2             r1, r2, r3, r1
+  Ret               r0
+

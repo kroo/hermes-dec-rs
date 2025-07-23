@@ -1,0 +1,269 @@
+Bytecode File Information:
+  Bytecode version number: 94
+  Source hash: a692192bdc8ee6f7b2b9918faf18a64db39587c8
+  Function count: 8
+  String count: 34
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 1
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 2
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..-1] #13923238: 
+s1[ASCII, 0..20] #07BD3EB3: ?anon_0_?anon_0_testx
+s2[ASCII, 8..20] #CC293D73: ?anon_0_testx
+s3[ASCII, 22..32] #C62208C8: ?anon_0_gen
+s4[ASCII, 36..43] #D037DAB6: AAAAAAAA
+s5[ASCII, 44..54] #50223B1A: Bon-jour : 
+s6[ASCII, 55..79] #663E95F4: Hello! Exception handling
+s7[ASCII, 79..84] #1C35E808: global
+s8[ASCII, 83..83] #07DDFB81: a
+s9[ASCII, 88..89] #B0F82D55: zb
+s10[ASCII, 89..89] #629A2BFD: b
+s11[ASCII, 89..95] #CD347266: bonjour
+s12[ASCII, 106..148] #13935E65: dkooDD JPOD D09D\n\\  @ .\r\n\t@ \x00 D+D  
+s13[ASCII, 151..153] #1C182460: gmi
+s14[ASCII, 163..164] #9D97125E: le
+s15[UTF-16, 190..199] #4F138803: \x0064\x00E7\x0064\x00E0\x00E7\x0044\x00B0\x0044\x002B\x0044
+s16[UTF-16, 204..220] #A689F65B: \x0044\x002B\x0044\x0020\x002B\x0044\x202F\x002B\x0044\x0020\x002B\x000A\x0044\x002B\x00C9\x0044\x0020
+s17[ASCII, 16..20] testx
+s18[ASCII, 20..21] xy
+s19[ASCII, 30..32] gen
+s20[ASCII, 32..35] next
+s21[ASCII, 83..87] alert
+s22[ASCII, 95..100] random
+s23[ASCII, 101..106] onload
+s24[ASCII, 149..151] log
+s25[ASCII, 154..155] ze
+s26[ASCII, 155..158] exec
+s27[ASCII, 158..164] console
+s28[ASCII, 165..168] Date
+s29[ASCII, 167..171] test2
+s30[ASCII, 172..175] Math
+s31[ASCII, 176..178] now
+s32[ASCII, 178..183] window
+s33[ASCII, 184..188] print
+
+Array Buffer:
+
+Function Source Table:
+  Function ID 3 -> s0
+  Function ID 5 -> s0
+
+Function<global>0(1 params, 16 registers, 0 symbols):
+  DeclareGlobalVar  "testx"
+  DeclareGlobalVar  "gen"
+  DeclareGlobalVar  "ze"
+  CreateEnvironment r1
+  CreateAsyncClosure r2, r1, Function<testx>1
+  GetGlobalObject   r0
+  PutById           r0, r2, 1, "testx"
+  CreateGeneratorClosure r2, r1, Function<gen>4
+  PutById           r0, r2, 2, "gen"
+  CreateClosure     r1, r1, Function<ze>6
+  PutById           r0, r1, 3, "ze"
+  TryGetById        r2, r0, 1, "window"
+  GetByIdShort      r1, r0, 2, "ze"
+  PutById           r2, r1, 4, "onload"
+  GetByIdShort      r1, r0, 2, "ze"
+  LoadConstUndefined r4
+  Call1             r1, r1, r4
+  CreateRegExp      r1, "dkooDD JPOD D09D\n\\  @ .\r\n\t@ \x00 D+D  ", "gmi", 0
+  PutById           r0, r1, 5, "test2"
+  TryGetById        r3, r0, 3, "console"
+  GetByIdShort      r2, r3, 4, "log"
+  TryGetById        r6, r0, 5, "test2"
+  GetByIdShort      r5, r6, 6, "exec"
+  LoadConstString   r1, "bonjour"
+  Call2             r1, r5, r6, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r5, r0, 3, "console"
+  GetByIdShort      r3, r5, 4, "log"
+  GetByIdShort      r1, r0, 7, "gen"
+  Call1             r2, r1, r4
+  GetByIdShort      r1, r2, 8, "next"
+  Call1             r2, r1, r2
+  LoadConstString   r1, "a"
+  Call3             r1, r3, r5, r1, r2
+  TryGetById        r3, r0, 3, "console"
+  GetByIdShort      r2, r3, 4, "log"
+  GetByIdShort      r1, r0, 9, "testx"
+  LoadConstDouble   r5, 7.3
+  LoadConstString   r0, "le"
+  Add               r0, r5, r0
+  Call2             r1, r1, r4, r0
+  GetByIdShort      r0, r1, 8, "next"
+  Call1             r1, r0, r1
+  LoadConstString   r0, "b"
+  Call3             r0, r2, r3, r0, r1
+  Ret               r0
+
+NCFunction<testx>1(2 params, 15 registers, 0 symbols):
+  LoadConstUndefined r4
+  LoadConstUndefined r0
+  ReifyArguments    r0
+  Mov               r3, r0
+  GetBuiltinClosure r2, 52
+  CreateEnvironment r0
+  CreateGeneratorClosure r1, r0, Function<?anon_0_testx>2
+  LoadThisNS        r0
+  Call4             r0, r2, r4, r1, r0, r3
+  Ret               r0
+
+NCFunction<?anon_0_testx>2(2 params, 1 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateGenerator   r0, r0, Function<?anon_0_?anon_0_testx>3
+  Ret               r0
+
+Function<?anon_0_?anon_0_testx>3(2 params, 16 registers, 0 symbols):
+  StartGenerator    
+  ResumeGenerator   r0, r1
+  JmpTrue           L1, r1
+  GetGlobalObject   r4
+  GetByIdShort      r2, r4, 1, "testx"
+  TryGetById        r3, r4, 2, "test2"
+  LoadConstUInt8    r5, 42
+  LoadConstString   r1, "D+D +D +D +
+D+ÉD "
+  Add               r1, r5, r1
+  Add               r1, r1, r3
+  LoadConstUndefined r3
+  Call2             r1, r2, r3, r1
+  SaveGenerator     [4]
+  Ret               r1
+  ResumeGenerator   r1, r2
+  JmpTrue           L2, r2
+  GetByIdShort      r2, r4, 3, "gen"
+  Call1             r2, r2, r3
+  SaveGenerator     [4]
+  Ret               r2
+  ResumeGenerator   r2, r5
+  JmpTrue           L3, r5
+  TryGetById        r7, r4, 4, "console"
+  GetByIdShort      r6, r7, 5, "log"
+  LoadParam         r5, 1
+  Call2             r5, r6, r7, r5
+  TryGetById        r6, r4, 4, "console"
+  GetByIdShort      r5, r6, 5, "log"
+  TryGetById        r4, r4, 6, "xy"
+  Call2             r4, r5, r6, r4
+  CompleteGenerator 
+  Ret               r3
+L3:
+  CompleteGenerator 
+  Ret               r2
+L2:
+  CompleteGenerator 
+  Ret               r1
+L1:
+  CompleteGenerator 
+  Ret               r0
+
+NCFunction<gen>4(1 params, 1 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateGenerator   r0, r0, Function<?anon_0_gen>5
+  Ret               r0
+
+Function<?anon_0_gen>5(1 params, 17 registers, 0 symbols):
+  StartGenerator    
+  LoadConstUndefined r2
+  LoadConstUndefined r3
+  ResumeGenerator   r0, r1
+  JmpTrueLong       L1, r1
+  LoadConstUInt8    r1, 42
+  SaveGenerator     [4]
+  Ret               r1
+  ResumeGenerator   r1, r4
+  JmpTrueLong       L2, r4
+  GetGlobalObject   r4
+  GetByIdShort      r4, r4, 1, "gen"
+  Call1             r5, r4, r2
+  GetByIdShort      r4, r5, 2, "next"
+  Call1             r4, r4, r5
+  Jmp               L3
+  Catch             r4
+  GetGlobalObject   r4
+  TryGetById        r5, r4, 3, "print"
+  LoadConstString   r4, "Hello! Exception handling"
+  Call2             r4, r5, r2, r4
+L3:
+  Jmp               L4
+  Catch             r3
+  LoadConstInt      r5, 432
+  LoadConstString   r4, "dçdàçD°D+D"
+  Mul               r5, r5, r4
+  LoadConstInt      r4, 478
+  AddN              r4, r5, r4
+  JmpFalse          L5, r4
+  GetGlobalObject   r4
+  TryGetById        r6, r4, 4, "console"
+  GetByIdShort      r5, r6, 5, "log"
+  Mov               r7, r3
+  LoadConstString   r3, "Bon-jour : "
+  Add               r4, r3, r7
+  LoadConstInt      r3, 340000
+  Mul               r7, r7, r3
+  LoadConstUInt8    r3, 6
+  AddN              r3, r7, r3
+  Call3             r3, r5, r6, r4, r3
+L5:
+  Jmp               L4
+  Catch             r3
+  GetGlobalObject   r3
+  TryGetById        r4, r3, 6, "alert"
+  LoadConstString   r3, "AAAAAAAA"
+  Call2             r3, r4, r2, r3
+L4:
+  CompleteGenerator 
+  Ret               r2
+L2:
+  CompleteGenerator 
+  Ret               r1
+L1:
+  CompleteGenerator 
+  Ret               r0
+
+Exception Handlers:
+0: start = L30, end = L50, target = L52
+1: start = L75, end = L149, target = L151
+2: start = L509, end = L0, target = L0
+
+Function<ze>6(1 params, 12 registers, 1 symbols):
+  LoadConstUndefined r0
+  CreateEnvironment r3
+  GetGlobalObject   r1
+  TryGetById        r4, r1, 1, "Math"
+  GetByIdShort      r2, r4, 2, "random"
+  Call1             r2, r2, r4
+  JmpTrue           L1, r2
+  StoreNPToEnvironment r3, 0, r0
+  Jmp               L2
+L1:
+  CreateClosure     r2, r3, Function<zb>7
+  StoreToEnvironment r3, 0, r2
+  Call1             r2, r2, r0
+  GetByIdShort      r1, r1, 3, "ze"
+  Call1             r1, r1, r0
+L2:
+  Ret               r0
+
+Function<zb>7(1 params, 9 registers, 0 symbols):
+  GetGlobalObject   r0
+  TryGetById        r1, r0, 1, "Date"
+  GetByIdShort      r0, r1, 2, "now"
+  Call1             r0, r0, r1
+  JmpFalse          L1, r0
+  GetEnvironment    r0, 0
+  LoadFromEnvironment r1, r0, 0
+  LoadConstUndefined r0
+  Call1             r0, r1, r0
+L1:
+  LoadConstUndefined r0
+  Ret               r0
+

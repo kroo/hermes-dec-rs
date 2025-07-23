@@ -1,0 +1,207 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 96110590f3aaea2aabaddc428c3b6d4cc5ff48c5
+  Function count: 8
+  String count: 33
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 2
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..-1] #387B5503: 
+s1[ASCII, 0..5] #7CBAA9A5: ./math
+s2[ASCII, 2..8] #58FA9DBB: math.js
+s3[ASCII, 9..23] #5D62F994: __dirname works
+s4[ASCII, 24..39] #B335FB8E: add() should add
+s5[ASCII, 40..58] #9102A3D0: arrow + rest/spread
+s6[ASCII, 53..61] #C765D706: spreadSum
+s7[ASCII, 61..81] #1E7D2120: mul() should multiply
+s8[ASCII, 82..87] #629A2BFD: assert
+s9[ASCII, 88..97] #1C35E808: cjs_module
+s10[ASCII, 101..108] #24B44487: function
+s11[ASCII, 109..116] #A689F65B: index.js
+s12[ASCII, 117..120] #59476AD7: path
+s13[ASCII, 125..137] #807C5F3D: require cache
+s14[ASCII, 144..152] #EDE51DB0: undefined
+s15[UTF-16, 210..228] #0DA8F6EA: \x0041\x0073\x0073\x0065\x0072\x0074\x0069\x006F\x006E\x0020\x0066\x0061\x0069\x006C\x0065\x0064\x0020\x2011\x0020
+s16[UTF-16, 248..279] \x0053\x0074\x0061\x0072\x0074\x0069\x006E\x0067\x0020\x0048\x0065\x0072\x006D\x0065\x0073\x0020\x0043\x004A\x0053\x0020\x0073\x006D\x006F\x006B\x0065\x0020\x0074\x0065\x0073\x0074\x0020\x2026
+s17[ASCII, 9..17] __dirname
+s18[ASCII, 11..17] dirname
+s19[ASCII, 24..26] add
+s20[ASCII, 74..76] mul
+s21[ASCII, 97..100] exit
+s22[ASCII, 121..125] Error
+s23[ASCII, 137..143] exports
+s24[ASCII, 153..162] __filename
+s25[ASCII, 163..169] console
+s26[ASCII, 170..172] log
+s27[ASCII, 172..177] global
+s28[ASCII, 178..182] print
+s29[ASCII, 183..189] process
+s30[ASCII, 190..198] prototype
+s31[ASCII, 199..202] quit
+s32[ASCII, 203..208] reduce
+
+Array Buffer:
+
+Function<global>0(1 params, 1 registers, 0 symbols):
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<cjs_module>1(4 params, 23 registers, 0 symbols):
+  CreateEnvironment r1
+  LoadParam         r7, 2
+  CreateClosure     r3, r1, Function<assert>2
+  GetGlobalObject   r2
+  GetByIdShort      r0, r2, 1, "print"
+  TypeOf            r4, r0
+  LoadConstString   r0, "function"
+  JStrictEqual      L1, r4, r0
+  TryGetById        r4, r2, 2, "global"
+  TryGetById        r0, r2, 3, "console"
+  GetByIdShort      r0, r0, 4, "log"
+  PutById           r4, r0, 1, "print"
+L1:
+  TryGetById        r5, r2, 1, "print"
+  LoadConstUndefined r0
+  LoadConstString   r4, "Starting Hermes CJS smoke test …"
+  Call2             r4, r5, r0, r4
+  LoadConstString   r4, "./math"
+  Call2             r8, r7, r0, r4
+  GetByIdShort      r9, r8, 5, "add"
+  LoadConstUInt8    r6, 2
+  LoadConstUInt8    r5, 3
+  Call3             r10, r9, r8, r6, r5
+  LoadConstUInt8    r9, 5
+  StrictEq          r10, r10, r9
+  LoadConstString   r9, "add() should add"
+  Call3             r9, r3, r0, r10, r9
+  GetByIdShort      r11, r8, 6, "mul"
+  LoadConstUInt8    r10, 6
+  LoadConstUInt8    r9, 7
+  Call3             r10, r11, r8, r10, r9
+  LoadConstUInt8    r9, 42
+  StrictEq          r10, r10, r9
+  LoadConstString   r9, "mul() should multiply"
+  Call3             r9, r3, r0, r10, r9
+  Call2             r4, r7, r0, r4
+  StrictEq          r8, r4, r8
+  LoadConstString   r4, "require cache"
+  Call3             r4, r3, r0, r8, r4
+  LoadConstString   r4, "path"
+  Call2             r8, r7, r0, r4
+  TryGetById        r4, r2, 7, "__dirname"
+  GetByIdShort      r7, r8, 8, "dirname"
+  TryGetById        r2, r2, 9, "__filename"
+  Call2             r2, r7, r8, r2
+  StrictEq          r4, r4, r2
+  LoadConstString   r2, "__dirname works"
+  Call3             r2, r3, r0, r4, r2
+  CreateClosure     r4, r1, Function<spreadSum>3
+  LoadConstUInt8    r15, 1
+  LoadConstUInt8    r12, 4
+  LoadConstUndefined r16
+  Mov               r14, r6
+  Mov               r13, r5
+  Call              r2, r4, 5
+  LoadConstUInt8    r1, 10
+  StrictEq          r2, r2, r1
+  LoadConstString   r1, "arrow + rest/spread"
+  Call3             r1, r3, r0, r2, r1
+  Ret               r0
+
+Function<assert>2(3 params, 14 registers, 0 symbols):
+  LoadParam         r2, 2
+  LoadParam         r0, 1
+  JmpTrueLong       L1, r0
+  GetGlobalObject   r0
+  GetByIdShort      r1, r0, 1, "print"
+  TypeOf            r1, r1
+  LoadConstString   r3, "function"
+  JStrictEqual      L2, r1, r3
+  TryGetById        r1, r0, 2, "console"
+  GetByIdShort      r5, r1, 3, "log"
+  Jmp               L3
+L2:
+  TryGetById        r5, r0, 1, "print"
+L3:
+  LoadConstString   r1, "Assertion failed ‑ "
+  Add               r1, r1, r2
+  LoadConstUndefined r4
+  Call2             r1, r5, r4, r1
+  GetByIdShort      r1, r0, 4, "quit"
+  TypeOf            r1, r1
+  JStrictEqual      L4, r1, r3
+  GetByIdShort      r1, r0, 5, "process"
+  TypeOf            r3, r1
+  LoadConstString   r1, "undefined"
+  JStrictEqual      L5, r3, r1
+  TryGetById        r5, r0, 5, "process"
+  GetByIdShort      r3, r5, 6, "exit"
+  LoadConstUInt8    r1, 1
+  Call2             r1, r3, r5, r1
+  Jmp               L5
+L4:
+  TryGetById        r3, r0, 4, "quit"
+  LoadConstUInt8    r1, 1
+  Call2             r1, r3, r4, r1
+L5:
+  TryGetById        r0, r0, 7, "Error"
+  GetByIdShort      r1, r0, 8, "prototype"
+  CreateThis        r1, r1, r0
+  Mov               r7, r1
+  Mov               r6, r2
+  Construct         r0, r0, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L1:
+  LoadConstUndefined r0
+  Ret               r0
+
+NCFunction<spreadSum>3(2 params, 13 registers, 0 symbols):
+  LoadConstZero     r3
+  LoadConstZero     r5
+  CallBuiltin       r2, 45, 2
+  GetByIdShort      r1, r2, 1, "reduce"
+  CreateEnvironment r0
+  CreateClosure     r0, r0, Function<>4
+  Call3             r0, r1, r2, r0, r3
+  Ret               r0
+
+NCFunction<>4(3 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadParam         r0, 2
+  Add               r0, r1, r0
+  Ret               r0
+
+Function<cjs_module>5(4 params, 3 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateClosure     r2, r0, Function<add>7
+  LoadParam         r1, 1
+  PutById           r1, r2, 1, "add"
+  LoadParam         r1, 3
+  GetByIdShort      r1, r1, 1, "exports"
+  CreateClosure     r0, r0, Function<mul>6
+  PutById           r1, r0, 2, "mul"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<mul>6(3 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadParam         r0, 2
+  Mul               r0, r1, r0
+  Ret               r0
+
+Function<add>7(3 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadParam         r0, 2
+  Add               r0, r1, r0
+  Ret               r0
+

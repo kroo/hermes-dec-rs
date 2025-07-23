@@ -1,0 +1,426 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 96110590f3aaea2aabaddc428c3b6d4cc5ff48c5
+  Function count: 8
+  String count: 33
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 2
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..-1]: 
+s1[ASCII, 0..5]: ./math
+s2[ASCII, 2..8]: math.js
+s3[ASCII, 9..23]: __dirname works
+s4[ASCII, 24..39]: add() should add
+s5[ASCII, 40..58]: arrow + rest/spread
+s6[ASCII, 53..61]: spreadSum
+s7[ASCII, 61..81]: mul() should multiply
+s8[ASCII, 82..87]: assert
+s9[ASCII, 88..97]: cjs_module
+s10[ASCII, 101..108]: function
+s11[ASCII, 109..116]: index.js
+s12[ASCII, 117..120]: path
+s13[ASCII, 125..137]: require cache
+s14[ASCII, 144..152]: undefined
+s15[UTF-16, 210..247]: \x41\x00\x73\x00\x73\x00\x65\x00\x72\x00\x74\x00\x69\x00\x6F\x00\x6E\x00\x20\x00\x66\x00\x61\x00\x69\x00\x6C\x00\x65\x00\x64\x00\x20\x00\x11\x20\x20\x00
+s16[UTF-16, 248..311]: \x53\x00\x74\x00\x61\x00\x72\x00\x74\x00\x69\x00\x6E\x00\x67\x00\x20\x00\x48\x00\x65\x00\x72\x00\x6D\x00\x65\x00\x73\x00\x20\x00\x43\x00\x4A\x00\x53\x00\x20\x00\x73\x00\x6D\x00\x6F\x00\x6B\x00\x65\x00\x20\x00\x74\x00\x65\x00\x73\x00\x74\x00\x20\x00\x26\x20
+i17[ASCII, 9..17] #387B5503: __dirname
+i18[ASCII, 11..17] #7CBAA9A5: dirname
+i19[ASCII, 24..26] #58FA9DBB: add
+i20[ASCII, 74..76] #5D62F994: mul
+i21[ASCII, 97..100] #B335FB8E: exit
+i22[ASCII, 121..125] #9102A3D0: Error
+i23[ASCII, 137..143] #C765D706: exports
+i24[ASCII, 153..162] #1E7D2120: __filename
+i25[ASCII, 163..169] #629A2BFD: console
+i26[ASCII, 170..172] #1C35E808: log
+i27[ASCII, 172..177] #24B44487: global
+i28[ASCII, 178..182] #A689F65B: print
+i29[ASCII, 183..189] #59476AD7: process
+i30[ASCII, 190..198] #807C5F3D: prototype
+i31[ASCII, 199..202] #EDE51DB0: quit
+i32[ASCII, 203..208] #0DA8F6EA: reduce
+
+CommonJS Modules:
+  File ID 11 -> function ID 1
+  File ID 2 -> function ID 5
+
+Function<global>0(1 params, 1 registers, 0 symbols):
+    LoadConstUndefined r0
+    Ret               r0
+
+Function<cjs_module>1(4 params, 23 registers, 0 symbols):
+Offset in debug table: source 0x0000, scope 0x0000, textified callees 0x0000
+; hbc_testcases/cjs/index.js:1:1
+    CreateEnvironment r1
+; hbc_testcases/cjs/index.js:1:1
+    LoadParam         r7, 2
+; hbc_testcases/cjs/index.js:1:1
+    CreateClosure     r3, r1, Function<assert>2
+; hbc_testcases/cjs/index.js:1:1
+    GetGlobalObject   r2
+; hbc_testcases/cjs/index.js:22:5
+    GetByIdShort      r0, r2, 1, "print"
+; hbc_testcases/cjs/index.js:22:5
+    TypeOf            r4, r0
+; hbc_testcases/cjs/index.js:22:5
+    LoadConstString   r0, "function"
+; hbc_testcases/cjs/index.js:22:5
+    JStrictEqual      L1, r4, r0
+; hbc_testcases/cjs/index.js:23:3
+    TryGetById        r4, r2, 2, "global"
+; hbc_testcases/cjs/index.js:23:18
+    TryGetById        r0, r2, 3, "console"
+; hbc_testcases/cjs/index.js:23:25
+    GetByIdShort      r0, r0, 4, "log"
+; hbc_testcases/cjs/index.js:23:16
+    PutById           r4, r0, 1, "print"
+L1:
+; hbc_testcases/cjs/index.js:26:1
+    TryGetById        r5, r2, 1, "print"
+; hbc_testcases/cjs/index.js:26:1
+    LoadConstUndefined r0
+; hbc_testcases/cjs/index.js:26:1
+    LoadConstString   r4, "Starting Hermes "
+; hbc_testcases/cjs/index.js:26:6
+    Call2             r4, r5, r0, r4
+; hbc_testcases/cjs/index.js:26:6
+    LoadConstString   r4, "./math"
+; hbc_testcases/cjs/index.js:31:21
+    Call2             r8, r7, r0, r4
+; hbc_testcases/cjs/index.js:33:16
+    GetByIdShort      r9, r8, 5, "add"
+; hbc_testcases/cjs/index.js:33:16
+    LoadConstUInt8    r6, 2
+; hbc_testcases/cjs/index.js:33:16
+    LoadConstUInt8    r5, 3
+; hbc_testcases/cjs/index.js:33:16
+    Call3             r10, r9, r8, r6, r5
+; hbc_testcases/cjs/index.js:33:16
+    LoadConstUInt8    r9, 5
+; hbc_testcases/cjs/index.js:33:16
+    StrictEq          r10, r10, r9
+; hbc_testcases/cjs/index.js:33:16
+    LoadConstString   r9, "add() should add"
+; hbc_testcases/cjs/index.js:33:7
+    Call3             r9, r3, r0, r10, r9
+; hbc_testcases/cjs/index.js:34:16
+    GetByIdShort      r11, r8, 6, "mul"
+; hbc_testcases/cjs/index.js:34:16
+    LoadConstUInt8    r10, 6
+; hbc_testcases/cjs/index.js:34:16
+    LoadConstUInt8    r9, 7
+; hbc_testcases/cjs/index.js:34:16
+    Call3             r10, r11, r8, r10, r9
+; hbc_testcases/cjs/index.js:34:16
+    LoadConstUInt8    r9, 42
+; hbc_testcases/cjs/index.js:34:16
+    StrictEq          r10, r10, r9
+; hbc_testcases/cjs/index.js:34:16
+    LoadConstString   r9, "mul() should mult"...
+; hbc_testcases/cjs/index.js:34:7
+    Call3             r9, r3, r0, r10, r9
+; hbc_testcases/cjs/index.js:37:15
+    Call2             r4, r7, r0, r4
+; hbc_testcases/cjs/index.js:37:15
+    StrictEq          r8, r4, r8
+; hbc_testcases/cjs/index.js:37:15
+    LoadConstString   r4, "require cache"
+; hbc_testcases/cjs/index.js:37:7
+    Call3             r4, r3, r0, r8, r4
+; hbc_testcases/cjs/index.js:37:7
+    LoadConstString   r4, "path"
+; hbc_testcases/cjs/index.js:42:21
+    Call2             r8, r7, r0, r4
+; hbc_testcases/cjs/index.js:43:8
+    TryGetById        r4, r2, 7, "__dirname"
+; hbc_testcases/cjs/index.js:43:34
+    GetByIdShort      r7, r8, 8, "dirname"
+; hbc_testcases/cjs/index.js:43:35
+    TryGetById        r2, r2, 9, "__filename"
+; hbc_testcases/cjs/index.js:43:34
+    Call2             r2, r7, r8, r2
+; hbc_testcases/cjs/index.js:43:34
+    StrictEq          r4, r4, r2
+; hbc_testcases/cjs/index.js:43:34
+    LoadConstString   r2, "__dirname works"
+; hbc_testcases/cjs/index.js:43:7
+    Call3             r2, r3, r0, r4, r2
+; hbc_testcases/cjs/index.js:43:7
+    CreateClosure     r4, r1, NCFunction<spreadSum>3
+; hbc_testcases/cjs/index.js:43:7
+    LoadConstUInt8    r15, 1
+; hbc_testcases/cjs/index.js:43:7
+    LoadConstUInt8    r12, 4
+; hbc_testcases/cjs/index.js:43:7
+    LoadConstUndefined r16
+; hbc_testcases/cjs/index.js:43:7
+    Mov               r14, r6
+; hbc_testcases/cjs/index.js:43:7
+    Mov               r13, r5
+; hbc_testcases/cjs/index.js:49:17
+    Call              r2, r4, 5
+; hbc_testcases/cjs/index.js:49:17
+    LoadConstUInt8    r1, 10
+; hbc_testcases/cjs/index.js:49:17
+    StrictEq          r2, r2, r1
+; hbc_testcases/cjs/index.js:49:17
+    LoadConstString   r1, "arrow + rest/spre"...
+; hbc_testcases/cjs/index.js:49:7
+    Call3             r1, r3, r0, r2, r1
+; hbc_testcases/cjs/index.js:49:7
+    Ret               r0
+
+Function<assert>2(3 params, 14 registers, 0 symbols):
+Offset in debug table: source 0x007c, scope 0x0000, textified callees 0x0000
+; hbc_testcases/cjs/index.js:6:1
+    LoadParam         r2, 2
+; hbc_testcases/cjs/index.js:6:1
+    LoadParam         r0, 1
+; hbc_testcases/cjs/index.js:6:1
+    JmpTrueLong       L1, r0
+; hbc_testcases/cjs/index.js:6:1
+    GetGlobalObject   r0
+; hbc_testcases/cjs/index.js:10:17
+    GetByIdShort      r1, r0, 1, "print"
+; hbc_testcases/cjs/index.js:10:17
+    TypeOf            r1, r1
+; hbc_testcases/cjs/index.js:10:17
+    LoadConstString   r3, "function"
+; hbc_testcases/cjs/index.js:10:17
+    JStrictEqual      L2, r1, r3
+; hbc_testcases/cjs/index.js:10:55
+    TryGetById        r1, r0, 2, "console"
+; hbc_testcases/cjs/index.js:10:62
+    GetByIdShort      r5, r1, 3, "log"
+; hbc_testcases/cjs/index.js:10:62
+    Jmp               L3
+L2:
+; hbc_testcases/cjs/index.js:10:47
+    TryGetById        r5, r0, 1, "print"
+L3:
+; hbc_testcases/cjs/index.js:10:47
+    LoadConstString   r1, "Assertion "
+; hbc_testcases/cjs/index.js:11:9
+    Add               r1, r1, r2
+; hbc_testcases/cjs/index.js:11:9
+    LoadConstUndefined r4
+; hbc_testcases/cjs/index.js:11:8
+    Call2             r1, r5, r4, r1
+; hbc_testcases/cjs/index.js:13:9
+    GetByIdShort      r1, r0, 4, "quit"
+; hbc_testcases/cjs/index.js:13:9
+    TypeOf            r1, r1
+; hbc_testcases/cjs/index.js:13:9
+    JStrictEqual      L4, r1, r3
+; hbc_testcases/cjs/index.js:15:16
+    GetByIdShort      r1, r0, 5, "process"
+; hbc_testcases/cjs/index.js:15:16
+    TypeOf            r3, r1
+; hbc_testcases/cjs/index.js:15:16
+    LoadConstString   r1, "undefined"
+; hbc_testcases/cjs/index.js:15:16
+    JStrictEqual      L5, r3, r1
+; hbc_testcases/cjs/index.js:16:7
+    TryGetById        r5, r0, 5, "process"
+; hbc_testcases/cjs/index.js:16:19
+    GetByIdShort      r3, r5, 6, "exit"
+; hbc_testcases/cjs/index.js:16:19
+    LoadConstUInt8    r1, 1
+; hbc_testcases/cjs/index.js:16:19
+    Call2             r1, r3, r5, r1
+; hbc_testcases/cjs/index.js:16:19
+    Jmp               L5
+L4:
+; hbc_testcases/cjs/index.js:14:7
+    TryGetById        r3, r0, 4, "quit"
+; hbc_testcases/cjs/index.js:14:7
+    LoadConstUInt8    r1, 1
+; hbc_testcases/cjs/index.js:14:11
+    Call2             r1, r3, r4, r1
+L5:
+; hbc_testcases/cjs/index.js:18:15
+    TryGetById        r0, r0, 7, "Error"
+; hbc_testcases/cjs/index.js:18:20
+    GetByIdShort      r1, r0, 8, "prototype"
+; hbc_testcases/cjs/index.js:18:20
+    CreateThis        r1, r1, r0
+; hbc_testcases/cjs/index.js:18:20
+    Mov               r7, r1
+; hbc_testcases/cjs/index.js:18:20
+    Mov               r6, r2
+; hbc_testcases/cjs/index.js:18:20
+    Construct         r0, r0, 2
+; hbc_testcases/cjs/index.js:18:20
+    SelectObject      r0, r1, r0
+; hbc_testcases/cjs/index.js:18:5
+    Throw             r0
+L1:
+; hbc_testcases/cjs/index.js:18:5
+    LoadConstUndefined r0
+; hbc_testcases/cjs/index.js:18:5
+    Ret               r0
+
+NCFunction<spreadSum>3(2 params, 13 registers, 0 symbols):
+Offset in debug table: source 0x0122, scope 0x0000, textified callees 0x0000
+; hbc_testcases/cjs/index.js:48:19
+    LoadConstZero     r3
+; hbc_testcases/cjs/index.js:48:19
+    LoadConstZero     r5
+; hbc_testcases/cjs/index.js:48:19
+    CallBuiltin       r2, "HermesBuiltin.copyRestArgs", 2
+; hbc_testcases/cjs/index.js:48:43
+    GetByIdShort      r1, r2, 1, "reduce"
+; hbc_testcases/cjs/index.js:48:43
+    CreateEnvironment r0
+; hbc_testcases/cjs/index.js:48:43
+    CreateClosure     r0, r0, NCFunction<>4
+; hbc_testcases/cjs/index.js:48:43
+    Call3             r0, r1, r2, r0, r3
+; hbc_testcases/cjs/index.js:48:43
+    Ret               r0
+
+NCFunction<>4(3 params, 2 registers, 0 symbols):
+Offset in debug table: source 0x0135, scope 0x0000, textified callees 0x0000
+; hbc_testcases/cjs/index.js:48:44
+    LoadParam         r1, 1
+; hbc_testcases/cjs/index.js:48:44
+    LoadParam         r0, 2
+; hbc_testcases/cjs/index.js:48:54
+    Add               r0, r1, r0
+; hbc_testcases/cjs/index.js:48:54
+    Ret               r0
+
+Function<cjs_module>5(4 params, 3 registers, 0 symbols):
+Offset in debug table: source 0x0142, scope 0x0000, textified callees 0x0000
+; hbc_testcases/cjs/math.js:1:1
+    CreateEnvironment r0
+; hbc_testcases/cjs/math.js:1:1
+    CreateClosure     r2, r0, Function<add>7
+; hbc_testcases/cjs/math.js:1:1
+    LoadParam         r1, 1
+; hbc_testcases/cjs/math.js:4:13
+    PutById           r1, r2, 1, "add"
+; hbc_testcases/cjs/math.js:4:13
+    LoadParam         r1, 3
+; hbc_testcases/cjs/math.js:12:7
+    GetByIdShort      r1, r1, 1, "exports"
+; hbc_testcases/cjs/math.js:12:7
+    CreateClosure     r0, r0, Function<mul>6
+; hbc_testcases/cjs/math.js:12:20
+    PutById           r1, r0, 2, "mul"
+; hbc_testcases/cjs/math.js:12:20
+    LoadConstUndefined r0
+; hbc_testcases/cjs/math.js:12:20
+    Ret               r0
+
+Function<mul>6(3 params, 2 registers, 0 symbols):
+Offset in debug table: source 0x0155, scope 0x0000, textified callees 0x0000
+; hbc_testcases/cjs/math.js:8:1
+    LoadParam         r1, 1
+; hbc_testcases/cjs/math.js:8:1
+    LoadParam         r0, 2
+; hbc_testcases/cjs/math.js:9:10
+    Mul               r0, r1, r0
+; hbc_testcases/cjs/math.js:9:10
+    Ret               r0
+
+Function<add>7(3 params, 2 registers, 0 symbols):
+Offset in debug table: source 0x0162, scope 0x0000, textified callees 0x0000
+; hbc_testcases/cjs/math.js:4:15
+    LoadParam         r1, 1
+; hbc_testcases/cjs/math.js:4:15
+    LoadParam         r0, 2
+; hbc_testcases/cjs/math.js:5:10
+    Add               r0, r1, r0
+; hbc_testcases/cjs/math.js:5:10
+    Ret               r0
+
+Debug filename table:
+  0: hbc_testcases/cjs/index.js
+  1: hbc_testcases/cjs/math.js
+
+Debug file table:
+  source table offset 0x0000: filename id 0
+  source table offset 0x0142: filename id 1
+
+Debug source table:
+  0x0000  function idx 1, starts at line 1 col 1
+    bc 12: line 22 col 5 scope offset 0x0000 env r0
+    bc 28: line 23 col 3 scope offset 0x0000 env r4
+    bc 34: line 23 col 18 scope offset 0x0000 env r0
+    bc 40: line 23 col 25 scope offset 0x0000 env r0
+    bc 45: line 23 col 16 scope offset 0x0000 env r0
+    bc 51: line 26 col 1 scope offset 0x0000 env r5
+    bc 63: line 26 col 6 scope offset 0x0000 env r4
+    bc 72: line 31 col 21 scope offset 0x0000 env r8
+    bc 77: line 33 col 16 scope offset 0x0000 env r9
+    bc 88: line 33 col 16 scope offset 0x0000 env r10
+    bc 105: line 33 col 7 scope offset 0x0000 env r9
+    bc 111: line 34 col 16 scope offset 0x0000 env r11
+    bc 122: line 34 col 16 scope offset 0x0000 env r10
+    bc 139: line 34 col 7 scope offset 0x0000 env r9
+    bc 145: line 37 col 15 scope offset 0x0000 env r4
+    bc 158: line 37 col 7 scope offset 0x0000 env r4
+    bc 168: line 42 col 21 scope offset 0x0000 env r8
+    bc 173: line 43 col 8 scope offset 0x0000 env r4
+    bc 179: line 43 col 34 scope offset 0x0000 env r7
+    bc 184: line 43 col 35 scope offset 0x0000 env r2
+    bc 190: line 43 col 34 scope offset 0x0000 env r2
+    bc 203: line 43 col 7 scope offset 0x0000 env r2
+    bc 228: line 49 col 17 scope offset 0x0000 env r2
+    bc 243: line 49 col 7 scope offset 0x0000 env r1
+  0x007c  function idx 2, starts at line 6 col 1
+    bc 14: line 10 col 17 scope offset 0x0000 env none
+    bc 30: line 10 col 55 scope offset 0x0000 env none
+    bc 36: line 10 col 62 scope offset 0x0000 env none
+    bc 43: line 10 col 47 scope offset 0x0000 env none
+    bc 53: line 11 col 9 scope offset 0x0000 env none
+    bc 59: line 11 col 8 scope offset 0x0000 env none
+    bc 64: line 13 col 9 scope offset 0x0000 env none
+    bc 76: line 15 col 16 scope offset 0x0000 env none
+    bc 92: line 16 col 7 scope offset 0x0000 env none
+    bc 98: line 16 col 19 scope offset 0x0000 env none
+    bc 106: line 16 col 19 scope offset 0x0000 env none
+    bc 113: line 14 col 7 scope offset 0x0000 env none
+    bc 122: line 14 col 11 scope offset 0x0000 env none
+    bc 127: line 18 col 15 scope offset 0x0000 env none
+    bc 133: line 18 col 20 scope offset 0x0000 env none
+    bc 138: line 18 col 20 scope offset 0x0000 env none
+    bc 148: line 18 col 20 scope offset 0x0000 env none
+    bc 156: line 18 col 5 scope offset 0x0000 env none
+  0x0122  function idx 3, starts at line 48 col 19
+    bc 4: line 48 col 19 scope offset 0x0000 env r2
+    bc 8: line 48 col 43 scope offset 0x0000 env r1
+    bc 20: line 48 col 43 scope offset 0x0000 env r0
+  0x0135  function idx 4, starts at line 48 col 44
+    bc 6: line 48 col 54 scope offset 0x0000 env none
+  0x0142  function idx 5, starts at line 1 col 1
+    bc 10: line 4 col 13 scope offset 0x0000 env r1
+    bc 19: line 12 col 7 scope offset 0x0000 env r1
+    bc 29: line 12 col 20 scope offset 0x0000 env r0
+  0x0155  function idx 6, starts at line 8 col 1
+    bc 6: line 9 col 10 scope offset 0x0000 env none
+  0x0162  function idx 7, starts at line 4 col 15
+    bc 6: line 5 col 10 scope offset 0x0000 env none
+  0x016f  end of debug source table
+
+Debug scope descriptor table:
+  0x0000  lexical parent:   none, flags:    , variable count: 0
+  0x0003  end of debug scope descriptor table
+
+Textified callees table:
+  0x0000  entries: 0
+  0x0001  end of textified callees table
+
+Debug string table:
+  0x0000  end of debug string table
+
