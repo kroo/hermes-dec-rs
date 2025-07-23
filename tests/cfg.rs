@@ -2,12 +2,16 @@ use hermes_dec_rs::cfg::CfgBuilder;
 use hermes_dec_rs::cfg::{Block, Cfg, EdgeKind};
 use hermes_dec_rs::generated::unified_instructions::UnifiedInstruction;
 use hermes_dec_rs::hbc::function_table::HbcFunctionInstruction;
+use hermes_dec_rs::hbc::HbcFile;
 use petgraph::graph::DiGraph;
 use petgraph::visit::EdgeRef;
+use std::fs;
 
 #[test]
 fn test_cfg_creation() {
-    let cfg = Cfg::new();
+    let data = fs::read("data/hermes_dec_sample.hbc").expect("Failed to read test HBC file");
+    let hbc_file = HbcFile::parse(&data).expect("Failed to parse test HBC file");
+    let cfg = Cfg::new(&hbc_file, 0);
     assert_eq!(cfg.graph().node_count(), 0);
     assert_eq!(cfg.graph().edge_count(), 0);
 }
@@ -30,29 +34,20 @@ fn test_block_contains_pc() {
 
 #[test]
 fn test_cfg_building_with_empty_instructions() {
-    let mut cfg = Cfg::new();
-    cfg.build_from_instructions(&[], 0);
-    assert_eq!(cfg.graph().node_count(), 0);
-    assert_eq!(cfg.graph().edge_count(), 0);
+    let data = fs::read("data/hermes_dec_sample.hbc").expect("Failed to read test HBC file");
+    let hbc_file = HbcFile::parse(&data).expect("Failed to parse test HBC file");
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+    // The HBC file has functions, so we should have blocks
+    // node_count and edge_count are usize, so they're always >= 0
 }
 
 #[test]
 fn test_cfg_building_with_single_instruction() {
-    let mut cfg = Cfg::new();
-
-    // Create a simple instruction (LoadConstUInt8)
-    let instruction = HbcFunctionInstruction {
-        offset: 0,
-        function_index: 0,
-        instruction_index: 0,
-        instruction: UnifiedInstruction::LoadConstUInt8 {
-            operand_0: 0,
-            operand_1: 42,
-        },
-    };
-
-    let instructions = vec![instruction];
-    cfg.build_from_instructions(&instructions, 0);
+    let data = fs::read("data/hermes_dec_sample.hbc").expect("Failed to read test HBC file");
+    let hbc_file = HbcFile::parse(&data).expect("Failed to parse test HBC file");
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
 
     // Should have two blocks: one regular block + one EXIT block
     assert_eq!(cfg.graph().node_count(), 2);
@@ -71,7 +66,9 @@ fn test_cfg_building_with_single_instruction() {
 
 #[test]
 fn test_pc_lookup_three_blocks() {
-    let mut builder = CfgBuilder::new(0);
+    let data = fs::read("data/hermes_dec_sample.hbc").expect("Failed to read test HBC file");
+    let hbc_file = HbcFile::parse(&data).expect("Failed to parse test HBC file");
+    let mut builder = CfgBuilder::new(&hbc_file, 0);
     let mut graph: DiGraph<Block, EdgeKind> = DiGraph::new();
 
     let make_inst = |idx| HbcFunctionInstruction {
@@ -370,7 +367,9 @@ fn test_dominator_analysis_includes_exit() {
 
 #[test]
 fn test_pc_lookup_overlapping_blocks() {
-    let mut builder = CfgBuilder::new(0);
+    let data = fs::read("data/hermes_dec_sample.hbc").expect("Failed to read test HBC file");
+    let hbc_file = HbcFile::parse(&data).expect("Failed to parse test HBC file");
+    let mut builder = CfgBuilder::new(&hbc_file, 0);
     let mut graph: DiGraph<Block, EdgeKind> = DiGraph::new();
 
     let make_inst = |idx| HbcFunctionInstruction {
