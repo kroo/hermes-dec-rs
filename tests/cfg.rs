@@ -1,7 +1,7 @@
+use hermes_dec_rs::cfg::CfgBuilder;
 use hermes_dec_rs::cfg::{Block, Cfg, EdgeKind};
 use hermes_dec_rs::generated::unified_instructions::UnifiedInstruction;
 use hermes_dec_rs::hbc::function_table::HbcFunctionInstruction;
-use hermes_dec_rs::cfg::CfgBuilder;
 use petgraph::graph::DiGraph;
 
 #[test]

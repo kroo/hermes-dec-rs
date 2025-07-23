@@ -153,11 +153,7 @@ impl CfgBuilder {
     }
 
     /// Add a block to the graph and update lookup tables
-    pub fn add_block(
-        &mut self,
-        graph: &mut DiGraph<Block, EdgeKind>,
-        block: Block,
-    ) -> NodeIndex {
+    pub fn add_block(&mut self, graph: &mut DiGraph<Block, EdgeKind>, block: Block) -> NodeIndex {
         let start_pc = block.start_pc;
         let end_pc = block.end_pc;
         let node_index = graph.add_node(block);
