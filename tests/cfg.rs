@@ -772,3 +772,141 @@ fn test_non_terminating_function_still_has_exit() {
         .count();
     assert_eq!(incoming_count, 0);
 }
+
+#[test]
+fn test_leader_after_return_throw() {
+    // Test case: Return followed by unreachable code
+    let hbc_file = make_test_hbc_file_with_instructions(vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Start of first block
+        UnifiedInstruction::Ret { operand_0: 1 }, // 1: Return - should terminate block
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: Unreachable code - should be in separate block
+        UnifiedInstruction::Throw { operand_0: 2 }, // 3: Throw - should terminate block
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 200,
+        }, // 4: More unreachable code - should be in separate block
+    ]);
+    
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    
+
+    
+    cfg.build();
+
+    // Should have 6 blocks: 5 regular blocks + 1 EXIT block
+    // Block 0: LoadConstUInt8 (0)
+    // Block 1: Ret (1) 
+    // Block 2: LoadConstUInt8 (2) - unreachable after return
+    // Block 3: Throw (3)
+    // Block 4: LoadConstUInt8 (4) - unreachable after throw
+    // Block 5: EXIT
+    assert_eq!(cfg.graph().node_count(), 6);
+
+    // Find all non-EXIT blocks and verify they have the correct instructions
+    let non_exit_blocks: Vec<_> = cfg
+        .graph()
+        .node_indices()
+        .filter(|&node| !cfg.graph()[node].is_exit())
+        .collect();
+    
+    assert_eq!(non_exit_blocks.len(), 5);
+
+    // Verify each block has the expected instructions
+    for &block_node in &non_exit_blocks {
+        let block = &cfg.graph()[block_node];
+        match block.start_pc() {
+            0 => {
+                // First block: LoadConstUInt8
+                assert_eq!(block.instruction_count(), 1);
+                assert_eq!(block.start_pc(), 0);
+                assert_eq!(block.end_pc(), 1);
+            }
+            1 => {
+                // Second block: Ret
+                assert_eq!(block.instruction_count(), 1);
+                assert_eq!(block.start_pc(), 1);
+                assert_eq!(block.end_pc(), 2);
+                assert!(block.is_terminating());
+            }
+            2 => {
+                // Third block: Unreachable code after return
+                assert_eq!(block.instruction_count(), 1);
+                assert_eq!(block.start_pc(), 2);
+                assert_eq!(block.end_pc(), 3);
+            }
+            3 => {
+                // Fourth block: Throw
+                assert_eq!(block.instruction_count(), 1);
+                assert_eq!(block.start_pc(), 3);
+                assert_eq!(block.end_pc(), 4);
+                assert!(block.is_terminating());
+            }
+            4 => {
+                // Fifth block: Unreachable code after throw
+                assert_eq!(block.instruction_count(), 1);
+                assert_eq!(block.start_pc(), 4);
+                assert_eq!(block.end_pc(), 5);
+            }
+            _ => panic!("Unexpected block start_pc: {}", block.start_pc()),
+        }
+    }
+
+    // Verify that Return and Throw blocks connect to EXIT
+    let exit_node = cfg.exit_node().unwrap();
+    for &block_node in &non_exit_blocks {
+        let block = &cfg.graph()[block_node];
+        if block.is_terminating() {
+            let has_exit_edge = cfg
+                .graph()
+                .neighbors_directed(block_node, petgraph::Direction::Outgoing)
+                .any(|neighbor| neighbor == exit_node);
+            assert!(has_exit_edge, "Terminating block at PC {} should connect to EXIT", block.start_pc());
+        }
+    }
+}
+
+#[test]
+fn test_leader_after_return_throw_as_last_instruction() {
+    // Test case: Return/Throw as the last instruction in function
+    let hbc_file = make_test_hbc_file_with_instructions(vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        },
+        UnifiedInstruction::Ret { operand_0: 1 }, // Last instruction
+    ]);
+    
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Should have 3 blocks: 2 regular blocks + 1 EXIT block
+    assert_eq!(cfg.graph().node_count(), 3);
+
+    // Find all non-EXIT blocks
+    let non_exit_blocks: Vec<_> = cfg
+        .graph()
+        .node_indices()
+        .filter(|&node| !cfg.graph()[node].is_exit())
+        .collect();
+    
+    assert_eq!(non_exit_blocks.len(), 2);
+
+    // First block should contain LoadConstUInt8
+    let first_block = &cfg.graph()[non_exit_blocks[0]];
+    assert_eq!(first_block.instruction_count(), 1);
+    assert_eq!(first_block.start_pc(), 0);
+    assert_eq!(first_block.end_pc(), 1);
+
+    // Second block should contain Ret
+    let second_block = &cfg.graph()[non_exit_blocks[1]];
+    assert_eq!(second_block.instruction_count(), 1);
+    assert_eq!(second_block.start_pc(), 1);
+    assert_eq!(second_block.end_pc(), 2);
+    assert!(second_block.is_terminating()); // Ends with Return
+}
