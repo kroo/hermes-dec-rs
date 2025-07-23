@@ -9,10 +9,8 @@ digraph {
   style = filled;
   color = lightgrey;
 
-  f1_n0 [ label = "Block 0 (PC 0-26)\l  0: LoadParam         r6, 1\l  1: LoadParam         r9, 2\l  2: GetByIdShort      r1, r9, 1, \"test\"\l  3: LoadParam         r0, 3\l  4: Call2             r5, r1, r9, r0\l  5: GetGlobalObject   r1\l  6: TryGetById        r0, r1, 2, \"globalThis\"\l  7: GetByIdShort      r3, r0, 3, \"console\"\l  8: GetByIdShort      r2, r3, 4, \"log\"\l  9: GetByIdShort      r4, r6, 5, \"padEnd\"\l  10: LoadConstUInt8    r0, 20\l  11: Call2             r8, r4, r6, r0\l  12: TryGetById        r4, r1, 6, \"String\"\l  13: LoadConstUndefined r0\l  14: Call2             r5, r4, r0, r5\l  15: GetByIdShort      r4, r5, 7, \"toUpperCase\"\l  16: Call1             r12, r4, r5\l  17: TryGetById        r1, r1, 8, \"HermesInternal\"\l  18: GetByIdShort      r6, r1, 9, \"concat\"\l  19: LoadConstString   r15, \"\"\l  20: LoadConstString   r13, \" : \"\l  21: LoadConstString   r11, \"  	→ \"\l  22: Mov               r14, r8\l  23: Mov               r10, r9\l  24: Call              r1, r6, 6\l  25: Call2             r1, r2, r3, r1\l" ]
-  f1_n1 [ label = "Block 1 (PC 26-27)\l  0: Ret               r0\l" ]
-  f1_n2 [ label = "EXIT" ]
+  f1_n0 [ label = "Block 0 (PC 0-27)\l  0: LoadParam         r6, 1\l  1: LoadParam         r9, 2\l  2: GetByIdShort      r1, r9, 1, \"test\"\l  3: LoadParam         r0, 3\l  4: Call2             r5, r1, r9, r0\l  5: GetGlobalObject   r1\l  6: TryGetById        r0, r1, 2, \"globalThis\"\l  7: GetByIdShort      r3, r0, 3, \"console\"\l  8: GetByIdShort      r2, r3, 4, \"log\"\l  9: GetByIdShort      r4, r6, 5, \"padEnd\"\l  10: LoadConstUInt8    r0, 20\l  11: Call2             r8, r4, r6, r0\l  12: TryGetById        r4, r1, 6, \"String\"\l  13: LoadConstUndefined r0\l  14: Call2             r5, r4, r0, r5\l  15: GetByIdShort      r4, r5, 7, \"toUpperCase\"\l  16: Call1             r12, r4, r5\l  17: TryGetById        r1, r1, 8, \"HermesInternal\"\l  18: GetByIdShort      r6, r1, 9, \"concat\"\l  19: LoadConstString   r15, \"\"\l  20: LoadConstString   r13, \" : \"\l  21: LoadConstString   r11, \"  	→ \"\l  22: Mov               r14, r8\l  23: Mov               r10, r9\l  24: Call              r1, r6, 6\l  25: Call2             r1, r2, r3, r1\l  26: Ret               r0\l" ]
+  f1_n1 [ label = "EXIT" ]
 
   f1_n0 -> f1_n1
-  f1_n1 -> f1_n2
 }

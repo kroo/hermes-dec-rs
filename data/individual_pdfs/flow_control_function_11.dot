@@ -9,10 +9,8 @@ digraph {
   style = filled;
   color = lightgrey;
 
-  f11_n0 [ label = "Block 0 (PC 0-1)\l  0: LoadConstZero     r0\l" ]
-  f11_n1 [ label = "Block 1 (PC 1-2)\l  0: Ret               r0\l" ]
-  f11_n2 [ label = "EXIT" ]
+  f11_n0 [ label = "Block 0 (PC 0-2)\l  0: LoadConstZero     r0\l  1: Ret               r0\l" ]
+  f11_n1 [ label = "EXIT" ]
 
   f11_n0 -> f11_n1
-  f11_n1 -> f11_n2
 }

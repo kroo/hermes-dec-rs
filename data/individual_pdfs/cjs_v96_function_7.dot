@@ -9,10 +9,8 @@ digraph {
   style = filled;
   color = lightgrey;
 
-  f7_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadParam         r0, 2\l  2: Add               r0, r1, r0\l" ]
-  f7_n1 [ label = "Block 1 (PC 3-4)\l  0: Ret               r0\l" ]
-  f7_n2 [ label = "EXIT" ]
+  f7_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r1, 1\l  1: LoadParam         r0, 2\l  2: Add               r0, r1, r0\l  3: Ret               r0\l" ]
+  f7_n1 [ label = "EXIT" ]
 
   f7_n0 -> f7_n1
-  f7_n1 -> f7_n2
 }

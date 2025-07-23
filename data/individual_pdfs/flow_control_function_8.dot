@@ -10,27 +10,19 @@ digraph {
   color = lightgrey;
 
   f8_n0 [ label = "Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l" ]
-  f8_n1 [ label = "Block 1 (PC 3-9)\l  0: GetEnvironment    r1, 2\l  1: LoadFromEnvironment r3, r1, 0\l  2: LoadConstUndefined r2\l  3: LoadConstUInt8    r1, 100\l  4: Call2             r1, r3, r2, r1\l  5: SaveGenerator     [4]\l" ]
-  f8_n2 [ label = "Block 2 (PC 9-10)\l  0: Ret               r1\l" ]
-  f8_n3 [ label = "Block 3 (PC 10-12)\l  0: ResumeGenerator   r1, r2\l  1: JmpTrue           L2, r2\l" ]
-  f8_n4 [ label = "Block 4 (PC 12-14)\l  0: LoadConstString   r2, \"done\"\l  1: CompleteGenerator \l" ]
-  f8_n5 [ label = "Block 5 (PC 14-15)\l  0: Ret               r2\l" ]
-  f8_n6 [ label = "Block 6 (PC 15-16)\l  0: CompleteGenerator \l" ]
-  f8_n7 [ label = "Block 7 (PC 16-17)\l  0: Ret               r1\l" ]
-  f8_n8 [ label = "Block 8 (PC 17-18)\l  0: CompleteGenerator \l" ]
-  f8_n9 [ label = "Block 9 (PC 18-19)\l  0: Ret               r0\l" ]
-  f8_n10 [ label = "EXIT" ]
+  f8_n1 [ label = "Block 1 (PC 3-10)\l  0: GetEnvironment    r1, 2\l  1: LoadFromEnvironment r3, r1, 0\l  2: LoadConstUndefined r2\l  3: LoadConstUInt8    r1, 100\l  4: Call2             r1, r3, r2, r1\l  5: SaveGenerator     [4]\l  6: Ret               r1\l" ]
+  f8_n2 [ label = "Block 2 (PC 10-12)\l  0: ResumeGenerator   r1, r2\l  1: JmpTrue           L2, r2\l" ]
+  f8_n3 [ label = "Block 3 (PC 12-15)\l  0: LoadConstString   r2, \"done\"\l  1: CompleteGenerator \l  2: Ret               r2\l" ]
+  f8_n4 [ label = "Block 4 (PC 15-17)\l  0: CompleteGenerator \l  1: Ret               r1\l" ]
+  f8_n5 [ label = "Block 5 (PC 17-19)\l  0: CompleteGenerator \l  1: Ret               r0\l" ]
+  f8_n6 [ label = "EXIT" ]
 
-  f8_n0 -> f8_n8
+  f8_n0 -> f8_n5
   f8_n0 -> f8_n1
-  f8_n1 -> f8_n2
-  f8_n2 -> f8_n10
+  f8_n1 -> f8_n6
+  f8_n2 -> f8_n4
+  f8_n2 -> f8_n3
   f8_n3 -> f8_n6
-  f8_n3 -> f8_n4
-  f8_n4 -> f8_n5
-  f8_n5 -> f8_n10
-  f8_n6 -> f8_n7
-  f8_n7 -> f8_n10
-  f8_n8 -> f8_n9
-  f8_n9 -> f8_n10
+  f8_n4 -> f8_n6
+  f8_n5 -> f8_n6
 }

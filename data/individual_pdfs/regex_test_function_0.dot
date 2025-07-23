@@ -26,13 +26,12 @@ digraph {
   f0_n14 [ label = "Block 14 (PC 234-243)\l  0: TryGetById        r11, r5, 2, \"globalThis\"\l  1: GetByIdShort      r13, r11, 3, \"console\"\l  2: GetByIdShort      r12, r13, 4, \"error\"\l  3: Mov               r14, r7\l  4: TryGetById        r11, r5, 5, \"HermesInternal\"\l  5: GetByIdShort      r11, r11, 6, \"concat\"\l  6: Call3             r11, r11, r3, r14, r1\l  7: GetByIdShort      r10, r10, 7, \"message\"\l  8: Call3             r0, r12, r13, r11, r10\l" ]
   f0_n15 [ label = "Block 15 (PC 243-244)\l  0: JmpLong           L7\l" ]
   f0_n16 [ label = "Block 16 (PC 244-245)\l  0: Catch             r1\l" ]
-  f0_n17 [ label = "Block 17 (PC 245-246)\l  0: IteratorClose     r2, 1\l" ]
-  f0_n18 [ label = "Block 18 (PC 246-247)\l  0: Throw             r1\l" ]
-  f0_n19 [ label = "Block 19 (PC 247-248)\l  0: Ret               r0\l" ]
-  f0_n20 [ label = "EXIT" ]
+  f0_n17 [ label = "Block 17 (PC 245-247)\l  0: IteratorClose     r2, 1\l  1: Throw             r1\l" ]
+  f0_n18 [ label = "Block 18 (PC 247-248)\l  0: Ret               r0\l" ]
+  f0_n19 [ label = "EXIT" ]
 
   f0_n0 -> f0_n1
-  f0_n1 -> f0_n19
+  f0_n1 -> f0_n18
   f0_n1 -> f0_n2
   f0_n2 -> f0_n4
   f0_n2 -> f0_n3
@@ -51,11 +50,10 @@ digraph {
   f0_n10 -> f0_n11
   f0_n11 -> f0_n12
   f0_n12 -> f0_n15
-  f0_n13 -> f0_n20
+  f0_n13 -> f0_n19
   f0_n14 -> f0_n15
   f0_n15 -> f0_n1
-  f0_n16 -> f0_n20
-  f0_n17 -> f0_n18
-  f0_n18 -> f0_n20
-  f0_n19 -> f0_n20
+  f0_n16 -> f0_n19
+  f0_n17 -> f0_n19
+  f0_n18 -> f0_n19
 }

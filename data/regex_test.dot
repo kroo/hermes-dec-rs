@@ -27,13 +27,12 @@ digraph {
     f0_n14 [ label = "Block 14 (PC 234-243)\l  0: TryGetById        r11, r5, 2, \"globalThis\"\l  1: GetByIdShort      r13, r11, 3, \"console\"\l  2: GetByIdShort      r12, r13, 4, \"error\"\l  3: Mov               r14, r7\l  4: TryGetById        r11, r5, 5, \"HermesInternal\"\l  5: GetByIdShort      r11, r11, 6, \"concat\"\l  6: Call3             r11, r11, r3, r14, r1\l  7: GetByIdShort      r10, r10, 7, \"message\"\l  8: Call3             r0, r12, r13, r11, r10\l" ]
     f0_n15 [ label = "Block 15 (PC 243-244)\l  0: JmpLong           L7\l" ]
     f0_n16 [ label = "Block 16 (PC 244-245)\l  0: Catch             r1\l" ]
-    f0_n17 [ label = "Block 17 (PC 245-246)\l  0: IteratorClose     r2, 1\l" ]
-    f0_n18 [ label = "Block 18 (PC 246-247)\l  0: Throw             r1\l" ]
-    f0_n19 [ label = "Block 19 (PC 247-248)\l  0: Ret               r0\l" ]
-    f0_n20 [ label = "EXIT" ]
+    f0_n17 [ label = "Block 17 (PC 245-247)\l  0: IteratorClose     r2, 1\l  1: Throw             r1\l" ]
+    f0_n18 [ label = "Block 18 (PC 247-248)\l  0: Ret               r0\l" ]
+    f0_n19 [ label = "EXIT" ]
 
     f0_n0 -> f0_n1
-    f0_n1 -> f0_n19
+    f0_n1 -> f0_n18
     f0_n1 -> f0_n2
     f0_n2 -> f0_n4
     f0_n2 -> f0_n3
@@ -52,13 +51,12 @@ digraph {
     f0_n10 -> f0_n11
     f0_n11 -> f0_n12
     f0_n12 -> f0_n15
-    f0_n13 -> f0_n20
+    f0_n13 -> f0_n19
     f0_n14 -> f0_n15
     f0_n15 -> f0_n1
-    f0_n16 -> f0_n20
-    f0_n17 -> f0_n18
-    f0_n18 -> f0_n20
-    f0_n19 -> f0_n20
+    f0_n16 -> f0_n19
+    f0_n17 -> f0_n19
+    f0_n18 -> f0_n19
   }
 
   subgraph cluster_function_1 {
@@ -66,12 +64,10 @@ digraph {
     style = filled;
     color = lightgrey;
 
-    f1_n0 [ label = "Block 0 (PC 0-26)\l  0: LoadParam         r6, 1\l  1: LoadParam         r9, 2\l  2: GetByIdShort      r1, r9, 1, \"test\"\l  3: LoadParam         r0, 3\l  4: Call2             r5, r1, r9, r0\l  5: GetGlobalObject   r1\l  6: TryGetById        r0, r1, 2, \"globalThis\"\l  7: GetByIdShort      r3, r0, 3, \"console\"\l  8: GetByIdShort      r2, r3, 4, \"log\"\l  9: GetByIdShort      r4, r6, 5, \"padEnd\"\l  10: LoadConstUInt8    r0, 20\l  11: Call2             r8, r4, r6, r0\l  12: TryGetById        r4, r1, 6, \"String\"\l  13: LoadConstUndefined r0\l  14: Call2             r5, r4, r0, r5\l  15: GetByIdShort      r4, r5, 7, \"toUpperCase\"\l  16: Call1             r12, r4, r5\l  17: TryGetById        r1, r1, 8, \"HermesInternal\"\l  18: GetByIdShort      r6, r1, 9, \"concat\"\l  19: LoadConstString   r15, \"\"\l  20: LoadConstString   r13, \" : \"\l  21: LoadConstString   r11, \"  	→ \"\l  22: Mov               r14, r8\l  23: Mov               r10, r9\l  24: Call              r1, r6, 6\l  25: Call2             r1, r2, r3, r1\l" ]
-    f1_n1 [ label = "Block 1 (PC 26-27)\l  0: Ret               r0\l" ]
-    f1_n2 [ label = "EXIT" ]
+    f1_n0 [ label = "Block 0 (PC 0-27)\l  0: LoadParam         r6, 1\l  1: LoadParam         r9, 2\l  2: GetByIdShort      r1, r9, 1, \"test\"\l  3: LoadParam         r0, 3\l  4: Call2             r5, r1, r9, r0\l  5: GetGlobalObject   r1\l  6: TryGetById        r0, r1, 2, \"globalThis\"\l  7: GetByIdShort      r3, r0, 3, \"console\"\l  8: GetByIdShort      r2, r3, 4, \"log\"\l  9: GetByIdShort      r4, r6, 5, \"padEnd\"\l  10: LoadConstUInt8    r0, 20\l  11: Call2             r8, r4, r6, r0\l  12: TryGetById        r4, r1, 6, \"String\"\l  13: LoadConstUndefined r0\l  14: Call2             r5, r4, r0, r5\l  15: GetByIdShort      r4, r5, 7, \"toUpperCase\"\l  16: Call1             r12, r4, r5\l  17: TryGetById        r1, r1, 8, \"HermesInternal\"\l  18: GetByIdShort      r6, r1, 9, \"concat\"\l  19: LoadConstString   r15, \"\"\l  20: LoadConstString   r13, \" : \"\l  21: LoadConstString   r11, \"  	→ \"\l  22: Mov               r14, r8\l  23: Mov               r10, r9\l  24: Call              r1, r6, 6\l  25: Call2             r1, r2, r3, r1\l  26: Ret               r0\l" ]
+    f1_n1 [ label = "EXIT" ]
 
     f1_n0 -> f1_n1
-    f1_n1 -> f1_n2
   }
 
 }
