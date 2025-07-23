@@ -1,0 +1,18 @@
+// Function 18 from flow_control
+// Generated from data/flow_control.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 18";
+  style = filled;
+  color = lightgrey;
+
+  f18_n0 [ label = "Block 0 (PC 0-7)\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"setTimeout\"\l  2: GetEnvironment    r0, 0\l  3: LoadFromEnvironment r2, r0, 0\l  4: LoadConstUndefined r1\l  5: LoadParam         r0, 1\l  6: Call3             r0, r3, r1, r0, r2\l" ]
+  f18_n1 [ label = "Block 1 (PC 7-8)\l  0: Ret               r0\l" ]
+  f18_n2 [ label = "EXIT" ]
+
+  f18_n0 -> f18_n1
+  f18_n1 -> f18_n2
+}

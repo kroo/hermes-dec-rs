@@ -1,0 +1,18 @@
+// Function 10 from flow_control
+// Generated from data/flow_control.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 10";
+  style = filled;
+  color = lightgrey;
+
+  f10_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstUInt8    r0, 2\l  2: Mul               r0, r1, r0\l" ]
+  f10_n1 [ label = "Block 1 (PC 3-4)\l  0: Ret               r0\l" ]
+  f10_n2 [ label = "EXIT" ]
+
+  f10_n0 -> f10_n1
+  f10_n1 -> f10_n2
+}

@@ -1,0 +1,18 @@
+// Function 3 from cjs-show-source
+// Generated from data/cjs-show-source.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 3";
+  style = filled;
+  color = lightgrey;
+
+  f3_n0 [ label = "Block 0 (PC 0-8)\l  0: LoadConstZero     r4\l  1: LoadConstZero     r6\l  2: CallBuiltin       r3, 45, 2\l  3: GetByIdShort      r2, r3, 1, \"reduce\"\l  4: CreateEnvironment r0\l  5: CreateClosure     r1, r0, Function<>4\l  6: Call3             r1, r2, r3, r1, r4\l  7: AsyncBreakCheck   \l" ]
+  f3_n1 [ label = "Block 1 (PC 8-9)\l  0: Ret               r1\l" ]
+  f3_n2 [ label = "EXIT" ]
+
+  f3_n0 -> f3_n1
+  f3_n1 -> f3_n2
+}

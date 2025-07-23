@@ -1,0 +1,22 @@
+// Function 12 from flow_control
+// Generated from data/flow_control.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 12";
+  style = filled;
+  color = lightgrey;
+
+  f12_n0 [ label = "Block 0 (PC 0-2)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l" ]
+  f12_n1 [ label = "Block 1 (PC 2-3)\l  0: StoreToEnvironment r0, 0, r1\l" ]
+  f12_n2 [ label = "Block 2 (PC 3-10)\l  0: CreateGeneratorClosure r1, r0, Function<gen>13\l  1: LoadConstUndefined r0\l  2: Call1             r4, r1, r0\l  3: NewArray          r0, 0\l  4: LoadConstZero     r3\l  5: Mov               r5, r0\l  6: CallBuiltin       r1, 46, 4\l" ]
+  f12_n3 [ label = "Block 3 (PC 10-11)\l  0: Ret               r0\l" ]
+  f12_n4 [ label = "EXIT" ]
+
+  f12_n0 -> f12_n1
+  f12_n1 -> f12_n4
+  f12_n2 -> f12_n3
+  f12_n3 -> f12_n4
+}

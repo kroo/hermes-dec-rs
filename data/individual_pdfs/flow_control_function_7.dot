@@ -1,0 +1,18 @@
+// Function 7 from flow_control
+// Generated from data/flow_control.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 7";
+  style = filled;
+  color = lightgrey;
+
+  f7_n0 [ label = "Block 0 (PC 0-2)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_?anon_0_asyncAwaitTest>8\l" ]
+  f7_n1 [ label = "Block 1 (PC 2-3)\l  0: Ret               r0\l" ]
+  f7_n2 [ label = "EXIT" ]
+
+  f7_n0 -> f7_n1
+  f7_n1 -> f7_n2
+}
