@@ -213,12 +213,12 @@ The CFG module has been refactored into a modular structure to enable parallel d
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-### Development Tickets
+### Development Issues
 
-The project uses a ticket-based development system for parallel work:
+The project uses GitHub issues for tracking development work and parallel development:
 
 - **CFG-01**: PC-to-block mapping
-- **CFG-02**: Basic block identification
+- **CFG-02**: Basic block identification  
 - **CFG-03**: Edge creation and analysis
 - **CFG-04**: Dominator analysis
 - **CFG-05**: Natural loop detection
@@ -228,7 +228,7 @@ The project uses a ticket-based development system for parallel work:
 - **CFG-09**: Control flow structuring
 - **CFG-10**: AST generation
 
-See `.tickets/` directory for detailed specifications.
+See [GitHub Issues](https://github.com/kroo/hermes-dec-rs/issues?q=is%3Aissue+is%3Aopen+label%3Acfg) for detailed specifications and progress tracking.
 
 ## License
 
