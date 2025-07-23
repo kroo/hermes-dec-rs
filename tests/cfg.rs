@@ -953,12 +953,12 @@ fn test_cfg_integration_with_hbc_files() {
             let mut cfg = Cfg::new(&hbc_file, function_index);
             cfg.build();
 
-                    // Generate DOT output for this function as a subgraph
-        let dot_output = cfg.to_dot_subgraph(&hbc_file, function_index);
-        
-        // Add subgraph to combined output
-        all_dot_output.push_str(&dot_output);
-        all_dot_output.push_str("\n");
+            // Generate DOT output for this function as a subgraph
+            let dot_output = cfg.to_dot_subgraph(&hbc_file, function_index);
+
+            // Add subgraph to combined output
+            all_dot_output.push_str(&dot_output);
+            all_dot_output.push_str("\n");
 
             // Basic CFG validation
             validate_cfg_structure(&cfg, &test_name, function_index);

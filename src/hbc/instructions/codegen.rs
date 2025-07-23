@@ -227,7 +227,7 @@ fn categorize_instruction(name: &str) -> String {
     let category = match lower {
         s if s.contains("jmp") || s.contains("switch") || s.starts_with("j") => "Jump",
         s if s.contains("call") || s.contains("construct") => "Call",
-        s if s.contains("ret") => "Return",
+        s if s == "ret" => "Return",
         s if s.contains("throw") || s.contains("catch") => "Exception",
         s if s.starts_with("new") && (s.contains("object") || s.contains("array")) => {
             "ObjectCreation"

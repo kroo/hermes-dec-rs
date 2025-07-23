@@ -10,20 +10,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
-    f0_n0 [ label = "Block 0 (PC 0-6)\l  0: DeclareGlobalVar  \"main\"\l  1: CreateEnvironment r1\l  2: CreateClosure     r2, r1, Function<main>1\l  3: GetGlobalObject   r0\l  4: PutById           r0, r2, 1, \"main\"\l  5: NewArrayWithBuffer r0, 360, 360, 0\l" ]
-    f0_n1 [ label = "Block 1 (PC 6-7)\l  0: StoreToEnvironment r1, 0, r0\l" ]
-    f0_n2 [ label = "Block 2 (PC 7-8)\l  0: NewObjectWithBuffer r0, 12, 12, 0, 0\l" ]
-    f0_n3 [ label = "Block 3 (PC 8-9)\l  0: StoreToEnvironment r1, 1, r0\l" ]
-    f0_n4 [ label = "Block 4 (PC 9-10)\l  0: LoadConstUndefined r0\l" ]
-    f0_n5 [ label = "Block 5 (PC 10-11)\l  0: Ret               r0\l" ]
-    f0_n6 [ label = "EXIT" ]
+    f0_n0 [ label = "Block 0 (PC 0-10)\l  0: DeclareGlobalVar  \"main\"\l  1: CreateEnvironment r1\l  2: CreateClosure     r2, r1, Function<main>1\l  3: GetGlobalObject   r0\l  4: PutById           r0, r2, 1, \"main\"\l  5: NewArrayWithBuffer r0, 360, 360, 0\l  6: StoreToEnvironment r1, 0, r0\l  7: NewObjectWithBuffer r0, 12, 12, 0, 0\l  8: StoreToEnvironment r1, 1, r0\l  9: LoadConstUndefined r0\l" ]
+    f0_n1 [ label = "Block 1 (PC 10-11)\l  0: Ret               r0\l" ]
+    f0_n2 [ label = "EXIT" ]
 
     f0_n0 -> f0_n1
-    f0_n1 -> f0_n6
-    f0_n2 -> f0_n3
-    f0_n3 -> f0_n6
-    f0_n4 -> f0_n5
-    f0_n5 -> f0_n6
+    f0_n1 -> f0_n2
   }
 
   subgraph cluster_function_1 {

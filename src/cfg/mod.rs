@@ -110,7 +110,8 @@ impl<'a> Cfg<'a> {
 
     /// Export CFG to DOT format as a subgraph for a specific function
     pub fn to_dot_subgraph(&self, hbc_file: &HbcFile, function_index: u32) -> String {
-        self.builder.to_dot_subgraph(&self.graph, hbc_file, function_index)
+        self.builder
+            .to_dot_subgraph(&self.graph, hbc_file, function_index)
     }
 
     /// Get the EXIT node for the current function

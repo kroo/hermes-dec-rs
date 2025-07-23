@@ -9,14 +9,10 @@ digraph {
   style = filled;
   color = lightgrey;
 
-  f15_n0 [ label = "Block 0 (PC 0-2)\l  0: CreateEnvironment r1\l  1: LoadParam         r0, 1\l" ]
-  f15_n1 [ label = "Block 1 (PC 2-3)\l  0: StoreToEnvironment r1, 0, r0\l" ]
-  f15_n2 [ label = "Block 2 (PC 3-9)\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"setTimeout\"\l  2: LoadConstUndefined r0\l  3: CreateClosure     r2, r1, Function<>16\l  4: LoadConstUInt8    r1, 50\l  5: Call3             r1, r3, r0, r2, r1\l" ]
-  f15_n3 [ label = "Block 3 (PC 9-10)\l  0: Ret               r0\l" ]
-  f15_n4 [ label = "EXIT" ]
+  f15_n0 [ label = "Block 0 (PC 0-9)\l  0: CreateEnvironment r1\l  1: LoadParam         r0, 1\l  2: StoreToEnvironment r1, 0, r0\l  3: GetGlobalObject   r0\l  4: TryGetById        r3, r0, 1, \"setTimeout\"\l  5: LoadConstUndefined r0\l  6: CreateClosure     r2, r1, Function<>16\l  7: LoadConstUInt8    r1, 50\l  8: Call3             r1, r3, r0, r2, r1\l" ]
+  f15_n1 [ label = "Block 1 (PC 9-10)\l  0: Ret               r0\l" ]
+  f15_n2 [ label = "EXIT" ]
 
   f15_n0 -> f15_n1
-  f15_n1 -> f15_n4
-  f15_n2 -> f15_n3
-  f15_n3 -> f15_n4
+  f15_n1 -> f15_n2
 }

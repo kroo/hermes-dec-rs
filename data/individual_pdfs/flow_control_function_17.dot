@@ -9,14 +9,10 @@ digraph {
   style = filled;
   color = lightgrey;
 
-  f17_n0 [ label = "Block 0 (PC 0-2)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l" ]
-  f17_n1 [ label = "Block 1 (PC 2-3)\l  0: StoreToEnvironment r0, 0, r1\l" ]
-  f17_n2 [ label = "Block 2 (PC 3-11)\l  0: GetGlobalObject   r1\l  1: TryGetById        r2, r1, 1, \"Promise\"\l  2: GetByIdShort      r1, r2, 2, \"prototype\"\l  3: CreateThis        r1, r1, r2\l  4: CreateClosure     r3, r0, Function<>18\l  5: Mov               r4, r1\l  6: Construct         r0, r2, 2\l  7: SelectObject      r0, r1, r0\l" ]
-  f17_n3 [ label = "Block 3 (PC 11-12)\l  0: Ret               r0\l" ]
-  f17_n4 [ label = "EXIT" ]
+  f17_n0 [ label = "Block 0 (PC 0-11)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l  2: StoreToEnvironment r0, 0, r1\l  3: GetGlobalObject   r1\l  4: TryGetById        r2, r1, 1, \"Promise\"\l  5: GetByIdShort      r1, r2, 2, \"prototype\"\l  6: CreateThis        r1, r1, r2\l  7: CreateClosure     r3, r0, Function<>18\l  8: Mov               r4, r1\l  9: Construct         r0, r2, 2\l  10: SelectObject      r0, r1, r0\l" ]
+  f17_n1 [ label = "Block 1 (PC 11-12)\l  0: Ret               r0\l" ]
+  f17_n2 [ label = "EXIT" ]
 
   f17_n0 -> f17_n1
-  f17_n1 -> f17_n4
-  f17_n2 -> f17_n3
-  f17_n3 -> f17_n4
+  f17_n1 -> f17_n2
 }

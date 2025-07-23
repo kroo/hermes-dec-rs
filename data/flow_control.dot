@@ -10,16 +10,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
-    f0_n0 [ label = "Block 0 (PC 0-30)\l  0: DeclareGlobalVar  \"ifElseTest\"\l  1: DeclareGlobalVar  \"forLoopTest\"\l  2: DeclareGlobalVar  \"switchTest\"\l  3: DeclareGlobalVar  \"whileTest\"\l  4: DeclareGlobalVar  \"tryCatchTest\"\l  5: DeclareGlobalVar  \"asyncAwaitTest\"\l  6: DeclareGlobalVar  \"promiseChainTest\"\l  7: DeclareGlobalVar  \"generatorTest\"\l  8: DeclareGlobalVar  \"callbackTest\"\l  9: CreateEnvironment r1\l  10: CreateClosure     r0, r1, Function<ifElseTest>1\l  11: GetGlobalObject   r2\l  12: PutById           r2, r0, 1, \"ifElseTest\"\l  13: CreateClosure     r0, r1, Function<forLoopTest>2\l  14: PutById           r2, r0, 2, \"forLoopTest\"\l  15: CreateClosure     r0, r1, Function<switchTest>3\l  16: PutById           r2, r0, 3, \"switchTest\"\l  17: CreateClosure     r0, r1, Function<whileTest>4\l  18: PutById           r2, r0, 4, \"whileTest\"\l  19: CreateClosure     r0, r1, Function<tryCatchTest>5\l  20: PutById           r2, r0, 5, \"tryCatchTest\"\l  21: CreateAsyncClosure r0, r1, Function<asyncAwaitTest>6\l  22: PutById           r2, r0, 6, \"asyncAwaitTest\"\l  23: CreateClosure     r0, r1, Function<promiseChainTest>9\l  24: PutById           r2, r0, 7, \"promiseChainTest\"\l  25: CreateClosure     r0, r1, Function<generatorTest>12\l  26: PutById           r2, r0, 8, \"generatorTest\"\l  27: CreateClosure     r0, r1, Function<callbackTest>15\l  28: PutById           r2, r0, 9, \"callbackTest\"\l  29: CreateClosure     r0, r1, Function<sleep>17\l" ]
-    f0_n1 [ label = "Block 1 (PC 30-31)\l  0: StoreToEnvironment r1, 0, r0\l" ]
-    f0_n2 [ label = "Block 2 (PC 31-32)\l  0: LoadConstUndefined r0\l" ]
-    f0_n3 [ label = "Block 3 (PC 32-33)\l  0: Ret               r0\l" ]
-    f0_n4 [ label = "EXIT" ]
+    f0_n0 [ label = "Block 0 (PC 0-32)\l  0: DeclareGlobalVar  \"ifElseTest\"\l  1: DeclareGlobalVar  \"forLoopTest\"\l  2: DeclareGlobalVar  \"switchTest\"\l  3: DeclareGlobalVar  \"whileTest\"\l  4: DeclareGlobalVar  \"tryCatchTest\"\l  5: DeclareGlobalVar  \"asyncAwaitTest\"\l  6: DeclareGlobalVar  \"promiseChainTest\"\l  7: DeclareGlobalVar  \"generatorTest\"\l  8: DeclareGlobalVar  \"callbackTest\"\l  9: CreateEnvironment r1\l  10: CreateClosure     r0, r1, Function<ifElseTest>1\l  11: GetGlobalObject   r2\l  12: PutById           r2, r0, 1, \"ifElseTest\"\l  13: CreateClosure     r0, r1, Function<forLoopTest>2\l  14: PutById           r2, r0, 2, \"forLoopTest\"\l  15: CreateClosure     r0, r1, Function<switchTest>3\l  16: PutById           r2, r0, 3, \"switchTest\"\l  17: CreateClosure     r0, r1, Function<whileTest>4\l  18: PutById           r2, r0, 4, \"whileTest\"\l  19: CreateClosure     r0, r1, Function<tryCatchTest>5\l  20: PutById           r2, r0, 5, \"tryCatchTest\"\l  21: CreateAsyncClosure r0, r1, Function<asyncAwaitTest>6\l  22: PutById           r2, r0, 6, \"asyncAwaitTest\"\l  23: CreateClosure     r0, r1, Function<promiseChainTest>9\l  24: PutById           r2, r0, 7, \"promiseChainTest\"\l  25: CreateClosure     r0, r1, Function<generatorTest>12\l  26: PutById           r2, r0, 8, \"generatorTest\"\l  27: CreateClosure     r0, r1, Function<callbackTest>15\l  28: PutById           r2, r0, 9, \"callbackTest\"\l  29: CreateClosure     r0, r1, Function<sleep>17\l  30: StoreToEnvironment r1, 0, r0\l  31: LoadConstUndefined r0\l" ]
+    f0_n1 [ label = "Block 1 (PC 32-33)\l  0: Ret               r0\l" ]
+    f0_n2 [ label = "EXIT" ]
 
     f0_n0 -> f0_n1
-    f0_n1 -> f0_n4
-    f0_n2 -> f0_n3
-    f0_n3 -> f0_n4
+    f0_n1 -> f0_n2
   }
 
   subgraph cluster_function_1 {
@@ -226,16 +222,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
-    f12_n0 [ label = "Block 0 (PC 0-2)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l" ]
-    f12_n1 [ label = "Block 1 (PC 2-3)\l  0: StoreToEnvironment r0, 0, r1\l" ]
-    f12_n2 [ label = "Block 2 (PC 3-10)\l  0: CreateGeneratorClosure r1, r0, Function<gen>13\l  1: LoadConstUndefined r0\l  2: Call1             r4, r1, r0\l  3: NewArray          r0, 0\l  4: LoadConstZero     r3\l  5: Mov               r5, r0\l  6: CallBuiltin       r1, 46, 4\l" ]
-    f12_n3 [ label = "Block 3 (PC 10-11)\l  0: Ret               r0\l" ]
-    f12_n4 [ label = "EXIT" ]
+    f12_n0 [ label = "Block 0 (PC 0-10)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l  2: StoreToEnvironment r0, 0, r1\l  3: CreateGeneratorClosure r1, r0, Function<gen>13\l  4: LoadConstUndefined r0\l  5: Call1             r4, r1, r0\l  6: NewArray          r0, 0\l  7: LoadConstZero     r3\l  8: Mov               r5, r0\l  9: CallBuiltin       r1, 46, 4\l" ]
+    f12_n1 [ label = "Block 1 (PC 10-11)\l  0: Ret               r0\l" ]
+    f12_n2 [ label = "EXIT" ]
 
     f12_n0 -> f12_n1
-    f12_n1 -> f12_n4
-    f12_n2 -> f12_n3
-    f12_n3 -> f12_n4
+    f12_n1 -> f12_n2
   }
 
   subgraph cluster_function_13 {
@@ -293,16 +285,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
-    f15_n0 [ label = "Block 0 (PC 0-2)\l  0: CreateEnvironment r1\l  1: LoadParam         r0, 1\l" ]
-    f15_n1 [ label = "Block 1 (PC 2-3)\l  0: StoreToEnvironment r1, 0, r0\l" ]
-    f15_n2 [ label = "Block 2 (PC 3-9)\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"setTimeout\"\l  2: LoadConstUndefined r0\l  3: CreateClosure     r2, r1, Function<>16\l  4: LoadConstUInt8    r1, 50\l  5: Call3             r1, r3, r0, r2, r1\l" ]
-    f15_n3 [ label = "Block 3 (PC 9-10)\l  0: Ret               r0\l" ]
-    f15_n4 [ label = "EXIT" ]
+    f15_n0 [ label = "Block 0 (PC 0-9)\l  0: CreateEnvironment r1\l  1: LoadParam         r0, 1\l  2: StoreToEnvironment r1, 0, r0\l  3: GetGlobalObject   r0\l  4: TryGetById        r3, r0, 1, \"setTimeout\"\l  5: LoadConstUndefined r0\l  6: CreateClosure     r2, r1, Function<>16\l  7: LoadConstUInt8    r1, 50\l  8: Call3             r1, r3, r0, r2, r1\l" ]
+    f15_n1 [ label = "Block 1 (PC 9-10)\l  0: Ret               r0\l" ]
+    f15_n2 [ label = "EXIT" ]
 
     f15_n0 -> f15_n1
-    f15_n1 -> f15_n4
-    f15_n2 -> f15_n3
-    f15_n3 -> f15_n4
+    f15_n1 -> f15_n2
   }
 
   subgraph cluster_function_16 {
@@ -323,16 +311,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
-    f17_n0 [ label = "Block 0 (PC 0-2)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l" ]
-    f17_n1 [ label = "Block 1 (PC 2-3)\l  0: StoreToEnvironment r0, 0, r1\l" ]
-    f17_n2 [ label = "Block 2 (PC 3-11)\l  0: GetGlobalObject   r1\l  1: TryGetById        r2, r1, 1, \"Promise\"\l  2: GetByIdShort      r1, r2, 2, \"prototype\"\l  3: CreateThis        r1, r1, r2\l  4: CreateClosure     r3, r0, Function<>18\l  5: Mov               r4, r1\l  6: Construct         r0, r2, 2\l  7: SelectObject      r0, r1, r0\l" ]
-    f17_n3 [ label = "Block 3 (PC 11-12)\l  0: Ret               r0\l" ]
-    f17_n4 [ label = "EXIT" ]
+    f17_n0 [ label = "Block 0 (PC 0-11)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l  2: StoreToEnvironment r0, 0, r1\l  3: GetGlobalObject   r1\l  4: TryGetById        r2, r1, 1, \"Promise\"\l  5: GetByIdShort      r1, r2, 2, \"prototype\"\l  6: CreateThis        r1, r1, r2\l  7: CreateClosure     r3, r0, Function<>18\l  8: Mov               r4, r1\l  9: Construct         r0, r2, 2\l  10: SelectObject      r0, r1, r0\l" ]
+    f17_n1 [ label = "Block 1 (PC 11-12)\l  0: Ret               r0\l" ]
+    f17_n2 [ label = "EXIT" ]
 
     f17_n0 -> f17_n1
-    f17_n1 -> f17_n4
-    f17_n2 -> f17_n3
-    f17_n3 -> f17_n4
+    f17_n1 -> f17_n2
   }
 
   subgraph cluster_function_18 {

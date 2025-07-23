@@ -429,7 +429,11 @@ impl<'a> CfgBuilder<'a> {
     }
 
     /// Export CFG to DOT format with disassembled instructions
-    pub fn to_dot_with_disassembly(&self, graph: &DiGraph<Block, EdgeKind>, hbc_file: &HbcFile) -> String {
+    pub fn to_dot_with_disassembly(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        hbc_file: &HbcFile,
+    ) -> String {
         let mut dot = String::new();
         dot.push_str("digraph {\n");
         dot.push_str("  rankdir=TB;\n");
@@ -441,21 +445,23 @@ impl<'a> CfgBuilder<'a> {
             let label = if block.is_exit() {
                 "EXIT".to_string()
             } else {
-                let mut block_label = format!("Block {} (PC {}-{})\\l", 
-                    node.index(), block.start_pc(), block.end_pc());
-                
+                let mut block_label = format!(
+                    "Block {} (PC {}-{})\\l",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                );
+
                 for (i, instruction) in block.instructions().iter().enumerate() {
                     let disassembled = instruction.format_instruction(hbc_file);
                     // Escape quotes and newlines for DOT format
-                    let escaped = disassembled
-                        .replace("\"", "\\\"")
-                        .replace("\n", "\\l");
+                    let escaped = disassembled.replace("\"", "\\\"").replace("\n", "\\l");
                     block_label.push_str(&format!("  {}: {}\\l", i, escaped));
                 }
-                
+
                 block_label
             };
-            
+
             dot.push_str(&format!("  {} [ label = \"{}\" ]\n", node.index(), label));
         }
 
@@ -472,9 +478,17 @@ impl<'a> CfgBuilder<'a> {
     }
 
     /// Export CFG to DOT format as a subgraph for a specific function
-    pub fn to_dot_subgraph(&self, graph: &DiGraph<Block, EdgeKind>, hbc_file: &HbcFile, function_index: u32) -> String {
+    pub fn to_dot_subgraph(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        hbc_file: &HbcFile,
+        function_index: u32,
+    ) -> String {
         let mut dot = String::new();
-        dot.push_str(&format!("  subgraph cluster_function_{} {{\n", function_index));
+        dot.push_str(&format!(
+            "  subgraph cluster_function_{} {{\n",
+            function_index
+        ));
         dot.push_str(&format!("    label = \"Function {}\";\n", function_index));
         dot.push_str("    style = filled;\n");
         dot.push_str("    color = lightgrey;\n\n");
@@ -486,21 +500,23 @@ impl<'a> CfgBuilder<'a> {
             let label = if block.is_exit() {
                 "EXIT".to_string()
             } else {
-                let mut block_label = format!("Block {} (PC {}-{})\\l", 
-                    node.index(), block.start_pc(), block.end_pc());
-                
+                let mut block_label = format!(
+                    "Block {} (PC {}-{})\\l",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                );
+
                 for (i, instruction) in block.instructions().iter().enumerate() {
                     let disassembled = instruction.format_instruction(hbc_file);
                     // Escape quotes and newlines for DOT format
-                    let escaped = disassembled
-                        .replace("\"", "\\\"")
-                        .replace("\n", "\\l");
+                    let escaped = disassembled.replace("\"", "\\\"").replace("\n", "\\l");
                     block_label.push_str(&format!("  {}: {}\\l", i, escaped));
                 }
-                
+
                 block_label
             };
-            
+
             dot.push_str(&format!("    {} [ label = \"{}\" ]\n", node_id, label));
         }
 
