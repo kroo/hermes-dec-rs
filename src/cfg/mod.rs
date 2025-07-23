@@ -106,6 +106,50 @@ impl Cfg {
     pub fn to_dot(&self) -> String {
         self.builder.to_dot(&self.graph)
     }
+
+    /// Get the EXIT node for the current function
+    pub fn exit_node(&self) -> Option<NodeIndex> {
+        self.builder.exit_node()
+    }
+
+    /// Find all EXIT nodes in the graph
+    pub fn find_exit_nodes(&self) -> Vec<NodeIndex> {
+        self.graph
+            .node_indices()
+            .filter(|&node| self.graph[node].is_exit())
+            .collect()
+    }
+
+    /// Check if all terminating blocks have a path to EXIT
+    pub fn all_terminators_reach_exit(&self) -> bool {
+        if let Some(exit_node) = self.exit_node() {
+            for node in self.graph.node_indices() {
+                let block = &self.graph[node];
+                if block.is_terminating() {
+                    // Check if this terminating block has a direct edge to EXIT
+                    let has_exit_edge = self
+                        .graph
+                        .neighbors_directed(node, petgraph::Direction::Outgoing)
+                        .any(|neighbor| neighbor == exit_node);
+                    if !has_exit_edge {
+                        return false;
+                    }
+                }
+            }
+            true
+        } else {
+            // If no EXIT node, check if there are any terminating blocks
+            !self
+                .graph
+                .node_indices()
+                .any(|node| self.graph[node].is_terminating())
+        }
+    }
+
+    /// Check if the CFG remains acyclic
+    pub fn is_acyclic(&self) -> bool {
+        !petgraph::algo::is_cyclic_directed(&self.graph)
+    }
 }
 
 impl Default for Cfg {
