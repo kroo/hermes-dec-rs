@@ -20,6 +20,8 @@ pub struct CfgBuilder {
     pc_to_block: HashMap<u32, NodeIndex>,
     /// Jump table for resolving jump targets
     jump_table: JumpTable,
+    /// Exit node for the current function (if any)
+    exit_node: Option<NodeIndex>,
 }
 
 impl CfgBuilder {
@@ -30,6 +32,7 @@ impl CfgBuilder {
             block_starts: HashMap::new(),
             pc_to_block: HashMap::new(),
             jump_table: JumpTable::new(),
+            exit_node: None,
         }
     }
 
@@ -43,6 +46,10 @@ impl CfgBuilder {
         self.pc_to_block.clear();
 
         let mut graph = DiGraph::new();
+
+        // Reset state for new function
+        self.block_starts.clear();
+        self.exit_node = None;
 
         if instructions.is_empty() {
             return graph;
@@ -64,7 +71,12 @@ impl CfgBuilder {
             self.add_block(&mut graph, block);
         }
 
-        // Step 5: Add edges between blocks
+        // Step 5: Add synthetic EXIT node
+        let exit_block = Block::new_exit();
+        let exit_node = graph.add_node(exit_block);
+        self.exit_node = Some(exit_node);
+
+        // Step 6: Add edges between blocks and connect terminators to EXIT
         self.add_edges(&mut graph, instructions);
 
         graph
@@ -174,9 +186,12 @@ impl CfgBuilder {
     ) {
         let mut block_ends: Vec<(u32, NodeIndex, Vec<HbcFunctionInstruction>)> = Vec::new();
 
-        // Find all block end points and collect instructions
+        // Find all block end points and collect instructions (excluding EXIT block)
         for node_index in graph.node_indices() {
             let block = &graph[node_index];
+            if block.is_exit() {
+                continue; // Skip EXIT block
+            }
             let end_pc = block.end_pc();
             let instructions = block.instructions().to_vec();
             block_ends.push((end_pc, node_index, instructions));
@@ -188,9 +203,14 @@ impl CfgBuilder {
                 continue;
             }
 
-            // Check if block ends with a jump
+            // Check if block ends with a terminating instruction (Return/Throw)
             if let Some(last_instruction) = instructions.last() {
-                if last_instruction.instruction.category() == "Jump" {
+                if matches!(last_instruction.instruction.category(), "Return" | "Exception") {
+                    // Connect terminating blocks to EXIT node
+                    if let Some(exit_node) = self.exit_node {
+                        graph.add_edge(from_node, exit_node, EdgeKind::Uncond);
+                    }
+                } else if last_instruction.instruction.category() == "Jump" {
                     // Add jump edge
                     if let Some(target) = self.get_jump_target(last_instruction) {
                         if let Some(&to_node) = self.block_starts.get(&target) {
@@ -410,5 +430,10 @@ impl CfgBuilder {
     /// Check whether the given PC is within any block
     pub fn is_pc_in_block(&self, pc: u32) -> bool {
         self.pc_to_block.contains_key(&pc)
+    }
+
+    /// Get the EXIT node for the current function
+    pub fn exit_node(&self) -> Option<NodeIndex> {
+        self.exit_node
     }
 }
