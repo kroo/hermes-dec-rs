@@ -8,6 +8,7 @@ pub mod builder;
 pub mod regions;
 pub mod visualization;
 
+use crate::hbc::HbcFile;
 use petgraph::algo::dominators::Dominators;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
@@ -30,30 +31,25 @@ pub enum EdgeKind {
 }
 
 /// Main CFG struct that provides high-level interface
-pub struct Cfg {
+pub struct Cfg<'a> {
     /// The underlying graph
     graph: DiGraph<block::Block, EdgeKind>,
     /// Builder for construction operations
-    builder: builder::CfgBuilder,
+    builder: builder::CfgBuilder<'a>,
 }
 
-impl Cfg {
+impl<'a> Cfg<'a> {
     /// Create a new empty CFG
-    pub fn new() -> Self {
+    pub fn new(hbc_file: &'a HbcFile<'a>, function_index: u32) -> Self {
         Self {
             graph: DiGraph::new(),
-            builder: builder::CfgBuilder::new(0),
+            builder: builder::CfgBuilder::new(hbc_file, function_index),
         }
     }
 
     /// Build CFG from instructions
-    pub fn build_from_instructions(
-        &mut self,
-        instructions: &[crate::hbc::function_table::HbcFunctionInstruction],
-        function_index: u32,
-    ) -> &mut Self {
-        self.builder = builder::CfgBuilder::new(function_index);
-        self.graph = self.builder.build_from_instructions(instructions);
+    pub fn build(&mut self) -> &mut Self {
+        self.graph = self.builder.build();
         self
     }
 
@@ -68,12 +64,12 @@ impl Cfg {
     }
 
     /// Get the builder for advanced operations
-    pub fn builder(&self) -> &builder::CfgBuilder {
+    pub fn builder(&self) -> &builder::CfgBuilder<'a> {
         &self.builder
     }
 
     /// Get the builder mutably for advanced operations
-    pub fn builder_mut(&mut self) -> &mut builder::CfgBuilder {
+    pub fn builder_mut(&mut self) -> &mut builder::CfgBuilder<'a> {
         &mut self.builder
     }
 
@@ -149,12 +145,6 @@ impl Cfg {
     /// Check if the CFG remains acyclic
     pub fn is_acyclic(&self) -> bool {
         !petgraph::algo::is_cyclic_directed(&self.graph)
-    }
-}
-
-impl Default for Cfg {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
