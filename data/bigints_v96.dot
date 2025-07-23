@@ -1,13 +1,21 @@
 // CFG analysis for bigints_v96
 // Generated from data/bigints_v96.hbc
 
-// Function 0
 digraph {
-    0 [ label = "Block 0 (PC 0-11):\n  0: DeclareGlobalVar  "a"\n  1: GetGlobalObject   r0\n  2: TryGetById        r3, r0, 1, "BigInt"\n  3: LoadConstUndefined r2\n  4: LoadConstBigInt   r1, 123456789012345678901234567890\n  5: Call2             r1, r3, r2, r1\n  6: PutById           r0, r1, 1, "a"\n  7: TryGetById        r2, r0, 2, "console"\n  8: GetByIdShort      r1, r2, 3, "log"\n  9: GetByIdShort      r0, r0, 4, "a"\n  10: Call2             r0, r1, r2, r0\n" ]
-    1 [ label = "Block 1 (PC 11-12):\n  0: Ret               r0\n" ]
-    2 [ label = "EXIT" ]
-    0 -> 1 [ ]
-    1 -> 2 [ ]
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    f0_n0 [ label = "Block 0 (PC 0-11)\l  0: DeclareGlobalVar  \"a\"\l  1: GetGlobalObject   r0\l  2: TryGetById        r3, r0, 1, \"BigInt\"\l  3: LoadConstUndefined r2\l  4: LoadConstBigInt   r1, 123456789012345678901234567890\l  5: Call2             r1, r3, r2, r1\l  6: PutById           r0, r1, 1, \"a\"\l  7: TryGetById        r2, r0, 2, \"console\"\l  8: GetByIdShort      r1, r2, 3, \"log\"\l  9: GetByIdShort      r0, r0, 4, \"a\"\l  10: Call2             r0, r1, r2, r0\l" ]
+    f0_n1 [ label = "Block 1 (PC 11-12)\l  0: Ret               r0\l" ]
+    f0_n2 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1
+    f0_n1 -> f0_n2
+  }
+
 }
-
-

@@ -941,6 +941,9 @@ fn test_cfg_integration_with_hbc_files() {
             "// Generated from {}\n\n",
             hbc_file_path.display()
         ));
+        all_dot_output.push_str("digraph {\n");
+        all_dot_output.push_str("  rankdir=TB;\n");
+        all_dot_output.push_str("  node [shape=box, fontname=\"monospace\"];\n\n");
 
         // Test CFG analysis for each function
         for function_index in 0..hbc_file.functions.count() {
@@ -950,17 +953,19 @@ fn test_cfg_integration_with_hbc_files() {
             let mut cfg = Cfg::new(&hbc_file, function_index);
             cfg.build();
 
-            // Generate DOT output for this function with disassembled instructions
-            let dot_output = cfg.to_dot_with_disassembly(&hbc_file);
-
-            // Add function header to combined output
-            all_dot_output.push_str(&format!("// Function {}\n", function_index));
-            all_dot_output.push_str(&dot_output);
-            all_dot_output.push_str("\n\n");
+                    // Generate DOT output for this function as a subgraph
+        let dot_output = cfg.to_dot_subgraph(&hbc_file, function_index);
+        
+        // Add subgraph to combined output
+        all_dot_output.push_str(&dot_output);
+        all_dot_output.push_str("\n");
 
             // Basic CFG validation
             validate_cfg_structure(&cfg, &test_name, function_index);
         }
+
+        // Close the digraph
+        all_dot_output.push_str("}\n");
 
         // Create expected DOT file path for the entire file
         let expected_dot_path = data_dir.join(format!("{}.dot", test_name));

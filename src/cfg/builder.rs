@@ -432,6 +432,8 @@ impl<'a> CfgBuilder<'a> {
     pub fn to_dot_with_disassembly(&self, graph: &DiGraph<Block, EdgeKind>, hbc_file: &HbcFile) -> String {
         let mut dot = String::new();
         dot.push_str("digraph {\n");
+        dot.push_str("  rankdir=TB;\n");
+        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n\n");
 
         // Add nodes with disassembled instructions
         for node in graph.node_indices() {
@@ -439,27 +441,80 @@ impl<'a> CfgBuilder<'a> {
             let label = if block.is_exit() {
                 "EXIT".to_string()
             } else {
-                let mut block_label = format!("Block {} (PC {}-{}):\\n", 
+                let mut block_label = format!("Block {} (PC {}-{})\\l", 
                     node.index(), block.start_pc(), block.end_pc());
                 
                 for (i, instruction) in block.instructions().iter().enumerate() {
                     let disassembled = instruction.format_instruction(hbc_file);
-                    block_label.push_str(&format!("  {}: {}\\n", i, disassembled));
+                    // Escape quotes and newlines for DOT format
+                    let escaped = disassembled
+                        .replace("\"", "\\\"")
+                        .replace("\n", "\\l");
+                    block_label.push_str(&format!("  {}: {}\\l", i, escaped));
                 }
                 
                 block_label
             };
             
-            dot.push_str(&format!("    {} [ label = \"{}\" ]\n", node.index(), label));
+            dot.push_str(&format!("  {} [ label = \"{}\" ]\n", node.index(), label));
         }
+
+        dot.push_str("\n");
 
         // Add edges
         for edge in graph.edge_indices() {
             let (tail, head) = graph.edge_endpoints(edge).unwrap();
-            dot.push_str(&format!("    {} -> {} [ ]\n", tail.index(), head.index()));
+            dot.push_str(&format!("  {} -> {}\n", tail.index(), head.index()));
         }
 
         dot.push_str("}\n");
+        dot
+    }
+
+    /// Export CFG to DOT format as a subgraph for a specific function
+    pub fn to_dot_subgraph(&self, graph: &DiGraph<Block, EdgeKind>, hbc_file: &HbcFile, function_index: u32) -> String {
+        let mut dot = String::new();
+        dot.push_str(&format!("  subgraph cluster_function_{} {{\n", function_index));
+        dot.push_str(&format!("    label = \"Function {}\";\n", function_index));
+        dot.push_str("    style = filled;\n");
+        dot.push_str("    color = lightgrey;\n\n");
+
+        // Add nodes with disassembled instructions
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let node_id = format!("f{}_n{}", function_index, node.index());
+            let label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                let mut block_label = format!("Block {} (PC {}-{})\\l", 
+                    node.index(), block.start_pc(), block.end_pc());
+                
+                for (i, instruction) in block.instructions().iter().enumerate() {
+                    let disassembled = instruction.format_instruction(hbc_file);
+                    // Escape quotes and newlines for DOT format
+                    let escaped = disassembled
+                        .replace("\"", "\\\"")
+                        .replace("\n", "\\l");
+                    block_label.push_str(&format!("  {}: {}\\l", i, escaped));
+                }
+                
+                block_label
+            };
+            
+            dot.push_str(&format!("    {} [ label = \"{}\" ]\n", node_id, label));
+        }
+
+        dot.push_str("\n");
+
+        // Add edges within the subgraph
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            let tail_id = format!("f{}_n{}", function_index, tail.index());
+            let head_id = format!("f{}_n{}", function_index, head.index());
+            dot.push_str(&format!("    {} -> {}\n", tail_id, head_id));
+        }
+
+        dot.push_str("  }\n");
         dot
     }
 
