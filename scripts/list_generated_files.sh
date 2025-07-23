@@ -41,7 +41,18 @@ else
 fi
 
 echo
+echo "📚 Combined individual PDFs (all functions in one file, one per page):"
+if [ -d "data/combined_pdfs" ]; then
+    ls -la data/combined_pdfs/*.pdf 2>/dev/null | wc -l | xargs echo "  Total combined PDF files:"
+    ls data/combined_pdfs/*.pdf 2>/dev/null | sed 's/^/  /' || echo "  No combined PDF files found"
+else
+    echo "  No combined PDFs directory found"
+fi
+
+echo
 echo "📊 Summary:"
-echo "  - Combined files show all functions in a single visualization"
+echo "  - Combined DOT files show all functions in a single visualization"
 echo "  - Individual PDFs show each function on its own page"
-echo "  - Use combined files for overview, individual files for detailed analysis" 
+echo "  - Combined individual PDFs show all functions in one file, one per page"
+echo "  - Use combined DOT files for overview, individual PDFs for detailed analysis"
+echo "  - Use combined individual PDFs for complete file analysis" 
