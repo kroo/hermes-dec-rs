@@ -281,8 +281,6 @@ fn make_test_instructions(
         .collect()
 }
 
-
-
 #[test]
 fn test_cfg_creation() {
     let hbc_file = make_test_hbc_file_with_instructions(vec![]);

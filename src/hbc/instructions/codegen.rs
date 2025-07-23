@@ -380,9 +380,11 @@ fn generate_define_instructions_macro(
         let mut total_size = 1; // Base size: 1 byte for opcode
         for op_type in &inst.operands {
             total_size += match op_type.as_str() {
-                "Reg8" | "UInt8" | "Addr8" | "StringId8" | "BigIntId8" | "FunctionId8" | "EnvId8" => 1,
+                "Reg8" | "UInt8" | "Addr8" | "StringId8" | "BigIntId8" | "FunctionId8"
+                | "EnvId8" => 1,
                 "UInt16" | "StringId16" | "BigIntId16" | "FunctionId16" => 2,
-                "Reg32" | "UInt32" | "Addr32" | "Imm32" | "StringId32" | "BigIntId32" | "FunctionId32" | "RegExpId32" => 4,
+                "Reg32" | "UInt32" | "Addr32" | "Imm32" | "StringId32" | "BigIntId32"
+                | "FunctionId32" | "RegExpId32" => 4,
                 "Double" => 8,
                 _ => 1, // Default fallback
             };
