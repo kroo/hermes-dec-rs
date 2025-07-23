@@ -13,6 +13,8 @@ use hermes_dec_rs::hbc::HbcHeader;
 use petgraph::graph::DiGraph;
 use petgraph::visit::EdgeRef;
 
+use std::fs;
+use std::path::Path;
 use std::sync::OnceLock;
 
 fn make_test_hbc_file<'a>(instructions: Vec<HbcFunctionInstruction>) -> HbcFile<'a> {
@@ -894,4 +896,285 @@ fn test_leader_after_return_throw_as_last_instruction() {
     assert_eq!(first_block.start_pc(), 0);
     assert_eq!(first_block.end_pc(), 2);
     assert!(first_block.is_terminating()); // Ends with Return
+}
+
+/// Test CFG analysis for all .hbc files in the data directory
+#[test]
+fn test_cfg_integration_with_hbc_files() {
+    let data_dir = Path::new("data");
+    let mut hbc_files = Vec::new();
+
+    // Find all .hbc files in the data directory
+    if let Ok(entries) = fs::read_dir(data_dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                if let Some(extension) = path.extension() {
+                    if extension == "hbc" {
+                        // Skip hermes_dec_sample as requested
+                        if !path.to_string_lossy().contains("hermes_dec_sample") {
+                            hbc_files.push(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    hbc_files.sort(); // Sort for consistent test ordering
+
+    for hbc_file_path in hbc_files {
+        let test_name = hbc_file_path.file_stem().unwrap().to_string_lossy();
+        println!("Testing CFG analysis for: {}", test_name);
+
+        // Load and parse the HBC file
+        let data = fs::read(&hbc_file_path)
+            .unwrap_or_else(|_| panic!("Failed to read HBC file: {}", hbc_file_path.display()));
+
+        let hbc_file = HbcFile::parse(&data)
+            .unwrap_or_else(|e| panic!("Failed to parse HBC file {}: {}", test_name, e));
+
+        // Collect DOT output for all functions
+        let mut all_dot_output = String::new();
+        all_dot_output.push_str(&format!("// CFG analysis for {}\n", test_name));
+        all_dot_output.push_str(&format!(
+            "// Generated from {}\n\n",
+            hbc_file_path.display()
+        ));
+
+        // Test CFG analysis for each function
+        for function_index in 0..hbc_file.functions.count() {
+            println!("  Analyzing function {}", function_index);
+
+            // Create CFG for this function
+            let mut cfg = Cfg::new(&hbc_file, function_index);
+            cfg.build();
+
+            // Generate DOT output for this function with disassembled instructions
+            let dot_output = cfg.to_dot_with_disassembly(&hbc_file);
+
+            // Add function header to combined output
+            all_dot_output.push_str(&format!("// Function {}\n", function_index));
+            all_dot_output.push_str(&dot_output);
+            all_dot_output.push_str("\n\n");
+
+            // Basic CFG validation
+            validate_cfg_structure(&cfg, &test_name, function_index);
+        }
+
+        // Create expected DOT file path for the entire file
+        let expected_dot_path = data_dir.join(format!("{}.dot", test_name));
+
+        // Check if expected file exists
+        if expected_dot_path.exists() {
+            // Read expected content
+            let expected_content = fs::read_to_string(&expected_dot_path).unwrap_or_else(|_| {
+                panic!(
+                    "Failed to read expected DOT file: {}",
+                    expected_dot_path.display()
+                )
+            });
+
+            // Compare actual vs expected
+            if all_dot_output != expected_content {
+                // Generate a detailed diff for debugging
+                let diff = generate_dot_diff(&expected_content, &all_dot_output);
+                panic!("CFG DOT output mismatch for {}:\n\n{}", test_name, diff);
+            }
+
+            println!("    ✓ DOT output matches expected");
+        } else {
+            // Create expected file for first run
+            fs::write(&expected_dot_path, &all_dot_output).unwrap_or_else(|_| {
+                panic!(
+                    "Failed to write expected DOT file: {}",
+                    expected_dot_path.display()
+                )
+            });
+            println!(
+                "    ✓ Created expected DOT file: {}",
+                expected_dot_path.display()
+            );
+        }
+
+        println!("✓ {} CFG analysis completed", test_name);
+    }
+}
+
+/// Validate basic CFG structure properties
+fn validate_cfg_structure(cfg: &Cfg, test_name: &str, function_index: u32) {
+    let graph = cfg.graph();
+
+    // CFG should not be empty (unless function has no instructions)
+    if graph.node_count() == 0 {
+        println!("    Warning: Function {} has empty CFG", function_index);
+        return;
+    }
+
+    // Should have exactly one EXIT node
+    let exit_nodes = cfg.find_exit_nodes();
+    assert_eq!(
+        exit_nodes.len(),
+        1,
+        "Function {} in {} should have exactly one EXIT node, found {}",
+        function_index,
+        test_name,
+        exit_nodes.len()
+    );
+
+    // EXIT node should have no outgoing edges
+    let exit_node = exit_nodes[0];
+    let outgoing_edges = graph
+        .neighbors_directed(exit_node, petgraph::Direction::Outgoing)
+        .count();
+    assert_eq!(
+        outgoing_edges, 0,
+        "EXIT node in function {} of {} should have no outgoing edges, found {}",
+        function_index, test_name, outgoing_edges
+    );
+
+    // All terminating blocks should reach EXIT
+    assert!(
+        cfg.all_terminators_reach_exit(),
+        "All terminating blocks in function {} of {} should reach EXIT",
+        function_index,
+        test_name
+    );
+
+    // CFG should remain acyclic (but loops are allowed)
+    // Note: Real code often contains loops, so we'll be more lenient here
+    // and only warn about potential issues rather than failing
+    if !cfg.is_acyclic() {
+        println!(
+            "    Warning: Function {} in {} contains cycles (loops)",
+            function_index, test_name
+        );
+        // For now, we'll allow cycles as they can be legitimate loops
+        // In the future, we could add more sophisticated cycle detection
+    }
+
+    // Basic block count validation
+    let non_exit_blocks = graph
+        .node_indices()
+        .filter(|&node| !graph[node].is_exit())
+        .count();
+
+    assert!(
+        non_exit_blocks > 0,
+        "Function {} in {} should have at least one non-EXIT block",
+        function_index,
+        test_name
+    );
+
+    println!("    ✓ Function {} CFG structure validated", function_index);
+}
+
+/// Generate a simple diff between expected and actual DOT content
+fn generate_dot_diff(expected: &str, actual: &str) -> String {
+    let expected_lines: Vec<&str> = expected.lines().collect();
+    let actual_lines: Vec<&str> = actual.lines().collect();
+
+    let mut diff = String::new();
+    diff.push_str("Expected vs Actual DOT output:\n");
+    diff.push_str("================================\n\n");
+
+    let max_lines = expected_lines.len().max(actual_lines.len());
+
+    for i in 0..max_lines {
+        let expected_line = expected_lines.get(i).unwrap_or(&"<missing>");
+        let actual_line = actual_lines.get(i).unwrap_or(&"<missing>");
+
+        if expected_line != actual_line {
+            diff.push_str(&format!("Line {}:\n", i + 1));
+            diff.push_str(&format!("  Expected: {}\n", expected_line));
+            diff.push_str(&format!("  Actual:   {}\n", actual_line));
+            diff.push_str("\n");
+        }
+    }
+
+    diff
+}
+
+/// Test CFG analysis with specific focus on complex control flow
+#[test]
+fn test_cfg_complex_control_flow() {
+    // Test files that are known to have complex control flow
+    let test_files = vec!["data/flow_control.hbc", "data/regex_test.hbc"];
+
+    for hbc_file_path in test_files {
+        let path = Path::new(hbc_file_path);
+        if !path.exists() {
+            continue;
+        }
+
+        let test_name = path.file_stem().unwrap().to_string_lossy();
+        println!("Testing complex control flow for: {}", test_name);
+
+        // Load and parse the HBC file
+        let data = fs::read(path)
+            .unwrap_or_else(|_| panic!("Failed to read HBC file: {}", path.display()));
+
+        let hbc_file = HbcFile::parse(&data)
+            .unwrap_or_else(|e| panic!("Failed to parse HBC file {}: {}", test_name, e));
+
+        // Test CFG analysis for each function
+        for function_index in 0..hbc_file.functions.count() {
+            println!(
+                "  Analyzing function {} for complex control flow",
+                function_index
+            );
+
+            let mut cfg = Cfg::new(&hbc_file, function_index);
+            cfg.build();
+
+            let graph = cfg.graph();
+
+            // For complex control flow, we expect multiple blocks and edges
+            let non_exit_blocks = graph
+                .node_indices()
+                .filter(|&node| !graph[node].is_exit())
+                .count();
+
+            let total_edges = graph.edge_count();
+
+            println!(
+                "    Function {}: {} blocks, {} edges",
+                function_index, non_exit_blocks, total_edges
+            );
+
+            // Complex functions should have multiple blocks
+            if non_exit_blocks > 1 {
+                // Test dominator analysis
+                if let Some(_dominators) = cfg.analyze_dominators() {
+                    println!("    ✓ Dominator analysis successful");
+
+                    // Test natural loop detection
+                    let loops = cfg.find_natural_loops();
+                    if !loops.is_empty() {
+                        println!("    ✓ Found {} natural loops", loops.len());
+                    }
+
+                    // Test if/else join detection
+                    let if_else_joins = cfg.find_if_else_joins();
+                    if !if_else_joins.is_empty() {
+                        println!("    ✓ Found {} if/else join blocks", if_else_joins.len());
+                    }
+
+                    // Test switch dispatch detection
+                    let switch_dispatches = cfg.find_switch_dispatches();
+                    if !switch_dispatches.is_empty() {
+                        println!(
+                            "    ✓ Found {} switch dispatch patterns",
+                            switch_dispatches.len()
+                        );
+                    }
+                }
+            }
+
+            // Validate CFG structure
+            validate_cfg_structure(&cfg, &test_name, function_index);
+        }
+
+        println!("✓ {} complex control flow analysis completed", test_name);
+    }
 }

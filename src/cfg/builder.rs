@@ -428,6 +428,41 @@ impl<'a> CfgBuilder<'a> {
         format!("{:?}", Dot::with_config(graph, &[Config::EdgeNoLabel]))
     }
 
+    /// Export CFG to DOT format with disassembled instructions
+    pub fn to_dot_with_disassembly(&self, graph: &DiGraph<Block, EdgeKind>, hbc_file: &HbcFile) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph {\n");
+
+        // Add nodes with disassembled instructions
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                let mut block_label = format!("Block {} (PC {}-{}):\\n", 
+                    node.index(), block.start_pc(), block.end_pc());
+                
+                for (i, instruction) in block.instructions().iter().enumerate() {
+                    let disassembled = instruction.format_instruction(hbc_file);
+                    block_label.push_str(&format!("  {}: {}\\n", i, disassembled));
+                }
+                
+                block_label
+            };
+            
+            dot.push_str(&format!("    {} [ label = \"{}\" ]\n", node.index(), label));
+        }
+
+        // Add edges
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            dot.push_str(&format!("    {} -> {} [ ]\n", tail.index(), head.index()));
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
     /// Get the block containing the given PC, if any
     pub fn get_block_at_pc(&self, pc: u32) -> Option<NodeIndex> {
         self.pc_to_block.get(&pc).copied()

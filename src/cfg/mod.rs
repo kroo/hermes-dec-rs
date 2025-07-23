@@ -103,6 +103,11 @@ impl<'a> Cfg<'a> {
         self.builder.to_dot(&self.graph)
     }
 
+    /// Export CFG to DOT format with disassembled instructions
+    pub fn to_dot_with_disassembly(&self, hbc_file: &HbcFile) -> String {
+        self.builder.to_dot_with_disassembly(&self.graph, hbc_file)
+    }
+
     /// Get the EXIT node for the current function
     pub fn exit_node(&self) -> Option<NodeIndex> {
         self.builder.exit_node()
