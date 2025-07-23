@@ -59,7 +59,8 @@ fn test_cfg_building_with_single_instruction() {
     assert_eq!(cfg.graph().edge_count(), 0);
 
     // Find the non-EXIT block and check its contents
-    let regular_block = cfg.graph()
+    let regular_block = cfg
+        .graph()
         .node_indices()
         .find(|&node| !cfg.graph()[node].is_exit())
         .unwrap();
@@ -128,7 +129,8 @@ fn test_exit_node_creation() {
 
     // EXIT node should have no outgoing edges
     let exit_node = exit_nodes[0];
-    let outgoing_edges = cfg.graph()
+    let outgoing_edges = cfg
+        .graph()
         .neighbors_directed(exit_node, petgraph::Direction::Outgoing)
         .count();
     assert_eq!(outgoing_edges, 0);
@@ -151,19 +153,22 @@ fn test_return_instruction_connects_to_exit() {
 
     // Find the return block and EXIT block
     let exit_node = cfg.exit_node().unwrap();
-    let return_block = cfg.graph()
+    let return_block = cfg
+        .graph()
         .node_indices()
         .find(|&node| !cfg.graph()[node].is_exit())
         .unwrap();
 
     // Return block should have edge to EXIT
-    let has_exit_edge = cfg.graph()
+    let has_exit_edge = cfg
+        .graph()
         .neighbors_directed(return_block, petgraph::Direction::Outgoing)
         .any(|neighbor| neighbor == exit_node);
     assert!(has_exit_edge);
 
     // Check that the edge is unconditional
-    let edge = cfg.graph()
+    let edge = cfg
+        .graph()
         .edges_directed(return_block, petgraph::Direction::Outgoing)
         .find(|edge| edge.target() == exit_node)
         .unwrap();
@@ -187,19 +192,22 @@ fn test_throw_instruction_connects_to_exit() {
 
     // Find the throw block and EXIT block
     let exit_node = cfg.exit_node().unwrap();
-    let throw_block = cfg.graph()
+    let throw_block = cfg
+        .graph()
         .node_indices()
         .find(|&node| !cfg.graph()[node].is_exit())
         .unwrap();
 
     // Throw block should have edge to EXIT
-    let has_exit_edge = cfg.graph()
+    let has_exit_edge = cfg
+        .graph()
         .neighbors_directed(throw_block, petgraph::Direction::Outgoing)
         .any(|neighbor| neighbor == exit_node);
     assert!(has_exit_edge);
 
     // Check that the edge is unconditional
-    let edge = cfg.graph()
+    let edge = cfg
+        .graph()
         .edges_directed(throw_block, petgraph::Direction::Outgoing)
         .find(|edge| edge.target() == exit_node)
         .unwrap();
@@ -318,13 +326,15 @@ fn test_exit_node_has_no_outgoing_edges() {
     let exit_node = cfg.exit_node().unwrap();
 
     // EXIT node should have no outgoing edges (true sink)
-    let outgoing_count = cfg.graph()
+    let outgoing_count = cfg
+        .graph()
         .neighbors_directed(exit_node, petgraph::Direction::Outgoing)
         .count();
     assert_eq!(outgoing_count, 0);
 
     // EXIT node should have incoming edges
-    let incoming_count = cfg.graph()
+    let incoming_count = cfg
+        .graph()
         .neighbors_directed(exit_node, petgraph::Direction::Incoming)
         .count();
     assert!(incoming_count > 0);
@@ -429,7 +439,8 @@ fn test_non_terminating_function_still_has_exit() {
 
     // No edges should connect to EXIT since no terminators
     let exit_node = cfg.exit_node().unwrap();
-    let incoming_count = cfg.graph()
+    let incoming_count = cfg
+        .graph()
         .neighbors_directed(exit_node, petgraph::Direction::Incoming)
         .count();
     assert_eq!(incoming_count, 0);

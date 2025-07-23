@@ -127,7 +127,8 @@ impl Cfg {
                 let block = &self.graph[node];
                 if block.is_terminating() {
                     // Check if this terminating block has a direct edge to EXIT
-                    let has_exit_edge = self.graph
+                    let has_exit_edge = self
+                        .graph
                         .neighbors_directed(node, petgraph::Direction::Outgoing)
                         .any(|neighbor| neighbor == exit_node);
                     if !has_exit_edge {
@@ -138,7 +139,10 @@ impl Cfg {
             true
         } else {
             // If no EXIT node, check if there are any terminating blocks
-            !self.graph.node_indices().any(|node| self.graph[node].is_terminating())
+            !self
+                .graph
+                .node_indices()
+                .any(|node| self.graph[node].is_terminating())
         }
     }
 

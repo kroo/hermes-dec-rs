@@ -205,7 +205,10 @@ impl CfgBuilder {
 
             // Check if block ends with a terminating instruction (Return/Throw)
             if let Some(last_instruction) = instructions.last() {
-                if matches!(last_instruction.instruction.category(), "Return" | "Exception") {
+                if matches!(
+                    last_instruction.instruction.category(),
+                    "Return" | "Exception"
+                ) {
                     // Connect terminating blocks to EXIT node
                     if let Some(exit_node) = self.exit_node {
                         graph.add_edge(from_node, exit_node, EdgeKind::Uncond);
