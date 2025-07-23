@@ -42,7 +42,7 @@ impl Cfg {
     pub fn new() -> Self {
         Self {
             graph: DiGraph::new(),
-            builder: builder::CfgBuilder::new(),
+            builder: builder::CfgBuilder::new(0),
         }
     }
 
@@ -52,9 +52,8 @@ impl Cfg {
         instructions: &[crate::hbc::function_table::HbcFunctionInstruction],
         function_index: u32,
     ) -> &mut Self {
-        self.graph = self
-            .builder
-            .build_from_instructions(instructions, function_index);
+        self.builder = builder::CfgBuilder::new(function_index);
+        self.graph = self.builder.build_from_instructions(instructions);
         self
     }
 

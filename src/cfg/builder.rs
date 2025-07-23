@@ -12,6 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 /// CFG builder and analyzer
 pub struct CfgBuilder {
+    /// Function this builder is associated with
+    function_index: u32,
     /// Mapping from block start PC to node index
     block_starts: HashMap<u32, NodeIndex>,
     /// Mapping from every PC value within a block's range to the block node
@@ -21,9 +23,10 @@ pub struct CfgBuilder {
 }
 
 impl CfgBuilder {
-    /// Create a new CFG builder
-    pub fn new() -> Self {
+    /// Create a new CFG builder for the given function index
+    pub fn new(function_index: u32) -> Self {
         CfgBuilder {
+            function_index,
             block_starts: HashMap::new(),
             pc_to_block: HashMap::new(),
             jump_table: JumpTable::new(),
@@ -34,9 +37,8 @@ impl CfgBuilder {
     pub fn build_from_instructions(
         &mut self,
         instructions: &[HbcFunctionInstruction],
-        function_index: u32,
     ) -> DiGraph<Block, EdgeKind> {
-        // Clear lookup tables for a fresh build
+        // Start with fresh lookup tables
         self.block_starts.clear();
         self.pc_to_block.clear();
 
@@ -48,7 +50,7 @@ impl CfgBuilder {
 
         // Step 1: Build jump table for this function
         self.jump_table
-            .build_for_function(function_index, instructions)
+            .build_for_function(self.function_index, instructions)
             .expect("Failed to build jump table");
 
         // Step 2: Find leaders (basic block entry points)

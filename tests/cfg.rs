@@ -65,7 +65,7 @@ fn test_cfg_building_with_single_instruction() {
 
 #[test]
 fn test_pc_lookup_three_blocks() {
-    let mut builder = CfgBuilder::new();
+    let mut builder = CfgBuilder::new(0);
     let mut graph: DiGraph<Block, EdgeKind> = DiGraph::new();
 
     let make_inst = |idx| HbcFunctionInstruction {
@@ -95,7 +95,7 @@ fn test_pc_lookup_three_blocks() {
 
 #[test]
 fn test_pc_lookup_overlapping_blocks() {
-    let mut builder = CfgBuilder::new();
+    let mut builder = CfgBuilder::new(0);
     let mut graph: DiGraph<Block, EdgeKind> = DiGraph::new();
 
     let make_inst = |idx| HbcFunctionInstruction {
