@@ -1,0 +1,202 @@
+Bytecode File Information:
+  Bytecode version number: 90
+  Source hash: 473da7adb50a014739fe743daa715cde6ffff72b
+  Function count: 3
+  String count: 31
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..6] #29DC03AC: fifteen
+s1[ASCII, 6..19] #F2708BE8: negative three
+s2[ASCII, 15..19] three
+s3[ASCII, 19..24] eleven
+s4[ASCII, 24..35] negative one
+s5[ASCII, 33..35] one
+s6[ASCII, 34..46] negative five
+s7[ASCII, 43..46] five
+s8[ASCII, 46..50] eight
+s9[ASCII, 46..53] eighteen
+s10[ASCII, 53..65] negative four
+s11[ASCII, 62..65] four
+s12[ASCII, 62..69] fourteen
+s13[ASCII, 69..80] negative two
+s14[ASCII, 78..80] two
+s15[ASCII, 80..84] other
+s16[ASCII, 85..90] global
+s17[ASCII, 104..111] thirteen
+s18[ASCII, 112..116] seven
+s19[ASCII, 112..120] seventeen
+s20[ASCII, 120..123] nine
+s21[ASCII, 120..127] nineteen
+s22[ASCII, 128..130] six
+s23[ASCII, 128..134] sixteen
+s24[ASCII, 149..151] ten
+s25[ASCII, 152..157] twelve
+s26[ASCII, 158..163] twenty
+s27[ASCII, 164..170] unknown
+s28[ASCII, 171..174] zero
+s29[ASCII, 90..104] largeSwitchTest
+s30[ASCII, 135..149] denseSwitchTest
+
+Array Buffer:
+
+Function<global>0(1 params, 12 registers, 0 symbols):
+  DeclareGlobalVar  "denseSwitchTest"
+  DeclareGlobalVar  "largeSwitchTest"
+  CreateEnvironment r1
+  CreateClosure     r2, r1, Function<denseSwitchTest>1
+  GetGlobalObject   r0
+  PutById           r0, r2, 1, "denseSwitchTest"
+  CreateClosure     r1, r1, Function<largeSwitchTest>2
+  PutById           r0, r1, 2, "largeSwitchTest"
+  GetByIdShort      r3, r0, 1, "denseSwitchTest"
+  LoadConstUndefined r2
+  LoadConstUInt8    r1, 15
+  Call2             r1, r3, r2, r1
+  GetByIdShort      r1, r0, 2, "largeSwitchTest"
+  LoadConstUInt8    r0, 7
+  Call2             r0, r1, r2, r0
+  Ret               r0
+
+Function<denseSwitchTest>1(2 params, 1 registers, 0 symbols):
+  LoadParam         r0, 1
+  SwitchImm         r0, 150, [144], 0, 20
+  LoadConstString   r0, "twenty"
+  Ret               r0
+  LoadConstString   r0, "nineteen"
+  Ret               r0
+  LoadConstString   r0, "eighteen"
+  Ret               r0
+  LoadConstString   r0, "seventeen"
+  Ret               r0
+  LoadConstString   r0, "sixteen"
+  Ret               r0
+  LoadConstString   r0, "fifteen"
+  Ret               r0
+  LoadConstString   r0, "fourteen"
+  Ret               r0
+  LoadConstString   r0, "thirteen"
+  Ret               r0
+  LoadConstString   r0, "twelve"
+  Ret               r0
+  LoadConstString   r0, "eleven"
+  Ret               r0
+  LoadConstString   r0, "ten"
+  Ret               r0
+  LoadConstString   r0, "nine"
+  Ret               r0
+  LoadConstString   r0, "eight"
+  Ret               r0
+  LoadConstString   r0, "seven"
+  Ret               r0
+  LoadConstString   r0, "six"
+  Ret               r0
+  LoadConstString   r0, "five"
+  Ret               r0
+  LoadConstString   r0, "four"
+  Ret               r0
+  LoadConstString   r0, "three"
+  Ret               r0
+  LoadConstString   r0, "two"
+  Ret               r0
+  LoadConstString   r0, "one"
+  Ret               r0
+  LoadConstString   r0, "zero"
+  Ret               r0
+  LoadConstString   r0, "other"
+  Ret               r0
+
+Function<largeSwitchTest>2(2 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadConstInt      r0, 4294967291
+  JStrictEqualLong  L1, r0, r1
+  LoadConstInt      r0, 4294967292
+  JStrictEqualLong  L2, r0, r1
+  LoadConstInt      r0, 4294967293
+  JStrictEqualLong  L3, r0, r1
+  LoadConstInt      r0, 4294967294
+  JStrictEqualLong  L4, r0, r1
+  LoadConstInt      r0, 4294967295
+  JStrictEqualLong  L5, r0, r1
+  LoadConstZero     r0
+  JStrictEqualLong  L6, r0, r1
+  LoadConstUInt8    r0, 1
+  JStrictEqualLong  L7, r0, r1
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L8, r0, r1
+  LoadConstUInt8    r0, 3
+  JStrictEqual      L9, r0, r1
+  LoadConstUInt8    r0, 4
+  JStrictEqual      L10, r0, r1
+  LoadConstUInt8    r0, 5
+  JStrictEqual      L11, r0, r1
+  LoadConstUInt8    r0, 6
+  JStrictEqual      L12, r0, r1
+  LoadConstUInt8    r0, 7
+  JStrictEqual      L13, r0, r1
+  LoadConstUInt8    r0, 8
+  JStrictEqual      L14, r0, r1
+  LoadConstUInt8    r0, 9
+  JStrictEqual      L15, r0, r1
+  LoadConstUInt8    r0, 10
+  JStrictEqual      L16, r0, r1
+  LoadConstString   r0, "unknown"
+  Ret               r0
+L16:
+  LoadConstString   r0, "ten"
+  Ret               r0
+L15:
+  LoadConstString   r0, "nine"
+  Ret               r0
+L14:
+  LoadConstString   r0, "eight"
+  Ret               r0
+L13:
+  LoadConstString   r0, "seven"
+  Ret               r0
+L12:
+  LoadConstString   r0, "six"
+  Ret               r0
+L11:
+  LoadConstString   r0, "five"
+  Ret               r0
+L10:
+  LoadConstString   r0, "four"
+  Ret               r0
+L9:
+  LoadConstString   r0, "three"
+  Ret               r0
+L8:
+  LoadConstString   r0, "two"
+  Ret               r0
+L7:
+  LoadConstString   r0, "one"
+  Ret               r0
+L6:
+  LoadConstString   r0, "zero"
+  Ret               r0
+L5:
+  LoadConstString   r0, "negative one"
+  Ret               r0
+L4:
+  LoadConstString   r0, "negative two"
+  Ret               r0
+L3:
+  LoadConstString   r0, "negative three"
+  Ret               r0
+L2:
+  LoadConstString   r0, "negative four"
+  Ret               r0
+L1:
+  LoadConstString   r0, "negative five"
+  Ret               r0
+
