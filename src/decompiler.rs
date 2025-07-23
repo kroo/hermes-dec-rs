@@ -5,7 +5,7 @@
 
 use crate::ast::AstBuilder;
 use crate::cfg::Cfg;
-use crate::hbc::{tables::function_table::HbcFunction, HbcFile};
+use crate::hbc::HbcFile;
 use crate::{DecompilerError, DecompilerResult};
 use oxc_allocator::Allocator;
 
@@ -28,8 +28,7 @@ impl Decompiler {
         // Process functions sequentially (for now)
         let mut modules = Vec::new();
         for i in 0..hbc_file.functions.count() {
-            let func = hbc_file.functions.get(i, hbc_file)?;
-            modules.push(self.decompile_function(&func, i)?);
+            modules.push(self.decompile_function(hbc_file, i)?);
         }
         // Combine modules (for now, just take the first one)
         let module = modules
@@ -46,12 +45,12 @@ impl Decompiler {
     /// Decompile a single function
     fn decompile_function(
         &self,
-        func: &HbcFunction,
+        hbc_file: &HbcFile,
         function_index: u32,
     ) -> DecompilerResult<String> {
         // Build CFG from instructions
-        let mut cfg = Cfg::new();
-        cfg.build_from_instructions(&func.instructions, function_index);
+        let mut cfg = Cfg::new(hbc_file, function_index);
+        cfg.build();
 
         // Build AST from CFG
         let mut ast_builder = AstBuilder::new(&self.allocator);

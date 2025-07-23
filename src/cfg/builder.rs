@@ -6,44 +6,50 @@ use crate::cfg::{Block, EdgeKind};
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::function_table::HbcFunctionInstruction;
 use crate::hbc::tables::jump_table::JumpTable;
+use crate::hbc::HbcFile;
 use petgraph::algo::dominators::{self, Dominators};
 use petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::{HashMap, HashSet};
 
 /// CFG builder and analyzer
-pub struct CfgBuilder {
+pub struct CfgBuilder<'a> {
+    /// Reference to the HBC file
+    hbc_file: &'a HbcFile<'a>,
     /// Function this builder is associated with
     function_index: u32,
     /// Mapping from block start PC to node index
     block_starts: HashMap<u32, NodeIndex>,
     /// Mapping from every PC value within a block's range to the block node
     pc_to_block: HashMap<u32, NodeIndex>,
-    /// Jump table for resolving jump targets
-    jump_table: JumpTable,
     /// Exit node for the current function (if any)
     exit_node: Option<NodeIndex>,
 }
 
-impl CfgBuilder {
-    /// Create a new CFG builder for the given function index
-    pub fn new(function_index: u32) -> Self {
+impl<'a> CfgBuilder<'a> {
+    /// Create a new CFG builder for the given HBC file and function index
+    pub fn new(hbc_file: &'a HbcFile, function_index: u32) -> Self {
         CfgBuilder {
+            hbc_file,
             function_index,
             block_starts: HashMap::new(),
             pc_to_block: HashMap::new(),
-            jump_table: JumpTable::new(),
             exit_node: None,
         }
     }
 
-    /// Build CFG from instructions
-    pub fn build_from_instructions(
-        &mut self,
-        instructions: &[HbcFunctionInstruction],
-    ) -> DiGraph<Block, EdgeKind> {
-        // Start with fresh lookup tables
+    /// Build CFG for the function (loads instructions from the HBC file)
+    pub fn build(&mut self) -> DiGraph<Block, EdgeKind> {
         self.block_starts.clear();
         self.pc_to_block.clear();
+
+        let instructions = match self
+            .hbc_file
+            .functions
+            .get_instructions(self.function_index)
+        {
+            Ok(instrs) => instrs,
+            Err(_) => return DiGraph::new(),
+        };
 
         let mut graph = DiGraph::new();
 
@@ -55,16 +61,14 @@ impl CfgBuilder {
             return graph;
         }
 
-        // Step 1: Build jump table for this function
-        self.jump_table
-            .build_for_function(self.function_index, instructions)
-            .expect("Failed to build jump table");
+        // Use the jump table from the HBC file
+        let jump_table = &self.hbc_file.jump_table;
 
         // Step 2: Find leaders (basic block entry points)
-        let leaders = self.find_leaders(instructions);
+        let leaders = self.find_leaders(&instructions, jump_table);
 
         // Step 3: Create basic blocks
-        let blocks = self.create_blocks(instructions, &leaders);
+        let blocks = self.create_blocks(&instructions, &leaders);
 
         // Step 4: Add blocks to graph and populate PC mapping
         for block in blocks {
@@ -77,31 +81,28 @@ impl CfgBuilder {
         self.exit_node = Some(exit_node);
 
         // Step 6: Add edges between blocks and connect terminators to EXIT
-        self.add_edges(&mut graph, instructions);
+        self.add_edges(&mut graph, jump_table);
 
         graph
     }
 
     /// Find basic block leaders
-    fn find_leaders(&self, instructions: &[HbcFunctionInstruction]) -> HashSet<u32> {
+    fn find_leaders(
+        &self,
+        instructions: &[HbcFunctionInstruction],
+        jump_table: &JumpTable,
+    ) -> HashSet<u32> {
         let mut leaders = HashSet::new();
 
-        // Entry point is always a leader
         if !instructions.is_empty() {
             leaders.insert(0);
         }
 
-        // Find branch targets and post-branch instructions
         for (i, instruction) in instructions.iter().enumerate() {
             let pc = i as u32;
-
-            // Check if this is a jump instruction
             if instruction.instruction.category() == "Jump" {
-                // Get jump target
-                if let Some(target) = self.get_jump_target(instruction) {
+                if let Some(target) = self.get_jump_target(instruction, jump_table) {
                     leaders.insert(target);
-
-                    // Post-branch instruction is also a leader (unless it's the target)
                     let post_branch = pc + 1;
                     if post_branch < instructions.len() as u32 && post_branch != target {
                         leaders.insert(post_branch);
@@ -114,17 +115,15 @@ impl CfgBuilder {
     }
 
     /// Get jump target from instruction using jump table
-    fn get_jump_target(&self, instruction: &HbcFunctionInstruction) -> Option<u32> {
-        // Use the jump table to get the target instruction index
-        if let Some(jump_label) = self
-            .jump_table
+    fn get_jump_target(
+        &self,
+        instruction: &HbcFunctionInstruction,
+        jump_table: &JumpTable,
+    ) -> Option<u32> {
+        if let Some(jump_label) = jump_table
             .get_label_by_jump_op_index(instruction.function_index, instruction.instruction_index)
         {
-            // Find the label in the jump table to get the target instruction index
-            if let Some(labels) = self
-                .jump_table
-                .get_labels_for_function(instruction.function_index)
-            {
+            if let Some(labels) = jump_table.get_labels_for_function(instruction.function_index) {
                 for label in labels {
                     if &label.name == jump_label {
                         return Some(label.instruction_index);
@@ -179,11 +178,7 @@ impl CfgBuilder {
     }
 
     /// Add edges between blocks
-    fn add_edges(
-        &mut self,
-        graph: &mut DiGraph<Block, EdgeKind>,
-        _instructions: &[HbcFunctionInstruction],
-    ) {
+    fn add_edges(&mut self, graph: &mut DiGraph<Block, EdgeKind>, jump_table: &JumpTable) {
         let mut block_ends: Vec<(u32, NodeIndex, Vec<HbcFunctionInstruction>)> = Vec::new();
 
         // Find all block end points and collect instructions (excluding EXIT block)
@@ -215,7 +210,7 @@ impl CfgBuilder {
                     }
                 } else if last_instruction.instruction.category() == "Jump" {
                     // Add jump edge
-                    if let Some(target) = self.get_jump_target(last_instruction) {
+                    if let Some(target) = self.get_jump_target(last_instruction, jump_table) {
                         if let Some(&to_node) = self.block_starts.get(&target) {
                             let edge_kind = self.get_edge_kind(last_instruction);
                             graph.add_edge(from_node, to_node, edge_kind);

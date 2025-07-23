@@ -1,4 +1,4 @@
-use crate::cfg::CfgBuilder;
+use crate::cfg::Cfg;
 use crate::error::{Error as DecompilerError, Result as DecompilerResult};
 use crate::hbc::HbcFile;
 use std::path::Path;
@@ -62,15 +62,15 @@ fn analyze_function_cfg(
     }
 
     // Build CFG
-    let mut builder = CfgBuilder::new(function_index);
-    let cfg = builder.build_from_instructions(&instructions);
+    let mut cfg = Cfg::new(hbc_file, function_index);
+    cfg.build();
 
-    println!("  Basic blocks: {}", cfg.node_count());
-    println!("  Edges: {}", cfg.edge_count());
+    println!("  Basic blocks: {}", cfg.graph().node_count());
+    println!("  Edges: {}", cfg.graph().edge_count());
 
     // Print basic block information
-    for (i, node_index) in cfg.node_indices().enumerate() {
-        let block = &cfg[node_index];
+    for (i, node_index) in cfg.graph().node_indices().enumerate() {
+        let block = &cfg.graph()[node_index];
         println!(
             "    Block {}: PC {}-{} ({} instructions)",
             i,
@@ -81,11 +81,11 @@ fn analyze_function_cfg(
     }
 
     // Analyze dominators and control flow structure
-    if let Some(_dominators) = builder.analyze_dominators(&cfg) {
+    if let Some(_dominators) = cfg.analyze_dominators() {
         println!("  Dominator analysis: Available");
 
         // Find natural loops
-        let loops = builder.find_natural_loops(&cfg);
+        let loops = cfg.find_natural_loops();
         if !loops.is_empty() {
             println!("  Natural loops: {} found", loops.len());
             for (header, tail) in loops {
@@ -98,7 +98,7 @@ fn analyze_function_cfg(
         }
 
         // Find if/else join blocks
-        let join_blocks = builder.find_if_else_joins(&cfg);
+        let join_blocks = cfg.find_if_else_joins();
         if !join_blocks.is_empty() {
             println!("  If/else join blocks: {} found", join_blocks.len());
             for join in join_blocks {
@@ -107,7 +107,7 @@ fn analyze_function_cfg(
         }
 
         // Find switch dispatches
-        let switch_dispatches = builder.find_switch_dispatches(&cfg);
+        let switch_dispatches = cfg.find_switch_dispatches();
         if !switch_dispatches.is_empty() {
             println!("  Switch dispatches: {} found", switch_dispatches.len());
             for (i, dispatch) in switch_dispatches.iter().enumerate() {
@@ -120,7 +120,7 @@ fn analyze_function_cfg(
 
     // Export DOT if requested
     if let Some(dot_path) = output_dot {
-        let dot_content = builder.to_dot(&cfg);
+        let dot_content = cfg.to_dot();
         std::fs::write(dot_path, dot_content)
             .map_err(|e| DecompilerError::Io(format!("Failed to write DOT file: {}", e)))?;
         println!("  DOT exported to: {}", dot_path.display());

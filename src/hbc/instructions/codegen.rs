@@ -373,6 +373,32 @@ fn generate_define_instructions_macro(
     )?;
     writeln!(code, "                }}")?;
     writeln!(code, "            }}\n")?;
+    // `size()` method
+    writeln!(code, "            pub fn size(&self) -> usize {{")?;
+    writeln!(code, "                match self {{")?;
+    for inst in &registry.instructions {
+        let mut total_size = 1; // Base size: 1 byte for opcode
+        for op_type in &inst.operands {
+            total_size += match op_type.as_str() {
+                "Reg8" | "UInt8" | "Addr8" | "StringId8" | "BigIntId8" | "FunctionId8"
+                | "EnvId8" => 1,
+                "UInt16" | "StringId16" | "BigIntId16" | "FunctionId16" => 2,
+                "Reg32" | "UInt32" | "Addr32" | "Imm32" | "StringId32" | "BigIntId32"
+                | "FunctionId32" | "RegExpId32" => 4,
+                "Double" => 8,
+                _ => 1, // Default fallback
+            };
+        }
+        writeln!(
+            code,
+            "                    UnifiedInstruction::{} {{ .. }} => {}, // {}",
+            sanitize_rust_identifier(&inst.name),
+            total_size,
+            inst.operands.join(", ")
+        )?;
+    }
+    writeln!(code, "                }}")?;
+    writeln!(code, "            }}\n")?;
     generate_format_instruction_method(code, registry)?;
     generate_parse_method(code, registry)?;
     writeln!(code, "        }}")?; // end impl
