@@ -13,7 +13,7 @@ pub fn inspect(input_path: &std::path::Path) -> DecompilerResult<()> {
             });
         }
     };
-    
+
     // Parse the HBC file
     let hbc_file: HbcFile = match HbcFile::parse(&data) {
         Ok(file) => file,
@@ -24,7 +24,7 @@ pub fn inspect(input_path: &std::path::Path) -> DecompilerResult<()> {
             });
         }
     };
-    
+
     // Output as JSON
     match serde_json::to_string_pretty(&hbc_file) {
         Ok(json) => {
@@ -35,4 +35,4 @@ pub fn inspect(input_path: &std::path::Path) -> DecompilerResult<()> {
             message: "Failed to serialize HBC file to JSON".to_string(),
         }),
     }
-} 
+}

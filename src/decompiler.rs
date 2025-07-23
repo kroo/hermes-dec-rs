@@ -1,12 +1,12 @@
 #![allow(dead_code)]
 //! Main decompiler module
-//! 
+//!
 //! This module orchestrates the entire decompilation process from HBC to JavaScript.
 
-use crate::{DecompilerError, DecompilerResult};
-use crate::hbc::{HbcFile, tables::function_table::HbcFunction};
-use crate::cfg::Cfg;
 use crate::ast::AstBuilder;
+use crate::cfg::Cfg;
+use crate::hbc::{tables::function_table::HbcFunction, HbcFile};
+use crate::{DecompilerError, DecompilerResult};
 use oxc_allocator::Allocator;
 
 /// Main decompiler struct
@@ -22,7 +22,7 @@ impl Decompiler {
             allocator: Allocator::default(),
         })
     }
-    
+
     /// Decompile an HBC file to JavaScript
     pub fn decompile(&mut self, hbc_file: &HbcFile) -> DecompilerResult<String> {
         // Process functions sequentially (for now)
@@ -32,35 +32,44 @@ impl Decompiler {
             modules.push(self.decompile_function(&func, i)?);
         }
         // Combine modules (for now, just take the first one)
-        let module = modules.into_iter().next()
+        let module = modules
+            .into_iter()
+            .next()
             .ok_or_else(|| DecompilerError::Internal {
                 message: "No functions found in HBC file".to_string(),
             })?;
-        
+
         // Generate JavaScript code
         self.generate_code(&module)
     }
-    
+
     /// Decompile a single function
-    fn decompile_function(&self, func: &HbcFunction, function_index: u32) -> DecompilerResult<String> {
+    fn decompile_function(
+        &self,
+        func: &HbcFunction,
+        function_index: u32,
+    ) -> DecompilerResult<String> {
         // Build CFG from instructions
         let mut cfg = Cfg::new();
         cfg.build_from_instructions(&func.instructions, function_index);
-        
+
         // Build AST from CFG
         let mut ast_builder = AstBuilder::new(&self.allocator);
         let _program = ast_builder.build_from_cfg(&cfg);
-        
+
         // For now, return a placeholder
-        Ok(format!("// Function {} decompiled (placeholder)", function_index))
+        Ok(format!(
+            "// Function {} decompiled (placeholder)",
+            function_index
+        ))
     }
-    
+
     /// Generate JavaScript code from AST
     fn generate_code(&self, code: &str) -> DecompilerResult<String> {
         // For now, just return the code as-is
         Ok(code.to_string())
     }
-    
+
     /// Decompile HBC file with options
     pub fn decompile_with_options(
         &mut self,
@@ -76,7 +85,7 @@ impl Decompiler {
         // 5. Apply minification if requested
         // 6. Add comments if requested
         // 7. Generate code
-        
+
         Ok("// TODO: Implement decompilation".to_string())
     }
-} 
+}

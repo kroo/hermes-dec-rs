@@ -1,7 +1,7 @@
 //! Library tests for hermes-dec-rs
 
-mod hbc;
-mod cfg;
 mod ast;
+mod cfg;
 mod decompiler;
-mod disasm_output; 
+mod disasm_output;
+mod hbc;

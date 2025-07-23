@@ -1,15 +1,15 @@
 //! Command-line interface module
-//! 
+//!
 //! This module contains the implementations for the CLI subcommands.
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+pub mod cfg;
 pub mod decompile;
 pub mod disasm;
-pub mod inspect;
 pub mod generate;
-pub mod cfg;
+pub mod inspect;
 
 #[derive(Parser)]
 #[command(name = "hermes-dec-rs")]
@@ -78,7 +78,11 @@ impl Cli {
                 }
                 generate::generate_instructions()?;
             }
-            Commands::Cfg { input, function, dot } => {
+            Commands::Cfg {
+                input,
+                function,
+                dot,
+            } => {
                 cfg::cfg(&input, function, dot.as_deref())?;
             }
         }
@@ -89,26 +93,22 @@ impl Cli {
 
 /// Common CLI utilities
 pub mod utils {
-    use crate::error::{Error as DecompilerError, Result as DecompilerResult};
     use super::*;
-    
+    use crate::error::{Error as DecompilerError, Result as DecompilerResult};
+
     /// Read a file into a byte vector
     pub fn read_file(path: &std::path::Path) -> DecompilerResult<Vec<u8>> {
-        std::fs::read(path)
-            .map_err(DecompilerError::from)
+        std::fs::read(path).map_err(DecompilerError::from)
     }
-    
+
     /// Write output to file or stdout
     pub fn write_output(content: &str, output_path: Option<&PathBuf>) -> DecompilerResult<()> {
         match output_path {
-            Some(path) => {
-                std::fs::write(path, content)
-                    .map_err(DecompilerError::from)
-            }
+            Some(path) => std::fs::write(path, content).map_err(DecompilerError::from),
             None => {
                 println!("{}", content);
                 Ok(())
             }
         }
     }
-} 
+}

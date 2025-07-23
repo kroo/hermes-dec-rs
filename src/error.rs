@@ -1,5 +1,5 @@
-use thiserror::Error;
 use miette::{Diagnostic, SourceSpan};
+use thiserror::Error;
 
 /// Result type for decompiler operations
 pub type Result<T> = std::result::Result<T, Error>;
@@ -69,4 +69,4 @@ impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Error::Io(err.to_string())
     }
-} 
+}

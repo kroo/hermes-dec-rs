@@ -1,4 +1,4 @@
-use hermes_dec_rs::generated::generated_traits::{InstructionCategory, get_category_from_name};
+use hermes_dec_rs::generated::generated_traits::{get_category_from_name, InstructionCategory};
 
 #[test]
 fn test_instruction_category_duplication() {
@@ -22,12 +22,15 @@ fn test_instruction_category_duplication() {
         InstructionCategory::Bitwise,
     ];
     assert_eq!(generated_categories.len(), 16);
-    
+
     // Test that the generated version can be used for category mapping
     let test_instruction = "LoadConstString";
     let generated_category = get_category_from_name(test_instruction);
     println!("LoadConstString category: {:?}", generated_category);
-    assert!(matches!(generated_category, InstructionCategory::ConstantLoad));
+    assert!(matches!(
+        generated_category,
+        InstructionCategory::ConstantLoad
+    ));
 }
 
 #[test]
@@ -51,12 +54,24 @@ fn test_category_mapping_consistency() {
     for instruction in test_instructions {
         let generated_category = get_category_from_name(instruction);
         match instruction {
-            "LoadConstString" => assert!(matches!(generated_category, InstructionCategory::ConstantLoad)),
+            "LoadConstString" => assert!(matches!(
+                generated_category,
+                InstructionCategory::ConstantLoad
+            )),
             "Call" => assert!(matches!(generated_category, InstructionCategory::Call)),
             "Ret" => assert!(matches!(generated_category, InstructionCategory::Return)),
-            "Add" => assert!(matches!(generated_category, InstructionCategory::Arithmetic)),
-            "GetById" => assert!(matches!(generated_category, InstructionCategory::PropertyAccess)),
-            "NewObject" => assert!(matches!(generated_category, InstructionCategory::ObjectCreation)),
+            "Add" => assert!(matches!(
+                generated_category,
+                InstructionCategory::Arithmetic
+            )),
+            "GetById" => assert!(matches!(
+                generated_category,
+                InstructionCategory::PropertyAccess
+            )),
+            "NewObject" => assert!(matches!(
+                generated_category,
+                InstructionCategory::ObjectCreation
+            )),
             _ => assert!(matches!(generated_category, InstructionCategory::Other)),
         }
     }
@@ -64,9 +79,9 @@ fn test_category_mapping_consistency() {
 
 #[test]
 fn test_generated_version_registry() {
-    use hermes_dec_rs::generated::generated_traits::{get_version_registry};
+    use hermes_dec_rs::generated::generated_traits::get_version_registry;
     let registry = get_version_registry();
     assert!(registry.is_supported(90));
     assert!(registry.is_supported(95));
     assert!(registry.is_supported(96));
-} 
+}

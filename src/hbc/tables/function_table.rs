@@ -1,10 +1,13 @@
 use super::super::{header::HbcHeader, HbcFile};
 use super::string_table::StringTable;
-use scroll::Pread;
-use serde::{Serialize, Deserialize, ser::{SerializeStruct, Serializer}};
-use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::error::{Error as DecompilerError, Result as DecompilerResult};
+use crate::generated::unified_instructions::UnifiedInstruction;
 use regex::Regex;
+use scroll::Pread;
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Deserialize, Serialize,
+};
 
 #[derive(Debug, Clone, Copy, scroll::Pread)]
 #[repr(C, packed)]
@@ -216,13 +219,18 @@ pub struct HbcFunction {
 
 impl HbcFunctionInstruction {
     pub fn format_instruction(&self, hbc_file: &HbcFile) -> String {
-        static JUMP_LABEL_REGEX: once_cell::sync::Lazy<Regex> = once_cell::sync::Lazy::new(|| Regex::new(r"\[\-?\d+\]").unwrap());
+        static JUMP_LABEL_REGEX: once_cell::sync::Lazy<Regex> =
+            once_cell::sync::Lazy::new(|| Regex::new(r"\[\-?\d+\]").unwrap());
 
         let formatted_instruction = self.instruction.format_instruction(hbc_file);
-        let jump_operand = hbc_file.jump_table.get_label_by_jump_op_index(self.function_index, self.instruction_index);
+        let jump_operand = hbc_file
+            .jump_table
+            .get_label_by_jump_op_index(self.function_index, self.instruction_index);
         if let Some(label) = jump_operand {
             // replace [\d+] with label
-            JUMP_LABEL_REGEX.replace_all(&formatted_instruction, label).to_string()
+            JUMP_LABEL_REGEX
+                .replace_all(&formatted_instruction, label)
+                .to_string()
         } else {
             formatted_instruction
         }
@@ -394,7 +402,9 @@ impl<'a> FunctionTable<'a> {
             let parsed_header = &self.parsed_headers[index as usize];
             let instructions = parsed_header.instructions()?;
             Ok(HbcFunction {
-                name: self.get_function_name(index, &hbc_file.strings).unwrap_or_else(|| format!("function_{}", index)),
+                name: self
+                    .get_function_name(index, &hbc_file.strings)
+                    .unwrap_or_else(|| format!("function_{}", index)),
                 flags: parsed_header.header.flags(),
                 param_count: parsed_header.header.param_count(),
                 env_size: parsed_header.header.environment_size() as u32,
@@ -428,7 +438,7 @@ impl<'a> ParsedFunctionHeader<'a> {
         if let Some(result) = self.cached_instructions.get() {
             return result.clone();
         }
-        
+
         let result = self.parse_instructions();
         let _ = self.cached_instructions.set(result.clone());
         result
@@ -438,7 +448,7 @@ impl<'a> ParsedFunctionHeader<'a> {
     fn parse_instructions(&self) -> DecompilerResult<Vec<HbcFunctionInstruction>> {
         let mut instructions = Vec::new();
         let mut offset = 0;
-        
+
         while offset < self.body.len() {
             if offset >= self.body.len() {
                 break;

@@ -11,4 +11,4 @@ fn test_decompiler_with_empty_functions() {
     // This test will need to be updated once we have proper HBC file creation
     // For now, it just verifies the module compiles
     assert!(true);
-} 
+}

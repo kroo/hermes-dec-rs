@@ -7,836 +7,738 @@
 
 use anyhow::Result;
 use scroll::{Pread, LE};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 macro_rules! OPERAND3_Addr8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_FunctionId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_UInt8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND4_Reg8_UInt16_UInt16_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg32_Reg32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u32>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND4_Reg8_Reg8_UInt8_StringId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_UInt16_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND5_Reg8_Reg8_Reg8_Reg8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-                operand_4: operand_4,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_StringId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_BigIntId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_BigIntId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_StringId8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND5_Reg8_UInt32_Addr32_UInt32_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<i32>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
-            let operand_4 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-                operand_4: operand_4,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<i32>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_StringId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Addr8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Addr32_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND6_Reg8_Reg8_Reg8_Reg8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_5 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-                operand_4: operand_4,
-                operand_5: operand_5,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_5 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+            operand_5: operand_5,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND4_Reg8_UInt16_UInt16_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND4_Reg8_StringId32_StringId32_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Addr32_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_UInt8_FunctionId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND4_Reg8_Reg8_UInt8_StringId8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND1_StringId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND1_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND5_Reg8_Reg8_Reg8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-                operand_4: operand_4,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND1_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_UInt8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_Double {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<f64>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<f64>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_FunctionId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND1_Addr32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND4_Reg8_Reg8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_Imm32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND5_Reg8_UInt16_UInt16_UInt16_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_4 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-                operand_4: operand_4,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_UInt8_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND2_Reg8_StringId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND4_Reg8_Reg8_Reg8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND5_Reg8_UInt16_UInt16_UInt32_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
-            let operand_4 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-                operand_4: operand_4,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND4_Reg8_Reg8_UInt8_StringId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-                operand_3: operand_3,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_UInt8_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND1_Addr8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! OPERAND3_Reg8_Reg8_StringId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {
-        {
-            let start = *$offset;
-            let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-            let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
-            let instr = UnifiedInstruction::$variant {
-                operand_0: operand_0,
-                operand_1: operand_1,
-                operand_2: operand_2,
-            };
-            let bytes_read = *$offset - start;
-            Ok((instr, bytes_read))
-        }
-    };
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
 }
 macro_rules! define_instructions {
     ($($name:ident { operands: [$($op:ident: $op_ty:ty),*], category: $cat:expr }),*) => {
@@ -972,7 +874,7 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::AsyncBreakCheck {  } => { /* No operands */ 
+                    UnifiedInstruction::AsyncBreakCheck {  } => { /* No operands */
                     }
                     UnifiedInstruction::GetByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
                         operands.push(format!("r{}", operand_0));
@@ -980,7 +882,7 @@ macro_rules! define_instructions {
                         operands.push(operand_2.to_string());
                         operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
                     }
-                    UnifiedInstruction::StartGenerator {  } => { /* No operands */ 
+                    UnifiedInstruction::StartGenerator {  } => { /* No operands */
                     }
                     UnifiedInstruction::GreaterEq { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
@@ -1012,7 +914,7 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::Debugger {  } => { /* No operands */ 
+                    UnifiedInstruction::Debugger {  } => { /* No operands */
                     }
                     UnifiedInstruction::ReifyArguments { operand_0 } => {
                         operands.push(format!("r{}", operand_0));
@@ -1064,7 +966,7 @@ macro_rules! define_instructions {
                         operands.push(operand_2.to_string());
                         operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
                     }
-                    UnifiedInstruction::Unreachable {  } => { /* No operands */ 
+                    UnifiedInstruction::Unreachable {  } => { /* No operands */
                     }
                     UnifiedInstruction::Sub { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
@@ -1336,7 +1238,7 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::CompleteGenerator {  } => { /* No operands */ 
+                    UnifiedInstruction::CompleteGenerator {  } => { /* No operands */
                     }
                     UnifiedInstruction::IteratorBegin { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
@@ -1580,7 +1482,7 @@ macro_rules! define_instructions {
                     UnifiedInstruction::NewObject { operand_0 } => {
                         operands.push(format!("r{}", operand_0));
                     }
-                    UnifiedInstruction::DebuggerCheckBreak {  } => { /* No operands */ 
+                    UnifiedInstruction::DebuggerCheckBreak {  } => { /* No operands */
                     }
                     UnifiedInstruction::SelectObject { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));

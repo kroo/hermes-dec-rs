@@ -101,7 +101,10 @@ impl SLPArray {
     }
 
     pub fn to_strings(&self, string_table: &[String]) -> Vec<String> {
-        self.items.iter().map(|item| item.to_string(string_table)).collect()
+        self.items
+            .iter()
+            .map(|item| item.to_string(string_table))
+            .collect()
     }
 }
 
@@ -177,7 +180,7 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
             // eprintln!("((tag_byte & 0x0F) as usize) << 8: {:?}", ((tag_byte & 0x0F) as usize) << 8);
             // eprintln!("((tag_byte & 0x0F) as usize) << 8 | (length_byte as usize): {:?}", ((tag_byte & 0x0F) as usize) << 8 | (length_byte as usize));
             // eprintln!("length_byte as usize: {:?}", length_byte as usize);
-            
+
             let tag_type = TagType::from_u8((tag_byte >> 4) & 0x07)
                 .ok_or_else(|| format!("Unknown tag type: {}", (tag_byte >> 4) & 0x07))?;
             let length = (((tag_byte & 0x0F) as usize) << 8) | (length_byte as usize);
@@ -214,9 +217,7 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
             }
 
             match tag_type {
-                TagType::NullTag => {
-                    items.push(SLPValue::Null)
-                },
+                TagType::NullTag => items.push(SLPValue::Null),
                 TagType::TrueTag => items.push(SLPValue::True),
                 TagType::FalseTag => items.push(SLPValue::False),
                 TagType::NumberTag => {
@@ -229,7 +230,7 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
                         // eprintln!("data.len: {}", data.len());
                         // eprintln!("data[offset..offset + 8]: {:?}", &data[offset..data.len()]);
                         // return Err(format!("Not enough bytes for double (offset={}, data.len={})", offset, data.len()));
-                        
+
                         offset += 8;
                         // eprintln!("BREAKING OUT OF LOOP");
                         break;
@@ -248,7 +249,7 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
                     let val = u32::from_le_bytes(bytes.try_into().unwrap());
 
                     // eprintln!("read long string bytes: {:?}, offset: {}, val: {}", &data[offset..offset + 4], offset, val);
-                    
+
                     offset += 4;
                     items.push(SLPValue::LongString(val));
                 }
@@ -289,7 +290,13 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
         // eprintln!("after loop, offset: {}, items.len: {}", offset, items.len());
     }
 
-    Ok(SLPArray { items: if let Some(n) = num_items { items.into_iter().take(n).collect() } else { items } })
+    Ok(SLPArray {
+        items: if let Some(n) = num_items {
+            items.into_iter().take(n).collect()
+        } else {
+            items
+        },
+    })
 }
 
 #[cfg(test)]
@@ -302,40 +309,40 @@ mod tests {
         // Format: tag byte (type << 4 | length), then values
         let data = vec![
             0x01, // null tag (0), length 1
-            0x11, // true tag (1), length 1  
+            0x11, // true tag (1), length 1
             0x21, // false tag (2), length 1
             0x31, // number tag (3), length 1
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x45, 0x40, // 42.0 as f64
             0x51, // short string tag (5), length 1
             0x05, 0x00, // string index 5
         ];
-        
+
         let result = unpack_slp_array(&data, None).unwrap();
         assert_eq!(result.items.len(), 5);
-        
+
         match &result.items[0] {
-            SLPValue::Null => {},
+            SLPValue::Null => {}
             _ => panic!("Expected null"),
         }
-        
+
         match &result.items[1] {
-            SLPValue::True => {},
+            SLPValue::True => {}
             _ => panic!("Expected true"),
         }
-        
+
         match &result.items[2] {
-            SLPValue::False => {},
+            SLPValue::False => {}
             _ => panic!("Expected false"),
         }
-        
+
         match &result.items[3] {
             SLPValue::Number(n) => assert_eq!(*n, 42.0),
             _ => panic!("Expected number"),
         }
-        
+
         match &result.items[4] {
             SLPValue::ShortString(idx) => assert_eq!(*idx, 5),
             _ => panic!("Expected short string"),
         }
     }
-} 
+}

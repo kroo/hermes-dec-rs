@@ -1,5 +1,5 @@
 //! CFG visualization module
-//! 
+//!
 //! This module contains visualization utilities for CFGs.
 
 use crate::cfg::{Block, EdgeKind};
@@ -32,7 +32,7 @@ pub fn generate_dot(graph: &DiGraph<Block, EdgeKind>, options: &DotOptions) -> S
     dot.push_str("digraph CFG {\n");
     dot.push_str("  rankdir=TB;\n");
     dot.push_str("  node [shape=box];\n\n");
-    
+
     // Add nodes
     for node in graph.node_indices() {
         if let Some(block) = graph.node_weight(node) {
@@ -40,40 +40,40 @@ pub fn generate_dot(graph: &DiGraph<Block, EdgeKind>, options: &DotOptions) -> S
             dot.push_str(&format!("  {} [label=\"{}\"];\n", node.index(), label));
         }
     }
-    
+
     dot.push_str("\n");
-    
+
     // Add edges with labels and colors
     for edge in graph.edge_indices() {
         let (tail, head) = graph.edge_endpoints(edge).unwrap();
         let edge_kind = graph.edge_weight(edge).unwrap();
-        
+
         let mut edge_str = format!("  {} -> {}", tail.index(), head.index());
         let mut attributes = Vec::new();
-        
+
         // Add label if requested
         if options.include_labels {
             if let Some(label) = get_edge_label(edge_kind) {
                 attributes.push(format!("label=\"{}\"", label));
             }
         }
-        
+
         // Add color if requested
         if options.include_colors {
             if let Some(color) = get_edge_color(edge_kind) {
                 attributes.push(format!("color=\"{}\"", color));
             }
         }
-        
+
         // Add attributes if any
         if !attributes.is_empty() {
             edge_str.push_str(&format!(" [{}]", attributes.join(", ")));
         }
-        
+
         edge_str.push_str(";\n");
         dot.push_str(&edge_str);
     }
-    
+
     dot.push_str("}\n");
     dot
 }
@@ -81,7 +81,11 @@ pub fn generate_dot(graph: &DiGraph<Block, EdgeKind>, options: &DotOptions) -> S
 /// Format a block label for DOT
 fn format_block_label(block: &Block, options: &DotOptions) -> String {
     if options.include_node_details {
-        format!("Block {}: {} instructions", block.start_pc(), block.instruction_count())
+        format!(
+            "Block {}: {} instructions",
+            block.start_pc(),
+            block.instruction_count()
+        )
     } else {
         format!("Block {}", block.start_pc())
     }
@@ -113,6 +117,6 @@ fn get_edge_color(edge_kind: &EdgeKind) -> Option<&'static str> {
 
 /// Generate a simple DOT representation (backward compatibility)
 pub fn generate_simple_dot(graph: &DiGraph<Block, EdgeKind>) -> String {
-    use petgraph::dot::{Dot, Config};
+    use petgraph::dot::{Config, Dot};
     format!("{:?}", Dot::with_config(graph, &[Config::EdgeNoLabel]))
-} 
+}

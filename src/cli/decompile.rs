@@ -1,10 +1,13 @@
+use crate::decompiler::Decompiler;
 use crate::error::{Error as DecompilerError, Result as DecompilerResult};
 use crate::hbc::HbcFile;
-use crate::decompiler::Decompiler;
 use std::fs;
 
 /// Run the decompile subcommand
-pub fn decompile(input_path: &std::path::Path, output_path: Option<&std::path::Path>) -> DecompilerResult<()> {
+pub fn decompile(
+    input_path: &std::path::Path,
+    output_path: Option<&std::path::Path>,
+) -> DecompilerResult<()> {
     // Read the input file
     let data = match fs::read(input_path) {
         Ok(data) => data,
@@ -41,20 +44,18 @@ pub fn decompile(input_path: &std::path::Path, output_path: Option<&std::path::P
 
     // Write output
     match output_path {
-        Some(path) => {
-            match fs::write(path, &output) {
-                Ok(_) => println!("Decompiled code written to: {}", path.display()),
-                Err(_) => {
-                    return Err(DecompilerError::Internal {
-                        message: format!("Failed to write output to: {}", path.display()),
-                    });
-                }
+        Some(path) => match fs::write(path, &output) {
+            Ok(_) => println!("Decompiled code written to: {}", path.display()),
+            Err(_) => {
+                return Err(DecompilerError::Internal {
+                    message: format!("Failed to write output to: {}", path.display()),
+                });
             }
-        }
+        },
         None => {
             println!("{}", output);
         }
     }
 
     Ok(())
-} 
+}

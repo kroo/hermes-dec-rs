@@ -1,7 +1,7 @@
-use serde::ser::{Serializer, SerializeStruct};
-use serde::Serialize;
 use super::super::header::HbcHeader;
-use super::super::regexp_bytecode::{RegExpBytecodeParser, DecompiledRegExp};
+use super::super::regexp_bytecode::{DecompiledRegExp, RegExpBytecodeParser};
+use serde::ser::{SerializeStruct, Serializer};
+use serde::Serialize;
 
 #[derive(Debug)]
 pub struct RegExpTable<'a> {
@@ -11,38 +11,45 @@ pub struct RegExpTable<'a> {
     pub regexps: Vec<RegExpBytecodeParser<'a>>,
 }
 
-
 impl<'a> RegExpTable<'a> {
     pub fn parse(data: &'a [u8], header: &HbcHeader, offset: &mut usize) -> Result<Self, String> {
         let count = header.reg_exp_count() as usize;
         let storage_size = header.reg_exp_storage_size() as usize;
-                
+
         // Parse RegExp table
         let table_start = *offset;
         let table_size = count * 8; // 8 bytes per entry (4 bytes offset + 4 bytes length)
-        
+
         if table_start + table_size > data.len() {
-            return Err(format!("RegExp table would exceed data bounds: start=0x{:x}, size={}, data_len={}", 
-                             table_start, table_size, data.len()));
+            return Err(format!(
+                "RegExp table would exceed data bounds: start=0x{:x}, size={}, data_len={}",
+                table_start,
+                table_size,
+                data.len()
+            ));
         }
-        
+
         let table = &data[table_start..table_start + table_size];
         *offset += table_size;
-        
+
         // Align to 4-byte boundary
         Self::align_to_padding(offset, 4);
-        
+
         // Parse RegExp storage
         let storage_start = *offset;
-        
+
         if storage_start + storage_size > data.len() {
-            return Err(format!("RegExp storage would exceed data bounds: start=0x{:x}, size={}, data_len={}", 
-                             storage_start, storage_size, data.len()));
+            return Err(format!(
+                "RegExp storage would exceed data bounds: start=0x{:x}, size={}, data_len={}",
+                storage_start,
+                storage_size,
+                data.len()
+            ));
         }
-        
+
         let storage = &data[storage_start..storage_start + storage_size];
         *offset += storage_size;
-        
+
         // Parse RegExp entries
         let mut regexps = Vec::new();
         if storage_size > 0 {
@@ -55,7 +62,7 @@ impl<'a> RegExpTable<'a> {
                 regexps.push(parser);
             }
         }
-        
+
         Ok(RegExpTable {
             table,
             storage,

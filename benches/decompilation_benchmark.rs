@@ -10,4 +10,4 @@ fn decompilation_benchmark(c: &mut Criterion) {
 }
 
 criterion_group!(benches, decompilation_benchmark);
-criterion_main!(benches); 
+criterion_main!(benches);

@@ -1,9 +1,9 @@
-use crate::DecompilerError;
-use crate::generated::unified_instructions::UnifiedInstruction;
+use super::function_table::HbcFunctionInstruction;
 use crate::generated::generated_traits::is_jump_instruction;
+use crate::generated::unified_instructions::UnifiedInstruction;
+use crate::DecompilerError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use super::function_table::HbcFunctionInstruction;
 
 /// Represents a label in the disassembly
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -60,7 +60,16 @@ impl JumpTable {
     pub fn build_for_function_parallel(
         function_index: u32,
         instructions: &[HbcFunctionInstruction],
-    ) -> Result<(u32, Vec<Label>, Vec<JumpInstruction>, HashMap<u32, String>, HashMap<u32, String>), DecompilerError> {
+    ) -> Result<
+        (
+            u32,
+            Vec<Label>,
+            Vec<JumpInstruction>,
+            HashMap<u32, String>,
+            HashMap<u32, String>,
+        ),
+        DecompilerError,
+    > {
         let mut labels = Vec::new();
         let mut jumps = Vec::new();
         let mut label_map = HashMap::new();
@@ -68,7 +77,7 @@ impl JumpTable {
         let mut label_counter = 0;
 
         // Build address-to-instruction-index mapping
-        let mut address_to_index = HashMap::new();        
+        let mut address_to_index = HashMap::new();
         for instruction in instructions.iter() {
             // Record the current offset for this instruction
             address_to_index.insert(instruction.offset, instruction.instruction_index);
@@ -76,10 +85,12 @@ impl JumpTable {
 
         // First pass: identify all jump targets by converting addresses to instruction indices
         let mut jump_targets = HashSet::new();
-        
+
         for (_i, instruction) in instructions.iter().enumerate() {
             if is_jump_instruction(instruction.name()) {
-                if let Some(relative_offset) = Self::extract_jump_target_relative_offset_static(&instruction.instruction) {
+                if let Some(relative_offset) =
+                    Self::extract_jump_target_relative_offset_static(&instruction.instruction)
+                {
                     // Convert address to instruction index
                     let target_address = instruction.offset as i32 + relative_offset;
                     if let Some(&target_index) = address_to_index.get(&(target_address as u32)) {
@@ -123,7 +134,6 @@ impl JumpTable {
                             // update jump map
                             jump_map.insert(instruction.instruction_index, label_name.clone());
                         }
-
                     }
                 }
             }
@@ -154,7 +164,8 @@ impl JumpTable {
         function_index: u32,
         instructions: &[HbcFunctionInstruction],
     ) -> Result<(), DecompilerError> {
-        let (_, labels, jumps, label_map, jump_map) = Self::build_for_function_parallel(function_index, instructions)?;
+        let (_, labels, jumps, label_map, jump_map) =
+            Self::build_for_function_parallel(function_index, instructions)?;
         self.merge_function_data(function_index, labels, jumps, label_map, jump_map);
         Ok(())
     }
@@ -223,33 +234,51 @@ impl JumpTable {
 
     /// Get the label name by index for a given function
     pub fn get_label(&self, function_index: u32, index: u32) -> Option<&Label> {
-        self.labels_by_function.get(&function_index).and_then(|labels| labels.get(index as usize))
+        self.labels_by_function
+            .get(&function_index)
+            .and_then(|labels| labels.get(index as usize))
     }
 
     /// Get the number of labels for a given function
     pub fn get_label_count(&self, function_index: u32) -> usize {
-        self.labels_by_function.get(&function_index).map(|labels| labels.len()).unwrap_or(0)
+        self.labels_by_function
+            .get(&function_index)
+            .map(|labels| labels.len())
+            .unwrap_or(0)
     }
 
     /// Get the jump instruction by index for a given function
     pub fn get_jump(&self, function_index: u32, index: u32) -> Option<&JumpInstruction> {
-        self.jumps_by_function.get(&function_index).and_then(|jumps| jumps.get(index as usize))
+        self.jumps_by_function
+            .get(&function_index)
+            .and_then(|jumps| jumps.get(index as usize))
     }
 
     /// Get the number of jump instructions for a given function
     pub fn get_jump_count(&self, function_index: u32) -> usize {
-        self.jumps_by_function.get(&function_index).map(|jumps| jumps.len()).unwrap_or(0)
+        self.jumps_by_function
+            .get(&function_index)
+            .map(|jumps| jumps.len())
+            .unwrap_or(0)
     }
-    
+
     /// Get the label name for a given instruction index in a function
-    pub fn get_label_by_inst_index(&self, function_index: u32, instruction_index: u32) -> Option<&String> {
+    pub fn get_label_by_inst_index(
+        &self,
+        function_index: u32,
+        instruction_index: u32,
+    ) -> Option<&String> {
         self.label_map
             .get(&function_index)
             .and_then(|labels| labels.get(&instruction_index))
     }
 
     /// Get the label name for a given jump instruction
-    pub fn get_label_by_jump_op_index(&self, function_index: u32, instruction_index: u32) -> Option<&String> {
+    pub fn get_label_by_jump_op_index(
+        &self,
+        function_index: u32,
+        instruction_index: u32,
+    ) -> Option<&String> {
         self.jump_map
             .get(&function_index)
             .and_then(|jumps| jumps.get(&instruction_index))
@@ -264,4 +293,4 @@ impl JumpTable {
     pub fn get_jumps_for_function(&self, function_index: u32) -> Option<&Vec<JumpInstruction>> {
         self.jumps_by_function.get(&function_index)
     }
-} 
+}
