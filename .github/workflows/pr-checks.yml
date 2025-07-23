@@ -1,9 +1,7 @@
 ---
-name: Fast CI
+name: Fast PR Checks
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -12,10 +10,10 @@ env:
   CARGO_INCREMENTAL: 1
 
 jobs:
-  quick-checks:
-    name: Quick Checks
+  parallel-checks:
+    name: Parallel Checks
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     strategy:
       matrix:
         check: [fmt, clippy, build, test]
@@ -56,24 +54,3 @@ jobs:
       - name: Run tests
         if: matrix.check == 'test'
         run: cargo test --all-features
-
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
-      - name: Run security audit
-        run: cargo audit

@@ -1,0 +1,46 @@
+---
+name: Dev Speed Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev, feature/*]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 1
+
+jobs:
+  speed-check:
+    name: Speed Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-stable-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run all checks
+        run: |
+          cargo fmt -- --check
+          cargo clippy --all-targets --all-features -- -W clippy::all
+          cargo build --all-targets --all-features
+          cargo test --all-features
