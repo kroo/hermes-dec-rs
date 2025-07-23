@@ -62,8 +62,8 @@ fn analyze_function_cfg(
     }
 
     // Build CFG
-    let mut builder = CfgBuilder::new();
-    let cfg = builder.build_from_instructions(&instructions, function_index);
+    let mut builder = CfgBuilder::new(function_index);
+    let cfg = builder.build_from_instructions(&instructions);
 
     println!("  Basic blocks: {}", cfg.node_count());
     println!("  Edges: {}", cfg.edge_count());

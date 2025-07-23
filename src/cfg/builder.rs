@@ -12,17 +12,23 @@ use std::collections::{HashMap, HashSet};
 
 /// CFG builder and analyzer
 pub struct CfgBuilder {
+    /// Function this builder is associated with
+    function_index: u32,
     /// Mapping from block start PC to node index
     block_starts: HashMap<u32, NodeIndex>,
+    /// Mapping from every PC value within a block's range to the block node
+    pc_to_block: HashMap<u32, NodeIndex>,
     /// Jump table for resolving jump targets
     jump_table: JumpTable,
 }
 
 impl CfgBuilder {
-    /// Create a new CFG builder
-    pub fn new() -> Self {
+    /// Create a new CFG builder for the given function index
+    pub fn new(function_index: u32) -> Self {
         CfgBuilder {
+            function_index,
             block_starts: HashMap::new(),
+            pc_to_block: HashMap::new(),
             jump_table: JumpTable::new(),
         }
     }
@@ -31,8 +37,11 @@ impl CfgBuilder {
     pub fn build_from_instructions(
         &mut self,
         instructions: &[HbcFunctionInstruction],
-        function_index: u32,
     ) -> DiGraph<Block, EdgeKind> {
+        // Start with fresh lookup tables
+        self.block_starts.clear();
+        self.pc_to_block.clear();
+
         let mut graph = DiGraph::new();
 
         if instructions.is_empty() {
@@ -41,7 +50,7 @@ impl CfgBuilder {
 
         // Step 1: Build jump table for this function
         self.jump_table
-            .build_for_function(function_index, instructions)
+            .build_for_function(self.function_index, instructions)
             .expect("Failed to build jump table");
 
         // Step 2: Find leaders (basic block entry points)
@@ -50,11 +59,9 @@ impl CfgBuilder {
         // Step 3: Create basic blocks
         let blocks = self.create_blocks(instructions, &leaders);
 
-        // Step 4: Add blocks to graph
+        // Step 4: Add blocks to graph and populate PC mapping
         for block in blocks {
-            let start_pc = block.start_pc;
-            let node_index = graph.add_node(block);
-            self.block_starts.insert(start_pc, node_index);
+            self.add_block(&mut graph, block);
         }
 
         // Step 5: Add edges between blocks
@@ -145,6 +152,18 @@ impl CfgBuilder {
         }
 
         blocks
+    }
+
+    /// Add a block to the graph and update lookup tables
+    pub fn add_block(&mut self, graph: &mut DiGraph<Block, EdgeKind>, block: Block) -> NodeIndex {
+        let start_pc = block.start_pc;
+        let end_pc = block.end_pc;
+        let node_index = graph.add_node(block);
+        self.block_starts.insert(start_pc, node_index);
+        for pc in start_pc..end_pc {
+            self.pc_to_block.insert(pc, node_index);
+        }
+        node_index
     }
 
     /// Add edges between blocks
@@ -381,5 +400,15 @@ impl CfgBuilder {
     pub fn to_dot(&self, graph: &DiGraph<Block, EdgeKind>) -> String {
         use petgraph::dot::{Config, Dot};
         format!("{:?}", Dot::with_config(graph, &[Config::EdgeNoLabel]))
+    }
+
+    /// Get the block containing the given PC, if any
+    pub fn get_block_at_pc(&self, pc: u32) -> Option<NodeIndex> {
+        self.pc_to_block.get(&pc).copied()
+    }
+
+    /// Check whether the given PC is within any block
+    pub fn is_pc_in_block(&self, pc: u32) -> bool {
+        self.pc_to_block.contains_key(&pc)
     }
 }
