@@ -111,7 +111,7 @@ impl<'a> CfgBuilder<'a> {
             } else if matches!(instruction.instruction.category(), "Return" | "Exception") {
                 // Return/Throw instructions should be leaders (start of their own block)
                 leaders.insert(pc);
-                
+
                 // If there are instructions after this Return/Throw, they should be unreachable
                 // and form a separate basic block
                 let post_terminator = pc + 1;

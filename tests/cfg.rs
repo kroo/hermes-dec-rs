@@ -792,16 +792,14 @@ fn test_leader_after_return_throw() {
             operand_1: 200,
         }, // 4: More unreachable code - should be in separate block
     ]);
-    
-    let mut cfg = Cfg::new(&hbc_file, 0);
-    
 
-    
+    let mut cfg = Cfg::new(&hbc_file, 0);
+
     cfg.build();
 
     // Should have 6 blocks: 5 regular blocks + 1 EXIT block
     // Block 0: LoadConstUInt8 (0)
-    // Block 1: Ret (1) 
+    // Block 1: Ret (1)
     // Block 2: LoadConstUInt8 (2) - unreachable after return
     // Block 3: Throw (3)
     // Block 4: LoadConstUInt8 (4) - unreachable after throw
@@ -814,7 +812,7 @@ fn test_leader_after_return_throw() {
         .node_indices()
         .filter(|&node| !cfg.graph()[node].is_exit())
         .collect();
-    
+
     assert_eq!(non_exit_blocks.len(), 5);
 
     // Verify each block has the expected instructions
@@ -866,7 +864,11 @@ fn test_leader_after_return_throw() {
                 .graph()
                 .neighbors_directed(block_node, petgraph::Direction::Outgoing)
                 .any(|neighbor| neighbor == exit_node);
-            assert!(has_exit_edge, "Terminating block at PC {} should connect to EXIT", block.start_pc());
+            assert!(
+                has_exit_edge,
+                "Terminating block at PC {} should connect to EXIT",
+                block.start_pc()
+            );
         }
     }
 }
@@ -881,7 +883,7 @@ fn test_leader_after_return_throw_as_last_instruction() {
         },
         UnifiedInstruction::Ret { operand_0: 1 }, // Last instruction
     ]);
-    
+
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
@@ -894,7 +896,7 @@ fn test_leader_after_return_throw_as_last_instruction() {
         .node_indices()
         .filter(|&node| !cfg.graph()[node].is_exit())
         .collect();
-    
+
     assert_eq!(non_exit_blocks.len(), 2);
 
     // First block should contain LoadConstUInt8
