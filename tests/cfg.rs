@@ -797,14 +797,12 @@ fn test_leader_after_return_throw() {
 
     cfg.build();
 
-    // Should have 6 blocks: 5 regular blocks + 1 EXIT block
-    // Block 0: LoadConstUInt8 (0)
-    // Block 1: Ret (1)
-    // Block 2: LoadConstUInt8 (2) - unreachable after return
-    // Block 3: Throw (3)
-    // Block 4: LoadConstUInt8 (4) - unreachable after throw
-    // Block 5: EXIT
-    assert_eq!(cfg.graph().node_count(), 6);
+    // Should have 4 blocks: 3 regular blocks + 1 EXIT block
+    // Block 0: LoadConstUInt8 + Ret (0-1) - Return included in preceding block
+    // Block 1: LoadConstUInt8 + Throw (2-3) - Throw included in preceding block
+    // Block 2: LoadConstUInt8 (4) - Unreachable code after throw
+    // Block 3: EXIT
+    assert_eq!(cfg.graph().node_count(), 4);
 
     // Find all non-EXIT blocks and verify they have the correct instructions
     let non_exit_blocks: Vec<_> = cfg
@@ -813,43 +811,32 @@ fn test_leader_after_return_throw() {
         .filter(|&node| !cfg.graph()[node].is_exit())
         .collect();
 
-    assert_eq!(non_exit_blocks.len(), 5);
+    assert_eq!(non_exit_blocks.len(), 3);
 
     // Verify each block has the expected instructions
     for &block_node in &non_exit_blocks {
         let block = &cfg.graph()[block_node];
         match block.start_pc() {
             0 => {
-                // First block: LoadConstUInt8
-                assert_eq!(block.instruction_count(), 1);
+                // First block: LoadConstUInt8 + Ret (Return included in preceding block)
+                assert_eq!(block.instruction_count(), 2);
                 assert_eq!(block.start_pc(), 0);
-                assert_eq!(block.end_pc(), 1);
-            }
-            1 => {
-                // Second block: Ret
-                assert_eq!(block.instruction_count(), 1);
-                assert_eq!(block.start_pc(), 1);
                 assert_eq!(block.end_pc(), 2);
                 assert!(block.is_terminating());
             }
             2 => {
-                // Third block: Unreachable code after return
-                assert_eq!(block.instruction_count(), 1);
+                // Second block: LoadConstUInt8 + Throw (Throw included in preceding block)
+                assert_eq!(block.instruction_count(), 2);
                 assert_eq!(block.start_pc(), 2);
-                assert_eq!(block.end_pc(), 3);
-            }
-            3 => {
-                // Fourth block: Throw
-                assert_eq!(block.instruction_count(), 1);
-                assert_eq!(block.start_pc(), 3);
                 assert_eq!(block.end_pc(), 4);
                 assert!(block.is_terminating());
             }
             4 => {
-                // Fifth block: Unreachable code after throw
+                // Third block: Unreachable code after throw
                 assert_eq!(block.instruction_count(), 1);
                 assert_eq!(block.start_pc(), 4);
                 assert_eq!(block.end_pc(), 5);
+                assert!(!block.is_terminating());
             }
             _ => panic!("Unexpected block start_pc: {}", block.start_pc()),
         }
@@ -887,8 +874,10 @@ fn test_leader_after_return_throw_as_last_instruction() {
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    // Should have 3 blocks: 2 regular blocks + 1 EXIT block
-    assert_eq!(cfg.graph().node_count(), 3);
+    // Should have 2 blocks: 1 regular block + 1 EXIT block
+    // Block 0: LoadConstUInt8 + Ret (Return included in preceding block)
+    // Block 1: EXIT
+    assert_eq!(cfg.graph().node_count(), 2);
 
     // Find all non-EXIT blocks
     let non_exit_blocks: Vec<_> = cfg
@@ -897,18 +886,12 @@ fn test_leader_after_return_throw_as_last_instruction() {
         .filter(|&node| !cfg.graph()[node].is_exit())
         .collect();
 
-    assert_eq!(non_exit_blocks.len(), 2);
+    assert_eq!(non_exit_blocks.len(), 1);
 
-    // First block should contain LoadConstUInt8
+    // First block should contain LoadConstUInt8 + Ret
     let first_block = &cfg.graph()[non_exit_blocks[0]];
-    assert_eq!(first_block.instruction_count(), 1);
+    assert_eq!(first_block.instruction_count(), 2);
     assert_eq!(first_block.start_pc(), 0);
-    assert_eq!(first_block.end_pc(), 1);
-
-    // Second block should contain Ret
-    let second_block = &cfg.graph()[non_exit_blocks[1]];
-    assert_eq!(second_block.instruction_count(), 1);
-    assert_eq!(second_block.start_pc(), 1);
-    assert_eq!(second_block.end_pc(), 2);
-    assert!(second_block.is_terminating()); // Ends with Return
+    assert_eq!(first_block.end_pc(), 2);
+    assert!(first_block.is_terminating()); // Ends with Return
 }
