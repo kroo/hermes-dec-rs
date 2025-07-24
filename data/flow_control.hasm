@@ -152,16 +152,19 @@ L1:
 
 Function<tryCatchTest>5(2 params, 9 registers, 0 symbols):
   LoadParam         r0, 1
+L1:
   Mov               r1, r0
   LoadConstUndefined r0
   Call1             r0, r1, r0
+L2:
   Ret               r0
+L3:
   Catch             r0
   LoadConstString   r0, "error"
   Ret               r0
 
 Exception Handlers:
-0: start = L3, end = L12, target = L14
+0: start = L1, end = L2, target = L3
 
 NCFunction<asyncAwaitTest>6(1 params, 15 registers, 0 symbols):
   LoadConstUndefined r4

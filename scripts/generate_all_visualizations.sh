@@ -59,22 +59,32 @@ fi
 echo "✅ Combined individual PDFs generated"
 echo
 
-# Step 5: Show summary
-echo "📊 Step 5: Generating summary..."
+# Step 5: Reorganize files into subdirectories
+echo "🗂️  Step 5: Reorganizing files into subdirectories..."
+./scripts/reorganize_cfg_visualizations.sh
+if [ $? -ne 0 ]; then
+    echo "❌ File reorganization failed"
+    exit 1
+fi
+echo "✅ Files reorganized"
+echo
+
+# Step 6: Show summary
+echo "📊 Step 6: Generating summary..."
 ./scripts/list_generated_files.sh
 
 echo
 echo "🎉 All visualizations generated successfully!"
 echo
 echo "📁 Generated files:"
-echo "  - data/*.dot: Combined DOT files (7 files)"
-echo "  - data/*.pdf: Combined PDF files (7 files)"
-echo "  - data/*.png: Combined PNG files (7 files)"
-echo "  - data/*.svg: Combined SVG files (7 files)"
-echo "  - data/individual_pdfs/*.pdf: Individual PDFs (42 files)"
-echo "  - data/combined_pdfs/*.pdf: Combined individual PDFs (7 files)"
+echo "  - data/cfg_visualizations/*/: Organized CFG visualizations by file"
+echo "    Each subdirectory contains:"
+echo "    - *.dot: Combined DOT file"
+echo "    - *.pdf: Combined PDF file"
+echo "    - *.png: Combined PNG file"
+echo "    - *.svg: Combined SVG file"
+echo "    - *_all_functions.pdf: Combined individual PDFs"
 echo
 echo "📖 Usage:"
 echo "  - Use combined DOT/PDF/PNG/SVG for overview"
-echo "  - Use individual PDFs for detailed function analysis"
 echo "  - Use combined individual PDFs for complete file analysis" 
