@@ -143,7 +143,7 @@ fn make_test_hbc_file_with_jump_table<'a>(
     let mut hbc_file = make_test_hbc_file(instructions.clone());
 
     // Build the jump table for the instructions
-    if let Err(e) = hbc_file.jump_table.build_for_function(0, &instructions) {
+    if let Err(e) = hbc_file.jump_table.build_for_function(0, &instructions, &[]) {
         eprintln!("Warning: Failed to build jump table: {}", e);
     }
 
