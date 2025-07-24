@@ -122,7 +122,13 @@ impl<'a> CfgBuilder<'a> {
             } else if instruction.instruction.category() == "Exception" {
                 // Exception instructions like Throw are terminating, but Catch is not
                 // Only treat actual terminating exception instructions as terminators
-                if matches!(instruction.instruction.name(), "Throw" | "ThrowIfEmpty" | "ThrowIfHasRestrictedGlobalProperty" | "ThrowIfUndefinedInst") {
+                if matches!(
+                    instruction.instruction.name(),
+                    "Throw"
+                        | "ThrowIfEmpty"
+                        | "ThrowIfHasRestrictedGlobalProperty"
+                        | "ThrowIfUndefinedInst"
+                ) {
                     let post_terminator = pc + 1;
                     if post_terminator < instructions.len() as u32 {
                         leaders.insert(post_terminator);
@@ -163,12 +169,28 @@ impl<'a> CfgBuilder<'a> {
 
     /// Add exception handler edges to the CFG
     fn add_exception_handler_edges(&self, graph: &mut DiGraph<Block, EdgeKind>) {
-        if let Some(parsed_header) = self.hbc_file.functions.get_parsed_header(self.function_index) {
+        if let Some(parsed_header) = self
+            .hbc_file
+            .functions
+            .get_parsed_header(self.function_index)
+        {
             for handler in &parsed_header.exc_handlers {
                 // Convert byte offsets to instruction indices using jump table
-                if let Some(try_start_idx) = self.hbc_file.jump_table.byte_offset_to_instruction_index(self.function_index, handler.start) {
-                    if let Some(try_end_idx) = self.hbc_file.jump_table.byte_offset_to_instruction_index(self.function_index, handler.end) {
-                        if let Some(catch_target_idx) = self.hbc_file.jump_table.byte_offset_to_instruction_index(self.function_index, handler.target) {
+                if let Some(try_start_idx) = self
+                    .hbc_file
+                    .jump_table
+                    .byte_offset_to_instruction_index(self.function_index, handler.start)
+                {
+                    if let Some(try_end_idx) = self
+                        .hbc_file
+                        .jump_table
+                        .byte_offset_to_instruction_index(self.function_index, handler.end)
+                    {
+                        if let Some(catch_target_idx) = self
+                            .hbc_file
+                            .jump_table
+                            .byte_offset_to_instruction_index(self.function_index, handler.target)
+                        {
                             // Find the catch block
                             if let Some(&catch_node) = self.block_starts.get(&catch_target_idx) {
                                 // Find all blocks that are within the try range
@@ -301,8 +323,6 @@ impl<'a> CfgBuilder<'a> {
             _ => EdgeKind::Uncond, // Default for other conditional jumps
         }
     }
-
-
 
     /// Check if instruction is a conditional jump
     fn is_conditional_jump(&self, instruction: &HbcFunctionInstruction) -> bool {
@@ -647,16 +667,19 @@ impl<'a> CfgBuilder<'a> {
         hbc_file: &HbcFile,
     ) -> Option<String> {
         let block = &graph[node];
-        
+
         // Only check blocks that aren't exit blocks
         if block.is_exit() {
             return None;
         }
-        
+
         // Check if this block's start PC is a jump target
         let start_pc = block.start_pc();
-        
+
         // The jump table now includes both jump targets and exception handler targets
-        hbc_file.jump_table.get_label_by_inst_index(self.function_index, start_pc).cloned()
+        hbc_file
+            .jump_table
+            .get_label_by_inst_index(self.function_index, start_pc)
+            .cloned()
     }
 }

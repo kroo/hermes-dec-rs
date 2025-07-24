@@ -151,7 +151,7 @@ impl JumpTable {
             let start_offset = handler.start;
             let end_offset = handler.end;
             let target_offset = handler.target;
-            
+
             // Convert byte offsets to instruction indices
             if let Some(start_idx) = address_to_index.get(&start_offset) {
                 if !jump_targets.contains(start_idx) {
@@ -167,7 +167,7 @@ impl JumpTable {
                     jump_targets.insert(*start_idx);
                 }
             }
-            
+
             if let Some(end_idx) = address_to_index.get(&end_offset) {
                 if !jump_targets.contains(end_idx) {
                     // create label for exception handler end
@@ -182,7 +182,7 @@ impl JumpTable {
                     jump_targets.insert(*end_idx);
                 }
             }
-            
+
             if let Some(target_idx) = address_to_index.get(&target_offset) {
                 if !jump_targets.contains(target_idx) {
                     // create label for exception handler target (catch block)
@@ -199,7 +199,14 @@ impl JumpTable {
             }
         }
 
-        Ok((function_index, labels, jumps, label_map, jump_map, address_to_index))
+        Ok((
+            function_index,
+            labels,
+            jumps,
+            label_map,
+            jump_map,
+            address_to_index,
+        ))
     }
 
     /// Merge jump table data from parallel processing
@@ -216,7 +223,8 @@ impl JumpTable {
         self.jumps_by_function.insert(function_index, jumps);
         self.label_map.insert(function_index, label_map);
         self.jump_map.insert(function_index, jump_map);
-        self.address_to_index_map.insert(function_index, address_to_index);
+        self.address_to_index_map
+            .insert(function_index, address_to_index);
     }
 
     /// Build the jump table from a function's instructions
@@ -229,7 +237,14 @@ impl JumpTable {
     ) -> Result<(), DecompilerError> {
         let (_, labels, jumps, label_map, jump_map, address_to_index) =
             Self::build_for_function_parallel(function_index, instructions, exc_handlers)?;
-        self.merge_function_data(function_index, labels, jumps, label_map, jump_map, address_to_index);
+        self.merge_function_data(
+            function_index,
+            labels,
+            jumps,
+            label_map,
+            jump_map,
+            address_to_index,
+        );
         Ok(())
     }
 
@@ -358,7 +373,11 @@ impl JumpTable {
     }
 
     /// Convert byte offset to instruction index for a specific function
-    pub fn byte_offset_to_instruction_index(&self, function_index: u32, byte_offset: u32) -> Option<u32> {
+    pub fn byte_offset_to_instruction_index(
+        &self,
+        function_index: u32,
+        byte_offset: u32,
+    ) -> Option<u32> {
         self.address_to_index_map
             .get(&function_index)
             .and_then(|map| map.get(&byte_offset))

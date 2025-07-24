@@ -225,19 +225,22 @@ impl<'a> HbcFile<'a> {
                     })?;
 
                 // Get exception handlers for this function
-                let exc_handlers = if let Some(parsed_header) = hbc_file.functions.get_parsed_header(function_index) {
+                let exc_handlers = if let Some(parsed_header) =
+                    hbc_file.functions.get_parsed_header(function_index)
+                {
                     &parsed_header.exc_handlers
                 } else {
                     &[] as &[tables::function_table::ExceptionHandlerInfo]
                 };
 
                 // Build jump table data for this function without modifying the main jump table
-                JumpTable::build_for_function_parallel(function_index, &instructions, exc_handlers).map_err(|e| {
-                    format!(
-                        "Failed to build jump table for function {}: {}",
-                        function_index, e
-                    )
-                })
+                JumpTable::build_for_function_parallel(function_index, &instructions, exc_handlers)
+                    .map_err(|e| {
+                        format!(
+                            "Failed to build jump table for function {}: {}",
+                            function_index, e
+                        )
+                    })
             })
             .collect();
 
