@@ -339,19 +339,27 @@ fn format_instruction(
 /// Generate exception handlers string
 fn generate_exception_handlers(
     parsed_header: &crate::hbc::tables::function_table::ParsedFunctionHeader,
-    _jump_table: &crate::hbc::JumpTable,
+    jump_table: &crate::hbc::JumpTable,
 ) -> String {
     let mut exception_output = String::new();
     if !parsed_header.exc_handlers.is_empty() {
         exception_output.push_str("\nException Handlers:\n");
         for (i, handler) in parsed_header.exc_handlers.iter().enumerate() {
             // Copy values to avoid packed struct access issues
-            let start = handler.start;
-            let end = handler.end;
-            let target = handler.target;
+            let start_idx = jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.start).unwrap();
+            let end_idx = jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.end).unwrap();
+            let target_idx = jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.target).unwrap();
+
+            let start = jump_table.get_label_by_inst_index(parsed_header.index, start_idx).unwrap();
+            let end = jump_table.get_label_by_inst_index(parsed_header.index, end_idx).unwrap();
+            let target = jump_table.get_label_by_inst_index(parsed_header.index, target_idx).unwrap();
+
             exception_output.push_str(&format!(
-                "{}: start = L{}, end = L{}, target = L{}\n",
-                i, start, end, target
+                "{}: start = {}, end = {}, target = {}\n",
+                i,
+                start,
+                end,
+                target,
             ));
         }
     }

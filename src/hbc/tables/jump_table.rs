@@ -42,6 +42,9 @@ pub struct JumpTable {
     /// Maps function index to {instruction index -> label name}
     /// This is used to get the label name for a jump instruction's first operand
     jump_map: HashMap<u32, HashMap<u32, String>>,
+    /// Maps function index to {byte offset -> instruction index}
+    /// This is used to convert byte offsets to instruction indices
+    address_to_index_map: HashMap<u32, HashMap<u32, u32>>,
 }
 
 impl JumpTable {
@@ -52,6 +55,7 @@ impl JumpTable {
             jumps_by_function: HashMap::new(),
             label_map: HashMap::new(),
             jump_map: HashMap::new(),
+            address_to_index_map: HashMap::new(),
         }
     }
 
@@ -60,6 +64,7 @@ impl JumpTable {
     pub fn build_for_function_parallel(
         function_index: u32,
         instructions: &[HbcFunctionInstruction],
+        exc_handlers: &[super::function_table::ExceptionHandlerInfo],
     ) -> Result<
         (
             u32,
@@ -67,6 +72,7 @@ impl JumpTable {
             Vec<JumpInstruction>,
             HashMap<u32, String>,
             HashMap<u32, String>,
+            HashMap<u32, u32>,
         ),
         DecompilerError,
     > {
@@ -139,7 +145,61 @@ impl JumpTable {
             }
         }
 
-        Ok((function_index, labels, jumps, label_map, jump_map))
+        // Second pass: add exception handler labels
+        for (_handler_idx, handler) in exc_handlers.iter().enumerate() {
+            // Copy packed struct fields to local variables to avoid unaligned access
+            let start_offset = handler.start;
+            let end_offset = handler.end;
+            let target_offset = handler.target;
+            
+            // Convert byte offsets to instruction indices
+            if let Some(start_idx) = address_to_index.get(&start_offset) {
+                if !jump_targets.contains(start_idx) {
+                    // create label for exception handler start
+                    label_counter += 1;
+                    let label_name = format!("L{}", label_counter);
+                    labels.push(Label {
+                        name: label_name.clone(),
+                        instruction_index: *start_idx,
+                        function_index,
+                    });
+                    label_map.insert(*start_idx, label_name);
+                    jump_targets.insert(*start_idx);
+                }
+            }
+            
+            if let Some(end_idx) = address_to_index.get(&end_offset) {
+                if !jump_targets.contains(end_idx) {
+                    // create label for exception handler end
+                    label_counter += 1;
+                    let label_name = format!("L{}", label_counter);
+                    labels.push(Label {
+                        name: label_name.clone(),
+                        instruction_index: *end_idx,
+                        function_index,
+                    });
+                    label_map.insert(*end_idx, label_name);
+                    jump_targets.insert(*end_idx);
+                }
+            }
+            
+            if let Some(target_idx) = address_to_index.get(&target_offset) {
+                if !jump_targets.contains(target_idx) {
+                    // create label for exception handler target (catch block)
+                    label_counter += 1;
+                    let label_name = format!("L{}", label_counter);
+                    labels.push(Label {
+                        name: label_name.clone(),
+                        instruction_index: *target_idx,
+                        function_index,
+                    });
+                    label_map.insert(*target_idx, label_name);
+                    jump_targets.insert(*target_idx);
+                }
+            }
+        }
+
+        Ok((function_index, labels, jumps, label_map, jump_map, address_to_index))
     }
 
     /// Merge jump table data from parallel processing
@@ -150,11 +210,13 @@ impl JumpTable {
         jumps: Vec<JumpInstruction>,
         label_map: HashMap<u32, String>,
         jump_map: HashMap<u32, String>,
+        address_to_index: HashMap<u32, u32>,
     ) {
         self.labels_by_function.insert(function_index, labels);
         self.jumps_by_function.insert(function_index, jumps);
         self.label_map.insert(function_index, label_map);
         self.jump_map.insert(function_index, jump_map);
+        self.address_to_index_map.insert(function_index, address_to_index);
     }
 
     /// Build the jump table from a function's instructions
@@ -163,10 +225,11 @@ impl JumpTable {
         &mut self,
         function_index: u32,
         instructions: &[HbcFunctionInstruction],
+        exc_handlers: &[super::function_table::ExceptionHandlerInfo],
     ) -> Result<(), DecompilerError> {
-        let (_, labels, jumps, label_map, jump_map) =
-            Self::build_for_function_parallel(function_index, instructions)?;
-        self.merge_function_data(function_index, labels, jumps, label_map, jump_map);
+        let (_, labels, jumps, label_map, jump_map, address_to_index) =
+            Self::build_for_function_parallel(function_index, instructions, exc_handlers)?;
+        self.merge_function_data(function_index, labels, jumps, label_map, jump_map, address_to_index);
         Ok(())
     }
 
@@ -292,5 +355,13 @@ impl JumpTable {
     /// Get all jump instructions for a function
     pub fn get_jumps_for_function(&self, function_index: u32) -> Option<&Vec<JumpInstruction>> {
         self.jumps_by_function.get(&function_index)
+    }
+
+    /// Convert byte offset to instruction index for a specific function
+    pub fn byte_offset_to_instruction_index(&self, function_index: u32, byte_offset: u32) -> Option<u32> {
+        self.address_to_index_map
+            .get(&function_index)
+            .and_then(|map| map.get(&byte_offset))
+            .copied()
     }
 }
