@@ -108,6 +108,14 @@ impl<'a> CfgBuilder<'a> {
                         leaders.insert(post_branch);
                     }
                 }
+            } else if matches!(instruction.instruction.category(), "Return" | "Exception") {
+                // Return/Throw instructions should NOT be leaders - they belong to the preceding block
+                // However, if there are instructions after this Return/Throw, they should be unreachable
+                // and form a separate basic block starting at pc+1
+                let post_terminator = pc + 1;
+                if post_terminator < instructions.len() as u32 {
+                    leaders.insert(post_terminator);
+                }
             }
         }
 
