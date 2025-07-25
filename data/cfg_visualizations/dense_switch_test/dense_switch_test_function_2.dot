@@ -1,0 +1,96 @@
+// Function 2 from dense_switch_test
+// Generated from data/dense_switch_test.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 2";
+  style = filled;
+  color = lightgrey;
+
+  f2_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstInt      r0, 4294967291\l  2: JStrictEqualLong  L1, r0, r1\l" ]
+  f2_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstInt      r0, 4294967292\l  1: JStrictEqualLong  L2, r0, r1\l" ]
+  f2_n2 [ label = "Block 2 (PC 5-7)\l  0: LoadConstInt      r0, 4294967293\l  1: JStrictEqualLong  L3, r0, r1\l" ]
+  f2_n3 [ label = "Block 3 (PC 7-9)\l  0: LoadConstInt      r0, 4294967294\l  1: JStrictEqualLong  L4, r0, r1\l" ]
+  f2_n4 [ label = "Block 4 (PC 9-11)\l  0: LoadConstInt      r0, 4294967295\l  1: JStrictEqualLong  L5, r0, r1\l" ]
+  f2_n5 [ label = "Block 5 (PC 11-13)\l  0: LoadConstZero     r0\l  1: JStrictEqualLong  L6, r0, r1\l" ]
+  f2_n6 [ label = "Block 6 (PC 13-15)\l  0: LoadConstUInt8    r0, 1\l  1: JStrictEqualLong  L7, r0, r1\l" ]
+  f2_n7 [ label = "Block 7 (PC 15-17)\l  0: LoadConstUInt8    r0, 2\l  1: JStrictEqual      L8, r0, r1\l" ]
+  f2_n8 [ label = "Block 8 (PC 17-19)\l  0: LoadConstUInt8    r0, 3\l  1: JStrictEqual      L9, r0, r1\l" ]
+  f2_n9 [ label = "Block 9 (PC 19-21)\l  0: LoadConstUInt8    r0, 4\l  1: JStrictEqual      L10, r0, r1\l" ]
+  f2_n10 [ label = "Block 10 (PC 21-23)\l  0: LoadConstUInt8    r0, 5\l  1: JStrictEqual      L11, r0, r1\l" ]
+  f2_n11 [ label = "Block 11 (PC 23-25)\l  0: LoadConstUInt8    r0, 6\l  1: JStrictEqual      L12, r0, r1\l" ]
+  f2_n12 [ label = "Block 12 (PC 25-27)\l  0: LoadConstUInt8    r0, 7\l  1: JStrictEqual      L13, r0, r1\l" ]
+  f2_n13 [ label = "Block 13 (PC 27-29)\l  0: LoadConstUInt8    r0, 8\l  1: JStrictEqual      L14, r0, r1\l" ]
+  f2_n14 [ label = "Block 14 (PC 29-31)\l  0: LoadConstUInt8    r0, 9\l  1: JStrictEqual      L15, r0, r1\l" ]
+  f2_n15 [ label = "Block 15 (PC 31-33)\l  0: LoadConstUInt8    r0, 10\l  1: JStrictEqual      L16, r0, r1\l" ]
+  f2_n16 [ label = "Block 16 (PC 33-35)\l  0: LoadConstString   r0, \"unknown\"\l  1: Ret               r0\l" ]
+  f2_n17 [ label = "Block 17 (PC 35-37) [L16]\l  0: LoadConstString   r0, \"ten\"\l  1: Ret               r0\l" ]
+  f2_n18 [ label = "Block 18 (PC 37-39) [L15]\l  0: LoadConstString   r0, \"nine\"\l  1: Ret               r0\l" ]
+  f2_n19 [ label = "Block 19 (PC 39-41) [L14]\l  0: LoadConstString   r0, \"eight\"\l  1: Ret               r0\l" ]
+  f2_n20 [ label = "Block 20 (PC 41-43) [L13]\l  0: LoadConstString   r0, \"seven\"\l  1: Ret               r0\l" ]
+  f2_n21 [ label = "Block 21 (PC 43-45) [L12]\l  0: LoadConstString   r0, \"six\"\l  1: Ret               r0\l" ]
+  f2_n22 [ label = "Block 22 (PC 45-47) [L11]\l  0: LoadConstString   r0, \"five\"\l  1: Ret               r0\l" ]
+  f2_n23 [ label = "Block 23 (PC 47-49) [L10]\l  0: LoadConstString   r0, \"four\"\l  1: Ret               r0\l" ]
+  f2_n24 [ label = "Block 24 (PC 49-51) [L9]\l  0: LoadConstString   r0, \"three\"\l  1: Ret               r0\l" ]
+  f2_n25 [ label = "Block 25 (PC 51-53) [L8]\l  0: LoadConstString   r0, \"two\"\l  1: Ret               r0\l" ]
+  f2_n26 [ label = "Block 26 (PC 53-55) [L7]\l  0: LoadConstString   r0, \"one\"\l  1: Ret               r0\l" ]
+  f2_n27 [ label = "Block 27 (PC 55-57) [L6]\l  0: LoadConstString   r0, \"zero\"\l  1: Ret               r0\l" ]
+  f2_n28 [ label = "Block 28 (PC 57-59) [L5]\l  0: LoadConstString   r0, \"negative one\"\l  1: Ret               r0\l" ]
+  f2_n29 [ label = "Block 29 (PC 59-61) [L4]\l  0: LoadConstString   r0, \"negative two\"\l  1: Ret               r0\l" ]
+  f2_n30 [ label = "Block 30 (PC 61-63) [L3]\l  0: LoadConstString   r0, \"negative three\"\l  1: Ret               r0\l" ]
+  f2_n31 [ label = "Block 31 (PC 63-65) [L2]\l  0: LoadConstString   r0, \"negative four\"\l  1: Ret               r0\l" ]
+  f2_n32 [ label = "Block 32 (PC 65-67) [L1]\l  0: LoadConstString   r0, \"negative five\"\l  1: Ret               r0\l" ]
+  f2_n33 [ label = "EXIT" ]
+
+  f2_n0 -> f2_n32
+  f2_n0 -> f2_n1
+  f2_n1 -> f2_n31
+  f2_n1 -> f2_n2
+  f2_n2 -> f2_n30
+  f2_n2 -> f2_n3
+  f2_n3 -> f2_n29
+  f2_n3 -> f2_n4
+  f2_n4 -> f2_n28
+  f2_n4 -> f2_n5
+  f2_n5 -> f2_n27
+  f2_n5 -> f2_n6
+  f2_n6 -> f2_n26
+  f2_n6 -> f2_n7
+  f2_n7 -> f2_n25
+  f2_n7 -> f2_n8
+  f2_n8 -> f2_n24
+  f2_n8 -> f2_n9
+  f2_n9 -> f2_n23
+  f2_n9 -> f2_n10
+  f2_n10 -> f2_n22
+  f2_n10 -> f2_n11
+  f2_n11 -> f2_n21
+  f2_n11 -> f2_n12
+  f2_n12 -> f2_n20
+  f2_n12 -> f2_n13
+  f2_n13 -> f2_n19
+  f2_n13 -> f2_n14
+  f2_n14 -> f2_n18
+  f2_n14 -> f2_n15
+  f2_n15 -> f2_n17
+  f2_n15 -> f2_n16
+  f2_n16 -> f2_n33
+  f2_n17 -> f2_n33
+  f2_n18 -> f2_n33
+  f2_n19 -> f2_n33
+  f2_n20 -> f2_n33
+  f2_n21 -> f2_n33
+  f2_n22 -> f2_n33
+  f2_n23 -> f2_n33
+  f2_n24 -> f2_n33
+  f2_n25 -> f2_n33
+  f2_n26 -> f2_n33
+  f2_n27 -> f2_n33
+  f2_n28 -> f2_n33
+  f2_n29 -> f2_n33
+  f2_n30 -> f2_n33
+  f2_n31 -> f2_n33
+  f2_n32 -> f2_n33
+}

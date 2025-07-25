@@ -1,0 +1,23 @@
+// Function 5 from flow_control
+// Generated from data/flow_control.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 5";
+  style = filled;
+  color = lightgrey;
+
+  f5_n0 [ label = "Block 0 (PC 0-1)\l  0: LoadParam         r0, 1\l" ]
+  f5_n1 [ label = "Block 1 (PC 1-4) [L1]\l  0: Mov               r1, r0\l  1: LoadConstUndefined r0\l  2: Call1             r0, r1, r0\l" ]
+  f5_n2 [ label = "Block 2 (PC 4-5) [L2]\l  0: Ret               r0\l" ]
+  f5_n3 [ label = "Block 3 (PC 5-8) [L3]\l  0: Catch             r0\l  1: LoadConstString   r0, \"error\"\l  2: Ret               r0\l" ]
+  f5_n4 [ label = "EXIT" ]
+
+  f5_n0 -> f5_n1
+  f5_n1 -> f5_n2
+  f5_n2 -> f5_n4
+  f5_n3 -> f5_n4
+  f5_n1 -> f5_n3
+}

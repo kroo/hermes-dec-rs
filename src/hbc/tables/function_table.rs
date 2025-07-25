@@ -296,7 +296,6 @@ impl<'a> FunctionTable<'a> {
                 for _ in 0..exc_count {
                     let exc_handler: ExceptionHandlerInfo = data.gread_with(offset, scroll::LE)?;
                     exc_handlers.push(exc_handler);
-                    *offset += std::mem::size_of::<ExceptionHandlerInfo>();
                 }
             }
 

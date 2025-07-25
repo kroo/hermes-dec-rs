@@ -1,0 +1,25 @@
+// Function 2 from flow_control
+// Generated from data/flow_control.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 2";
+  style = filled;
+  color = lightgrey;
+
+  f2_n0 [ label = "Block 0 (PC 0-8)\l  0: LoadParam         r5, 1\l  1: GetByIdShort      r1, r5, 1, \"length\"\l  2: LoadConstZero     r0\l  3: Less              r1, r0, r1\l  4: LoadConstUInt8    r4, 50\l  5: LoadConstZero     r3\l  6: LoadConstZero     r2\l  7: JmpFalse          L1, r1\l" ]
+  f2_n1 [ label = "Block 1 (PC 8-13) [L2]\l  0: GetByVal          r1, r5, r2\l  1: Add               r7, r3, r1\l  2: Mov               r1, r2\l  3: Mov               r0, r7\l  4: JGreater          L1, r0, r4\l" ]
+  f2_n2 [ label = "Block 2 (PC 13-18)\l  0: Inc               r2, r1\l  1: GetByIdShort      r1, r5, 1, \"length\"\l  2: Mov               r3, r7\l  3: Mov               r0, r3\l  4: JLess             L2, r2, r1\l" ]
+  f2_n3 [ label = "Block 3 (PC 18-19) [L1]\l  0: Ret               r0\l" ]
+  f2_n4 [ label = "EXIT" ]
+
+  f2_n0 -> f2_n3
+  f2_n0 -> f2_n1
+  f2_n1 -> f2_n3
+  f2_n1 -> f2_n2
+  f2_n2 -> f2_n1
+  f2_n2 -> f2_n3
+  f2_n3 -> f2_n4
+}

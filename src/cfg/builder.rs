@@ -83,6 +83,9 @@ impl<'a> CfgBuilder<'a> {
         // Step 6: Add edges between blocks and connect terminators to EXIT
         self.add_edges(&mut graph, jump_table);
 
+        // Add exception handler edges
+        self.add_exception_handler_edges(&mut graph);
+
         graph
     }
 
@@ -108,14 +111,36 @@ impl<'a> CfgBuilder<'a> {
                         leaders.insert(post_branch);
                     }
                 }
-            } else if matches!(instruction.instruction.category(), "Return" | "Exception") {
-                // Return/Throw instructions should NOT be leaders - they belong to the preceding block
-                // However, if there are instructions after this Return/Throw, they should be unreachable
+            } else if instruction.instruction.category() == "Return" {
+                // Return instructions should NOT be leaders - they belong to the preceding block
+                // However, if there are instructions after this Return, they should be unreachable
                 // and form a separate basic block starting at pc+1
                 let post_terminator = pc + 1;
                 if post_terminator < instructions.len() as u32 {
                     leaders.insert(post_terminator);
                 }
+            } else if instruction.instruction.category() == "Exception" {
+                // Exception instructions like Throw are terminating, but Catch is not
+                // Only treat actual terminating exception instructions as terminators
+                if matches!(
+                    instruction.instruction.name(),
+                    "Throw"
+                        | "ThrowIfEmpty"
+                        | "ThrowIfHasRestrictedGlobalProperty"
+                        | "ThrowIfUndefinedInst"
+                ) {
+                    let post_terminator = pc + 1;
+                    if post_terminator < instructions.len() as u32 {
+                        leaders.insert(post_terminator);
+                    }
+                }
+            }
+        }
+
+        // Add exception handler targets as leaders (now included in jump table labels)
+        if let Some(labels) = jump_table.get_labels_for_function(self.function_index) {
+            for label in labels {
+                leaders.insert(label.instruction_index);
             }
         }
 
@@ -140,6 +165,53 @@ impl<'a> CfgBuilder<'a> {
             }
         }
         None
+    }
+
+    /// Add exception handler edges to the CFG
+    fn add_exception_handler_edges(&self, graph: &mut DiGraph<Block, EdgeKind>) {
+        if let Some(parsed_header) = self
+            .hbc_file
+            .functions
+            .get_parsed_header(self.function_index)
+        {
+            for handler in &parsed_header.exc_handlers {
+                // Convert byte offsets to instruction indices using jump table
+                if let Some(try_start_idx) = self
+                    .hbc_file
+                    .jump_table
+                    .byte_offset_to_instruction_index(self.function_index, handler.start)
+                {
+                    if let Some(try_end_idx) = self
+                        .hbc_file
+                        .jump_table
+                        .byte_offset_to_instruction_index(self.function_index, handler.end)
+                    {
+                        if let Some(catch_target_idx) = self
+                            .hbc_file
+                            .jump_table
+                            .byte_offset_to_instruction_index(self.function_index, handler.target)
+                        {
+                            // Find the catch block
+                            if let Some(&catch_node) = self.block_starts.get(&catch_target_idx) {
+                                // Find all blocks that are within the try range
+                                // Sort by PC to ensure deterministic order
+                                let mut blocks_in_range: Vec<_> = self
+                                    .block_starts
+                                    .iter()
+                                    .filter(|(pc, _)| **pc >= try_start_idx && **pc < try_end_idx)
+                                    .collect();
+                                blocks_in_range.sort_by_key(|(pc, _)| **pc);
+
+                                for (_, &block_node) in blocks_in_range {
+                                    // This block is within the try range, add exception edge to catch block
+                                    graph.add_edge(block_node, catch_node, EdgeKind::Uncond);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Create basic blocks from instructions and leaders
@@ -424,8 +496,158 @@ impl<'a> CfgBuilder<'a> {
 
     /// Export CFG to DOT format for visualization
     pub fn to_dot(&self, graph: &DiGraph<Block, EdgeKind>) -> String {
-        use petgraph::dot::{Config, Dot};
-        format!("{:?}", Dot::with_config(graph, &[Config::EdgeNoLabel]))
+        let mut dot = String::new();
+        dot.push_str("digraph {\n");
+        dot.push_str("  rankdir=TB;\n");
+        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n\n");
+
+        // Add nodes
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                format!(
+                    "Block {} (PC {}-{})",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                )
+            };
+
+            dot.push_str(&format!("  {} [ label = \"{}\" ]\n", node.index(), label));
+        }
+
+        dot.push_str("\n");
+
+        // Add edges
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            dot.push_str(&format!("  {} -> {}\n", tail.index(), head.index()));
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
+    /// Export CFG to DOT format with disassembled instructions
+    pub fn to_dot_with_disassembly(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        hbc_file: &HbcFile,
+    ) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph {\n");
+        dot.push_str("  rankdir=TB;\n");
+        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n\n");
+
+        // Add nodes with disassembled instructions
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                let mut block_label = format!(
+                    "Block {} (PC {}-{})",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                );
+
+                // Add jump label to block title if this block is a jump target
+                if let Some(jump_label) = self.get_block_jump_label(node, graph, hbc_file) {
+                    block_label.push_str(&format!(" [{}]", jump_label));
+                }
+
+                block_label.push_str("\\l");
+
+                for (i, instruction) in block.instructions().iter().enumerate() {
+                    let disassembled = instruction.format_instruction(hbc_file);
+                    // Escape quotes and newlines for DOT format
+                    let escaped = disassembled.replace("\"", "\\\"").replace("\n", "\\l");
+                    block_label.push_str(&format!("  {}: {}\\l", i, escaped));
+                }
+
+                block_label
+            };
+
+            dot.push_str(&format!("  {} [ label = \"{}\" ]\n", node.index(), label));
+        }
+
+        dot.push_str("\n");
+
+        // Add edges (no labels)
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            dot.push_str(&format!("  {} -> {}\n", tail.index(), head.index()));
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
+    /// Export CFG to DOT format as a subgraph for a specific function
+    pub fn to_dot_subgraph(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        hbc_file: &HbcFile,
+        function_index: u32,
+    ) -> String {
+        let mut dot = String::new();
+        dot.push_str(&format!(
+            "  subgraph cluster_function_{} {{\n",
+            function_index
+        ));
+        dot.push_str(&format!("    label = \"Function {}\";\n", function_index));
+        dot.push_str("    style = filled;\n");
+        dot.push_str("    color = lightgrey;\n\n");
+
+        // Add nodes with disassembled instructions
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let node_id = format!("f{}_n{}", function_index, node.index());
+            let label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                let mut block_label = format!(
+                    "Block {} (PC {}-{})",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                );
+
+                // Add jump label to block title if this block is a jump target
+                if let Some(jump_label) = self.get_block_jump_label(node, graph, hbc_file) {
+                    block_label.push_str(&format!(" [{}]", jump_label));
+                }
+
+                block_label.push_str("\\l");
+
+                for (i, instruction) in block.instructions().iter().enumerate() {
+                    let disassembled = instruction.format_instruction(hbc_file);
+                    // Escape quotes and newlines for DOT format
+                    let escaped = disassembled.replace("\"", "\\\"").replace("\n", "\\l");
+                    block_label.push_str(&format!("  {}: {}\\l", i, escaped));
+                }
+
+                block_label
+            };
+
+            dot.push_str(&format!("    {} [ label = \"{}\" ]\n", node_id, label));
+        }
+
+        dot.push_str("\n");
+
+        // Add edges within the subgraph (no labels)
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            let tail_id = format!("f{}_n{}", function_index, tail.index());
+            let head_id = format!("f{}_n{}", function_index, head.index());
+            dot.push_str(&format!("    {} -> {}\n", tail_id, head_id));
+        }
+
+        dot.push_str("  }\n");
+        dot
     }
 
     /// Get the block containing the given PC, if any
@@ -441,5 +663,29 @@ impl<'a> CfgBuilder<'a> {
     /// Get the EXIT node for the current function
     pub fn exit_node(&self) -> Option<NodeIndex> {
         self.exit_node
+    }
+
+    /// Get jump label for a block if it's a jump target
+    fn get_block_jump_label(
+        &self,
+        node: NodeIndex,
+        graph: &DiGraph<Block, EdgeKind>,
+        hbc_file: &HbcFile,
+    ) -> Option<String> {
+        let block = &graph[node];
+
+        // Only check blocks that aren't exit blocks
+        if block.is_exit() {
+            return None;
+        }
+
+        // Check if this block's start PC is a jump target
+        let start_pc = block.start_pc();
+
+        // The jump table now includes both jump targets and exception handler targets
+        hbc_file
+            .jump_table
+            .get_label_by_inst_index(self.function_index, start_pc)
+            .cloned()
     }
 }

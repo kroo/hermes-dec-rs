@@ -181,12 +181,15 @@ Function<?anon_0_gen>5(1 params, 17 registers, 0 symbols):
   Ret               r1
   ResumeGenerator   r1, r4
   JmpTrueLong       L2, r4
+L6:
   GetGlobalObject   r4
   GetByIdShort      r4, r4, 1, "gen"
   Call1             r5, r4, r2
   GetByIdShort      r4, r5, 2, "next"
   Call1             r4, r4, r5
+L7:
   Jmp               L3
+L8:
   Catch             r4
   GetGlobalObject   r4
   TryGetById        r5, r4, 3, "print"
@@ -194,7 +197,9 @@ Function<?anon_0_gen>5(1 params, 17 registers, 0 symbols):
   Call2             r4, r5, r2, r4
 L3:
   Jmp               L4
+L9:
   Catch             r3
+L10:
   LoadConstInt      r5, 432
   LoadConstString   r4, "dçdàçD°D+D"
   Mul               r5, r5, r4
@@ -214,6 +219,7 @@ L3:
   Call3             r3, r5, r6, r4, r3
 L5:
   Jmp               L4
+L11:
   Catch             r3
   GetGlobalObject   r3
   TryGetById        r4, r3, 6, "alert"
@@ -230,9 +236,9 @@ L1:
   Ret               r0
 
 Exception Handlers:
-0: start = L30, end = L50, target = L52
-1: start = L75, end = L149, target = L151
-2: start = L509, end = L0, target = L0
+0: start = L6, end = L7, target = L8
+1: start = L6, end = L3, target = L9
+2: start = L10, end = L5, target = L11
 
 Function<ze>6(1 params, 12 registers, 1 symbols):
   LoadConstUndefined r0

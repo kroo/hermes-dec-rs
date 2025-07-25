@@ -1,0 +1,16 @@
+// Function 9 from flow_control
+// Generated from data/flow_control.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 9";
+  style = filled;
+  color = lightgrey;
+
+  f9_n0 [ label = "Block 0 (PC 0-13)\l  0: CreateEnvironment r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"Promise\"\l  3: GetByIdShort      r2, r3, 2, \"resolve\"\l  4: LoadConstUInt8    r1, 5\l  5: Call2             r3, r2, r3, r1\l  6: GetByIdShort      r2, r3, 3, \"then\"\l  7: CreateClosure     r1, r0, Function<>10\l  8: Call2             r2, r2, r3, r1\l  9: GetByIdShort      r1, r2, 4, \"catch\"\l  10: CreateClosure     r0, r0, Function<>11\l  11: Call2             r0, r1, r2, r0\l  12: Ret               r0\l" ]
+  f9_n1 [ label = "EXIT" ]
+
+  f9_n0 -> f9_n1
+}

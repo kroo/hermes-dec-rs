@@ -1,0 +1,16 @@
+// Function 0 from cjs-show-source
+// Generated from data/cjs-show-source.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 0";
+  style = filled;
+  color = lightgrey;
+
+  f0_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadConstUndefined r0\l  1: AsyncBreakCheck   \l  2: Ret               r0\l" ]
+  f0_n1 [ label = "EXIT" ]
+
+  f0_n0 -> f0_n1
+}
