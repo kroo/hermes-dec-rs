@@ -194,11 +194,17 @@ impl<'a> CfgBuilder<'a> {
                             // Find the catch block
                             if let Some(&catch_node) = self.block_starts.get(&catch_target_idx) {
                                 // Find all blocks that are within the try range
-                                for (pc, &block_node) in &self.block_starts {
-                                    if *pc >= try_start_idx && *pc < try_end_idx {
-                                        // This block is within the try range, add exception edge to catch block
-                                        graph.add_edge(block_node, catch_node, EdgeKind::Uncond);
-                                    }
+                                // Sort by PC to ensure deterministic order
+                                let mut blocks_in_range: Vec<_> = self
+                                    .block_starts
+                                    .iter()
+                                    .filter(|(pc, _)| **pc >= try_start_idx && **pc < try_end_idx)
+                                    .collect();
+                                blocks_in_range.sort_by_key(|(pc, _)| **pc);
+                                
+                                for (_, &block_node) in blocks_in_range {
+                                    // This block is within the try range, add exception edge to catch block
+                                    graph.add_edge(block_node, catch_node, EdgeKind::Uncond);
                                 }
                             }
                         }

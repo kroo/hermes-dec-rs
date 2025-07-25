@@ -1,0 +1,22 @@
+// Function 4 from flow_control
+// Generated from data/flow_control.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 4";
+  style = filled;
+  color = lightgrey;
+
+  f4_n0 [ label = "Block 0 (PC 0-6)\l  0: LoadParam         r3, 1\l  1: LoadConstZero     r2\l  2: Greater           r4, r3, r2\l  3: LoadConstUInt8    r1, 1\l  4: Mov               r0, r1\l  5: JmpFalse          L1, r4\l" ]
+  f4_n1 [ label = "Block 1 (PC 6-10) [L2]\l  0: Mul               r1, r1, r3\l  1: Dec               r3, r3\l  2: Mov               r0, r1\l  3: JGreater          L2, r3, r2\l" ]
+  f4_n2 [ label = "Block 2 (PC 10-11) [L1]\l  0: Ret               r0\l" ]
+  f4_n3 [ label = "EXIT" ]
+
+  f4_n0 -> f4_n2
+  f4_n0 -> f4_n1
+  f4_n1 -> f4_n1
+  f4_n1 -> f4_n2
+  f4_n2 -> f4_n3
+}
