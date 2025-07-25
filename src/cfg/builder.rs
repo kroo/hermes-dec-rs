@@ -201,7 +201,7 @@ impl<'a> CfgBuilder<'a> {
                                     .filter(|(pc, _)| **pc >= try_start_idx && **pc < try_end_idx)
                                     .collect();
                                 blocks_in_range.sort_by_key(|(pc, _)| **pc);
-                                
+
                                 for (_, &block_node) in blocks_in_range {
                                     // This block is within the try range, add exception edge to catch block
                                     graph.add_edge(block_node, catch_node, EdgeKind::Uncond);
