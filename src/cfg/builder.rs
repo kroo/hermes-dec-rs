@@ -1285,6 +1285,111 @@ impl<'a> CfgBuilder<'a> {
         exits
     }
 
+    /// Analyze post-dominators for the CFG using reverse graph + simple_fast
+    pub fn analyze_post_dominators(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+    ) -> Option<crate::cfg::analysis::PostDominatorAnalysis> {
+        if graph.node_count() == 0 {
+            return None;
+        }
+
+        // Get the EXIT node as the entry point for post-dominator analysis
+        let exit_node = self.exit_node?;
+
+        // Create a reversed graph for post-dominator analysis
+        let mut reversed_graph = DiGraph::new();
+        let mut node_mapping = HashMap::new();
+
+        // Add all nodes to reversed graph
+        for node_idx in graph.node_indices() {
+            let block = &graph[node_idx];
+            let new_node = reversed_graph.add_node(block.clone());
+            node_mapping.insert(node_idx, new_node);
+        }
+
+        // Add reversed edges
+        for edge_idx in graph.edge_indices() {
+            if let Some((source, target)) = graph.edge_endpoints(edge_idx) {
+                let edge_kind = graph.edge_weight(edge_idx).unwrap();
+                // Reverse the edge direction: target -> source in reversed graph
+                if let (Some(&reversed_target), Some(&reversed_source)) =
+                    (node_mapping.get(&target), node_mapping.get(&source))
+                {
+                    reversed_graph.add_edge(reversed_target, reversed_source, edge_kind.clone());
+                }
+            }
+        }
+
+        // Get the reversed exit node (entry point for post-dominator analysis)
+        let reversed_exit = node_mapping.get(&exit_node)?;
+
+        // Compute dominators on the reversed graph
+        let dominators = dominators::simple_fast(&reversed_graph, *reversed_exit);
+
+        // Convert dominators result to PostDominatorAnalysis
+        let mut post_dominators = HashMap::new();
+        let mut immediate_post_dominators = HashMap::new();
+
+        for node_idx in graph.node_indices() {
+            let reversed_node = node_mapping.get(&node_idx)?;
+
+            // Build post-dominator set for this node
+            let mut post_dom_set = HashSet::new();
+
+            // Add all nodes that dominate this node in the reversed graph
+            for other_node_idx in graph.node_indices() {
+                let other_reversed_node = node_mapping.get(&other_node_idx)?;
+
+                // Check if other_node dominates this node in reversed graph
+                if self.dominates_in_graph(&dominators, *other_reversed_node, *reversed_node) {
+                    post_dom_set.insert(other_node_idx);
+                }
+            }
+
+            post_dominators.insert(node_idx, post_dom_set);
+
+            // Get immediate post-dominator
+            let immediate_post_dom =
+                dominators
+                    .immediate_dominator(*reversed_node)
+                    .and_then(|dom_node| {
+                        // Find original node index for this dominator
+                        node_mapping
+                            .iter()
+                            .find(|(_, &rev_node)| rev_node == dom_node)
+                            .map(|(&orig_node, _)| orig_node)
+                    });
+
+            immediate_post_dominators.insert(node_idx, immediate_post_dom);
+        }
+
+        Some(crate::cfg::analysis::PostDominatorAnalysis {
+            post_dominators,
+            immediate_post_dominators,
+        })
+    }
+
+    /// Check if a node dominates another node using petgraph Dominators
+    fn dominates_in_graph(
+        &self,
+        dominators: &Dominators<NodeIndex>,
+        dominator: NodeIndex,
+        node: NodeIndex,
+    ) -> bool {
+        let mut current = node;
+        loop {
+            if current == dominator {
+                return true;
+            }
+            if let Some(immediate_dom) = dominators.immediate_dominator(current) {
+                current = immediate_dom;
+            } else {
+                return false;
+            }
+        }
+    }
+
     /// Get jump label for a block if it's a jump target
     fn get_block_jump_label(
         &self,

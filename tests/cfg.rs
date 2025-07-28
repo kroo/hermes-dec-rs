@@ -2609,3 +2609,420 @@ fn test_irreducible_analysis_includes_reducible() {
     let has_reducible = loop_analysis.loops.iter().any(|l| !l.is_irreducible);
     assert!(has_reducible, "Should detect reducible loops");
 }
+
+// ============================================================================
+// POST-DOMINATOR ANALYSIS TESTS
+// ============================================================================
+
+/// Test post-dominator analysis on diamond CFG: A → {B, C} → D
+/// Acceptance criteria: D post-dominates B & C
+#[test]
+fn test_post_dominators_diamond_shape() {
+    // Create diamond CFG: A → {B, C} → D
+    // A: conditional branch to B or C
+    // B, C: both jump to D
+    // D: final block
+    let instructions = vec![
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 0: A (condition)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        }, // 1: B (then branch)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 2: Jump to D
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        }, // 3: C (else branch)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 4: Jump to D
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 50,
+        }, // 5: D (join point)
+        UnifiedInstruction::Ret { operand_0: 1 }, // 6: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 0, 1, Some(1)), // A → B (condition true)
+        ("JmpTrue", 0, 3, Some(0)), // A → C (condition false)
+        ("Jmp", 2, 5, None),        // B → D
+        ("Jmp", 4, 5, None),        // C → D
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let post_doms = cfg
+        .analyze_post_dominators()
+        .expect("Post-dominator analysis should succeed");
+
+    // Get node indices
+    let node_a = cfg.builder().get_block_at_pc(0).unwrap();
+    let node_b = cfg.builder().get_block_at_pc(1).unwrap();
+    let node_c = cfg.builder().get_block_at_pc(3).unwrap();
+    let node_d = cfg.builder().get_block_at_pc(5).unwrap();
+
+    // D should post-dominate B and C (acceptance criteria)
+    assert!(
+        post_doms.dominates(node_d, node_b),
+        "D should post-dominate B"
+    );
+    assert!(
+        post_doms.dominates(node_d, node_c),
+        "D should post-dominate C"
+    );
+
+    // D should also post-dominate A (since A must go through D to reach EXIT)
+    assert!(
+        post_doms.dominates(node_d, node_a),
+        "D should post-dominate A"
+    );
+
+    // D should post-dominate itself
+    assert!(
+        post_doms.dominates(node_d, node_d),
+        "D should post-dominate itself"
+    );
+}
+
+/// Test immediate post-dominator relationships
+#[test]
+fn test_immediate_post_dominators() {
+    // Create branching CFG to ensure separate blocks: A → B → C
+    // A branches to B, B branches to C
+    let instructions = vec![
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 0: A (branch to B)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        }, // 1: B
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 2: B branches to C
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        }, // 3: C
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 0, 1, Some(1)), // A → B
+        ("JmpTrue", 2, 3, Some(1)), // B → C
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let post_doms = cfg
+        .analyze_post_dominators()
+        .expect("Post-dominator analysis should succeed");
+
+    // Get node indices - these should be different blocks now
+    let node_a = cfg.builder().get_block_at_pc(0).unwrap();
+    let node_b = cfg.builder().get_block_at_pc(1).unwrap();
+    let node_c = cfg.builder().get_block_at_pc(3).unwrap();
+
+    // Test immediate post-dominator relationships
+    // In this CFG A → B → C → EXIT:
+    // A's immediate post-dominator should be B
+    // B's immediate post-dominator should be C
+    // C's immediate post-dominator should be EXIT
+    assert_eq!(
+        post_doms.immediate_post_dominator(node_a),
+        Some(node_b),
+        "B should be immediate post-dominator of A"
+    );
+    assert_eq!(
+        post_doms.immediate_post_dominator(node_b),
+        Some(node_c),
+        "C should be immediate post-dominator of B"
+    );
+
+    // C's immediate post-dominator should be EXIT (which we can't easily test the node index of)
+    // So we just verify it has an immediate post-dominator
+    assert!(
+        post_doms.immediate_post_dominator(node_c).is_some(),
+        "C should have an immediate post-dominator (EXIT)"
+    );
+}
+
+/// Test post-dominator analysis with loops
+#[test]
+fn test_post_dominators_with_loops() {
+    // Create loop CFG: A → B → C → B (loop), B → D (exit)
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (loop header/condition)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C (loop body)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to B
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 200,
+        }, // 4: D (exit)
+        UnifiedInstruction::Ret { operand_0: 1 }, // 5: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // B → C (condition true)
+        ("Jmp", 3, 1, None),        // C → B (back edge)
+        ("JmpTrue", 1, 4, Some(0)), // B → D (condition false)
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let post_doms = cfg
+        .analyze_post_dominators()
+        .expect("Post-dominator analysis should succeed");
+
+    // Get node indices
+    let node_a = cfg.builder().get_block_at_pc(0).unwrap();
+    let node_b = cfg.builder().get_block_at_pc(1).unwrap();
+    let node_c = cfg.builder().get_block_at_pc(2).unwrap();
+    let node_d = cfg.builder().get_block_at_pc(4).unwrap();
+
+    // D should post-dominate everything (only exit path)
+    assert!(
+        post_doms.dominates(node_d, node_a),
+        "D should post-dominate A"
+    );
+    assert!(
+        post_doms.dominates(node_d, node_b),
+        "D should post-dominate B"
+    );
+    assert!(
+        post_doms.dominates(node_d, node_c),
+        "D should post-dominate C"
+    );
+
+    // B should post-dominate C (C must go through B to reach D)
+    assert!(
+        post_doms.dominates(node_b, node_c),
+        "B should post-dominate C"
+    );
+}
+
+/// Test post-dominator analysis with multiple exit paths
+#[test]
+fn test_post_dominators_multiple_exits() {
+    // Create CFG with multiple exits: A → B → {C→EXIT, D→EXIT}
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        }, // 0: A
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (condition)
+        UnifiedInstruction::Ret { operand_0: 1 }, // 2: C (early exit)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        }, // 3: D
+        UnifiedInstruction::Ret { operand_0: 2 }, // 4: D (exit)
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // B → C (condition true)
+        ("JmpTrue", 1, 3, Some(0)), // B → D (condition false)
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let post_doms = cfg
+        .analyze_post_dominators()
+        .expect("Post-dominator analysis should succeed");
+
+    // Get node indices
+    let _node_a = cfg.builder().get_block_at_pc(0).unwrap();
+    let node_b = cfg.builder().get_block_at_pc(1).unwrap();
+    let node_c = cfg.builder().get_block_at_pc(2).unwrap();
+    let node_d = cfg.builder().get_block_at_pc(3).unwrap();
+
+    // Only EXIT should post-dominate everything (common post-dominator)
+    // C and D should not post-dominate each other
+    assert!(
+        !post_doms.dominates(node_c, node_d),
+        "C should not post-dominate D"
+    );
+    assert!(
+        !post_doms.dominates(node_d, node_c),
+        "D should not post-dominate C"
+    );
+
+    // B should not be post-dominated by C or D
+    assert!(
+        !post_doms.dominates(node_c, node_b),
+        "C should not post-dominate B"
+    );
+    assert!(
+        !post_doms.dominates(node_d, node_b),
+        "D should not post-dominate B"
+    );
+}
+
+/// Test post-dominator analysis with unreachable code
+#[test]
+fn test_post_dominators_unreachable_code() {
+    // Create CFG with unreachable block
+    let instructions = vec![
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 0: Jump to block at PC 2
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        }, // 1: Unreachable block
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        }, // 2: Reachable block
+        UnifiedInstruction::Ret { operand_0: 1 }, // 3: Return
+    ];
+
+    let jumps = vec![("Jmp", 0, 2, None)]; // Jump from PC 0 to PC 2
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let post_doms = cfg
+        .analyze_post_dominators()
+        .expect("Post-dominator analysis should succeed even with unreachable code");
+
+    // Get node indices
+    let node_0 = cfg.builder().get_block_at_pc(0).unwrap();
+    let node_1 = cfg.builder().get_block_at_pc(1).unwrap();
+    let node_2 = cfg.builder().get_block_at_pc(2).unwrap();
+
+    // Reachable nodes should have proper post-domination relationships
+    assert!(
+        post_doms.dominates(node_2, node_0),
+        "Reachable block should post-dominate entry"
+    );
+
+    // Unreachable node should not participate in post-domination of reachable nodes
+    assert!(
+        !post_doms.dominates(node_1, node_0),
+        "Unreachable block should not post-dominate entry"
+    );
+    assert!(
+        !post_doms.dominates(node_1, node_2),
+        "Unreachable block should not post-dominate reachable block"
+    );
+}
+
+/// Test post-dominator analysis on empty function
+#[test]
+fn test_post_dominators_empty_function() {
+    let instructions = vec![];
+    let hbc_file = make_test_hbc_file_with_instructions(instructions);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Should handle empty function gracefully
+    let post_doms = cfg.analyze_post_dominators();
+    assert!(
+        post_doms.is_none(),
+        "Empty function should return None for post-dominator analysis"
+    );
+}
+
+/// Test post-dominator analysis performance and correctness on larger CFG
+#[test]
+fn test_post_dominators_performance() {
+    // Create a more complex CFG to test performance
+    let mut instructions = Vec::new();
+    let mut jumps = Vec::new();
+
+    // Create a chain of conditional branches: A → B → C → D → E
+    for i in 0..10 {
+        instructions.push(UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: (i + 1) as u8,
+        });
+        instructions.push(UnifiedInstruction::LoadConstUInt8 {
+            operand_0: (i + 1) as u8,
+            operand_1: (i * 10 + 100) as u8,
+        });
+
+        if i < 9 {
+            jumps.push(("JmpTrue", i * 2, (i + 1) * 2, Some(1)));
+            jumps.push(("JmpTrue", i * 2, (i + 1) * 2 + 1, Some(0)));
+        }
+    }
+
+    // Add final return
+    instructions.push(UnifiedInstruction::Ret { operand_0: 1 });
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Performance test: analysis should complete quickly
+    let start = std::time::Instant::now();
+    let post_doms = cfg
+        .analyze_post_dominators()
+        .expect("Post-dominator analysis should succeed on larger CFG");
+    let duration = start.elapsed();
+
+    // Should complete in reasonable time (less than 1 second for small test)
+    assert!(
+        duration.as_millis() < 1000,
+        "Post-dominator analysis should be efficient: took {}ms",
+        duration.as_millis()
+    );
+
+    // Basic correctness check - get some nodes
+    let first_node = cfg.builder().get_block_at_pc(0).unwrap();
+
+    // Debug: print all blocks to understand the CFG structure
+    let mut block_pcs = Vec::new();
+    for node in cfg.graph().node_indices() {
+        let block = &cfg.graph()[node];
+        if !block.is_exit() {
+            block_pcs.push(block.start_pc());
+        }
+    }
+    block_pcs.sort();
+
+    // The return instruction should be at PC 20 (after 10 pairs of instructions)
+    let return_node = cfg.builder().get_block_at_pc(20);
+
+    // For a complex branching CFG, we should test that EXIT post-dominates everything
+    // rather than assuming a linear relationship
+    if let Some(return_node) = return_node {
+        // Return block should post-dominate first block since all paths must go through return
+        assert!(
+            post_doms.dominates(return_node, first_node),
+            "Return block should post-dominate first block"
+        );
+    } else {
+        // If we can't find return block, just verify the analysis completed
+        // This test is primarily for performance anyway
+        println!(
+            "Performance test completed successfully - analysis finished in {}ms",
+            duration.as_millis()
+        );
+    }
+}

@@ -160,13 +160,6 @@ impl SwitchAnalysis {
     }
 }
 
-/// Analysis functions for CFGs
-pub fn analyze_post_dominators(_graph: &DiGraph<Block, EdgeKind>) -> Option<PostDominatorAnalysis> {
-    // TODO: Implement post-dominator analysis
-    // This will be implemented in CFG-06
-    None
-}
-
 pub fn find_natural_loops(
     _graph: &DiGraph<Block, EdgeKind>,
     _dominators: &Dominators<NodeIndex>,
