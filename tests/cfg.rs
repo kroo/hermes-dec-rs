@@ -904,7 +904,7 @@ fn test_leader_after_return_throw_as_last_instruction() {
 
 #[test]
 fn test_cfg_with_switch_table() {
-    use hermes_dec_rs::hbc::tables::switch_table::{SwitchCase, SwitchTable};
+    use hermes_dec_rs::hbc::tables::switch_table::SwitchTable;
 
     // Create a simple switch table for testing
     let mut switch_table = SwitchTable::new(0, 2, 100, 150, 1000, 1, 0);
@@ -1059,7 +1059,7 @@ fn test_cfg_with_switch_table() {
     let graph = cfg.graph();
 
     // Verify that leaders were created for switch targets
-    let mut cfg_builder = CfgBuilder::new(&hbc_file, 0);
+    let cfg_builder = CfgBuilder::new(&hbc_file, 0);
     let leaders = cfg_builder.find_leaders(
         &hbc_file.functions.get_instructions(0).unwrap(),
         &hbc_file.jump_table,

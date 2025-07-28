@@ -1,4 +1,3 @@
-use hermes_dec_rs::generated::unified_instructions::UnifiedInstruction;
 use hermes_dec_rs::hbc::tables::switch_table::{SwitchCase, SwitchTable, SwitchTableCollection};
 use hermes_dec_rs::hbc::HbcFile;
 use std::fs;
