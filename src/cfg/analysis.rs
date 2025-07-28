@@ -160,7 +160,6 @@ impl SwitchAnalysis {
     }
 }
 
-
 pub fn find_natural_loops(
     _graph: &DiGraph<Block, EdgeKind>,
     _dominators: &Dominators<NodeIndex>,
