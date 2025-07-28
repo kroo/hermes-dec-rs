@@ -6,6 +6,7 @@ use crate::cfg::{Block, EdgeKind};
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::function_table::HbcFunctionInstruction;
 use crate::hbc::tables::jump_table::JumpTable;
+use crate::hbc::tables::switch_table::SwitchTable;
 use crate::hbc::HbcFile;
 use petgraph::algo::dominators::{self, Dominators};
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -90,7 +91,7 @@ impl<'a> CfgBuilder<'a> {
     }
 
     /// Find basic block leaders
-    fn find_leaders(
+    pub fn find_leaders(
         &self,
         instructions: &[HbcFunctionInstruction],
         jump_table: &JumpTable,
@@ -104,11 +105,57 @@ impl<'a> CfgBuilder<'a> {
         for (i, instruction) in instructions.iter().enumerate() {
             let pc = i as u32;
             if instruction.instruction.category() == "Jump" {
-                if let Some(target) = self.get_jump_target(instruction, jump_table) {
-                    leaders.insert(target);
-                    let post_branch = pc + 1;
-                    if post_branch < instructions.len() as u32 && post_branch != target {
-                        leaders.insert(post_branch);
+                // Check if this is a switch instruction
+                if matches!(instruction.instruction.name(), "SwitchImm") {
+                    // Handle switch instructions - add all case targets as leaders
+                    if let Some(switch_table) = self.get_switch_table_for_instruction(instruction) {
+                        // Add default case target
+                        if let Some(default_target) = switch_table.default_instruction_index {
+                            leaders.insert(default_target);
+                        }
+                        
+                        // Add all case targets
+                        for case in &switch_table.cases {
+                            if let Some(target) = case.target_instruction_index {
+                                leaders.insert(target);
+                            }
+                        }
+                        
+                        // Add fallthrough (next instruction after switch)
+                        let post_switch = pc + 1;
+                        if post_switch < instructions.len() as u32 {
+                            leaders.insert(post_switch);
+                        }
+                    }
+                } else {
+                    // Handle regular jump instructions
+                    if let Some(target) = self.get_jump_target(instruction, jump_table) {
+                        leaders.insert(target);
+                        let post_branch = pc + 1;
+                        if post_branch < instructions.len() as u32 && post_branch != target {
+                            leaders.insert(post_branch);
+                        }
+                    }
+                }
+            } else if instruction.instruction.category() == "Switch" {
+                // Handle switch instructions - add all case targets as leaders
+                if let Some(switch_table) = self.get_switch_table_for_instruction(instruction) {
+                    // Add default case target
+                    if let Some(default_target) = switch_table.default_instruction_index {
+                        leaders.insert(default_target);
+                    }
+                    
+                    // Add all case targets
+                    for case in &switch_table.cases {
+                        if let Some(target) = case.target_instruction_index {
+                            leaders.insert(target);
+                        }
+                    }
+                    
+                    // Add fallthrough (next instruction after switch)
+                    let post_switch = pc + 1;
+                    if post_switch < instructions.len() as u32 {
+                        leaders.insert(post_switch);
                     }
                 }
             } else if instruction.instruction.category() == "Return" {
@@ -165,6 +212,16 @@ impl<'a> CfgBuilder<'a> {
             }
         }
         None
+    }
+
+    /// Get switch table for a switch instruction
+    fn get_switch_table_for_instruction(
+        &self,
+        instruction: &HbcFunctionInstruction,
+    ) -> Option<&SwitchTable> {
+        self.hbc_file
+            .switch_tables
+            .get_switch_table_by_instruction(self.function_index, instruction.instruction_index)
     }
 
     /// Add exception handler edges to the CFG
@@ -289,19 +346,60 @@ impl<'a> CfgBuilder<'a> {
                         graph.add_edge(from_node, exit_node, EdgeKind::Uncond);
                     }
                 } else if last_instruction.instruction.category() == "Jump" {
-                    // Add jump edge
-                    if let Some(target) = self.get_jump_target(last_instruction, jump_table) {
-                        if let Some(&to_node) = self.block_starts.get(&target) {
-                            let edge_kind = self.get_edge_kind(last_instruction);
-                            graph.add_edge(from_node, to_node, edge_kind);
+                    // Check if this is a switch instruction
+                    if matches!(last_instruction.instruction.name(), "SwitchImm") {
+                        // Handle switch instructions - add edges for all cases and default
+                        if let Some(switch_table) = self.get_switch_table_for_instruction(last_instruction) {
+                            // Add edge for default case
+                            if let Some(default_target) = switch_table.default_instruction_index {
+                                if let Some(&to_node) = self.block_starts.get(&default_target) {
+                                    graph.add_edge(from_node, to_node, EdgeKind::Default);
+                                }
+                            }
+                            
+                            // Add edges for all switch cases
+                            for (case_index, case) in switch_table.cases.iter().enumerate() {
+                                if let Some(target) = case.target_instruction_index {
+                                    if let Some(&to_node) = self.block_starts.get(&target) {
+                                        graph.add_edge(from_node, to_node, EdgeKind::Switch(case_index));
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Handle regular jump instructions
+                        if let Some(target) = self.get_jump_target(last_instruction, jump_table) {
+                            if let Some(&to_node) = self.block_starts.get(&target) {
+                                let edge_kind = self.get_edge_kind(last_instruction);
+                                graph.add_edge(from_node, to_node, edge_kind);
+                            }
+                        }
+
+                        // Add fallthrough edge for conditional jumps
+                        if self.is_conditional_jump(last_instruction) {
+                            let fallthrough_pc = end_pc;
+                            if let Some(&to_node) = self.block_starts.get(&fallthrough_pc) {
+                                graph.add_edge(from_node, to_node, EdgeKind::Fall);
+                            }
                         }
                     }
-
-                    // Add fallthrough edge for conditional jumps
-                    if self.is_conditional_jump(last_instruction) {
-                        let fallthrough_pc = end_pc;
-                        if let Some(&to_node) = self.block_starts.get(&fallthrough_pc) {
-                            graph.add_edge(from_node, to_node, EdgeKind::Fall);
+                } else if last_instruction.instruction.category() == "Switch" {
+                    // Handle switch instructions - add edges for all cases and default
+                    if let Some(switch_table) = self.get_switch_table_for_instruction(last_instruction) {
+                        // Add edge for default case
+                        if let Some(default_target) = switch_table.default_instruction_index {
+                            if let Some(&to_node) = self.block_starts.get(&default_target) {
+                                graph.add_edge(from_node, to_node, EdgeKind::Default);
+                            }
+                        }
+                        
+                        // Add edges for all switch cases
+                        for (case_index, case) in switch_table.cases.iter().enumerate() {
+                            if let Some(target) = case.target_instruction_index {
+                                if let Some(&to_node) = self.block_starts.get(&target) {
+                                    graph.add_edge(from_node, to_node, EdgeKind::Switch(case_index));
+                                }
+                            }
                         }
                     }
                 } else {
@@ -325,7 +423,11 @@ impl<'a> CfgBuilder<'a> {
             UnifiedInstruction::JmpFalse { .. } | UnifiedInstruction::JmpFalseLong { .. } => {
                 EdgeKind::False
             }
-            UnifiedInstruction::SwitchImm { .. } => EdgeKind::Switch(0), // Default case
+            UnifiedInstruction::SwitchImm { .. } => {
+                // For switch instructions, we'll handle the edge creation separately
+                // in the add_edges method to create multiple edges for each case
+                EdgeKind::Default
+            }
             _ => EdgeKind::Uncond, // Default for other conditional jumps
         }
     }
