@@ -2102,3 +2102,70 @@ fn test_precise_conditional_edges_jmp_undefined_long() {
     assert!(found_true, "JmpUndefinedLong should create a True edge");
     assert!(found_false, "JmpUndefinedLong should create a False edge");
 }
+
+/// Test that edge labels are correctly generated in DOT output
+#[test]
+fn test_edge_labels_in_dot_output() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load value
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+        }, // 1: Jump if true
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 3: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // Jump from instruction 1 to instruction 2
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Generate DOT output
+    let dot_output = cfg.builder().to_dot(cfg.graph());
+
+    // Verify that edge labels are present
+    assert!(
+        dot_output.contains("label="),
+        "DOT output should contain edge labels"
+    );
+    assert!(
+        dot_output.contains("true"),
+        "DOT output should contain 'true' edge label"
+    );
+    assert!(
+        dot_output.contains("false"),
+        "DOT output should contain 'false' edge label"
+    );
+
+    // Verify the structure includes edge labels
+    let lines: Vec<&str> = dot_output.lines().collect();
+    let edge_lines: Vec<&str> = lines
+        .iter()
+        .filter(|line| line.contains("->") && line.contains("label="))
+        .map(|&line| line)
+        .collect();
+
+    assert!(
+        !edge_lines.is_empty(),
+        "Should have at least one edge with a label"
+    );
+
+    // Verify specific edge label formats
+    for line in edge_lines {
+        assert!(
+            line.contains("[label="),
+            "Edge line should have label attribute"
+        );
+        assert!(line.contains("]"), "Edge line should have closing bracket");
+    }
+}

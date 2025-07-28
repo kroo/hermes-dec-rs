@@ -30,45 +30,45 @@ digraph {
     f0_n17 [ label = "Block 17 (PC 247-248) [L1]\l  0: Ret               r0\l" ]
     f0_n18 [ label = "EXIT" ]
 
-    f0_n0 -> f0_n1
-    f0_n1 -> f0_n17
-    f0_n1 -> f0_n2
-    f0_n2 -> f0_n4
-    f0_n2 -> f0_n3
-    f0_n3 -> f0_n4
-    f0_n4 -> f0_n7
-    f0_n4 -> f0_n5
-    f0_n5 -> f0_n7
-    f0_n5 -> f0_n6
-    f0_n6 -> f0_n7
-    f0_n7 -> f0_n10
-    f0_n7 -> f0_n8
-    f0_n8 -> f0_n10
-    f0_n8 -> f0_n9
-    f0_n9 -> f0_n10
-    f0_n10 -> f0_n12
-    f0_n10 -> f0_n11
-    f0_n11 -> f0_n12
-    f0_n12 -> f0_n13
-    f0_n13 -> f0_n15
-    f0_n14 -> f0_n15
-    f0_n15 -> f0_n1
-    f0_n16 -> f0_n18
-    f0_n17 -> f0_n18
-    f0_n12 -> f0_n14
-    f0_n2 -> f0_n16
-    f0_n3 -> f0_n16
-    f0_n4 -> f0_n16
-    f0_n5 -> f0_n16
-    f0_n6 -> f0_n16
-    f0_n7 -> f0_n16
-    f0_n8 -> f0_n16
-    f0_n9 -> f0_n16
-    f0_n10 -> f0_n16
-    f0_n11 -> f0_n16
-    f0_n12 -> f0_n16
-    f0_n13 -> f0_n16
-    f0_n14 -> f0_n16
+    f0_n0 -> f0_n1 [label="fall"]
+    f0_n1 -> f0_n17 [label="true"]
+    f0_n1 -> f0_n2 [label="false"]
+    f0_n2 -> f0_n4 [label="true"]
+    f0_n2 -> f0_n3 [label="false"]
+    f0_n3 -> f0_n4 [label="fall"]
+    f0_n4 -> f0_n7 [label="true"]
+    f0_n4 -> f0_n5 [label="false"]
+    f0_n5 -> f0_n7 [label="true"]
+    f0_n5 -> f0_n6 [label="false"]
+    f0_n6 -> f0_n7 [label="fall"]
+    f0_n7 -> f0_n10 [label="true"]
+    f0_n7 -> f0_n8 [label="false"]
+    f0_n8 -> f0_n10 [label="true"]
+    f0_n8 -> f0_n9 [label="false"]
+    f0_n9 -> f0_n10 [label="fall"]
+    f0_n10 -> f0_n12 [label="true"]
+    f0_n10 -> f0_n11 [label="false"]
+    f0_n11 -> f0_n12 [label="fall"]
+    f0_n12 -> f0_n13 [label="fall"]
+    f0_n13 -> f0_n15 [label="uncond"]
+    f0_n14 -> f0_n15 [label="fall"]
+    f0_n15 -> f0_n1 [label="uncond"]
+    f0_n16 -> f0_n18 [label="uncond"]
+    f0_n17 -> f0_n18 [label="uncond"]
+    f0_n12 -> f0_n14 [label="uncond"]
+    f0_n2 -> f0_n16 [label="uncond"]
+    f0_n3 -> f0_n16 [label="uncond"]
+    f0_n4 -> f0_n16 [label="uncond"]
+    f0_n5 -> f0_n16 [label="uncond"]
+    f0_n6 -> f0_n16 [label="uncond"]
+    f0_n7 -> f0_n16 [label="uncond"]
+    f0_n8 -> f0_n16 [label="uncond"]
+    f0_n9 -> f0_n16 [label="uncond"]
+    f0_n10 -> f0_n16 [label="uncond"]
+    f0_n11 -> f0_n16 [label="uncond"]
+    f0_n12 -> f0_n16 [label="uncond"]
+    f0_n13 -> f0_n16 [label="uncond"]
+    f0_n14 -> f0_n16 [label="uncond"]
   }
 
   subgraph cluster_function_1 {
@@ -79,7 +79,7 @@ digraph {
     f1_n0 [ label = "Block 0 (PC 0-27)\l  0: LoadParam         r6, 1\l  1: LoadParam         r9, 2\l  2: GetByIdShort      r1, r9, 1, \"test\"\l  3: LoadParam         r0, 3\l  4: Call2             r5, r1, r9, r0\l  5: GetGlobalObject   r1\l  6: TryGetById        r0, r1, 2, \"globalThis\"\l  7: GetByIdShort      r3, r0, 3, \"console\"\l  8: GetByIdShort      r2, r3, 4, \"log\"\l  9: GetByIdShort      r4, r6, 5, \"padEnd\"\l  10: LoadConstUInt8    r0, 20\l  11: Call2             r8, r4, r6, r0\l  12: TryGetById        r4, r1, 6, \"String\"\l  13: LoadConstUndefined r0\l  14: Call2             r5, r4, r0, r5\l  15: GetByIdShort      r4, r5, 7, \"toUpperCase\"\l  16: Call1             r12, r4, r5\l  17: TryGetById        r1, r1, 8, \"HermesInternal\"\l  18: GetByIdShort      r6, r1, 9, \"concat\"\l  19: LoadConstString   r15, \"\"\l  20: LoadConstString   r13, \" : \"\l  21: LoadConstString   r11, \"  	→ \"\l  22: Mov               r14, r8\l  23: Mov               r10, r9\l  24: Call              r1, r6, 6\l  25: Call2             r1, r2, r3, r1\l  26: Ret               r0\l" ]
     f1_n1 [ label = "EXIT" ]
 
-    f1_n0 -> f1_n1
+    f1_n0 -> f1_n1 [label="uncond"]
   }
 
 }

@@ -1,0 +1,16 @@
+// Function 5 from cjs-show-source
+// Generated from data/cjs-show-source.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 5";
+  style = filled;
+  color = lightgrey;
+
+  f5_n0 [ label = "Block 0 (PC 0-11)\l  0: CreateEnvironment r0\l  1: CreateClosure     r2, r0, Function<add>7\l  2: LoadParam         r1, 1\l  3: PutById           r1, r2, 1, \"add\"\l  4: LoadParam         r1, 3\l  5: GetByIdShort      r2, r1, 1, \"exports\"\l  6: CreateClosure     r1, r0, Function<mul>6\l  7: PutById           r2, r1, 2, \"mul\"\l  8: LoadConstUndefined r1\l  9: AsyncBreakCheck   \l  10: Ret               r1\l" ]
+  f5_n1 [ label = "EXIT" ]
+
+  f5_n0 -> f5_n1 [label="uncond"]
+}

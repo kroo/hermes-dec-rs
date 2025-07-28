@@ -694,10 +694,34 @@ impl<'a> CfgBuilder<'a> {
 
         dot.push_str("\n");
 
-        // Add edges
+        // Add edges with labels
         for edge in graph.edge_indices() {
             let (tail, head) = graph.edge_endpoints(edge).unwrap();
-            dot.push_str(&format!("  {} -> {}\n", tail.index(), head.index()));
+            let edge_kind = graph.edge_weight(edge).unwrap();
+
+            let label = match edge_kind {
+                EdgeKind::Uncond => "uncond",
+                EdgeKind::True => "true",
+                EdgeKind::False => "false",
+                EdgeKind::Switch(case_index) => {
+                    dot.push_str(&format!(
+                        "  {} -> {} [label=\"switch({})\"]\n",
+                        tail.index(),
+                        head.index(),
+                        case_index
+                    ));
+                    continue;
+                }
+                EdgeKind::Default => "default",
+                EdgeKind::Fall => "fall",
+            };
+
+            dot.push_str(&format!(
+                "  {} -> {} [label=\"{}\"]\n",
+                tail.index(),
+                head.index(),
+                label
+            ));
         }
 
         dot.push_str("}\n");
@@ -750,10 +774,34 @@ impl<'a> CfgBuilder<'a> {
 
         dot.push_str("\n");
 
-        // Add edges (no labels)
+        // Add edges with labels
         for edge in graph.edge_indices() {
             let (tail, head) = graph.edge_endpoints(edge).unwrap();
-            dot.push_str(&format!("  {} -> {}\n", tail.index(), head.index()));
+            let edge_kind = graph.edge_weight(edge).unwrap();
+
+            let label = match edge_kind {
+                EdgeKind::Uncond => "uncond",
+                EdgeKind::True => "true",
+                EdgeKind::False => "false",
+                EdgeKind::Switch(case_index) => {
+                    dot.push_str(&format!(
+                        "  {} -> {} [label=\"switch({})\"]\n",
+                        tail.index(),
+                        head.index(),
+                        case_index
+                    ));
+                    continue;
+                }
+                EdgeKind::Default => "default",
+                EdgeKind::Fall => "fall",
+            };
+
+            dot.push_str(&format!(
+                "  {} -> {} [label=\"{}\"]\n",
+                tail.index(),
+                head.index(),
+                label
+            ));
         }
 
         dot.push_str("}\n");
@@ -812,12 +860,32 @@ impl<'a> CfgBuilder<'a> {
 
         dot.push_str("\n");
 
-        // Add edges within the subgraph (no labels)
+        // Add edges within the subgraph with labels
         for edge in graph.edge_indices() {
             let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            let edge_kind = graph.edge_weight(edge).unwrap();
             let tail_id = format!("f{}_n{}", function_index, tail.index());
             let head_id = format!("f{}_n{}", function_index, head.index());
-            dot.push_str(&format!("    {} -> {}\n", tail_id, head_id));
+
+            let label = match edge_kind {
+                EdgeKind::Uncond => "uncond",
+                EdgeKind::True => "true",
+                EdgeKind::False => "false",
+                EdgeKind::Switch(case_index) => {
+                    dot.push_str(&format!(
+                        "    {} -> {} [label=\"switch({})\"]\n",
+                        tail_id, head_id, case_index
+                    ));
+                    continue;
+                }
+                EdgeKind::Default => "default",
+                EdgeKind::Fall => "fall",
+            };
+
+            dot.push_str(&format!(
+                "    {} -> {} [label=\"{}\"]\n",
+                tail_id, head_id, label
+            ));
         }
 
         dot.push_str("  }\n");

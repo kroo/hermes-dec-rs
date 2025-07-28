@@ -13,7 +13,7 @@ digraph {
     f0_n0 [ label = "Block 0 (PC 0-2)\l  0: LoadConstUndefined r0\l  1: Ret               r0\l" ]
     f0_n1 [ label = "EXIT" ]
 
-    f0_n0 -> f0_n1
+    f0_n0 -> f0_n1 [label="uncond"]
   }
 
   subgraph cluster_function_1 {
@@ -26,10 +26,10 @@ digraph {
     f1_n2 [ label = "Block 2 (PC 12-59) [L1]\l  0: TryGetById        r5, r2, 1, \"print\"\l  1: LoadConstUndefined r0\l  2: LoadConstString   r4, \"Starting Hermes CJS smoke test …\"\l  3: Call2             r4, r5, r0, r4\l  4: LoadConstString   r4, \"./math\"\l  5: Call2             r8, r7, r0, r4\l  6: GetByIdShort      r9, r8, 5, \"add\"\l  7: LoadConstUInt8    r6, 2\l  8: LoadConstUInt8    r5, 3\l  9: Call3             r10, r9, r8, r6, r5\l  10: LoadConstUInt8    r9, 5\l  11: StrictEq          r10, r10, r9\l  12: LoadConstString   r9, \"add() should add\"\l  13: Call3             r9, r3, r0, r10, r9\l  14: GetByIdShort      r11, r8, 6, \"mul\"\l  15: LoadConstUInt8    r10, 6\l  16: LoadConstUInt8    r9, 7\l  17: Call3             r10, r11, r8, r10, r9\l  18: LoadConstUInt8    r9, 42\l  19: StrictEq          r10, r10, r9\l  20: LoadConstString   r9, \"mul() should multiply\"\l  21: Call3             r9, r3, r0, r10, r9\l  22: Call2             r4, r7, r0, r4\l  23: StrictEq          r8, r4, r8\l  24: LoadConstString   r4, \"require cache\"\l  25: Call3             r4, r3, r0, r8, r4\l  26: LoadConstString   r4, \"path\"\l  27: Call2             r8, r7, r0, r4\l  28: TryGetById        r4, r2, 7, \"__dirname\"\l  29: GetByIdShort      r7, r8, 8, \"dirname\"\l  30: TryGetById        r2, r2, 9, \"__filename\"\l  31: Call2             r2, r7, r8, r2\l  32: StrictEq          r4, r4, r2\l  33: LoadConstString   r2, \"__dirname works\"\l  34: Call3             r2, r3, r0, r4, r2\l  35: CreateClosure     r4, r1, Function<spreadSum>3\l  36: LoadConstUInt8    r15, 1\l  37: LoadConstUInt8    r12, 4\l  38: LoadConstUndefined r16\l  39: Mov               r14, r6\l  40: Mov               r13, r5\l  41: Call              r2, r4, 5\l  42: LoadConstUInt8    r1, 10\l  43: StrictEq          r2, r2, r1\l  44: LoadConstString   r1, \"arrow + rest/spread\"\l  45: Call3             r1, r3, r0, r2, r1\l  46: Ret               r0\l" ]
     f1_n3 [ label = "EXIT" ]
 
-    f1_n0 -> f1_n2
-    f1_n0 -> f1_n1
-    f1_n1 -> f1_n2
-    f1_n2 -> f1_n3
+    f1_n0 -> f1_n2 [label="true"]
+    f1_n0 -> f1_n1 [label="false"]
+    f1_n1 -> f1_n2 [label="fall"]
+    f1_n2 -> f1_n3 [label="uncond"]
   }
 
   subgraph cluster_function_2 {
@@ -49,20 +49,20 @@ digraph {
     f2_n9 [ label = "Block 9 (PC 39-41) [L1]\l  0: LoadConstUndefined r0\l  1: Ret               r0\l" ]
     f2_n10 [ label = "EXIT" ]
 
-    f2_n0 -> f2_n9
-    f2_n0 -> f2_n1
-    f2_n1 -> f2_n3
-    f2_n1 -> f2_n2
-    f2_n2 -> f2_n4
-    f2_n3 -> f2_n4
-    f2_n4 -> f2_n7
-    f2_n4 -> f2_n5
-    f2_n5 -> f2_n8
-    f2_n5 -> f2_n6
-    f2_n6 -> f2_n8
-    f2_n7 -> f2_n8
-    f2_n8 -> f2_n10
-    f2_n9 -> f2_n10
+    f2_n0 -> f2_n9 [label="true"]
+    f2_n0 -> f2_n1 [label="false"]
+    f2_n1 -> f2_n3 [label="true"]
+    f2_n1 -> f2_n2 [label="false"]
+    f2_n2 -> f2_n4 [label="uncond"]
+    f2_n3 -> f2_n4 [label="fall"]
+    f2_n4 -> f2_n7 [label="true"]
+    f2_n4 -> f2_n5 [label="false"]
+    f2_n5 -> f2_n8 [label="true"]
+    f2_n5 -> f2_n6 [label="false"]
+    f2_n6 -> f2_n8 [label="uncond"]
+    f2_n7 -> f2_n8 [label="fall"]
+    f2_n8 -> f2_n10 [label="uncond"]
+    f2_n9 -> f2_n10 [label="uncond"]
   }
 
   subgraph cluster_function_3 {
@@ -73,7 +73,7 @@ digraph {
     f3_n0 [ label = "Block 0 (PC 0-8)\l  0: LoadConstZero     r3\l  1: LoadConstZero     r5\l  2: CallBuiltin       r2, 45, 2\l  3: GetByIdShort      r1, r2, 1, \"reduce\"\l  4: CreateEnvironment r0\l  5: CreateClosure     r0, r0, Function<>4\l  6: Call3             r0, r1, r2, r0, r3\l  7: Ret               r0\l" ]
     f3_n1 [ label = "EXIT" ]
 
-    f3_n0 -> f3_n1
+    f3_n0 -> f3_n1 [label="uncond"]
   }
 
   subgraph cluster_function_4 {
@@ -84,7 +84,7 @@ digraph {
     f4_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r1, 1\l  1: LoadParam         r0, 2\l  2: Add               r0, r1, r0\l  3: Ret               r0\l" ]
     f4_n1 [ label = "EXIT" ]
 
-    f4_n0 -> f4_n1
+    f4_n0 -> f4_n1 [label="uncond"]
   }
 
   subgraph cluster_function_5 {
@@ -95,7 +95,7 @@ digraph {
     f5_n0 [ label = "Block 0 (PC 0-10)\l  0: CreateEnvironment r0\l  1: CreateClosure     r2, r0, Function<add>7\l  2: LoadParam         r1, 1\l  3: PutById           r1, r2, 1, \"add\"\l  4: LoadParam         r1, 3\l  5: GetByIdShort      r1, r1, 1, \"exports\"\l  6: CreateClosure     r0, r0, Function<mul>6\l  7: PutById           r1, r0, 2, \"mul\"\l  8: LoadConstUndefined r0\l  9: Ret               r0\l" ]
     f5_n1 [ label = "EXIT" ]
 
-    f5_n0 -> f5_n1
+    f5_n0 -> f5_n1 [label="uncond"]
   }
 
   subgraph cluster_function_6 {
@@ -106,7 +106,7 @@ digraph {
     f6_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r1, 1\l  1: LoadParam         r0, 2\l  2: Mul               r0, r1, r0\l  3: Ret               r0\l" ]
     f6_n1 [ label = "EXIT" ]
 
-    f6_n0 -> f6_n1
+    f6_n0 -> f6_n1 [label="uncond"]
   }
 
   subgraph cluster_function_7 {
@@ -117,7 +117,7 @@ digraph {
     f7_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r1, 1\l  1: LoadParam         r0, 2\l  2: Add               r0, r1, r0\l  3: Ret               r0\l" ]
     f7_n1 [ label = "EXIT" ]
 
-    f7_n0 -> f7_n1
+    f7_n0 -> f7_n1 [label="uncond"]
   }
 
 }

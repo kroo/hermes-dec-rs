@@ -13,7 +13,7 @@ digraph {
     f0_n0 [ label = "Block 0 (PC 0-16)\l  0: DeclareGlobalVar  \"denseSwitchTest\"\l  1: DeclareGlobalVar  \"largeSwitchTest\"\l  2: CreateEnvironment r1\l  3: CreateClosure     r2, r1, Function<denseSwitchTest>1\l  4: GetGlobalObject   r0\l  5: PutById           r0, r2, 1, \"denseSwitchTest\"\l  6: CreateClosure     r1, r1, Function<largeSwitchTest>2\l  7: PutById           r0, r1, 2, \"largeSwitchTest\"\l  8: GetByIdShort      r3, r0, 1, \"denseSwitchTest\"\l  9: LoadConstUndefined r2\l  10: LoadConstUInt8    r1, 15\l  11: Call2             r1, r3, r2, r1\l  12: GetByIdShort      r1, r0, 2, \"largeSwitchTest\"\l  13: LoadConstUInt8    r0, 7\l  14: Call2             r0, r1, r2, r0\l  15: Ret               r0\l" ]
     f0_n1 [ label = "EXIT" ]
 
-    f0_n0 -> f0_n1
+    f0_n0 -> f0_n1 [label="uncond"]
   }
 
   subgraph cluster_function_1 {
@@ -46,50 +46,50 @@ digraph {
     f1_n22 [ label = "Block 22 (PC 44-46)\l  0: LoadConstString   r0, \"other\"\l  1: Ret               r0\l" ]
     f1_n23 [ label = "EXIT" ]
 
-    f1_n0 -> f1_n22
-    f1_n0 -> f1_n21
-    f1_n0 -> f1_n20
-    f1_n0 -> f1_n19
-    f1_n0 -> f1_n18
-    f1_n0 -> f1_n17
-    f1_n0 -> f1_n16
-    f1_n0 -> f1_n15
-    f1_n0 -> f1_n14
-    f1_n0 -> f1_n13
-    f1_n0 -> f1_n12
-    f1_n0 -> f1_n11
-    f1_n0 -> f1_n10
-    f1_n0 -> f1_n9
-    f1_n0 -> f1_n8
-    f1_n0 -> f1_n7
-    f1_n0 -> f1_n6
-    f1_n0 -> f1_n5
-    f1_n0 -> f1_n4
-    f1_n0 -> f1_n3
-    f1_n0 -> f1_n2
-    f1_n0 -> f1_n1
-    f1_n1 -> f1_n23
-    f1_n2 -> f1_n23
-    f1_n3 -> f1_n23
-    f1_n4 -> f1_n23
-    f1_n5 -> f1_n23
-    f1_n6 -> f1_n23
-    f1_n7 -> f1_n23
-    f1_n8 -> f1_n23
-    f1_n9 -> f1_n23
-    f1_n10 -> f1_n23
-    f1_n11 -> f1_n23
-    f1_n12 -> f1_n23
-    f1_n13 -> f1_n23
-    f1_n14 -> f1_n23
-    f1_n15 -> f1_n23
-    f1_n16 -> f1_n23
-    f1_n17 -> f1_n23
-    f1_n18 -> f1_n23
-    f1_n19 -> f1_n23
-    f1_n20 -> f1_n23
-    f1_n21 -> f1_n23
-    f1_n22 -> f1_n23
+    f1_n0 -> f1_n22 [label="default"]
+    f1_n0 -> f1_n21 [label="switch(0)"]
+    f1_n0 -> f1_n20 [label="switch(1)"]
+    f1_n0 -> f1_n19 [label="switch(2)"]
+    f1_n0 -> f1_n18 [label="switch(3)"]
+    f1_n0 -> f1_n17 [label="switch(4)"]
+    f1_n0 -> f1_n16 [label="switch(5)"]
+    f1_n0 -> f1_n15 [label="switch(6)"]
+    f1_n0 -> f1_n14 [label="switch(7)"]
+    f1_n0 -> f1_n13 [label="switch(8)"]
+    f1_n0 -> f1_n12 [label="switch(9)"]
+    f1_n0 -> f1_n11 [label="switch(10)"]
+    f1_n0 -> f1_n10 [label="switch(11)"]
+    f1_n0 -> f1_n9 [label="switch(12)"]
+    f1_n0 -> f1_n8 [label="switch(13)"]
+    f1_n0 -> f1_n7 [label="switch(14)"]
+    f1_n0 -> f1_n6 [label="switch(15)"]
+    f1_n0 -> f1_n5 [label="switch(16)"]
+    f1_n0 -> f1_n4 [label="switch(17)"]
+    f1_n0 -> f1_n3 [label="switch(18)"]
+    f1_n0 -> f1_n2 [label="switch(19)"]
+    f1_n0 -> f1_n1 [label="switch(20)"]
+    f1_n1 -> f1_n23 [label="uncond"]
+    f1_n2 -> f1_n23 [label="uncond"]
+    f1_n3 -> f1_n23 [label="uncond"]
+    f1_n4 -> f1_n23 [label="uncond"]
+    f1_n5 -> f1_n23 [label="uncond"]
+    f1_n6 -> f1_n23 [label="uncond"]
+    f1_n7 -> f1_n23 [label="uncond"]
+    f1_n8 -> f1_n23 [label="uncond"]
+    f1_n9 -> f1_n23 [label="uncond"]
+    f1_n10 -> f1_n23 [label="uncond"]
+    f1_n11 -> f1_n23 [label="uncond"]
+    f1_n12 -> f1_n23 [label="uncond"]
+    f1_n13 -> f1_n23 [label="uncond"]
+    f1_n14 -> f1_n23 [label="uncond"]
+    f1_n15 -> f1_n23 [label="uncond"]
+    f1_n16 -> f1_n23 [label="uncond"]
+    f1_n17 -> f1_n23 [label="uncond"]
+    f1_n18 -> f1_n23 [label="uncond"]
+    f1_n19 -> f1_n23 [label="uncond"]
+    f1_n20 -> f1_n23 [label="uncond"]
+    f1_n21 -> f1_n23 [label="uncond"]
+    f1_n22 -> f1_n23 [label="uncond"]
   }
 
   subgraph cluster_function_2 {
@@ -132,55 +132,55 @@ digraph {
     f2_n32 [ label = "Block 32 (PC 65-67) [L1]\l  0: LoadConstString   r0, \"negative five\"\l  1: Ret               r0\l" ]
     f2_n33 [ label = "EXIT" ]
 
-    f2_n0 -> f2_n32
-    f2_n0 -> f2_n1
-    f2_n1 -> f2_n31
-    f2_n1 -> f2_n2
-    f2_n2 -> f2_n30
-    f2_n2 -> f2_n3
-    f2_n3 -> f2_n29
-    f2_n3 -> f2_n4
-    f2_n4 -> f2_n28
-    f2_n4 -> f2_n5
-    f2_n5 -> f2_n27
-    f2_n5 -> f2_n6
-    f2_n6 -> f2_n26
-    f2_n6 -> f2_n7
-    f2_n7 -> f2_n25
-    f2_n7 -> f2_n8
-    f2_n8 -> f2_n24
-    f2_n8 -> f2_n9
-    f2_n9 -> f2_n23
-    f2_n9 -> f2_n10
-    f2_n10 -> f2_n22
-    f2_n10 -> f2_n11
-    f2_n11 -> f2_n21
-    f2_n11 -> f2_n12
-    f2_n12 -> f2_n20
-    f2_n12 -> f2_n13
-    f2_n13 -> f2_n19
-    f2_n13 -> f2_n14
-    f2_n14 -> f2_n18
-    f2_n14 -> f2_n15
-    f2_n15 -> f2_n17
-    f2_n15 -> f2_n16
-    f2_n16 -> f2_n33
-    f2_n17 -> f2_n33
-    f2_n18 -> f2_n33
-    f2_n19 -> f2_n33
-    f2_n20 -> f2_n33
-    f2_n21 -> f2_n33
-    f2_n22 -> f2_n33
-    f2_n23 -> f2_n33
-    f2_n24 -> f2_n33
-    f2_n25 -> f2_n33
-    f2_n26 -> f2_n33
-    f2_n27 -> f2_n33
-    f2_n28 -> f2_n33
-    f2_n29 -> f2_n33
-    f2_n30 -> f2_n33
-    f2_n31 -> f2_n33
-    f2_n32 -> f2_n33
+    f2_n0 -> f2_n32 [label="true"]
+    f2_n0 -> f2_n1 [label="false"]
+    f2_n1 -> f2_n31 [label="true"]
+    f2_n1 -> f2_n2 [label="false"]
+    f2_n2 -> f2_n30 [label="true"]
+    f2_n2 -> f2_n3 [label="false"]
+    f2_n3 -> f2_n29 [label="true"]
+    f2_n3 -> f2_n4 [label="false"]
+    f2_n4 -> f2_n28 [label="true"]
+    f2_n4 -> f2_n5 [label="false"]
+    f2_n5 -> f2_n27 [label="true"]
+    f2_n5 -> f2_n6 [label="false"]
+    f2_n6 -> f2_n26 [label="true"]
+    f2_n6 -> f2_n7 [label="false"]
+    f2_n7 -> f2_n25 [label="true"]
+    f2_n7 -> f2_n8 [label="false"]
+    f2_n8 -> f2_n24 [label="true"]
+    f2_n8 -> f2_n9 [label="false"]
+    f2_n9 -> f2_n23 [label="true"]
+    f2_n9 -> f2_n10 [label="false"]
+    f2_n10 -> f2_n22 [label="true"]
+    f2_n10 -> f2_n11 [label="false"]
+    f2_n11 -> f2_n21 [label="true"]
+    f2_n11 -> f2_n12 [label="false"]
+    f2_n12 -> f2_n20 [label="true"]
+    f2_n12 -> f2_n13 [label="false"]
+    f2_n13 -> f2_n19 [label="true"]
+    f2_n13 -> f2_n14 [label="false"]
+    f2_n14 -> f2_n18 [label="true"]
+    f2_n14 -> f2_n15 [label="false"]
+    f2_n15 -> f2_n17 [label="true"]
+    f2_n15 -> f2_n16 [label="false"]
+    f2_n16 -> f2_n33 [label="uncond"]
+    f2_n17 -> f2_n33 [label="uncond"]
+    f2_n18 -> f2_n33 [label="uncond"]
+    f2_n19 -> f2_n33 [label="uncond"]
+    f2_n20 -> f2_n33 [label="uncond"]
+    f2_n21 -> f2_n33 [label="uncond"]
+    f2_n22 -> f2_n33 [label="uncond"]
+    f2_n23 -> f2_n33 [label="uncond"]
+    f2_n24 -> f2_n33 [label="uncond"]
+    f2_n25 -> f2_n33 [label="uncond"]
+    f2_n26 -> f2_n33 [label="uncond"]
+    f2_n27 -> f2_n33 [label="uncond"]
+    f2_n28 -> f2_n33 [label="uncond"]
+    f2_n29 -> f2_n33 [label="uncond"]
+    f2_n30 -> f2_n33 [label="uncond"]
+    f2_n31 -> f2_n33 [label="uncond"]
+    f2_n32 -> f2_n33 [label="uncond"]
   }
 
 }

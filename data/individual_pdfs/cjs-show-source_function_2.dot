@@ -1,0 +1,38 @@
+// Function 2 from cjs-show-source
+// Generated from data/cjs-show-source.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 2";
+  style = filled;
+  color = lightgrey;
+
+  f2_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r2, 2\l  1: LoadParam         r0, 1\l  2: AsyncBreakCheck   \l  3: JmpTrueLong       L1, r0\l" ]
+  f2_n1 [ label = "Block 1 (PC 4-9)\l  0: GetGlobalObject   r0\l  1: GetByIdShort      r1, r0, 1, \"print\"\l  2: TypeOf            r1, r1\l  3: LoadConstString   r3, \"function\"\l  4: JStrictEqual      L2, r1, r3\l" ]
+  f2_n2 [ label = "Block 2 (PC 9-13)\l  0: TryGetById        r1, r0, 2, \"globalThis\"\l  1: GetByIdShort      r1, r1, 3, \"console\"\l  2: GetByIdShort      r5, r1, 4, \"log\"\l  3: Jmp               L3\l" ]
+  f2_n3 [ label = "Block 3 (PC 13-14) [L2]\l  0: TryGetById        r5, r0, 1, \"print\"\l" ]
+  f2_n4 [ label = "Block 4 (PC 14-22) [L3]\l  0: LoadConstString   r1, \"Assertion failed ‑ \"\l  1: Add               r4, r1, r2\l  2: LoadConstUndefined r1\l  3: Call2             r1, r5, r1, r4\l  4: TryGetById        r1, r0, 2, \"globalThis\"\l  5: GetByIdShort      r1, r1, 5, \"quit\"\l  6: TypeOf            r1, r1\l  7: JStrictEqual      L4, r1, r3\l" ]
+  f2_n5 [ label = "Block 5 (PC 22-27)\l  0: TryGetById        r1, r0, 2, \"globalThis\"\l  1: GetByIdShort      r1, r1, 6, \"process\"\l  2: TypeOf            r3, r1\l  3: LoadConstString   r1, \"undefined\"\l  4: JStrictEqual      L5, r3, r1\l" ]
+  f2_n6 [ label = "Block 6 (PC 27-33)\l  0: TryGetById        r1, r0, 2, \"globalThis\"\l  1: GetByIdShort      r4, r1, 6, \"process\"\l  2: GetByIdShort      r3, r4, 7, \"exit\"\l  3: LoadConstUInt8    r1, 1\l  4: Call2             r1, r3, r4, r1\l  5: Jmp               L5\l" ]
+  f2_n7 [ label = "Block 7 (PC 33-37) [L4]\l  0: TryGetById        r4, r0, 2, \"globalThis\"\l  1: GetByIdShort      r3, r4, 5, \"quit\"\l  2: LoadConstUInt8    r1, 1\l  3: Call2             r1, r3, r4, r1\l" ]
+  f2_n8 [ label = "Block 8 (PC 37-45) [L5]\l  0: TryGetById        r0, r0, 8, \"Error\"\l  1: GetByIdShort      r1, r0, 9, \"prototype\"\l  2: CreateThis        r1, r1, r0\l  3: Mov               r7, r1\l  4: Mov               r6, r2\l  5: Construct         r0, r0, 2\l  6: SelectObject      r0, r1, r0\l  7: Throw             r0\l" ]
+  f2_n9 [ label = "Block 9 (PC 45-47) [L1]\l  0: LoadConstUndefined r0\l  1: Ret               r0\l" ]
+  f2_n10 [ label = "EXIT" ]
+
+  f2_n0 -> f2_n9 [label="true"]
+  f2_n0 -> f2_n1 [label="false"]
+  f2_n1 -> f2_n3 [label="true"]
+  f2_n1 -> f2_n2 [label="false"]
+  f2_n2 -> f2_n4 [label="uncond"]
+  f2_n3 -> f2_n4 [label="fall"]
+  f2_n4 -> f2_n7 [label="true"]
+  f2_n4 -> f2_n5 [label="false"]
+  f2_n5 -> f2_n8 [label="true"]
+  f2_n5 -> f2_n6 [label="false"]
+  f2_n6 -> f2_n8 [label="uncond"]
+  f2_n7 -> f2_n8 [label="fall"]
+  f2_n8 -> f2_n10 [label="uncond"]
+  f2_n9 -> f2_n10 [label="uncond"]
+}

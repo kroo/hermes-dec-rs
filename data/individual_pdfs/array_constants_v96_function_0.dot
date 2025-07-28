@@ -1,0 +1,16 @@
+// Function 0 from array_constants_v96
+// Generated from data/array_constants_v96.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 0";
+  style = filled;
+  color = lightgrey;
+
+  f0_n0 [ label = "Block 0 (PC 0-11)\l  0: DeclareGlobalVar  \"main\"\l  1: CreateEnvironment r1\l  2: CreateClosure     r2, r1, Function<main>1\l  3: GetGlobalObject   r0\l  4: PutById           r0, r2, 1, \"main\"\l  5: NewArrayWithBuffer r0, 360, 360, 0\l  6: StoreToEnvironment r1, 0, r0\l  7: NewObjectWithBuffer r0, 12, 12, 0, 0\l  8: StoreToEnvironment r1, 1, r0\l  9: LoadConstUndefined r0\l  10: Ret               r0\l" ]
+  f0_n1 [ label = "EXIT" ]
+
+  f0_n0 -> f0_n1 [label="uncond"]
+}
