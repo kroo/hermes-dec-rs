@@ -915,7 +915,7 @@ impl<'a> CfgBuilder<'a> {
         &self,
         graph: &DiGraph<Block, EdgeKind>,
     ) -> crate::cfg::analysis::LoopAnalysis {
-        use crate::cfg::analysis::{Loop, LoopAnalysis, LoopType};
+        use crate::cfg::analysis::{Loop, LoopAnalysis};
         use std::collections::HashMap;
 
         let mut loops = Vec::new();
@@ -1033,10 +1033,10 @@ impl<'a> CfgBuilder<'a> {
     /// Classify the type of loop
     fn classify_loop_type(
         &self,
-        graph: &DiGraph<Block, EdgeKind>,
-        header: NodeIndex,
-        tail: NodeIndex,
-        loop_body: &HashSet<NodeIndex>,
+        _graph: &DiGraph<Block, EdgeKind>,
+        _header: NodeIndex,
+        _tail: NodeIndex,
+        _loop_body: &HashSet<NodeIndex>,
     ) -> crate::cfg::analysis::LoopType {
         use crate::cfg::analysis::LoopType;
 
@@ -1048,7 +1048,7 @@ impl<'a> CfgBuilder<'a> {
     fn find_loop_exits(
         &self,
         graph: &DiGraph<Block, EdgeKind>,
-        header: NodeIndex,
+        _header: NodeIndex,
         loop_body: &HashSet<NodeIndex>,
     ) -> Vec<NodeIndex> {
         let mut exits = Vec::new();

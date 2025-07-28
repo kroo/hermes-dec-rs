@@ -12,9 +12,7 @@ use hermes_dec_rs::hbc::tables::{
 use hermes_dec_rs::hbc::HbcFile;
 use hermes_dec_rs::hbc::HbcHeader;
 use petgraph::graph::DiGraph;
-use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
