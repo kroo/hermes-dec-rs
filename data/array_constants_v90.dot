@@ -10,10 +10,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f0_n0 [ label = "Block 0 (PC 0-11)\l  0: DeclareGlobalVar  \"main\"\l  1: CreateEnvironment r1\l  2: CreateClosure     r2, r1, Function<main>1\l  3: GetGlobalObject   r0\l  4: PutById           r0, r2, 1, \"main\"\l  5: NewArrayWithBuffer r0, 360, 360, 0\l  6: StoreToEnvironment r1, 0, r0\l  7: NewObjectWithBuffer r0, 12, 12, 0, 0\l  8: StoreToEnvironment r1, 1, r0\l  9: LoadConstUndefined r0\l  10: Ret               r0\l" ]
     f0_n1 [ label = "EXIT" ]
 
-    f0_n0 -> f0_n1
+    f0_n0 -> f0_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_1 {
@@ -21,18 +23,20 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f1_n0 [ label = "Block 0 (PC 0-5)\l  0: LoadConstString   r6, \"_modified\"\l  1: GetEnvironment    r0, 0\l  2: LoadFromEnvironment r4, r0, 1\l  3: GetPNameList      r5, r4, r3, r2\l  4: JmpUndefined      L1, r5\l" ]
     f1_n1 [ label = "Block 1 (PC 5-7) [L2]\l  0: GetNextPName      r1, r5, r4, r3, r2\l  1: JmpUndefined      L1, r1\l" ]
     f1_n2 [ label = "Block 2 (PC 7-13)\l  0: Mov               r9, r1\l  1: LoadFromEnvironment r8, r0, 1\l  2: GetByVal          r7, r8, r9\l  3: Add               r7, r7, r6\l  4: PutByVal          r8, r9, r7\l  5: Jmp               L2\l" ]
     f1_n3 [ label = "Block 3 (PC 13-24) [L1]\l  0: GetGlobalObject   r1\l  1: TryGetById        r4, r1, 1, \"console\"\l  2: GetByIdShort      r3, r4, 2, \"log\"\l  3: LoadFromEnvironment r2, r0, 0\l  4: Call2             r2, r3, r4, r2\l  5: TryGetById        r2, r1, 1, \"console\"\l  6: GetByIdShort      r1, r2, 2, \"log\"\l  7: LoadFromEnvironment r0, r0, 1\l  8: Call2             r0, r1, r2, r0\l  9: LoadConstUndefined r0\l  10: Ret               r0\l" ]
     f1_n4 [ label = "EXIT" ]
 
-    f1_n0 -> f1_n3
-    f1_n0 -> f1_n1
-    f1_n1 -> f1_n3
-    f1_n1 -> f1_n2
-    f1_n2 -> f1_n1
-    f1_n3 -> f1_n4
+    f1_n0 -> f1_n3 [label="True"]
+    f1_n0 -> f1_n1 [label="False"]
+    f1_n1 -> f1_n3 [label="True"]
+    f1_n1 -> f1_n2 [label="False"]
+    f1_n2 -> f1_n1 [label="Uncond"]
+    f1_n3 -> f1_n4 [label="Uncond"]
   }
 
 }

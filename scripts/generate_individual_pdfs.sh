@@ -42,7 +42,9 @@ EOF
         # Extract the subgraph content (without the subgraph wrapper)
         sed -n "/subgraph cluster_function_${func_num}/,/^  }$/p" "$dot_file" | \
         sed '1d;$d' | \
-        sed 's/^    /  /' >> "$output_dot"
+        sed 's/^    /  /' | \
+        sed '/^  subgraph cluster_function_/,$d' | \
+        sed '/^  }$/d' >> "$output_dot"
         
         # Close the digraph
         echo "}" >> "$output_dot"
