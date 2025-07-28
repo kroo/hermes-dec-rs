@@ -50,7 +50,7 @@ fn test_jump_table_basic_functionality() {
     ];
 
     // Build the jump table
-    let result = jump_table.build_for_function(0, &instructions);
+    let result = jump_table.build_for_function(0, &instructions, &[]);
     assert!(result.is_ok());
 
     // Check that labels were created for jump targets

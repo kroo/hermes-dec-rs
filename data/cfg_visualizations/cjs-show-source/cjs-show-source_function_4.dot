@@ -1,0 +1,16 @@
+// Function 4 from cjs-show-source
+// Generated from data/cjs-show-source.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 4";
+  style = filled;
+  color = lightgrey;
+
+  f4_n0 [ label = "Block 0 (PC 0-5)\l  0: LoadParam         r1, 1\l  1: LoadParam         r0, 2\l  2: Add               r0, r1, r0\l  3: AsyncBreakCheck   \l  4: Ret               r0\l" ]
+  f4_n1 [ label = "EXIT" ]
+
+  f4_n0 -> f4_n1
+}

@@ -224,25 +224,36 @@ impl<'a> HbcFile<'a> {
                         )
                     })?;
 
+                // Get exception handlers for this function
+                let exc_handlers = if let Some(parsed_header) =
+                    hbc_file.functions.get_parsed_header(function_index)
+                {
+                    &parsed_header.exc_handlers
+                } else {
+                    &[] as &[tables::function_table::ExceptionHandlerInfo]
+                };
+
                 // Build jump table data for this function without modifying the main jump table
-                JumpTable::build_for_function_parallel(function_index, &instructions).map_err(|e| {
-                    format!(
-                        "Failed to build jump table for function {}: {}",
-                        function_index, e
-                    )
-                })
+                JumpTable::build_for_function_parallel(function_index, &instructions, exc_handlers)
+                    .map_err(|e| {
+                        format!(
+                            "Failed to build jump table for function {}: {}",
+                            function_index, e
+                        )
+                    })
             })
             .collect();
 
         // Merge all results into the main jump table
         for result in jump_table_results? {
-            let (function_index, labels, jumps, label_map, jump_map) = result;
+            let (function_index, labels, jumps, label_map, jump_map, address_to_index) = result;
             hbc_file.jump_table.merge_function_data(
                 function_index,
                 labels,
                 jumps,
                 label_map,
                 jump_map,
+                address_to_index,
             );
         }
 

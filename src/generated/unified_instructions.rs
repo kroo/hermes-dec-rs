@@ -9,14 +9,12 @@ use anyhow::Result;
 use scroll::{Pread, LE};
 use serde::{Deserialize, Serialize};
 
-macro_rules! OPERAND2_Reg8_StringId32 {
+macro_rules! OPERAND1_StringId32 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_0 = $bytes.gread_with::<u32>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
-            operand_1: operand_1,
         };
         let bytes_read = *$offset - start;
         Ok((instr, bytes_read))
@@ -37,23 +35,262 @@ macro_rules! OPERAND3_Addr32_Reg8_Reg8 {
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND1_StringId32 {
+macro_rules! OPERAND6_Reg8_Reg8_Reg8_Reg8_Reg8_Reg8 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_5 = $bytes.gread_with::<u8>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+            operand_5: operand_5,
         };
         let bytes_read = *$offset - start;
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND1_Addr8 {
+macro_rules! OPERAND5_Reg8_Reg8_Reg8_Reg8_Reg8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Reg8_BigIntId16 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_Reg8_FunctionId32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_Reg8_StringId16 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND4_Reg8_Reg8_UInt8_StringId32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND4_Reg8_UInt16_UInt16_UInt32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Reg8_UInt8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_UInt8_UInt32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND5_Reg8_UInt32_Addr32_UInt32_UInt32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<i32>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_4 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+            operand_4: operand_4,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_Reg8_StringId32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_Reg8_StringId8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Reg32_Reg32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Reg8_Imm32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Addr8_Reg8 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Reg8_StringId32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Addr8_Reg8_Reg8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
         };
         let bytes_read = *$offset - start;
         Ok((instr, bytes_read))
@@ -76,42 +313,22 @@ macro_rules! OPERAND4_Reg8_Reg8_UInt8_StringId8 {
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND1_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u16>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND1_Addr32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Reg8_StringId16 {
+macro_rules! OPERAND3_Reg8_UInt8_UInt16 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
             operand_1: operand_1,
+            operand_2: operand_2,
         };
         let bytes_read = *$offset - start;
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND3_Reg8_Reg8_FunctionId16 {
+macro_rules! OPERAND3_Reg8_Reg8_UInt16 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
@@ -145,25 +362,12 @@ macro_rules! OPERAND5_Reg8_Reg8_Reg8_Reg8_UInt8 {
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND2_Reg32_Reg32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u32>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_Reg8_FunctionId32 {
+macro_rules! OPERAND3_Reg8_Reg8_UInt8 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
         let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
             operand_1: operand_1,
@@ -173,12 +377,178 @@ macro_rules! OPERAND3_Reg8_Reg8_FunctionId32 {
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND4_Reg8_UInt16_UInt16_UInt32 {
+macro_rules! OPERAND2_Reg8_StringId16 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND4_Reg8_Reg8_Reg8_Reg8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_UInt8_UInt8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Reg8_UInt32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND1_Addr8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND4_Reg8_UInt16_UInt16_UInt16 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
         let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
         let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_Reg8_Reg8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND1_Addr32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND1_UInt16 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Reg8_BigIntId32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Reg8_UInt16 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND4_Reg8_Reg8_Reg8_UInt8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+            operand_3: operand_3,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND4_Reg8_StringId32_StringId32_UInt32 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
         let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
@@ -190,12 +560,68 @@ macro_rules! OPERAND4_Reg8_UInt16_UInt16_UInt32 {
         Ok((instr, bytes_read))
     }};
 }
+macro_rules! OPERAND2_Reg8_Double {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<f64>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_UInt8_Reg8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND2_Addr32_Reg8 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
 macro_rules! OPERAND1_Reg8 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
+        };
+        let bytes_read = *$offset - start;
+        Ok((instr, bytes_read))
+    }};
+}
+macro_rules! OPERAND3_Reg8_UInt8_FunctionId16 {
+    ($variant:ident, $bytes:expr, $offset:expr) => {{
+        let start = *$offset;
+        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
+        let instr = UnifiedInstruction::$variant {
+            operand_0: operand_0,
+            operand_1: operand_1,
+            operand_2: operand_2,
         };
         let bytes_read = *$offset - start;
         Ok((instr, bytes_read))
@@ -220,80 +646,11 @@ macro_rules! OPERAND5_Reg8_UInt16_UInt16_UInt32_UInt32 {
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND2_Reg8_UInt32 {
+macro_rules! OPERAND3_Reg8_UInt16_Reg8 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Reg8_Double {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<f64>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Addr32_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<i32>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND4_Reg8_StringId32_StringId32_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
-        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-            operand_3: operand_3,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Reg8_Imm32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Addr8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
+        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
         let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
@@ -304,7 +661,7 @@ macro_rules! OPERAND3_Addr8_Reg8_Reg8 {
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND3_Reg8_UInt8_UInt16 {
+macro_rules! OPERAND3_Reg8_Reg8_FunctionId16 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
@@ -314,47 +671,6 @@ macro_rules! OPERAND3_Reg8_UInt8_UInt16 {
             operand_0: operand_0,
             operand_1: operand_1,
             operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Reg8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_Reg8_StringId8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Reg8_BigIntId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
         };
         let bytes_read = *$offset - start;
         Ok((instr, bytes_read))
@@ -368,72 +684,6 @@ macro_rules! OPERAND5_Reg8_UInt16_UInt16_UInt16_UInt16 {
         let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
         let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
         let operand_4 = $bytes.gread_with::<u16>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-            operand_3: operand_3,
-            operand_4: operand_4,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND5_Reg8_UInt32_Addr32_UInt32_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u32>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<i32>($offset, LE)?;
-        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
-        let operand_4 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-            operand_3: operand_3,
-            operand_4: operand_4,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Addr8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<i8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND5_Reg8_Reg8_Reg8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
         let instr = UnifiedInstruction::$variant {
             operand_0: operand_0,
             operand_1: operand_1,
@@ -462,209 +712,6 @@ macro_rules! OPERAND4_Reg8_Reg8_UInt8_StringId16 {
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND4_Reg8_Reg8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-            operand_3: operand_3,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_UInt8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND4_Reg8_UInt16_UInt16_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-        let operand_3 = $bytes.gread_with::<u16>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-            operand_3: operand_3,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Reg8_BigIntId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND2_Reg8_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_UInt16_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u16>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND4_Reg8_Reg8_UInt8_StringId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_3 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-            operand_3: operand_3,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND6_Reg8_Reg8_Reg8_Reg8_Reg8_Reg8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_4 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_5 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-            operand_3: operand_3,
-            operand_4: operand_4,
-            operand_5: operand_5,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_UInt8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_Reg8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_Reg8_StringId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_UInt8_FunctionId16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_Reg8_UInt16 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u16>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
 macro_rules! OPERAND2_Reg8_Reg8 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
@@ -678,54 +725,7 @@ macro_rules! OPERAND2_Reg8_Reg8 {
         Ok((instr, bytes_read))
     }};
 }
-macro_rules! OPERAND4_Reg8_Reg8_Reg8_UInt8 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_3 = $bytes.gread_with::<u8>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-            operand_3: operand_3,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_Reg8_StringId32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
 macro_rules! OPERAND3_Reg8_Reg8_UInt32 {
-    ($variant:ident, $bytes:expr, $offset:expr) => {{
-        let start = *$offset;
-        let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_1 = $bytes.gread_with::<u8>($offset, LE)?;
-        let operand_2 = $bytes.gread_with::<u32>($offset, LE)?;
-        let instr = UnifiedInstruction::$variant {
-            operand_0: operand_0,
-            operand_1: operand_1,
-            operand_2: operand_2,
-        };
-        let bytes_read = *$offset - start;
-        Ok((instr, bytes_read))
-    }};
-}
-macro_rules! OPERAND3_Reg8_UInt8_UInt32 {
     ($variant:ident, $bytes:expr, $offset:expr) => {{
         let start = *$offset;
         let operand_0 = $bytes.gread_with::<u8>($offset, LE)?;
@@ -762,248 +762,293 @@ macro_rules! define_instructions {
 
             pub fn size(&self) -> usize {
                 match self {
-                    UnifiedInstruction::IteratorNext { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Sub32 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::ResumeGenerator { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::NewObjectWithBufferLong { .. } => 14, // Reg8, UInt16, UInt16, UInt32, UInt32
-                    UnifiedInstruction::IteratorClose { .. } => 3, // Reg8, UInt8
-                    UnifiedInstruction::JLessEqual { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::JNotGreater { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::LoadConstBigInt { .. } => 4, // Reg8, BigIntId16
-                    UnifiedInstruction::NewObjectWithBuffer { .. } => 10, // Reg8, UInt16, UInt16, UInt16, UInt16
-                    UnifiedInstruction::Mov { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::GetNextPName { .. } => 6, // Reg8, Reg8, Reg8, Reg8, Reg8
-                    UnifiedInstruction::LoadConstUInt8 { .. } => 3, // Reg8, UInt8
-                    UnifiedInstruction::JmpFalse { .. } => 3, // Addr8, Reg8
-                    UnifiedInstruction::JGreaterNLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::JGreaterEqualLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::JStrictEqualLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::JNotLessEqual { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::JLessNLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::JNotGreaterEqual { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::DirectEval { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::NewObjectWithParent { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::PutOwnByVal { .. } => 5, // Reg8, Reg8, Reg8, UInt8
-                    UnifiedInstruction::DelByIdLong { .. } => 7, // Reg8, Reg8, StringId32
-                    UnifiedInstruction::JmpUndefinedLong { .. } => 6, // Addr32, Reg8
-                    UnifiedInstruction::JNotGreaterNLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::StrictNeq { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::PutByVal { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Call { .. } => 4, // Reg8, Reg8, UInt8
-                    UnifiedInstruction::JStrictNotEqualLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::JmpTrueLong { .. } => 6, // Addr32, Reg8
-                    UnifiedInstruction::CreateGeneratorClosureLongIndex { .. } => 7, // Reg8, Reg8, FunctionId32
-                    UnifiedInstruction::CompleteGenerator { .. } => 1, //
-                    UnifiedInstruction::SaveGeneratorLong { .. } => 5, // Addr32
-                    UnifiedInstruction::JGreaterN { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::GreaterEq { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::LoadThisNS { .. } => 2, // Reg8
-                    UnifiedInstruction::LoadConstEmpty { .. } => 2, // Reg8
-                    UnifiedInstruction::Loadu16 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Loadu32 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::JNotEqualLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::Loadi8 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Divu32 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::DelByVal { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Loadi16 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::ConstructLong { .. } => 7, // Reg8, Reg8, UInt32
-                    UnifiedInstruction::BitAnd { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Div { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Store8 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::GetBuiltinClosure { .. } => 3, // Reg8, UInt8
-                    UnifiedInstruction::CreateGeneratorClosure { .. } => 5, // Reg8, Reg8, FunctionId16
-                    UnifiedInstruction::Not { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::Mod { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::NewArrayWithBuffer { .. } => 8, // Reg8, UInt16, UInt16, UInt16
-                    UnifiedInstruction::SwitchImm { .. } => 18, // Reg8, UInt32, Addr32, UInt32, UInt32
-                    UnifiedInstruction::DivN { .. } => 4, // Reg8, Reg8, Reg8
                     UnifiedInstruction::CreateGeneratorLongIndex { .. } => 7, // Reg8, Reg8, FunctionId32
-                    UnifiedInstruction::Divi32 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::PutNewOwnById { .. } => 5, // Reg8, Reg8, StringId16
-                    UnifiedInstruction::GetPNameList { .. } => 5, // Reg8, Reg8, Reg8, Reg8
-                    UnifiedInstruction::LoadConstDouble { .. } => 10, // Reg8, Double
-                    UnifiedInstruction::Eq { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::BitXor { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::DeclareGlobalVar { .. } => 5, // StringId32
-                    UnifiedInstruction::GetById { .. } => 6, // Reg8, Reg8, UInt8, StringId16
-                    UnifiedInstruction::Call4 { .. } => 7, // Reg8, Reg8, Reg8, Reg8, Reg8, Reg8
-                    UnifiedInstruction::AddEmptyString { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::ReifyArguments { .. } => 2, // Reg8
-                    UnifiedInstruction::JNotLessEqualLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::JNotGreaterEqualNLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::AsyncBreakCheck { .. } => 1, //
-                    UnifiedInstruction::CreateClosure { .. } => 5, // Reg8, Reg8, FunctionId16
-                    UnifiedInstruction::GetByIdLong { .. } => 8, // Reg8, Reg8, UInt8, StringId32
-                    UnifiedInstruction::GetArgumentsLength { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::SubN { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::JStrictNotEqual { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::JNotGreaterN { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::RShift { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Store16 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::JNotLessNLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::MulN { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::PutNewOwnByIdLong { .. } => 7, // Reg8, Reg8, StringId32
+                    UnifiedInstruction::CreateAsyncClosure { .. } => 5, // Reg8, Reg8, FunctionId16
+                    UnifiedInstruction::GreaterEq { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::CreateGenerator { .. } => 5, // Reg8, Reg8, FunctionId16
+                    UnifiedInstruction::PutOwnGetterSetterByVal { .. } => 6, // Reg8, Reg8, Reg8, Reg8, UInt8
                     UnifiedInstruction::Unreachable { .. } => 1, //
                     UnifiedInstruction::LoadConstFalse { .. } => 2, // Reg8
-                    UnifiedInstruction::StrictEq { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::LShift { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Negate { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::GetByIdShort { .. } => 5, // Reg8, Reg8, UInt8, StringId8
-                    UnifiedInstruction::SelectObject { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::StoreNPToEnvironment { .. } => 4, // Reg8, UInt8, Reg8
-                    UnifiedInstruction::CreateClosureLongIndex { .. } => 7, // Reg8, Reg8, FunctionId32
-                    UnifiedInstruction::Jmp { .. } => 2, // Addr8
-                    UnifiedInstruction::IsIn { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::CallLong { .. } => 7, // Reg8, Reg8, UInt32
-                    UnifiedInstruction::Throw { .. } => 2, // Reg8
-                    UnifiedInstruction::DelById { .. } => 5, // Reg8, Reg8, StringId16
-                    UnifiedInstruction::LoadConstUndefined { .. } => 2, // Reg8
-                    UnifiedInstruction::JLessN { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::JStrictEqual { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::IteratorBegin { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::JLess { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::LessEq { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::JEqualLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::NewArray { .. } => 4, // Reg8, UInt16
-                    UnifiedInstruction::Mul32 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::StoreToEnvironmentL { .. } => 5, // Reg8, UInt16, Reg8
-                    UnifiedInstruction::StoreToEnvironment { .. } => 4, // Reg8, UInt8, Reg8
-                    UnifiedInstruction::CallBuiltin { .. } => 4, // Reg8, UInt8, UInt8
-                    UnifiedInstruction::ToInt32 { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::JNotLess { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::JmpUndefined { .. } => 3, // Addr8, Reg8
-                    UnifiedInstruction::PutOwnByIndex { .. } => 4, // Reg8, Reg8, UInt8
-                    UnifiedInstruction::LoadConstInt { .. } => 6, // Reg8, Imm32
-                    UnifiedInstruction::TryPutByIdLong { .. } => 8, // Reg8, Reg8, UInt8, StringId32
-                    UnifiedInstruction::Less { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::AddN { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::NewObject { .. } => 2, // Reg8
-                    UnifiedInstruction::InstanceOf { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::PutOwnByIndexL { .. } => 7, // Reg8, Reg8, UInt32
-                    UnifiedInstruction::TryPutById { .. } => 6, // Reg8, Reg8, UInt8, StringId16
-                    UnifiedInstruction::DebuggerCheckBreak { .. } => 1, //
-                    UnifiedInstruction::LoadParamLong { .. } => 6, // Reg8, UInt32
-                    UnifiedInstruction::GetEnvironment { .. } => 3, // Reg8, UInt8
-                    UnifiedInstruction::Greater { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::CreateRegExp { .. } => 14, // Reg8, StringId32, StringId32, UInt32
-                    UnifiedInstruction::StartGenerator { .. } => 1, //
-                    UnifiedInstruction::Inc { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::JNotEqual { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::JmpTrue { .. } => 3, // Addr8, Reg8
-                    UnifiedInstruction::ProfilePoint { .. } => 3, // UInt16
-                    UnifiedInstruction::Add32 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::JmpLong { .. } => 5, // Addr32
-                    UnifiedInstruction::ToNumeric { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::LoadConstNull { .. } => 2, // Reg8
-                    UnifiedInstruction::JLessEqualLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::LoadConstTrue { .. } => 2, // Reg8
-                    UnifiedInstruction::TryGetByIdLong { .. } => 8, // Reg8, Reg8, UInt8, StringId32
-                    UnifiedInstruction::PutNewOwnNEById { .. } => 5, // Reg8, Reg8, StringId16
-                    UnifiedInstruction::NewArrayWithBufferLong { .. } => 10, // Reg8, UInt16, UInt16, UInt32
-                    UnifiedInstruction::Mul { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::LoadParam { .. } => 3, // Reg8, UInt8
-                    UnifiedInstruction::JLessLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::SaveGenerator { .. } => 2, // Addr8
-                    UnifiedInstruction::CreateThis { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Dec { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::Call3 { .. } => 6, // Reg8, Reg8, Reg8, Reg8, Reg8
-                    UnifiedInstruction::JEqual { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::LoadConstZero { .. } => 2, // Reg8
-                    UnifiedInstruction::BitNot { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::Add { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::LoadConstStringLongIndex { .. } => 6, // Reg8, StringId32
-                    UnifiedInstruction::JmpFalseLong { .. } => 6, // Addr32, Reg8
-                    UnifiedInstruction::JNotLessEqualN { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::JGreaterEqual { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::Catch { .. } => 2, // Reg8
-                    UnifiedInstruction::MovLong { .. } => 9, // Reg32, Reg32
-                    UnifiedInstruction::PutById { .. } => 6, // Reg8, Reg8, UInt8, StringId16
-                    UnifiedInstruction::GetNewTarget { .. } => 2, // Reg8
-                    UnifiedInstruction::GetArgumentsPropByVal { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::JLessEqualNLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::LoadFromEnvironment { .. } => 4, // Reg8, Reg8, UInt8
-                    UnifiedInstruction::JNotGreaterLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::Loadu8 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Call1 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Loadi32 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::JGreaterEqualNLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::BitOr { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::URshift { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::ThrowIfUndefinedInst { .. } => 2, // Reg8
-                    UnifiedInstruction::TypeOf { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::ThrowIfEmpty { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::JLessEqualN { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::StoreNPToEnvironmentL { .. } => 5, // Reg8, UInt16, Reg8
-                    UnifiedInstruction::CallBuiltinLong { .. } => 7, // Reg8, UInt8, UInt32
-                    UnifiedInstruction::CreateInnerEnvironment { .. } => 7, // Reg8, Reg8, UInt32
-                    UnifiedInstruction::ThrowIfHasRestrictedGlobalProperty { .. } => 5, // StringId32
-                    UnifiedInstruction::CreateAsyncClosureLongIndex { .. } => 7, // Reg8, Reg8, FunctionId32
-                    UnifiedInstruction::ToNumber { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::Construct { .. } => 4, // Reg8, Reg8, UInt8
-                    UnifiedInstruction::Store32 { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::CreateAsyncClosure { .. } => 5, // Reg8, Reg8, FunctionId16
-                    UnifiedInstruction::Neq { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::Sub { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::TryGetById { .. } => 6, // Reg8, Reg8, UInt8, StringId16
-                    UnifiedInstruction::CoerceThisNS { .. } => 3, // Reg8, Reg8
-                    UnifiedInstruction::GetGlobalObject { .. } => 2, // Reg8
-                    UnifiedInstruction::JGreaterEqualN { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::LoadConstBigIntLongIndex { .. } => 6, // Reg8, BigIntId32
-                    UnifiedInstruction::CallDirectLongIndex { .. } => 7, // Reg8, UInt8, UInt32
-                    UnifiedInstruction::LoadConstString { .. } => 4, // Reg8, StringId16
-                    UnifiedInstruction::PutOwnGetterSetterByVal { .. } => 6, // Reg8, Reg8, Reg8, Reg8, UInt8
-                    UnifiedInstruction::PutByIdLong { .. } => 8, // Reg8, Reg8, UInt8, StringId32
-                    UnifiedInstruction::PutNewOwnNEByIdLong { .. } => 7, // Reg8, Reg8, StringId32
-                    UnifiedInstruction::Ret { .. } => 2, // Reg8
-                    UnifiedInstruction::Debugger { .. } => 1, //
-                    UnifiedInstruction::JGreater { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::JGreaterLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::JNotGreaterEqualLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::Call2 { .. } => 5, // Reg8, Reg8, Reg8, Reg8
-                    UnifiedInstruction::CallDirect { .. } => 5, // Reg8, UInt8, FunctionId16
-                    UnifiedInstruction::PutNewOwnByIdShort { .. } => 4, // Reg8, Reg8, StringId8
-                    UnifiedInstruction::LoadFromEnvironmentL { .. } => 5, // Reg8, Reg8, UInt16
-                    UnifiedInstruction::GetByVal { .. } => 4, // Reg8, Reg8, Reg8
-                    UnifiedInstruction::JNotLessN { .. } => 4, // Addr8, Reg8, Reg8
-                    UnifiedInstruction::CreateEnvironment { .. } => 2, // Reg8
-                    UnifiedInstruction::JNotLessEqualNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::BitAnd { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::DirectEval { .. } => 3, // Reg8, Reg8
                     UnifiedInstruction::JNotGreaterEqualN { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::GetBuiltinClosure { .. } => 3, // Reg8, UInt8
+                    UnifiedInstruction::Not { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::PutNewOwnByIdLong { .. } => 7, // Reg8, Reg8, StringId32
+                    UnifiedInstruction::LoadConstString { .. } => 4, // Reg8, StringId16
+                    UnifiedInstruction::LoadConstUInt8 { .. } => 3, // Reg8, UInt8
+                    UnifiedInstruction::DeclareGlobalVar { .. } => 5, // StringId32
+                    UnifiedInstruction::StoreToEnvironmentL { .. } => 5, // Reg8, UInt16, Reg8
+                    UnifiedInstruction::JNotGreater { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::AddEmptyString { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::CreateGeneratorClosureLongIndex { .. } => 7, // Reg8, Reg8, FunctionId32
+                    UnifiedInstruction::StoreNPToEnvironment { .. } => 4, // Reg8, UInt8, Reg8
+                    UnifiedInstruction::CreateRegExp { .. } => 14, // Reg8, StringId32, StringId32, UInt32
+                    UnifiedInstruction::Loadu32 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::LoadConstBigInt { .. } => 4, // Reg8, BigIntId16
+                    UnifiedInstruction::CallLong { .. } => 7, // Reg8, Reg8, UInt32
+                    UnifiedInstruction::JLessEqualN { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::GetGlobalObject { .. } => 2, // Reg8
+                    UnifiedInstruction::GetArgumentsLength { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::MulN { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::LoadFromEnvironmentL { .. } => 5, // Reg8, Reg8, UInt16
+                    UnifiedInstruction::Sub { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::DelById { .. } => 5, // Reg8, Reg8, StringId16
+                    UnifiedInstruction::Construct { .. } => 4, // Reg8, Reg8, UInt8
+                    UnifiedInstruction::ConstructLong { .. } => 7, // Reg8, Reg8, UInt32
+                    UnifiedInstruction::LoadConstZero { .. } => 2, // Reg8
+                    UnifiedInstruction::JmpUndefined { .. } => 3, // Addr8, Reg8
+                    UnifiedInstruction::JLessEqualNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::JGreater { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::JNotGreaterEqualLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::JGreaterEqualNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::Loadu8 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::TryPutById { .. } => 6, // Reg8, Reg8, UInt8, StringId16
+                    UnifiedInstruction::JNotLessEqualNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::JGreaterEqualLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::StoreToEnvironment { .. } => 4, // Reg8, UInt8, Reg8
+                    UnifiedInstruction::SubN { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::Neq { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::GetByVal { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::GetNextPName { .. } => 6, // Reg8, Reg8, Reg8, Reg8, Reg8
+                    UnifiedInstruction::BitOr { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JNotGreaterLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::NewArray { .. } => 4, // Reg8, UInt16
+                    UnifiedInstruction::LoadConstTrue { .. } => 2, // Reg8
+                    UnifiedInstruction::Call { .. } => 4, // Reg8, Reg8, UInt8
+                    UnifiedInstruction::LoadFromEnvironment { .. } => 4, // Reg8, Reg8, UInt8
+                    UnifiedInstruction::DelByVal { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::CallDirectLongIndex { .. } => 7, // Reg8, UInt8, UInt32
+                    UnifiedInstruction::LShift { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JNotGreaterEqualNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::BitNot { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::Eq { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JNotLessEqual { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::JNotEqual { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::SaveGeneratorLong { .. } => 5, // Addr32
+                    UnifiedInstruction::IteratorNext { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::NewObjectWithParent { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::PutByVal { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::SwitchImm { .. } => 18, // Reg8, UInt32, Addr32, UInt32, UInt32
+                    UnifiedInstruction::LoadConstStringLongIndex { .. } => 6, // Reg8, StringId32
+                    UnifiedInstruction::ThrowIfEmpty { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::StrictEq { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::LoadConstNull { .. } => 2, // Reg8
+                    UnifiedInstruction::JmpUndefinedLong { .. } => 6, // Addr32, Reg8
+                    UnifiedInstruction::JmpTrueLong { .. } => 6, // Addr32, Reg8
+                    UnifiedInstruction::Add { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::LoadThisNS { .. } => 2, // Reg8
+                    UnifiedInstruction::LoadConstDouble { .. } => 10, // Reg8, Double
+                    UnifiedInstruction::GetByIdLong { .. } => 8, // Reg8, Reg8, UInt8, StringId32
+                    UnifiedInstruction::MovLong { .. } => 9, // Reg32, Reg32
+                    UnifiedInstruction::AddN { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::PutNewOwnById { .. } => 5, // Reg8, Reg8, StringId16
+                    UnifiedInstruction::Call2 { .. } => 5, // Reg8, Reg8, Reg8, Reg8
+                    UnifiedInstruction::Debugger { .. } => 1, //
+                    UnifiedInstruction::CreateClosureLongIndex { .. } => 7, // Reg8, Reg8, FunctionId32
+                    UnifiedInstruction::CreateThis { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::PutNewOwnByIdShort { .. } => 4, // Reg8, Reg8, StringId8
+                    UnifiedInstruction::IteratorClose { .. } => 3, // Reg8, UInt8
+                    UnifiedInstruction::JLessNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::JNotLessN { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::Call4 { .. } => 7, // Reg8, Reg8, Reg8, Reg8, Reg8, Reg8
+                    UnifiedInstruction::TryGetById { .. } => 6, // Reg8, Reg8, UInt8, StringId16
+                    UnifiedInstruction::Mul32 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::Throw { .. } => 2, // Reg8
+                    UnifiedInstruction::Store8 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::StrictNeq { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::ToNumber { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::Call3 { .. } => 6, // Reg8, Reg8, Reg8, Reg8, Reg8
+                    UnifiedInstruction::CreateClosure { .. } => 5, // Reg8, Reg8, FunctionId16
+                    UnifiedInstruction::Inc { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::Mod { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::CreateGeneratorClosure { .. } => 5, // Reg8, Reg8, FunctionId16
+                    UnifiedInstruction::ThrowIfHasRestrictedGlobalProperty { .. } => 5, // StringId32
+                    UnifiedInstruction::TryGetByIdLong { .. } => 8, // Reg8, Reg8, UInt8, StringId32
+                    UnifiedInstruction::StartGenerator { .. } => 1, //
+                    UnifiedInstruction::Divu32 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JEqual { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::NewObject { .. } => 2, // Reg8
+                    UnifiedInstruction::Greater { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JNotLessEqualLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::CreateInnerEnvironment { .. } => 7, // Reg8, Reg8, UInt32
+                    UnifiedInstruction::JGreaterEqual { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::Div { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JNotLessEqualN { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::Loadu16 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::Dec { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::ProfilePoint { .. } => 3, // UInt16
+                    UnifiedInstruction::JGreaterNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::NewArrayWithBufferLong { .. } => 10, // Reg8, UInt16, UInt16, UInt32
+                    UnifiedInstruction::ToNumeric { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::JStrictNotEqual { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::JNotLess { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::Loadi8 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::LoadParamLong { .. } => 6, // Reg8, UInt32
+                    UnifiedInstruction::URshift { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JLess { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::JNotGreaterNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::CallBuiltinLong { .. } => 7, // Reg8, UInt8, UInt32
+                    UnifiedInstruction::LoadConstBigIntLongIndex { .. } => 6, // Reg8, BigIntId32
+                    UnifiedInstruction::JStrictEqualLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::Call1 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JmpFalse { .. } => 3, // Addr8, Reg8
+                    UnifiedInstruction::JmpLong { .. } => 5, // Addr32
+                    UnifiedInstruction::JLessEqualLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::PutNewOwnNEByIdLong { .. } => 7, // Reg8, Reg8, StringId32
+                    UnifiedInstruction::InstanceOf { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JNotLessNLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::GetPNameList { .. } => 5, // Reg8, Reg8, Reg8, Reg8
+                    UnifiedInstruction::JNotGreaterEqual { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::LoadConstUndefined { .. } => 2, // Reg8
+                    UnifiedInstruction::ThrowIfUndefinedInst { .. } => 2, // Reg8
+                    UnifiedInstruction::NewObjectWithBufferLong { .. } => 14, // Reg8, UInt16, UInt16, UInt32, UInt32
+                    UnifiedInstruction::GetById { .. } => 6, // Reg8, Reg8, UInt8, StringId16
+                    UnifiedInstruction::NewArrayWithBuffer { .. } => 8, // Reg8, UInt16, UInt16, UInt16
+                    UnifiedInstruction::JmpTrue { .. } => 3, // Addr8, Reg8
+                    UnifiedInstruction::JGreaterEqualN { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::IteratorBegin { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::LoadParam { .. } => 3, // Reg8, UInt8
+                    UnifiedInstruction::TryPutByIdLong { .. } => 8, // Reg8, Reg8, UInt8, StringId32
+                    UnifiedInstruction::Loadi16 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::CreateAsyncClosureLongIndex { .. } => 7, // Reg8, Reg8, FunctionId32
+                    UnifiedInstruction::JGreaterLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::GetArgumentsPropByVal { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::DebuggerCheckBreak { .. } => 1, //
+                    UnifiedInstruction::JmpFalseLong { .. } => 6, // Addr32, Reg8
+                    UnifiedInstruction::LessEq { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::ReifyArguments { .. } => 2, // Reg8
+                    UnifiedInstruction::SaveGenerator { .. } => 2, // Addr8
+                    UnifiedInstruction::Add32 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::Store32 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::SelectObject { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::Mul { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::PutOwnByIndex { .. } => 4, // Reg8, Reg8, UInt8
+                    UnifiedInstruction::PutOwnByIndexL { .. } => 7, // Reg8, Reg8, UInt32
+                    UnifiedInstruction::CallBuiltin { .. } => 4, // Reg8, UInt8, UInt8
+                    UnifiedInstruction::JGreaterN { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::JNotGreaterN { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::PutById { .. } => 6, // Reg8, Reg8, UInt8, StringId16
+                    UnifiedInstruction::Ret { .. } => 2, // Reg8
+                    UnifiedInstruction::LoadConstEmpty { .. } => 2, // Reg8
+                    UnifiedInstruction::CreateEnvironment { .. } => 2, // Reg8
+                    UnifiedInstruction::LoadConstInt { .. } => 6, // Reg8, Imm32
+                    UnifiedInstruction::CallDirect { .. } => 5, // Reg8, UInt8, FunctionId16
+                    UnifiedInstruction::CompleteGenerator { .. } => 1, //
+                    UnifiedInstruction::Divi32 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::JStrictEqual { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::Less { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::BitXor { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::AsyncBreakCheck { .. } => 1, //
+                    UnifiedInstruction::Mov { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::Negate { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::GetNewTarget { .. } => 2, // Reg8
+                    UnifiedInstruction::CoerceThisNS { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::PutOwnByVal { .. } => 5, // Reg8, Reg8, Reg8, UInt8
+                    UnifiedInstruction::JLessEqual { .. } => 4, // Addr8, Reg8, Reg8
+                    UnifiedInstruction::DivN { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::Catch { .. } => 2, // Reg8
+                    UnifiedInstruction::GetEnvironment { .. } => 3, // Reg8, UInt8
+                    UnifiedInstruction::Jmp { .. } => 2, // Addr8
+                    UnifiedInstruction::ResumeGenerator { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::Sub32 { .. } => 4, // Reg8, Reg8, Reg8
                     UnifiedInstruction::JNotLessLong { .. } => 7, // Addr32, Reg8, Reg8
-                    UnifiedInstruction::CreateGenerator { .. } => 5, // Reg8, Reg8, FunctionId16
+                    UnifiedInstruction::PutByIdLong { .. } => 8, // Reg8, Reg8, UInt8, StringId32
+                    UnifiedInstruction::RShift { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::IsIn { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::PutNewOwnNEById { .. } => 5, // Reg8, Reg8, StringId16
+                    UnifiedInstruction::JEqualLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::JLessLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::Loadi32 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::TypeOf { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::JStrictNotEqualLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::NewObjectWithBuffer { .. } => 10, // Reg8, UInt16, UInt16, UInt16, UInt16
+                    UnifiedInstruction::StoreNPToEnvironmentL { .. } => 5, // Reg8, UInt16, Reg8
+                    UnifiedInstruction::ToInt32 { .. } => 3, // Reg8, Reg8
+                    UnifiedInstruction::GetByIdShort { .. } => 5, // Reg8, Reg8, UInt8, StringId8
+                    UnifiedInstruction::JNotEqualLong { .. } => 7, // Addr32, Reg8, Reg8
+                    UnifiedInstruction::Store16 { .. } => 4, // Reg8, Reg8, Reg8
+                    UnifiedInstruction::DelByIdLong { .. } => 7, // Reg8, Reg8, StringId32
+                    UnifiedInstruction::JLessN { .. } => 4, // Addr8, Reg8, Reg8
                 }
             }
 
             pub fn format_instruction(&self, hbc_file: &crate::hbc::HbcFile) -> String {
                 let mut operands: Vec<String> = Vec::new();
                 match self {
-                    UnifiedInstruction::IteratorNext { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::CreateGeneratorLongIndex { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                    }
+                    UnifiedInstruction::CreateAsyncClosure { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                    }
+                    UnifiedInstruction::GreaterEq { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::Sub32 { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::CreateGenerator { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                    }
+                    UnifiedInstruction::PutOwnGetterSetterByVal { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::ResumeGenerator { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::NewObjectWithBufferLong { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(operand_2.to_string());
-                        operands.push(operand_3.to_string());
+                        operands.push(format!("r{}", operand_3));
                         operands.push(operand_4.to_string());
                     }
-                    UnifiedInstruction::IteratorClose { operand_0, operand_1 } => {
+                    UnifiedInstruction::Unreachable {  } => { /* No operands */
+                    }
+                    UnifiedInstruction::LoadConstFalse { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::BitAnd { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::DirectEval { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::JNotGreaterEqualN { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::GetBuiltinClosure { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(operand_1.to_string());
                     }
-                    UnifiedInstruction::JLessEqual { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
+                    UnifiedInstruction::Not { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::PutNewOwnByIdLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::LoadConstString { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(hbc_file.strings.get(*operand_1 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::LoadConstUInt8 { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                    }
+                    UnifiedInstruction::DeclareGlobalVar { operand_0 } => {
+                        operands.push(hbc_file.strings.get(*operand_0 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::StoreToEnvironmentL { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
                         operands.push(format!("r{}", operand_2));
                     }
                     UnifiedInstruction::JNotGreater { operand_0, operand_1, operand_2 } => {
@@ -1011,37 +1056,121 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
+                    UnifiedInstruction::AddEmptyString { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::CreateGeneratorClosureLongIndex { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                    }
+                    UnifiedInstruction::StoreNPToEnvironment { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::CreateRegExp { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(hbc_file.strings.get(*operand_1 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                        operands.push(operand_3.to_string());
+                    }
+                    UnifiedInstruction::Loadu32 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
                     UnifiedInstruction::LoadConstBigInt { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(hbc_file.bigints.get(*operand_1 as u32).map(|b| b.clone()).map_or_else(|s| format!("{}", s), |b| b.to_string()));
                     }
-                    UnifiedInstruction::NewObjectWithBuffer { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
+                    UnifiedInstruction::CallLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
+                        operands.push(format!("r{}", operand_1));
                         operands.push(operand_2.to_string());
-                        operands.push(operand_3.to_string());
-                        operands.push(operand_4.to_string());
                     }
-                    UnifiedInstruction::Mov { operand_0, operand_1 } => {
+                    UnifiedInstruction::JLessEqualN { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::GetGlobalObject { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::GetArgumentsLength { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                     }
-                    UnifiedInstruction::GetNextPName { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
+                    UnifiedInstruction::MulN { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
-                        operands.push(format!("r{}", operand_3));
-                        operands.push(format!("r{}", operand_4));
                     }
-                    UnifiedInstruction::LoadConstUInt8 { operand_0, operand_1 } => {
+                    UnifiedInstruction::LoadFromEnvironmentL { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
                     }
-                    UnifiedInstruction::JmpFalse { operand_0, operand_1 } => {
+                    UnifiedInstruction::Sub { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::DelById { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::Construct { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::ConstructLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::LoadConstZero { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::JmpUndefined { operand_0, operand_1 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                     }
-                    UnifiedInstruction::JGreaterNLong { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::JLessEqualNLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JGreater { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JNotGreaterEqualLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JGreaterEqualNLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::Loadu8 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::TryPutById { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::JNotLessEqualNLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
@@ -1051,8 +1180,86 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JStrictEqualLong { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::StoreToEnvironment { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::SubN { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::Neq { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::GetByVal { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::GetNextPName { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                        operands.push(format!("r{}", operand_3));
+                        operands.push(format!("r{}", operand_4));
+                    }
+                    UnifiedInstruction::BitOr { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JNotGreaterLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::NewArray { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                    }
+                    UnifiedInstruction::LoadConstTrue { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::Call { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::LoadFromEnvironment { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::DelByVal { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::CallDirectLongIndex { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::LShift { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JNotGreaterEqualNLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::BitNot { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::Eq { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
@@ -1061,172 +1268,27 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JLessNLong { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::JNotEqual { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JNotGreaterEqual { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::SaveGeneratorLong { operand_0 } => {
                         operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::DirectEval { operand_0, operand_1 } => {
+                    UnifiedInstruction::IteratorNext { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
                     }
                     UnifiedInstruction::NewObjectWithParent { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                     }
-                    UnifiedInstruction::PutOwnByVal { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                        operands.push(operand_3.to_string());
-                    }
-                    UnifiedInstruction::DelByIdLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::JmpUndefinedLong { operand_0, operand_1 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::JNotGreaterNLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::StrictNeq { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
                     UnifiedInstruction::PutByVal { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Call { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::JStrictNotEqualLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JmpTrueLong { operand_0, operand_1 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::CreateGeneratorClosureLongIndex { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
-                    }
-                    UnifiedInstruction::CompleteGenerator {  } => { /* No operands */
-                    }
-                    UnifiedInstruction::SaveGeneratorLong { operand_0 } => {
-                        operands.push(format!("[{}]", operand_0));
-                    }
-                    UnifiedInstruction::JGreaterN { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::GreaterEq { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::LoadThisNS { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::LoadConstEmpty { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::Loadu16 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Loadu32 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JNotEqualLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Loadi8 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Divu32 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::DelByVal { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Loadi16 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::ConstructLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::BitAnd { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Div { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Store8 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::GetBuiltinClosure { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                    }
-                    UnifiedInstruction::CreateGeneratorClosure { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
-                    }
-                    UnifiedInstruction::Not { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::Mod { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::NewArrayWithBuffer { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(operand_2.to_string());
-                        operands.push(operand_3.to_string());
                     }
                     UnifiedInstruction::SwitchImm { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
                         operands.push(format!("r{}", operand_0));
@@ -1235,17 +1297,53 @@ macro_rules! define_instructions {
                         operands.push(operand_3.to_string());
                         operands.push(operand_4.to_string());
                     }
-                    UnifiedInstruction::DivN { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::LoadConstStringLongIndex { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(hbc_file.strings.get(*operand_1 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::ThrowIfEmpty { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::StrictEq { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::CreateGeneratorLongIndex { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::LoadConstNull { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::JmpUndefinedLong { operand_0, operand_1 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::JmpTrueLong { operand_0, operand_1 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::Add { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                        operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::Divi32 { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::LoadThisNS { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::LoadConstDouble { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                    }
+                    UnifiedInstruction::GetByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::MovLong { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::AddN { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
@@ -1255,34 +1353,42 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
                     }
-                    UnifiedInstruction::GetPNameList { operand_0, operand_1, operand_2, operand_3 } => {
+                    UnifiedInstruction::Call2 { operand_0, operand_1, operand_2, operand_3 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                         operands.push(format!("r{}", operand_3));
                     }
-                    UnifiedInstruction::LoadConstDouble { operand_0, operand_1 } => {
+                    UnifiedInstruction::Debugger {  } => { /* No operands */
+                    }
+                    UnifiedInstruction::CreateClosureLongIndex { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                    }
+                    UnifiedInstruction::CreateThis { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::PutNewOwnByIdShort { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::IteratorClose { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(operand_1.to_string());
                     }
-                    UnifiedInstruction::Eq { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
+                    UnifiedInstruction::JLessNLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::BitXor { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
+                    UnifiedInstruction::JNotLessN { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::DeclareGlobalVar { operand_0 } => {
-                        operands.push(hbc_file.strings.get(*operand_0 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::GetById { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
                     }
                     UnifiedInstruction::Call4 { operand_0, operand_1, operand_2, operand_3, operand_4, operand_5 } => {
                         operands.push(format!("r{}", operand_0));
@@ -1292,356 +1398,31 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_4));
                         operands.push(format!("r{}", operand_5));
                     }
-                    UnifiedInstruction::AddEmptyString { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::ReifyArguments { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::JNotLessEqualLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JNotGreaterEqualNLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::AsyncBreakCheck {  } => { /* No operands */
-                    }
-                    UnifiedInstruction::CreateClosure { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
-                    }
-                    UnifiedInstruction::GetByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
+                    UnifiedInstruction::TryGetById { operand_0, operand_1, operand_2, operand_3 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(operand_2.to_string());
                         operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::GetArgumentsLength { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::SubN { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JStrictNotEqual { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JNotGreaterN { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::RShift { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Store16 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JNotLessNLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::MulN { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::PutNewOwnByIdLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::Unreachable {  } => { /* No operands */
-                    }
-                    UnifiedInstruction::LoadConstFalse { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::StrictEq { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::LShift { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Negate { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::GetByIdShort { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::SelectObject { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::StoreNPToEnvironment { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::CreateClosureLongIndex { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
-                    }
-                    UnifiedInstruction::Jmp { operand_0 } => {
-                        operands.push(format!("[{}]", operand_0));
-                    }
-                    UnifiedInstruction::IsIn { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::CallLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::Throw { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::DelById { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::LoadConstUndefined { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::JLessN { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JStrictEqual { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::IteratorBegin { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::JLess { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::LessEq { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JEqualLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::NewArray { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
                     }
                     UnifiedInstruction::Mul32 { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::StoreToEnvironmentL { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::Throw { operand_0 } => {
                         operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::StoreToEnvironment { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::CallBuiltin { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::ToInt32 { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::JNotLess { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JmpUndefined { operand_0, operand_1 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::PutOwnByIndex { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::LoadConstInt { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                    }
-                    UnifiedInstruction::TryPutByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::Less { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::Store8 { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::AddN { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::StrictNeq { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::NewObject { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::InstanceOf { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::PutOwnByIndexL { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::TryPutById { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::DebuggerCheckBreak {  } => { /* No operands */
-                    }
-                    UnifiedInstruction::LoadParamLong { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                    }
-                    UnifiedInstruction::GetEnvironment { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                    }
-                    UnifiedInstruction::Greater { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::CreateRegExp { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(hbc_file.strings.get(*operand_1 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                        operands.push(operand_3.to_string());
-                    }
-                    UnifiedInstruction::StartGenerator {  } => { /* No operands */
-                    }
-                    UnifiedInstruction::Inc { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::JNotEqual { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JmpTrue { operand_0, operand_1 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::ProfilePoint { operand_0 } => {
-                        operands.push(operand_0.to_string());
-                    }
-                    UnifiedInstruction::Add32 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::JmpLong { operand_0 } => {
-                        operands.push(format!("[{}]", operand_0));
-                    }
-                    UnifiedInstruction::ToNumeric { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::LoadConstNull { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::JLessEqualLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::LoadConstTrue { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::TryGetByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::PutNewOwnNEById { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::NewArrayWithBufferLong { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(operand_2.to_string());
-                        operands.push(operand_3.to_string());
-                    }
-                    UnifiedInstruction::Mul { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::LoadParam { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                    }
-                    UnifiedInstruction::JLessLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::SaveGenerator { operand_0 } => {
-                        operands.push(format!("[{}]", operand_0));
-                    }
-                    UnifiedInstruction::CreateThis { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Dec { operand_0, operand_1 } => {
+                    UnifiedInstruction::ToNumber { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                     }
@@ -1652,79 +1433,151 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_3));
                         operands.push(format!("r{}", operand_4));
                     }
+                    UnifiedInstruction::CreateClosure { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                    }
+                    UnifiedInstruction::Inc { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::Mod { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::CreateGeneratorClosure { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                    }
+                    UnifiedInstruction::ThrowIfHasRestrictedGlobalProperty { operand_0 } => {
+                        operands.push(hbc_file.strings.get(*operand_0 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::TryGetByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::StartGenerator {  } => { /* No operands */
+                    }
+                    UnifiedInstruction::Divu32 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
                     UnifiedInstruction::JEqual { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::LoadConstZero { operand_0 } => {
+                    UnifiedInstruction::NewObject { operand_0 } => {
                         operands.push(format!("r{}", operand_0));
                     }
-                    UnifiedInstruction::BitNot { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::Add { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::Greater { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::LoadConstStringLongIndex { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(hbc_file.strings.get(*operand_1 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::JmpFalseLong { operand_0, operand_1 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::JNotLessEqualN { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::JNotLessEqualLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::CreateInnerEnvironment { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
                     }
                     UnifiedInstruction::JGreaterEqual { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::Catch { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::MovLong { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::PutById { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::GetNewTarget { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::GetArgumentsPropByVal { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::Div { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JLessEqualNLong { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::JNotLessEqualN { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::LoadFromEnvironment { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::Loadu16 { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
+                        operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JNotGreaterLong { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::Dec { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::ProfilePoint { operand_0 } => {
+                        operands.push(operand_0.to_string());
+                    }
+                    UnifiedInstruction::JGreaterNLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::Loadu8 { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::NewArrayWithBufferLong { operand_0, operand_1, operand_2, operand_3 } => {
                         operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(operand_2.to_string());
+                        operands.push(operand_3.to_string());
+                    }
+                    UnifiedInstruction::ToNumeric { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::JStrictNotEqual { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JNotLess { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::Loadi8 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::LoadParamLong { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                    }
+                    UnifiedInstruction::URshift { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JLess { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JNotGreaterNLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::CallBuiltinLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::LoadConstBigIntLongIndex { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(hbc_file.bigints.get(*operand_1 as u32).map(|b| b.clone()).map_or_else(|s| format!("{}", s), |b| b.to_string()));
+                    }
+                    UnifiedInstruction::JStrictEqualLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
@@ -1733,204 +1586,269 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::Loadi32 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
+                    UnifiedInstruction::JmpFalse { operand_0, operand_1 } => {
+                        operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JGreaterEqualNLong { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::JmpLong { operand_0 } => {
+                        operands.push(format!("[{}]", operand_0));
+                    }
+                    UnifiedInstruction::JLessEqualLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::BitOr { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::URshift { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::ThrowIfUndefinedInst { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::TypeOf { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::ThrowIfEmpty { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::JLessEqualN { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::StoreNPToEnvironmentL { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::CallBuiltinLong { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::CreateInnerEnvironment { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::ThrowIfHasRestrictedGlobalProperty { operand_0 } => {
-                        operands.push(hbc_file.strings.get(*operand_0 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::CreateAsyncClosureLongIndex { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
-                    }
-                    UnifiedInstruction::ToNumber { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::Construct { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::Store32 { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::CreateAsyncClosure { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
-                    }
-                    UnifiedInstruction::Neq { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::Sub { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::TryGetById { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::CoerceThisNS { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                    }
-                    UnifiedInstruction::GetGlobalObject { operand_0 } => {
-                        operands.push(format!("r{}", operand_0));
-                    }
-                    UnifiedInstruction::JGreaterEqualN { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("[{}]", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                    }
-                    UnifiedInstruction::LoadConstBigIntLongIndex { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(hbc_file.bigints.get(*operand_1 as u32).map(|b| b.clone()).map_or_else(|s| format!("{}", s), |b| b.to_string()));
-                    }
-                    UnifiedInstruction::CallDirectLongIndex { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::LoadConstString { operand_0, operand_1 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(hbc_file.strings.get(*operand_1 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
-                    }
-                    UnifiedInstruction::PutOwnGetterSetterByVal { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(format!("r{}", operand_2));
-                        operands.push(format!("r{}", operand_3));
-                        operands.push(operand_4.to_string());
-                    }
-                    UnifiedInstruction::PutByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
                     }
                     UnifiedInstruction::PutNewOwnNEByIdLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
                     }
-                    UnifiedInstruction::Ret { operand_0 } => {
+                    UnifiedInstruction::InstanceOf { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::Debugger {  } => { /* No operands */
-                    }
-                    UnifiedInstruction::JGreater { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::JNotLessNLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::GetPNameList { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                        operands.push(format!("r{}", operand_3));
+                    }
+                    UnifiedInstruction::JNotGreaterEqual { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::LoadConstUndefined { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::ThrowIfUndefinedInst { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::NewObjectWithBufferLong { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(operand_2.to_string());
+                        operands.push(operand_3.to_string());
+                        operands.push(operand_4.to_string());
+                    }
+                    UnifiedInstruction::GetById { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::NewArrayWithBuffer { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(operand_2.to_string());
+                        operands.push(operand_3.to_string());
+                    }
+                    UnifiedInstruction::JmpTrue { operand_0, operand_1 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::JGreaterEqualN { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::IteratorBegin { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::LoadParam { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                    }
+                    UnifiedInstruction::TryPutByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::Loadi16 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::CreateAsyncClosureLongIndex { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
                     }
                     UnifiedInstruction::JGreaterLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JNotGreaterEqualLong { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::GetArgumentsPropByVal { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::DebuggerCheckBreak {  } => { /* No operands */
+                    }
+                    UnifiedInstruction::JmpFalseLong { operand_0, operand_1 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::LessEq { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::ReifyArguments { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::SaveGenerator { operand_0 } => {
+                        operands.push(format!("[{}]", operand_0));
+                    }
+                    UnifiedInstruction::Add32 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::Store32 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::SelectObject { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::Mul { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::PutOwnByIndex { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::PutOwnByIndexL { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::CallBuiltin { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(operand_2.to_string());
+                    }
+                    UnifiedInstruction::JGreaterN { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::Call2 { operand_0, operand_1, operand_2, operand_3 } => {
-                        operands.push(format!("r{}", operand_0));
+                    UnifiedInstruction::JNotGreaterN { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
-                        operands.push(format!("r{}", operand_3));
+                    }
+                    UnifiedInstruction::PutById { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::Ret { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::LoadConstEmpty { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::CreateEnvironment { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::LoadConstInt { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
                     }
                     UnifiedInstruction::CallDirect { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(operand_1.to_string());
                         operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
                     }
-                    UnifiedInstruction::PutNewOwnByIdShort { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    UnifiedInstruction::CompleteGenerator {  } => { /* No operands */
                     }
-                    UnifiedInstruction::LoadFromEnvironmentL { operand_0, operand_1, operand_2 } => {
-                        operands.push(format!("r{}", operand_0));
-                        operands.push(format!("r{}", operand_1));
-                        operands.push(operand_2.to_string());
-                    }
-                    UnifiedInstruction::GetByVal { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::Divi32 { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JNotLessN { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::JStrictEqual { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::CreateEnvironment { operand_0 } => {
+                    UnifiedInstruction::Less { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::BitXor { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::AsyncBreakCheck {  } => { /* No operands */
+                    }
+                    UnifiedInstruction::Mov { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::Negate { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::GetNewTarget { operand_0 } => {
                         operands.push(format!("r{}", operand_0));
                     }
-                    UnifiedInstruction::JNotLessEqualNLong { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::CoerceThisNS { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::PutOwnByVal { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                        operands.push(operand_3.to_string());
+                    }
+                    UnifiedInstruction::JLessEqual { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("[{}]", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::JNotGreaterEqualN { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::DivN { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::Catch { operand_0 } => {
+                        operands.push(format!("r{}", operand_0));
+                    }
+                    UnifiedInstruction::GetEnvironment { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                    }
+                    UnifiedInstruction::Jmp { operand_0 } => {
                         operands.push(format!("[{}]", operand_0));
+                    }
+                    UnifiedInstruction::ResumeGenerator { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::Sub32 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
@@ -1939,10 +1857,92 @@ macro_rules! define_instructions {
                         operands.push(format!("r{}", operand_1));
                         operands.push(format!("r{}", operand_2));
                     }
-                    UnifiedInstruction::CreateGenerator { operand_0, operand_1, operand_2 } => {
+                    UnifiedInstruction::PutByIdLong { operand_0, operand_1, operand_2, operand_3 } => {
                         operands.push(format!("r{}", operand_0));
                         operands.push(format!("r{}", operand_1));
-                        operands.push(hbc_file.functions.get_function_name(*operand_2 as u32, &hbc_file.strings).map(|name| name.clone()).map_or_else(|| format!("Function<unknown>{}", operand_2), |name| format!("Function<{}>{}", name, operand_2)));
+                        operands.push(operand_2.to_string());
+                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::RShift { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::IsIn { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::PutNewOwnNEById { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::JEqualLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::JLessLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::Loadi32 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::TypeOf { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::JStrictNotEqualLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::NewObjectWithBuffer { operand_0, operand_1, operand_2, operand_3, operand_4 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(operand_2.to_string());
+                        operands.push(operand_3.to_string());
+                        operands.push(operand_4.to_string());
+                    }
+                    UnifiedInstruction::StoreNPToEnvironmentL { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(operand_1.to_string());
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::ToInt32 { operand_0, operand_1 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                    }
+                    UnifiedInstruction::GetByIdShort { operand_0, operand_1, operand_2, operand_3 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(operand_2.to_string());
+                        operands.push(hbc_file.strings.get(*operand_3 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::JNotEqualLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::Store16 { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
+                    }
+                    UnifiedInstruction::DelByIdLong { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("r{}", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(hbc_file.strings.get(*operand_2 as u32).map(|s| format!("\"{}\"", s)).unwrap_or_else(|_| format!("<string_error>")));
+                    }
+                    UnifiedInstruction::JLessN { operand_0, operand_1, operand_2 } => {
+                        operands.push(format!("[{}]", operand_0));
+                        operands.push(format!("r{}", operand_1));
+                        operands.push(format!("r{}", operand_2));
                     }
                 }
                 format!("{:<17} {}", self.name(), operands.join(", "))
@@ -6145,328 +6145,24 @@ macro_rules! define_instructions {
     };
 }
 define_instructions! {
-    IteratorNext {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+    CreateGeneratorLongIndex {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
         category: "Logical"
     },
-    Sub32 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    ResumeGenerator {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Logical"
-    },
-    NewObjectWithBufferLong {
-        operands: [operand_0: u8, operand_1: u16, operand_2: u16, operand_3: u32, operand_4: u32],
-        category: "ObjectCreation"
-    },
-    IteratorClose {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Logical"
-    },
-    JLessEqual {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JNotGreater {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    LoadConstBigInt {
-        operands: [operand_0: u8, operand_1: u16],
-        category: "ConstantLoad"
-    },
-    NewObjectWithBuffer {
-        operands: [operand_0: u8, operand_1: u16, operand_2: u16, operand_3: u16, operand_4: u16],
-        category: "ObjectCreation"
-    },
-    Mov {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Variable"
-    },
-    GetNextPName {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8, operand_4: u8],
-        category: "PropertyAccess"
-    },
-    LoadConstUInt8 {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "ConstantLoad"
-    },
-    JmpFalse {
-        operands: [operand_0: i8, operand_1: u8],
-        category: "Jump"
-    },
-    JGreaterNLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JGreaterEqualLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JStrictEqualLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JNotLessEqual {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JLessNLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JNotGreaterEqual {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    DirectEval {
-        operands: [operand_0: u8, operand_1: u8],
+    CreateAsyncClosure {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
         category: "Other"
-    },
-    NewObjectWithParent {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "ObjectCreation"
-    },
-    PutOwnByVal {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8],
-        category: "PropertyAccess"
-    },
-    DelByIdLong {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
-        category: "PropertyAccess"
-    },
-    JmpUndefinedLong {
-        operands: [operand_0: i32, operand_1: u8],
-        category: "Jump"
-    },
-    JNotGreaterNLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    StrictNeq {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Comparison"
-    },
-    PutByVal {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "PropertyAccess"
-    },
-    Call {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Call"
-    },
-    JStrictNotEqualLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JmpTrueLong {
-        operands: [operand_0: i32, operand_1: u8],
-        category: "Jump"
-    },
-    CreateGeneratorClosureLongIndex {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
-        category: "Logical"
-    },
-    CompleteGenerator {
-        operands: [],
-        category: "Logical"
-    },
-    SaveGeneratorLong {
-        operands: [operand_0: i32],
-        category: "Logical"
-    },
-    JGreaterN {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
     },
     GreaterEq {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Comparison"
     },
-    LoadThisNS {
-        operands: [operand_0: u8],
-        category: "Variable"
-    },
-    LoadConstEmpty {
-        operands: [operand_0: u8],
-        category: "ConstantLoad"
-    },
-    Loadu16 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Variable"
-    },
-    Loadu32 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Variable"
-    },
-    JNotEqualLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    Loadi8 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Variable"
-    },
-    Divu32 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    DelByVal {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "PropertyAccess"
-    },
-    Loadi16 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Variable"
-    },
-    ConstructLong {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
-        category: "Call"
-    },
-    BitAnd {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Bitwise"
-    },
-    Div {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    Store8 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Logical"
-    },
-    GetBuiltinClosure {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "PropertyAccess"
-    },
-    CreateGeneratorClosure {
+    CreateGenerator {
         operands: [operand_0: u8, operand_1: u8, operand_2: u16],
         category: "Logical"
     },
-    Not {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Logical"
-    },
-    Mod {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    NewArrayWithBuffer {
-        operands: [operand_0: u8, operand_1: u16, operand_2: u16, operand_3: u16],
-        category: "ObjectCreation"
-    },
-    SwitchImm {
-        operands: [operand_0: u8, operand_1: u32, operand_2: i32, operand_3: u32, operand_4: u32],
-        category: "Jump"
-    },
-    DivN {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    CreateGeneratorLongIndex {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
-        category: "Logical"
-    },
-    Divi32 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    PutNewOwnById {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
-        category: "PropertyAccess"
-    },
-    GetPNameList {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8],
-        category: "PropertyAccess"
-    },
-    LoadConstDouble {
-        operands: [operand_0: u8, operand_1: f64],
-        category: "ConstantLoad"
-    },
-    Eq {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Comparison"
-    },
-    BitXor {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Bitwise"
-    },
-    DeclareGlobalVar {
-        operands: [operand_0: u32],
-        category: "Environment"
-    },
-    GetById {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u16],
-        category: "PropertyAccess"
-    },
-    Call4 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8, operand_4: u8, operand_5: u8],
-        category: "Call"
-    },
-    AddEmptyString {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Arithmetic"
-    },
-    ReifyArguments {
-        operands: [operand_0: u8],
-        category: "Other"
-    },
-    JNotLessEqualLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JNotGreaterEqualNLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    AsyncBreakCheck {
-        operands: [],
-        category: "Other"
-    },
-    CreateClosure {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
-        category: "Other"
-    },
-    GetByIdLong {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u32],
-        category: "PropertyAccess"
-    },
-    GetArgumentsLength {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "PropertyAccess"
-    },
-    SubN {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    JStrictNotEqual {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JNotGreaterN {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    RShift {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Bitwise"
-    },
-    Store16 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Logical"
-    },
-    JNotLessNLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    MulN {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    PutNewOwnByIdLong {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+    PutOwnGetterSetterByVal {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8, operand_4: u8],
         category: "PropertyAccess"
     },
     Unreachable {
@@ -6477,315 +6173,135 @@ define_instructions! {
         operands: [operand_0: u8],
         category: "ConstantLoad"
     },
-    StrictEq {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Comparison"
-    },
-    LShift {
+    BitAnd {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Bitwise"
     },
-    Negate {
+    DirectEval {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Other"
+    },
+    JNotGreaterEqualN {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    GetBuiltinClosure {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "PropertyAccess"
+    },
+    Not {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Logical"
+    },
+    PutNewOwnByIdLong {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "PropertyAccess"
+    },
+    LoadConstString {
+        operands: [operand_0: u8, operand_1: u16],
+        category: "ConstantLoad"
+    },
+    LoadConstUInt8 {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "ConstantLoad"
+    },
+    DeclareGlobalVar {
+        operands: [operand_0: u32],
+        category: "Environment"
+    },
+    StoreToEnvironmentL {
+        operands: [operand_0: u8, operand_1: u16, operand_2: u8],
+        category: "Logical"
+    },
+    JNotGreater {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    AddEmptyString {
         operands: [operand_0: u8, operand_1: u8],
         category: "Arithmetic"
     },
-    GetByIdShort {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8],
-        category: "PropertyAccess"
-    },
-    SelectObject {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "TypeConversion"
+    CreateGeneratorClosureLongIndex {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "Logical"
     },
     StoreNPToEnvironment {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Logical"
     },
-    CreateClosureLongIndex {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
-        category: "Comparison"
+    CreateRegExp {
+        operands: [operand_0: u8, operand_1: u32, operand_2: u32, operand_3: u32],
+        category: "Other"
     },
-    Jmp {
-        operands: [operand_0: i8],
-        category: "Jump"
-    },
-    IsIn {
+    Loadu32 {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Comparison"
+        category: "Variable"
+    },
+    LoadConstBigInt {
+        operands: [operand_0: u8, operand_1: u16],
+        category: "ConstantLoad"
     },
     CallLong {
         operands: [operand_0: u8, operand_1: u8, operand_2: u32],
         category: "Call"
     },
-    Throw {
+    JLessEqualN {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    GetGlobalObject {
         operands: [operand_0: u8],
-        category: "Exception"
+        category: "PropertyAccess"
+    },
+    GetArgumentsLength {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "PropertyAccess"
+    },
+    MulN {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    LoadFromEnvironmentL {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
+        category: "Environment"
+    },
+    Sub {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
     },
     DelById {
         operands: [operand_0: u8, operand_1: u8, operand_2: u16],
         category: "PropertyAccess"
     },
-    LoadConstUndefined {
-        operands: [operand_0: u8],
-        category: "ConstantLoad"
-    },
-    JLessN {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JStrictEqual {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    IteratorBegin {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Logical"
-    },
-    JLess {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    LessEq {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Comparison"
-    },
-    JEqualLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    NewArray {
-        operands: [operand_0: u8, operand_1: u16],
-        category: "ObjectCreation"
-    },
-    Mul32 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    StoreToEnvironmentL {
-        operands: [operand_0: u8, operand_1: u16, operand_2: u8],
-        category: "Return"
-    },
-    StoreToEnvironment {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Return"
-    },
-    CallBuiltin {
+    Construct {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Call"
     },
-    ToInt32 {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Comparison"
-    },
-    JNotLess {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JmpUndefined {
-        operands: [operand_0: i8, operand_1: u8],
-        category: "Jump"
-    },
-    PutOwnByIndex {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "PropertyAccess"
-    },
-    LoadConstInt {
-        operands: [operand_0: u8, operand_1: u32],
-        category: "ConstantLoad"
-    },
-    TryPutByIdLong {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u32],
-        category: "PropertyAccess"
-    },
-    Less {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Comparison"
-    },
-    AddN {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    NewObject {
-        operands: [operand_0: u8],
-        category: "ObjectCreation"
-    },
-    InstanceOf {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Comparison"
-    },
-    PutOwnByIndexL {
+    ConstructLong {
         operands: [operand_0: u8, operand_1: u8, operand_2: u32],
-        category: "PropertyAccess"
-    },
-    TryPutById {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u16],
-        category: "PropertyAccess"
-    },
-    DebuggerCheckBreak {
-        operands: [],
-        category: "Debug"
-    },
-    LoadParamLong {
-        operands: [operand_0: u8, operand_1: u32],
-        category: "Variable"
-    },
-    GetEnvironment {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "PropertyAccess"
-    },
-    Greater {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Comparison"
-    },
-    CreateRegExp {
-        operands: [operand_0: u8, operand_1: u32, operand_2: u32, operand_3: u32],
-        category: "Other"
-    },
-    StartGenerator {
-        operands: [],
-        category: "Logical"
-    },
-    Inc {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Comparison"
-    },
-    JNotEqual {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JmpTrue {
-        operands: [operand_0: i8, operand_1: u8],
-        category: "Jump"
-    },
-    ProfilePoint {
-        operands: [operand_0: u16],
-        category: "Comparison"
-    },
-    Add32 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    JmpLong {
-        operands: [operand_0: i32],
-        category: "Jump"
-    },
-    ToNumeric {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "TypeConversion"
-    },
-    LoadConstNull {
-        operands: [operand_0: u8],
-        category: "ConstantLoad"
-    },
-    JLessEqualLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    LoadConstTrue {
-        operands: [operand_0: u8],
-        category: "ConstantLoad"
-    },
-    TryGetByIdLong {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u32],
-        category: "PropertyAccess"
-    },
-    PutNewOwnNEById {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
-        category: "PropertyAccess"
-    },
-    NewArrayWithBufferLong {
-        operands: [operand_0: u8, operand_1: u16, operand_2: u16, operand_3: u32],
-        category: "ObjectCreation"
-    },
-    Mul {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    LoadParam {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Variable"
-    },
-    JLessLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    SaveGenerator {
-        operands: [operand_0: i8],
-        category: "Logical"
-    },
-    CreateThis {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Other"
-    },
-    Dec {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Other"
-    },
-    Call3 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8, operand_4: u8],
         category: "Call"
-    },
-    JEqual {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
     },
     LoadConstZero {
         operands: [operand_0: u8],
         category: "ConstantLoad"
     },
-    BitNot {
-        operands: [operand_0: u8, operand_1: u8],
-        category: "Bitwise"
-    },
-    Add {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Arithmetic"
-    },
-    LoadConstStringLongIndex {
-        operands: [operand_0: u8, operand_1: u32],
-        category: "ConstantLoad"
-    },
-    JmpFalseLong {
-        operands: [operand_0: i32, operand_1: u8],
+    JmpUndefined {
+        operands: [operand_0: i8, operand_1: u8],
         category: "Jump"
-    },
-    JNotLessEqualN {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JGreaterEqual {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    Catch {
-        operands: [operand_0: u8],
-        category: "Exception"
-    },
-    MovLong {
-        operands: [operand_0: u32, operand_1: u32],
-        category: "Variable"
-    },
-    PutById {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u16],
-        category: "PropertyAccess"
-    },
-    GetNewTarget {
-        operands: [operand_0: u8],
-        category: "PropertyAccess"
-    },
-    GetArgumentsPropByVal {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "PropertyAccess"
     },
     JLessEqualNLong {
         operands: [operand_0: i32, operand_1: u8, operand_2: u8],
         category: "Jump"
     },
-    LoadFromEnvironment {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Environment"
+    JGreater {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
     },
-    JNotGreaterLong {
+    JNotGreaterEqualLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    JGreaterEqualNLong {
         operands: [operand_0: i32, operand_1: u8, operand_2: u8],
         category: "Jump"
     },
@@ -6793,188 +6309,672 @@ define_instructions! {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Variable"
     },
-    Call1 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Call"
+    TryPutById {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u16],
+        category: "PropertyAccess"
     },
-    Loadi32 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Variable"
-    },
-    JGreaterEqualNLong {
+    JNotLessEqualNLong {
         operands: [operand_0: i32, operand_1: u8, operand_2: u8],
         category: "Jump"
+    },
+    JGreaterEqualLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    StoreToEnvironment {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Logical"
+    },
+    SubN {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    Neq {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Comparison"
+    },
+    GetByVal {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "PropertyAccess"
+    },
+    GetNextPName {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8, operand_4: u8],
+        category: "PropertyAccess"
     },
     BitOr {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Bitwise"
     },
-    URshift {
+    JNotGreaterLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    NewArray {
+        operands: [operand_0: u8, operand_1: u16],
+        category: "ObjectCreation"
+    },
+    LoadConstTrue {
+        operands: [operand_0: u8],
+        category: "ConstantLoad"
+    },
+    Call {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Call"
+    },
+    LoadFromEnvironment {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Environment"
+    },
+    DelByVal {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "PropertyAccess"
+    },
+    CallDirectLongIndex {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "Call"
+    },
+    LShift {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Bitwise"
     },
-    ThrowIfUndefinedInst {
-        operands: [operand_0: u8],
-        category: "Exception"
+    JNotGreaterEqualNLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
     },
-    TypeOf {
+    BitNot {
         operands: [operand_0: u8, operand_1: u8],
-        category: "TypeConversion"
+        category: "Bitwise"
+    },
+    Eq {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Comparison"
+    },
+    JNotLessEqual {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    JNotEqual {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    SaveGeneratorLong {
+        operands: [operand_0: i32],
+        category: "Logical"
+    },
+    IteratorNext {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Logical"
+    },
+    NewObjectWithParent {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "ObjectCreation"
+    },
+    PutByVal {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "PropertyAccess"
+    },
+    SwitchImm {
+        operands: [operand_0: u8, operand_1: u32, operand_2: i32, operand_3: u32, operand_4: u32],
+        category: "Jump"
+    },
+    LoadConstStringLongIndex {
+        operands: [operand_0: u8, operand_1: u32],
+        category: "ConstantLoad"
     },
     ThrowIfEmpty {
         operands: [operand_0: u8, operand_1: u8],
         category: "Exception"
     },
-    JLessEqualN {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+    StrictEq {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Comparison"
+    },
+    LoadConstNull {
+        operands: [operand_0: u8],
+        category: "ConstantLoad"
+    },
+    JmpUndefinedLong {
+        operands: [operand_0: i32, operand_1: u8],
         category: "Jump"
     },
-    StoreNPToEnvironmentL {
-        operands: [operand_0: u8, operand_1: u16, operand_2: u8],
-        category: "Logical"
+    JmpTrueLong {
+        operands: [operand_0: i32, operand_1: u8],
+        category: "Jump"
     },
-    CallBuiltinLong {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+    Add {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    LoadThisNS {
+        operands: [operand_0: u8],
+        category: "Variable"
+    },
+    LoadConstDouble {
+        operands: [operand_0: u8, operand_1: f64],
+        category: "ConstantLoad"
+    },
+    GetByIdLong {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u32],
+        category: "PropertyAccess"
+    },
+    MovLong {
+        operands: [operand_0: u32, operand_1: u32],
+        category: "Variable"
+    },
+    AddN {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    PutNewOwnById {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
+        category: "PropertyAccess"
+    },
+    Call2 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8],
         category: "Call"
     },
-    CreateInnerEnvironment {
+    Debugger {
+        operands: [],
+        category: "Debug"
+    },
+    CreateClosureLongIndex {
         operands: [operand_0: u8, operand_1: u8, operand_2: u32],
         category: "Comparison"
     },
-    ThrowIfHasRestrictedGlobalProperty {
-        operands: [operand_0: u32],
+    CreateThis {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Other"
+    },
+    PutNewOwnByIdShort {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "PropertyAccess"
+    },
+    IteratorClose {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Logical"
+    },
+    JLessNLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    JNotLessN {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    Call4 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8, operand_4: u8, operand_5: u8],
+        category: "Call"
+    },
+    TryGetById {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u16],
+        category: "PropertyAccess"
+    },
+    Mul32 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    Throw {
+        operands: [operand_0: u8],
         category: "Exception"
     },
-    CreateAsyncClosureLongIndex {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+    Store8 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Logical"
+    },
+    StrictNeq {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Comparison"
     },
     ToNumber {
         operands: [operand_0: u8, operand_1: u8],
         category: "TypeConversion"
     },
-    Construct {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+    Call3 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8, operand_4: u8],
         category: "Call"
     },
-    Store32 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "Logical"
-    },
-    CreateAsyncClosure {
+    CreateClosure {
         operands: [operand_0: u8, operand_1: u8, operand_2: u16],
         category: "Other"
     },
-    Neq {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+    Inc {
+        operands: [operand_0: u8, operand_1: u8],
         category: "Comparison"
     },
-    Sub {
+    Mod {
         operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Arithmetic"
     },
-    TryGetById {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u16],
+    CreateGeneratorClosure {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
+        category: "Logical"
+    },
+    ThrowIfHasRestrictedGlobalProperty {
+        operands: [operand_0: u32],
+        category: "Exception"
+    },
+    TryGetByIdLong {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u32],
         category: "PropertyAccess"
     },
-    CoerceThisNS {
+    StartGenerator {
+        operands: [],
+        category: "Logical"
+    },
+    Divu32 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    JEqual {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    NewObject {
+        operands: [operand_0: u8],
+        category: "ObjectCreation"
+    },
+    Greater {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Comparison"
+    },
+    JNotLessEqualLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    CreateInnerEnvironment {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "Comparison"
+    },
+    JGreaterEqual {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    Div {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    JNotLessEqualN {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    Loadu16 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Variable"
+    },
+    Dec {
         operands: [operand_0: u8, operand_1: u8],
         category: "Other"
     },
-    GetGlobalObject {
-        operands: [operand_0: u8],
-        category: "PropertyAccess"
+    ProfilePoint {
+        operands: [operand_0: u16],
+        category: "Comparison"
     },
-    JGreaterEqualN {
+    JGreaterNLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    NewArrayWithBufferLong {
+        operands: [operand_0: u8, operand_1: u16, operand_2: u16, operand_3: u32],
+        category: "ObjectCreation"
+    },
+    ToNumeric {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "TypeConversion"
+    },
+    JStrictNotEqual {
         operands: [operand_0: i8, operand_1: u8, operand_2: u8],
         category: "Jump"
+    },
+    JNotLess {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    Loadi8 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Variable"
+    },
+    LoadParamLong {
+        operands: [operand_0: u8, operand_1: u32],
+        category: "Variable"
+    },
+    URshift {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Bitwise"
+    },
+    JLess {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    JNotGreaterNLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    CallBuiltinLong {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "Call"
     },
     LoadConstBigIntLongIndex {
         operands: [operand_0: u8, operand_1: u32],
         category: "ConstantLoad"
     },
-    CallDirectLongIndex {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+    JStrictEqualLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    Call1 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
         category: "Call"
     },
-    LoadConstString {
-        operands: [operand_0: u8, operand_1: u16],
-        category: "ConstantLoad"
+    JmpFalse {
+        operands: [operand_0: i8, operand_1: u8],
+        category: "Jump"
     },
-    PutOwnGetterSetterByVal {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8, operand_4: u8],
-        category: "PropertyAccess"
+    JmpLong {
+        operands: [operand_0: i32],
+        category: "Jump"
     },
-    PutByIdLong {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u32],
-        category: "PropertyAccess"
+    JLessEqualLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
     },
     PutNewOwnNEByIdLong {
         operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "PropertyAccess"
+    },
+    InstanceOf {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Comparison"
+    },
+    JNotLessNLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    GetPNameList {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8],
+        category: "PropertyAccess"
+    },
+    JNotGreaterEqual {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    LoadConstUndefined {
+        operands: [operand_0: u8],
+        category: "ConstantLoad"
+    },
+    ThrowIfUndefinedInst {
+        operands: [operand_0: u8],
+        category: "Exception"
+    },
+    NewObjectWithBufferLong {
+        operands: [operand_0: u8, operand_1: u16, operand_2: u16, operand_3: u32, operand_4: u32],
+        category: "ObjectCreation"
+    },
+    GetById {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u16],
+        category: "PropertyAccess"
+    },
+    NewArrayWithBuffer {
+        operands: [operand_0: u8, operand_1: u16, operand_2: u16, operand_3: u16],
+        category: "ObjectCreation"
+    },
+    JmpTrue {
+        operands: [operand_0: i8, operand_1: u8],
+        category: "Jump"
+    },
+    JGreaterEqualN {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    IteratorBegin {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Logical"
+    },
+    LoadParam {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Variable"
+    },
+    TryPutByIdLong {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u32],
+        category: "PropertyAccess"
+    },
+    Loadi16 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Variable"
+    },
+    CreateAsyncClosureLongIndex {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "Comparison"
+    },
+    JGreaterLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    GetArgumentsPropByVal {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "PropertyAccess"
+    },
+    DebuggerCheckBreak {
+        operands: [],
+        category: "Debug"
+    },
+    JmpFalseLong {
+        operands: [operand_0: i32, operand_1: u8],
+        category: "Jump"
+    },
+    LessEq {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Comparison"
+    },
+    ReifyArguments {
+        operands: [operand_0: u8],
+        category: "Other"
+    },
+    SaveGenerator {
+        operands: [operand_0: i8],
+        category: "Logical"
+    },
+    Add32 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    Store32 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Logical"
+    },
+    SelectObject {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "TypeConversion"
+    },
+    Mul {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    PutOwnByIndex {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "PropertyAccess"
+    },
+    PutOwnByIndexL {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "PropertyAccess"
+    },
+    CallBuiltin {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Call"
+    },
+    JGreaterN {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    JNotGreaterN {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    PutById {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u16],
         category: "PropertyAccess"
     },
     Ret {
         operands: [operand_0: u8],
         category: "Return"
     },
-    Debugger {
-        operands: [],
-        category: "Debug"
-    },
-    JGreater {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JGreaterLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    JNotGreaterEqualLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
-    },
-    Call2 {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8],
-        category: "Call"
-    },
-    CallDirect {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
-        category: "Call"
-    },
-    PutNewOwnByIdShort {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "PropertyAccess"
-    },
-    LoadFromEnvironmentL {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
-        category: "Environment"
-    },
-    GetByVal {
-        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
-        category: "PropertyAccess"
-    },
-    JNotLessN {
-        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
-        category: "Jump"
+    LoadConstEmpty {
+        operands: [operand_0: u8],
+        category: "ConstantLoad"
     },
     CreateEnvironment {
         operands: [operand_0: u8],
         category: "Environment"
     },
-    JNotLessEqualNLong {
-        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
-        category: "Jump"
+    LoadConstInt {
+        operands: [operand_0: u8, operand_1: u32],
+        category: "ConstantLoad"
     },
-    JNotGreaterEqualN {
+    CallDirect {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u16],
+        category: "Call"
+    },
+    CompleteGenerator {
+        operands: [],
+        category: "Logical"
+    },
+    Divi32 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    JStrictEqual {
         operands: [operand_0: i8, operand_1: u8, operand_2: u8],
         category: "Jump"
+    },
+    Less {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Comparison"
+    },
+    BitXor {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Bitwise"
+    },
+    AsyncBreakCheck {
+        operands: [],
+        category: "Other"
+    },
+    Mov {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Variable"
+    },
+    Negate {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Arithmetic"
+    },
+    GetNewTarget {
+        operands: [operand_0: u8],
+        category: "PropertyAccess"
+    },
+    CoerceThisNS {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Other"
+    },
+    PutOwnByVal {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8],
+        category: "PropertyAccess"
+    },
+    JLessEqual {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    DivN {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
+    },
+    Catch {
+        operands: [operand_0: u8],
+        category: "Exception"
+    },
+    GetEnvironment {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "PropertyAccess"
+    },
+    Jmp {
+        operands: [operand_0: i8],
+        category: "Jump"
+    },
+    ResumeGenerator {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Logical"
+    },
+    Sub32 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Arithmetic"
     },
     JNotLessLong {
         operands: [operand_0: i32, operand_1: u8, operand_2: u8],
         category: "Jump"
     },
-    CreateGenerator {
+    PutByIdLong {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u32],
+        category: "PropertyAccess"
+    },
+    RShift {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Bitwise"
+    },
+    IsIn {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Comparison"
+    },
+    PutNewOwnNEById {
         operands: [operand_0: u8, operand_1: u8, operand_2: u16],
+        category: "PropertyAccess"
+    },
+    JEqualLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    JLessLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    Loadi32 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Variable"
+    },
+    TypeOf {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "TypeConversion"
+    },
+    JStrictNotEqualLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    NewObjectWithBuffer {
+        operands: [operand_0: u8, operand_1: u16, operand_2: u16, operand_3: u16, operand_4: u16],
+        category: "ObjectCreation"
+    },
+    StoreNPToEnvironmentL {
+        operands: [operand_0: u8, operand_1: u16, operand_2: u8],
         category: "Logical"
+    },
+    ToInt32 {
+        operands: [operand_0: u8, operand_1: u8],
+        category: "Comparison"
+    },
+    GetByIdShort {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8, operand_3: u8],
+        category: "PropertyAccess"
+    },
+    JNotEqualLong {
+        operands: [operand_0: i32, operand_1: u8, operand_2: u8],
+        category: "Jump"
+    },
+    Store16 {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u8],
+        category: "Logical"
+    },
+    DelByIdLong {
+        operands: [operand_0: u8, operand_1: u8, operand_2: u32],
+        category: "PropertyAccess"
+    },
+    JLessN {
+        operands: [operand_0: i8, operand_1: u8, operand_2: u8],
+        category: "Jump"
     }
 }

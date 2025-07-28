@@ -364,6 +364,7 @@ L7:
   IteratorNext      r11, r2, r4
   Mov               r10, r2
   JStrictEqualLong  L1, r10, r6
+L10:
   Mov               r13, r11
   IteratorBegin     r10, r13
   LoadConstUndefined r11
@@ -406,7 +407,9 @@ L5:
   Mov               r11, r8
   Mov               r10, r9
   Call4             r0, r13, r6, r12, r11, r10
+L8:
   Jmp               L6
+L9:
   Catch             r10
   TryGetById        r11, r5, 2, "globalThis"
   GetByIdShort      r13, r11, 3, "console"
@@ -419,6 +422,7 @@ L5:
   Call3             r0, r12, r13, r11, r10
 L6:
   JmpLong           L7
+L11:
   Catch             r1
   IteratorClose     r2, 1
   Throw             r1
@@ -426,8 +430,8 @@ L1:
   Ret               r0
 
 Exception Handlers:
-0: start = L1280, end = L1301, target = L1303
-1: start = L0, end = L0, target = L0
+0: start = L5, end = L8, target = L9
+1: start = L10, end = L6, target = L11
 
 Function<run>1(4 params, 22 registers, 0 symbols):
   LoadParam         r6, 1

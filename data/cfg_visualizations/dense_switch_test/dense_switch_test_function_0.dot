@@ -1,0 +1,16 @@
+// Function 0 from dense_switch_test
+// Generated from data/dense_switch_test.dot
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  label = "Function 0";
+  style = filled;
+  color = lightgrey;
+
+  f0_n0 [ label = "Block 0 (PC 0-16)\l  0: DeclareGlobalVar  \"denseSwitchTest\"\l  1: DeclareGlobalVar  \"largeSwitchTest\"\l  2: CreateEnvironment r1\l  3: CreateClosure     r2, r1, Function<denseSwitchTest>1\l  4: GetGlobalObject   r0\l  5: PutById           r0, r2, 1, \"denseSwitchTest\"\l  6: CreateClosure     r1, r1, Function<largeSwitchTest>2\l  7: PutById           r0, r1, 2, \"largeSwitchTest\"\l  8: GetByIdShort      r3, r0, 1, \"denseSwitchTest\"\l  9: LoadConstUndefined r2\l  10: LoadConstUInt8    r1, 15\l  11: Call2             r1, r3, r2, r1\l  12: GetByIdShort      r1, r0, 2, \"largeSwitchTest\"\l  13: LoadConstUInt8    r0, 7\l  14: Call2             r0, r1, r2, r0\l  15: Ret               r0\l" ]
+  f0_n1 [ label = "EXIT" ]
+
+  f0_n0 -> f0_n1
+}
