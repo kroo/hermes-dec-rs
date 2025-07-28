@@ -476,8 +476,8 @@ mod tests {
 
     #[test]
     fn test_switch_table_sharing() {
-        let mut switch_table1 = SwitchTable::new(0, 5, 100, 150, 1000, 1, 0);
-        let mut switch_table2 = SwitchTable::new(0, 5, 100, 150, 1000, 2, 0);
+        let switch_table1 = SwitchTable::new(0, 5, 100, 150, 1000, 1, 0);
+        let switch_table2 = SwitchTable::new(0, 5, 100, 150, 1000, 2, 0);
         let switch_table3 = SwitchTable::new(0, 5, 100, 150, 2000, 3, 0);
 
         assert!(switch_table1.shares_jump_table(&switch_table2));
