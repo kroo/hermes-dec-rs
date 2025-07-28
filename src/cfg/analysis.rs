@@ -161,9 +161,12 @@ impl SwitchAnalysis {
 }
 
 /// Analysis functions for CFGs
+///
+/// This function is deprecated - use CfgBuilder::analyze_post_dominators instead
+/// which has access to the EXIT node required for post-dominator analysis
 pub fn analyze_post_dominators(_graph: &DiGraph<Block, EdgeKind>) -> Option<PostDominatorAnalysis> {
-    // TODO: Implement post-dominator analysis
-    // This will be implemented in CFG-06
+    // This function cannot be implemented without access to the EXIT node
+    // Use CfgBuilder::analyze_post_dominators or Cfg::analyze_post_dominators instead
     None
 }
 

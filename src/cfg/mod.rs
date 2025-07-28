@@ -167,6 +167,11 @@ impl<'a> Cfg<'a> {
     pub fn to_dot_with_loops(&self) -> String {
         self.builder.to_dot_with_loops(&self.graph)
     }
+
+    /// Analyze post-dominators for the CFG
+    pub fn analyze_post_dominators(&self) -> Option<analysis::PostDominatorAnalysis> {
+        self.builder.analyze_post_dominators(&self.graph)
+    }
 }
 
 // Re-export main types for convenience
