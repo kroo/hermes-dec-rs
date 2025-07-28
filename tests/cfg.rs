@@ -1,4 +1,5 @@
-use hermes_dec_rs::cfg::CfgBuilder;
+use hermes_dec_rs::cfg::analysis::LoopType;
+use hermes_dec_rs::cfg::builder::CfgBuilder;
 use hermes_dec_rs::cfg::{Block, Cfg, EdgeKind};
 use hermes_dec_rs::generated::unified_instructions::UnifiedInstruction;
 use hermes_dec_rs::hbc::function_table::HbcFunctionInstruction;
@@ -11,8 +12,9 @@ use hermes_dec_rs::hbc::tables::{
 use hermes_dec_rs::hbc::HbcFile;
 use hermes_dec_rs::hbc::HbcHeader;
 use petgraph::graph::DiGraph;
+use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -2168,4 +2170,223 @@ fn test_edge_labels_in_dot_output() {
         );
         assert!(line.contains("]"), "Edge line should have closing bracket");
     }
+}
+
+/// Test that loop body computation works correctly
+#[test]
+fn test_compute_loop_body() {
+    // Create a simple loop: A -> B -> C -> B (loop)
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (conditional)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to B
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // Jump from B to C
+        ("Jmp", 3, 1, None),        // Jump from C back to B
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // This should fail initially - we haven't implemented loop analysis yet
+    let loop_analysis = cfg.analyze_loops();
+
+    // Should find one loop
+    assert_eq!(loop_analysis.loops.len(), 1, "Should find exactly one loop");
+
+    let loop_info = &loop_analysis.loops[0];
+
+    // Loop should contain nodes B and C
+    assert!(loop_info
+        .body_nodes
+        .contains(&cfg.builder().get_block_at_pc(1).unwrap()));
+    assert!(loop_info
+        .body_nodes
+        .contains(&cfg.builder().get_block_at_pc(2).unwrap()));
+
+    // Loop header should be B (the conditional jump)
+    assert_eq!(loop_info.header, cfg.builder().get_block_at_pc(1).unwrap());
+
+    // Should have one back-edge from C to B
+    assert_eq!(loop_info.back_edges.len(), 1);
+    assert_eq!(
+        loop_info.back_edges[0],
+        (
+            cfg.builder().get_block_at_pc(2).unwrap(),
+            cfg.builder().get_block_at_pc(1).unwrap()
+        )
+    );
+}
+
+/// Test that loop type classification works correctly
+#[test]
+fn test_classify_loop_types() {
+    // Create a while loop: A -> B -> C -> B (while condition)
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (while condition)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C (loop body)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to B
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // Jump from B to C
+        ("Jmp", 3, 1, None),        // Jump from C back to B
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let loop_analysis = cfg.analyze_loops();
+
+    // Should find one loop
+    assert_eq!(loop_analysis.loops.len(), 1);
+
+    let loop_info = &loop_analysis.loops[0];
+
+    // Should classify as While loop
+    assert_eq!(
+        loop_info.loop_type,
+        LoopType::While,
+        "Should classify as While loop"
+    );
+}
+
+/// Test that loop exit detection works correctly
+#[test]
+fn test_loop_exit_detection() {
+    // Create a loop with exit: A -> B -> C -> B, B -> D (exit when condition is false)
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (condition)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C (body)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to B
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 200,
+        }, // 4: D (exit)
+        UnifiedInstruction::Ret { operand_0: 1 }, // 5: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // Jump from B to C (condition true)
+        ("Jmp", 3, 1, None),        // Jump from C back to B
+        ("JmpTrue", 1, 4, Some(0)), // Jump from B to D (condition false)
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let loop_analysis = cfg.analyze_loops();
+
+    // Should find one loop
+    assert_eq!(loop_analysis.loops.len(), 1);
+
+    let loop_info = &loop_analysis.loops[0];
+
+    // Should have exit nodes
+    assert!(!loop_info.exit_nodes.is_empty(), "Should have exit nodes");
+
+    // Exit should be node D (the block after the loop)
+    let exit_node = cfg.builder().get_block_at_pc(4).unwrap();
+    assert!(
+        loop_info.exit_nodes.contains(&exit_node),
+        "Should have D as exit node"
+    );
+}
+
+/// Test that multiple loops are handled correctly
+#[test]
+fn test_multiple_loops() {
+    // Create nested loops: A -> B -> C -> B (outer), C -> D -> C (inner)
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (outer loop)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C (inner loop)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to B
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 200,
+        }, // 4: D
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 5: Jump back to C
+        UnifiedInstruction::Ret { operand_0: 1 }, // 6: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // Jump from B to C (outer loop)
+        ("Jmp", 3, 1, None),        // Jump from C back to B (outer loop)
+        ("JmpTrue", 2, 4, Some(1)), // Jump from C to D (inner loop)
+        ("Jmp", 5, 2, None),        // Jump from D back to C (inner loop)
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let loop_analysis = cfg.analyze_loops();
+
+    // Should find two loops
+    assert_eq!(
+        loop_analysis.loops.len(),
+        2,
+        "Should find exactly two loops"
+    );
+
+    // Check that nodes are properly mapped to loops
+    let node_b = cfg.builder().get_block_at_pc(1).unwrap();
+    let node_c = cfg.builder().get_block_at_pc(2).unwrap();
+
+    let loops_containing_b = loop_analysis.get_loops_containing_node(node_b);
+    let loops_containing_c = loop_analysis.get_loops_containing_node(node_c);
+
+    assert_eq!(loops_containing_b.len(), 1, "Node B should be in one loop");
+    assert_eq!(
+        loops_containing_c.len(),
+        2,
+        "Node C should be in two loops (nested)"
+    );
 }

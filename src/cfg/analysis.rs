@@ -29,12 +29,25 @@ impl PostDominatorAnalysis {
     }
 }
 
+/// Loop type classification
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LoopType {
+    /// While loop (condition at entry)
+    While,
+    /// For loop (initialization, condition, increment)
+    For,
+    /// Do-while loop (condition at exit)
+    DoWhile,
+}
+
 /// Natural loop information
 #[derive(Debug, Clone)]
 pub struct Loop {
     pub header: NodeIndex,
     pub body_nodes: HashSet<NodeIndex>,
     pub back_edges: Vec<(NodeIndex, NodeIndex)>, // (tail, header) pairs
+    pub loop_type: LoopType,
+    pub exit_nodes: Vec<NodeIndex>,
 }
 
 /// Loop analysis results

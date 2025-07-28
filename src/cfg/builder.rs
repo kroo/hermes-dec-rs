@@ -910,6 +910,160 @@ impl<'a> CfgBuilder<'a> {
         self.exit_node
     }
 
+    /// Analyze loops in the CFG
+    pub fn analyze_loops(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+    ) -> crate::cfg::analysis::LoopAnalysis {
+        use crate::cfg::analysis::{Loop, LoopAnalysis, LoopType};
+        use std::collections::HashMap;
+
+        let mut loops = Vec::new();
+        let mut node_to_loops = HashMap::new();
+
+        // Get dominators
+        if let Some(dominators) = self.analyze_dominators(graph) {
+            // Find all back-edges
+            let back_edges = self.find_back_edges(graph, &dominators);
+
+            // For each back-edge, compute the complete loop body
+            for (header, tail) in back_edges {
+                let loop_body = self.compute_loop_body(graph, header, tail, &dominators);
+                let loop_type = self.classify_loop_type(graph, header, tail, &loop_body);
+                let exit_nodes = self.find_loop_exits(graph, header, &loop_body);
+
+                let loop_info = Loop {
+                    header,
+                    body_nodes: loop_body,
+                    back_edges: vec![(tail, header)],
+                    loop_type,
+                    exit_nodes,
+                };
+
+                loops.push(loop_info);
+            }
+
+            // Build node-to-loops mapping
+            for (loop_idx, loop_info) in loops.iter().enumerate() {
+                for &node in &loop_info.body_nodes {
+                    node_to_loops
+                        .entry(node)
+                        .or_insert_with(Vec::new)
+                        .push(loop_idx);
+                }
+            }
+        }
+
+        LoopAnalysis {
+            loops,
+            node_to_loops,
+        }
+    }
+
+    /// Find all back-edges in the CFG
+    fn find_back_edges(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        dominators: &Dominators<NodeIndex>,
+    ) -> Vec<(NodeIndex, NodeIndex)> {
+        let mut back_edges = Vec::new();
+
+        for edge in graph.edge_indices() {
+            if let Some((source, target)) = graph.edge_endpoints(edge) {
+                // Check if target dominates source (back-edge condition)
+                if self.dominates(dominators, target, source) {
+                    back_edges.push((target, source)); // (header, tail)
+                }
+            }
+        }
+
+        back_edges
+    }
+
+    /// Check if a node dominates another node
+    fn dominates(
+        &self,
+        dominators: &Dominators<NodeIndex>,
+        dominator: NodeIndex,
+        node: NodeIndex,
+    ) -> bool {
+        let mut current = node;
+        while let Some(immediate_dom) = dominators.immediate_dominator(current) {
+            if immediate_dom == dominator {
+                return true;
+            }
+            current = immediate_dom;
+        }
+        false
+    }
+
+    /// Compute the complete loop body for a back-edge
+    fn compute_loop_body(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        header: NodeIndex,
+        tail: NodeIndex,
+        dominators: &Dominators<NodeIndex>,
+    ) -> HashSet<NodeIndex> {
+        let mut loop_body = HashSet::new();
+        let mut worklist = vec![tail];
+
+        // Start from the tail and work backwards
+        while let Some(node) = worklist.pop() {
+            if loop_body.contains(&node) {
+                continue;
+            }
+
+            loop_body.insert(node);
+
+            // Add all predecessors that are dominated by the header
+            for pred in graph.neighbors_directed(node, petgraph::Direction::Incoming) {
+                if self.dominates(dominators, header, pred) && !loop_body.contains(&pred) {
+                    worklist.push(pred);
+                }
+            }
+        }
+
+        // Include the header in the loop body
+        loop_body.insert(header);
+
+        loop_body
+    }
+
+    /// Classify the type of loop
+    fn classify_loop_type(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        header: NodeIndex,
+        tail: NodeIndex,
+        loop_body: &HashSet<NodeIndex>,
+    ) -> crate::cfg::analysis::LoopType {
+        use crate::cfg::analysis::LoopType;
+
+        // For now, classify as While - we'll enhance this later
+        LoopType::While
+    }
+
+    /// Find loop exit nodes
+    fn find_loop_exits(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        header: NodeIndex,
+        loop_body: &HashSet<NodeIndex>,
+    ) -> Vec<NodeIndex> {
+        let mut exits = Vec::new();
+
+        for &node in loop_body {
+            for succ in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
+                if !loop_body.contains(&succ) {
+                    exits.push(succ);
+                }
+            }
+        }
+
+        exits
+    }
+
     /// Get jump label for a block if it's a jump target
     fn get_block_jump_label(
         &self,
