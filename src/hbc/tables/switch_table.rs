@@ -326,7 +326,7 @@ impl SwitchTableCollection {
     /// Get switch tables that share jump tables
     pub fn get_switch_tables_with_shared_jump_tables(&self) -> Vec<(&SwitchTable, &SwitchTable)> {
         let mut shared_pairs = Vec::new();
-        
+
         for function_tables in self.switch_tables_by_function.values() {
             for (i, table1) in function_tables.iter().enumerate() {
                 for table2 in function_tables.iter().skip(i + 1) {
@@ -336,7 +336,7 @@ impl SwitchTableCollection {
                 }
             }
         }
-        
+
         shared_pairs
     }
 }
@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn test_jump_table_data_creation() {
         let jump_table = JumpTableData::new(1000, 0, 5);
-        
+
         assert_eq!(jump_table.address, 1000);
         assert_eq!(jump_table.min_value, 0);
         assert_eq!(jump_table.max_value, 5);
@@ -378,18 +378,18 @@ mod tests {
     #[test]
     fn test_jump_table_data_entries() {
         let mut jump_table = JumpTableData::new(1000, 0, 2);
-        
+
         jump_table.add_entry(0, 10);
         jump_table.add_entry(1, 20);
         jump_table.add_entry(2, 30);
-        
+
         assert_eq!(jump_table.get_entry(0), Some(&10));
         assert_eq!(jump_table.get_entry(1), Some(&20));
         assert_eq!(jump_table.get_entry(2), Some(&30));
         assert_eq!(jump_table.get_entry(3), None);
-        
+
         assert!(jump_table.is_complete());
-        
+
         let case_values = jump_table.get_case_values();
         assert_eq!(case_values, vec![0, 1, 2]);
     }
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn test_jump_table_cache() {
         let mut cache = JumpTableCache::new();
-        
+
         // Create a jump table
         {
             let jump_table = cache.get_or_create_jump_table(1000, 0, 5);
@@ -405,15 +405,15 @@ mod tests {
             jump_table.add_entry(1, 20);
             jump_table.increment_reference_count();
         }
-        
+
         // Get the same jump table again (should be cached)
         {
             let jump_table2 = cache.get_or_create_jump_table(1000, 0, 5);
             jump_table2.increment_reference_count();
         }
-        
+
         assert_eq!(cache.len(), 1);
-        
+
         // Check shared jump tables
         let shared = cache.get_shared_jump_tables();
         assert_eq!(shared.len(), 1);
@@ -479,7 +479,7 @@ mod tests {
         let mut switch_table1 = SwitchTable::new(0, 5, 100, 150, 1000, 1, 0);
         let mut switch_table2 = SwitchTable::new(0, 5, 100, 150, 1000, 2, 0);
         let switch_table3 = SwitchTable::new(0, 5, 100, 150, 2000, 3, 0);
-        
+
         assert!(switch_table1.shares_jump_table(&switch_table2));
         assert!(!switch_table1.shares_jump_table(&switch_table3));
     }
@@ -527,7 +527,7 @@ mod tests {
         // Create two switch tables that share the same jump table
         let mut switch_table1 = SwitchTable::new(0, 5, 100, 150, 1000, 1, 0);
         let mut switch_table2 = SwitchTable::new(0, 5, 100, 150, 1000, 2, 0);
-        
+
         switch_table1.add_case(0, 10);
         switch_table1.add_case(1, 20);
         switch_table2.add_case(0, 10);
@@ -538,8 +538,8 @@ mod tests {
 
         let shared_pairs = collection.get_switch_tables_with_shared_jump_tables();
         assert_eq!(shared_pairs.len(), 1);
-        
+
         let (table1, table2) = shared_pairs[0];
         assert!(table1.shares_jump_table(table2));
     }
-} 
+}

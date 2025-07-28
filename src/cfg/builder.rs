@@ -113,14 +113,14 @@ impl<'a> CfgBuilder<'a> {
                         if let Some(default_target) = switch_table.default_instruction_index {
                             leaders.insert(default_target);
                         }
-                        
+
                         // Add all case targets
                         for case in &switch_table.cases {
                             if let Some(target) = case.target_instruction_index {
                                 leaders.insert(target);
                             }
                         }
-                        
+
                         // Add fallthrough (next instruction after switch)
                         let post_switch = pc + 1;
                         if post_switch < instructions.len() as u32 {
@@ -144,14 +144,14 @@ impl<'a> CfgBuilder<'a> {
                     if let Some(default_target) = switch_table.default_instruction_index {
                         leaders.insert(default_target);
                     }
-                    
+
                     // Add all case targets
                     for case in &switch_table.cases {
                         if let Some(target) = case.target_instruction_index {
                             leaders.insert(target);
                         }
                     }
-                    
+
                     // Add fallthrough (next instruction after switch)
                     let post_switch = pc + 1;
                     if post_switch < instructions.len() as u32 {
@@ -349,19 +349,25 @@ impl<'a> CfgBuilder<'a> {
                     // Check if this is a switch instruction
                     if matches!(last_instruction.instruction.name(), "SwitchImm") {
                         // Handle switch instructions - add edges for all cases and default
-                        if let Some(switch_table) = self.get_switch_table_for_instruction(last_instruction) {
+                        if let Some(switch_table) =
+                            self.get_switch_table_for_instruction(last_instruction)
+                        {
                             // Add edge for default case
                             if let Some(default_target) = switch_table.default_instruction_index {
                                 if let Some(&to_node) = self.block_starts.get(&default_target) {
                                     graph.add_edge(from_node, to_node, EdgeKind::Default);
                                 }
                             }
-                            
+
                             // Add edges for all switch cases
                             for (case_index, case) in switch_table.cases.iter().enumerate() {
                                 if let Some(target) = case.target_instruction_index {
                                     if let Some(&to_node) = self.block_starts.get(&target) {
-                                        graph.add_edge(from_node, to_node, EdgeKind::Switch(case_index));
+                                        graph.add_edge(
+                                            from_node,
+                                            to_node,
+                                            EdgeKind::Switch(case_index),
+                                        );
                                     }
                                 }
                             }
@@ -385,19 +391,25 @@ impl<'a> CfgBuilder<'a> {
                     }
                 } else if last_instruction.instruction.category() == "Switch" {
                     // Handle switch instructions - add edges for all cases and default
-                    if let Some(switch_table) = self.get_switch_table_for_instruction(last_instruction) {
+                    if let Some(switch_table) =
+                        self.get_switch_table_for_instruction(last_instruction)
+                    {
                         // Add edge for default case
                         if let Some(default_target) = switch_table.default_instruction_index {
                             if let Some(&to_node) = self.block_starts.get(&default_target) {
                                 graph.add_edge(from_node, to_node, EdgeKind::Default);
                             }
                         }
-                        
+
                         // Add edges for all switch cases
                         for (case_index, case) in switch_table.cases.iter().enumerate() {
                             if let Some(target) = case.target_instruction_index {
                                 if let Some(&to_node) = self.block_starts.get(&target) {
-                                    graph.add_edge(from_node, to_node, EdgeKind::Switch(case_index));
+                                    graph.add_edge(
+                                        from_node,
+                                        to_node,
+                                        EdgeKind::Switch(case_index),
+                                    );
                                 }
                             }
                         }

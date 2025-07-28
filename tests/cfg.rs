@@ -905,55 +905,166 @@ fn test_leader_after_return_throw_as_last_instruction() {
 #[test]
 fn test_cfg_with_switch_table() {
     use hermes_dec_rs::hbc::tables::switch_table::{SwitchCase, SwitchTable};
-    
+
     // Create a simple switch table for testing
     let mut switch_table = SwitchTable::new(0, 2, 100, 150, 1000, 1, 0);
     switch_table.add_case(0, 10);
     switch_table.add_case(1, 20);
     switch_table.add_case(2, 30);
-    
+
     // Set instruction indices for the targets
     switch_table.default_instruction_index = Some(5);
     for (i, case) in switch_table.cases.iter_mut().enumerate() {
         case.target_instruction_index = Some(10 + i as u32);
     }
-    
+
     // Create test instructions with a switch instruction
     let instructions = vec![
-        HbcFunctionInstruction { offset: 0, function_index: 0, instruction_index: 0, instruction: UnifiedInstruction::LoadConstString { operand_0: 0, operand_1: 0 } },
-        HbcFunctionInstruction { offset: 4, function_index: 0, instruction_index: 1, instruction: UnifiedInstruction::SwitchImm { operand_0: 0, operand_1: 0, operand_2: 0, operand_3: 0, operand_4: 0 } },
-        HbcFunctionInstruction { offset: 8, function_index: 0, instruction_index: 2, instruction: UnifiedInstruction::LoadConstString { operand_0: 1, operand_1: 1 } },
-        HbcFunctionInstruction { offset: 12, function_index: 0, instruction_index: 3, instruction: UnifiedInstruction::LoadConstString { operand_0: 2, operand_1: 2 } },
-        HbcFunctionInstruction { offset: 16, function_index: 0, instruction_index: 4, instruction: UnifiedInstruction::LoadConstString { operand_0: 3, operand_1: 3 } },
-        HbcFunctionInstruction { offset: 20, function_index: 0, instruction_index: 5, instruction: UnifiedInstruction::LoadConstString { operand_0: 4, operand_1: 4 } }, // Default case
-        HbcFunctionInstruction { offset: 24, function_index: 0, instruction_index: 6, instruction: UnifiedInstruction::LoadConstString { operand_0: 5, operand_1: 5 } },
-        HbcFunctionInstruction { offset: 28, function_index: 0, instruction_index: 7, instruction: UnifiedInstruction::LoadConstString { operand_0: 6, operand_1: 6 } },
-        HbcFunctionInstruction { offset: 32, function_index: 0, instruction_index: 8, instruction: UnifiedInstruction::LoadConstString { operand_0: 7, operand_1: 7 } },
-        HbcFunctionInstruction { offset: 36, function_index: 0, instruction_index: 9, instruction: UnifiedInstruction::LoadConstString { operand_0: 8, operand_1: 8 } },
-        HbcFunctionInstruction { offset: 40, function_index: 0, instruction_index: 10, instruction: UnifiedInstruction::LoadConstString { operand_0: 9, operand_1: 9 } }, // Case 0
-        HbcFunctionInstruction { offset: 44, function_index: 0, instruction_index: 11, instruction: UnifiedInstruction::LoadConstString { operand_0: 10, operand_1: 10 } }, // Case 1
-        HbcFunctionInstruction { offset: 48, function_index: 0, instruction_index: 12, instruction: UnifiedInstruction::LoadConstString { operand_0: 11, operand_1: 11 } }, // Case 2
-        HbcFunctionInstruction { offset: 52, function_index: 0, instruction_index: 13, instruction: UnifiedInstruction::Ret { operand_0: 0 } },
+        HbcFunctionInstruction {
+            offset: 0,
+            function_index: 0,
+            instruction_index: 0,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 0,
+                operand_1: 0,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 4,
+            function_index: 0,
+            instruction_index: 1,
+            instruction: UnifiedInstruction::SwitchImm {
+                operand_0: 0,
+                operand_1: 0,
+                operand_2: 0,
+                operand_3: 0,
+                operand_4: 0,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 8,
+            function_index: 0,
+            instruction_index: 2,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 1,
+                operand_1: 1,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 12,
+            function_index: 0,
+            instruction_index: 3,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 2,
+                operand_1: 2,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 16,
+            function_index: 0,
+            instruction_index: 4,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 3,
+                operand_1: 3,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 20,
+            function_index: 0,
+            instruction_index: 5,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 4,
+                operand_1: 4,
+            },
+        }, // Default case
+        HbcFunctionInstruction {
+            offset: 24,
+            function_index: 0,
+            instruction_index: 6,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 5,
+                operand_1: 5,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 28,
+            function_index: 0,
+            instruction_index: 7,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 6,
+                operand_1: 6,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 32,
+            function_index: 0,
+            instruction_index: 8,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 7,
+                operand_1: 7,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 36,
+            function_index: 0,
+            instruction_index: 9,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 8,
+                operand_1: 8,
+            },
+        },
+        HbcFunctionInstruction {
+            offset: 40,
+            function_index: 0,
+            instruction_index: 10,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 9,
+                operand_1: 9,
+            },
+        }, // Case 0
+        HbcFunctionInstruction {
+            offset: 44,
+            function_index: 0,
+            instruction_index: 11,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 10,
+                operand_1: 10,
+            },
+        }, // Case 1
+        HbcFunctionInstruction {
+            offset: 48,
+            function_index: 0,
+            instruction_index: 12,
+            instruction: UnifiedInstruction::LoadConstString {
+                operand_0: 11,
+                operand_1: 11,
+            },
+        }, // Case 2
+        HbcFunctionInstruction {
+            offset: 52,
+            function_index: 0,
+            instruction_index: 13,
+            instruction: UnifiedInstruction::Ret { operand_0: 0 },
+        },
     ];
-    
+
     // Create HBC file with switch table
     let mut hbc_file = make_test_hbc_file(instructions);
     hbc_file.switch_tables.add_switch_table(switch_table);
-    
 
-    
     // Build CFG
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
-    
+
     let graph = cfg.graph();
-    
+
     // Verify that leaders were created for switch targets
     let mut cfg_builder = CfgBuilder::new(&hbc_file, 0);
-    let leaders = cfg_builder.find_leaders(&hbc_file.functions.get_instructions(0).unwrap(), &hbc_file.jump_table);
-    
+    let leaders = cfg_builder.find_leaders(
+        &hbc_file.functions.get_instructions(0).unwrap(),
+        &hbc_file.jump_table,
+    );
 
-    
     // Should have leaders at: 0 (start), 2 (fallthrough), 5 (default), 10 (case 0), 11 (case 1), 12 (case 2)
     assert!(leaders.contains(&0));
     assert!(leaders.contains(&2)); // Fallthrough after switch
@@ -961,15 +1072,15 @@ fn test_cfg_with_switch_table() {
     assert!(leaders.contains(&10)); // Case 0
     assert!(leaders.contains(&11)); // Case 1
     assert!(leaders.contains(&12)); // Case 2
-    
+
     // Verify that edges were created for switch cases
     let mut switch_edges = 0;
     let mut default_edges = 0;
-    
+
     for edge in graph.edge_indices() {
         let (source, _target) = graph.edge_endpoints(edge).unwrap();
         let edge_weight = graph.edge_weight(edge).unwrap();
-        
+
         // Check if this edge comes from the switch instruction block
         let source_block = &graph[source];
         if source_block.start_pc() == 0 && source_block.end_pc() == 2 {
@@ -980,7 +1091,7 @@ fn test_cfg_with_switch_table() {
             }
         }
     }
-    
+
     // Should have 3 switch edges (one for each case) and 1 default edge
     assert_eq!(switch_edges, 3);
     assert_eq!(default_edges, 1);

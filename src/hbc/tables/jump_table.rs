@@ -238,10 +238,11 @@ impl JumpTable {
             {
                 // Calculate the absolute offset of the switch instruction in the HBC file
                 let switch_instruction_absolute_offset = function_body_offset + instruction.offset;
-                
+
                 // Calculate jump table address with 4-byte alignment
                 // jump_table_addr = (ip + op2 + 3) & ~3
-                let jump_table_addr = (switch_instruction_absolute_offset + jump_table_offset + 3) & !3;
+                let jump_table_addr =
+                    (switch_instruction_absolute_offset + jump_table_offset + 3) & !3;
 
                 // Get or create jump table from cache
                 let jump_table = jump_table_cache.get_or_create_jump_table(
@@ -256,7 +257,7 @@ impl JumpTable {
                     for case_value in *min_value..=*max_value {
                         let table_index = (case_value - min_value) as usize;
                         let entry_offset = jump_table_addr as usize + (table_index * 4);
-                        
+
                         // Ensure we have enough bytes to read from the full HBC file data
                         if entry_offset + 4 <= hbc_file_data.len() {
                             // Read 32-bit signed offset (little-endian)
@@ -267,7 +268,7 @@ impl JumpTable {
                                 hbc_file_data[entry_offset + 3],
                             ];
                             let target_offset = i32::from_le_bytes(offset_bytes);
-                            
+
                             // Add entry to jump table
                             jump_table.add_entry(case_value, target_offset);
                         } else {
@@ -296,11 +297,13 @@ impl JumpTable {
                 for case_value in *min_value..=*max_value {
                     if let Some(&target_offset) = jump_table.get_entry(case_value) {
                         switch_table.add_case(case_value, target_offset);
-                        
+
                         // Set the target instruction index if we can find it
                         let jump_dest = switch_instruction_absolute_offset as i32 + target_offset;
-                        
-                        if let Some(&target_instruction_index) = address_to_index.get(&(jump_dest as u32)) {
+
+                        if let Some(&target_instruction_index) =
+                            address_to_index.get(&(jump_dest as u32))
+                        {
                             // Update the case with the target instruction index
                             if let Some(case) = switch_table.cases.last_mut() {
                                 case.target_instruction_index = Some(target_instruction_index);
@@ -311,10 +314,10 @@ impl JumpTable {
 
                 // Add default case
                 let default_target_offset = *default_offset;
-                let default_jump_dest = switch_instruction_absolute_offset as i32 + default_target_offset;
-                switch_table.default_instruction_index = address_to_index
-                    .get(&(default_jump_dest as u32))
-                    .copied();
+                let default_jump_dest =
+                    switch_instruction_absolute_offset as i32 + default_target_offset;
+                switch_table.default_instruction_index =
+                    address_to_index.get(&(default_jump_dest as u32)).copied();
 
                 switch_tables.push(switch_table);
             }

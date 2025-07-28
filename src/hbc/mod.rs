@@ -269,10 +269,10 @@ impl<'a> HbcFile<'a> {
 
         // Build switch tables
         let switch_start_time = std::time::Instant::now();
-        
+
         // Create a shared jump table cache for this parsing session
         let mut shared_jump_table_cache = crate::hbc::tables::switch_table::JumpTableCache::new();
-        
+
         let switch_table_results: Result<Vec<_>, _> = (0..function_count)
             .into_par_iter()
             .map(|function_index| {
@@ -288,7 +288,9 @@ impl<'a> HbcFile<'a> {
                     })?;
 
                 // Get function body offset for switch table parsing
-                let function_body_offset = if let Some(parsed_header) = hbc_file.functions.get_parsed_header(function_index) {
+                let function_body_offset = if let Some(parsed_header) =
+                    hbc_file.functions.get_parsed_header(function_index)
+                {
                     if parsed_header.header.overflowed() {
                         parsed_header.large_header.unwrap().offset
                     } else {
@@ -299,30 +301,31 @@ impl<'a> HbcFile<'a> {
                 };
 
                 // Create a local jump table cache for this function
-                let mut local_jump_table_cache = crate::hbc::tables::switch_table::JumpTableCache::new();
+                let mut local_jump_table_cache =
+                    crate::hbc::tables::switch_table::JumpTableCache::new();
 
                 // Parse switch tables for this function
                 JumpTable::parse_switch_tables_for_function(
-                    function_index, 
-                    &instructions, 
+                    function_index,
+                    &instructions,
                     data, // Pass the full HBC file data instead of just function bytecode
                     &mut local_jump_table_cache,
                     function_body_offset,
                 )
-                    .map(|switch_tables| (function_index, switch_tables, local_jump_table_cache))
-                    .map_err(|e| {
-                        format!(
-                            "Failed to parse switch tables for function {}: {}",
-                            function_index, e
-                        )
-                    })
+                .map(|switch_tables| (function_index, switch_tables, local_jump_table_cache))
+                .map_err(|e| {
+                    format!(
+                        "Failed to parse switch tables for function {}: {}",
+                        function_index, e
+                    )
+                })
             })
             .collect();
 
         // Merge all switch table results and jump table caches
         for result in switch_table_results? {
             let (_function_index, switch_tables, local_cache) = result;
-            
+
             // Merge jump table cache
             for (address, jump_table_data) in local_cache.jump_tables {
                 let shared_jump_table = shared_jump_table_cache.get_or_create_jump_table(
@@ -330,26 +333,29 @@ impl<'a> HbcFile<'a> {
                     jump_table_data.min_value,
                     jump_table_data.max_value,
                 );
-                
+
                 // Copy entries if not already present
                 if shared_jump_table.entries.is_empty() {
                     for (case_value, target_offset) in jump_table_data.entries {
                         shared_jump_table.add_entry(case_value, target_offset);
                     }
                 }
-                
+
                 // Add reference count
                 shared_jump_table.reference_count += jump_table_data.reference_count;
             }
-            
+
             // Add switch tables
             for switch_table in switch_tables {
                 hbc_file.switch_tables.add_switch_table(switch_table);
             }
         }
-        
+
         // Copy the shared cache to the HbcFile
-        hbc_file.switch_tables.get_jump_table_cache_mut().jump_tables = shared_jump_table_cache.jump_tables;
+        hbc_file
+            .switch_tables
+            .get_jump_table_cache_mut()
+            .jump_tables = shared_jump_table_cache.jump_tables;
 
         let switch_elapsed = switch_start_time.elapsed();
         eprintln!(
