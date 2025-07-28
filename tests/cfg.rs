@@ -230,6 +230,46 @@ fn create_jump_instruction(
             operand_0: relative_offset as i32,
             operand_1: additional_operand.unwrap_or(0),
         },
+        "JEqual" => UnifiedInstruction::JEqual {
+            operand_0: relative_offset as i8,
+            operand_1: additional_operand.unwrap_or(0),
+            operand_2: (additional_operand.unwrap_or(0) + 1) % 255,
+        },
+        "JNotEqual" => UnifiedInstruction::JNotEqual {
+            operand_0: relative_offset as i8,
+            operand_1: additional_operand.unwrap_or(0),
+            operand_2: (additional_operand.unwrap_or(0) + 1) % 255,
+        },
+        "JStrictEqual" => UnifiedInstruction::JStrictEqual {
+            operand_0: relative_offset as i8,
+            operand_1: additional_operand.unwrap_or(0),
+            operand_2: (additional_operand.unwrap_or(0) + 1) % 255,
+        },
+        "JStrictNotEqual" => UnifiedInstruction::JStrictNotEqual {
+            operand_0: relative_offset as i8,
+            operand_1: additional_operand.unwrap_or(0),
+            operand_2: (additional_operand.unwrap_or(0) + 1) % 255,
+        },
+        "JLess" => UnifiedInstruction::JLess {
+            operand_0: relative_offset as i8,
+            operand_1: additional_operand.unwrap_or(0),
+            operand_2: (additional_operand.unwrap_or(0) + 1) % 255,
+        },
+        "JGreater" => UnifiedInstruction::JGreater {
+            operand_0: relative_offset as i8,
+            operand_1: additional_operand.unwrap_or(0),
+            operand_2: (additional_operand.unwrap_or(0) + 1) % 255,
+        },
+        "JLessEqual" => UnifiedInstruction::JLessEqual {
+            operand_0: relative_offset as i8,
+            operand_1: additional_operand.unwrap_or(0),
+            operand_2: (additional_operand.unwrap_or(0) + 1) % 255,
+        },
+        "JGreaterEqual" => UnifiedInstruction::JGreaterEqual {
+            operand_0: relative_offset as i8,
+            operand_1: additional_operand.unwrap_or(0),
+            operand_2: (additional_operand.unwrap_or(0) + 1) % 255,
+        },
         _ => panic!("Unsupported jump type: {}", jump_type),
     }
 }
@@ -1381,4 +1421,586 @@ fn test_cfg_complex_control_flow() {
 
         println!("✓ {} complex control flow analysis completed", test_name);
     }
+}
+
+/// Test precise conditional edge kinds for JmpTrue instruction
+#[test]
+fn test_precise_conditional_edges_jmp_true() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load value
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+        }, // 1: Jump if true
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 3: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // Jump from instruction 1 to instruction 2
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JmpTrue instruction
+    let jmp_true_block = cfg.builder().get_block_at_pc(1).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(jmp_true_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JmpTrue should create a True edge");
+    assert!(found_false, "JmpTrue should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JmpFalse instruction
+#[test]
+fn test_precise_conditional_edges_jmp_false() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load value
+        UnifiedInstruction::JmpFalse {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+        }, // 1: Jump if false
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 3: Return
+    ];
+
+    let jumps = vec![
+        ("JmpFalse", 1, 2, Some(1)), // Jump from instruction 1 to instruction 2
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JmpFalse instruction
+    let jmp_false_block = cfg.builder().get_block_at_pc(1).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(jmp_false_block).collect();
+
+    // Should have exactly 2 edges: True (fallthrough) and False (jump)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(
+        found_true,
+        "JmpFalse should create a True edge (fallthrough)"
+    );
+    assert!(found_false, "JmpFalse should create a False edge (jump)");
+}
+
+/// Test precise conditional edge kinds for JEqual instruction
+#[test]
+fn test_precise_conditional_edges_j_equal() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load first value
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 42,
+        }, // 1: Load second value
+        UnifiedInstruction::JEqual {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+            operand_2: 2, // Register 2
+        }, // 2: Jump if equal
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 100,
+        }, // 3: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JEqual", 2, 3, None), // Jump from instruction 2 to instruction 3
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JEqual instruction
+    let j_equal_block = cfg.builder().get_block_at_pc(2).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(j_equal_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JEqual should create a True edge");
+    assert!(found_false, "JEqual should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JNotEqual instruction
+#[test]
+fn test_precise_conditional_edges_j_not_equal() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load first value
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 1: Load different value
+        UnifiedInstruction::JNotEqual {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+            operand_2: 2, // Register 2
+        }, // 2: Jump if not equal
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 200,
+        }, // 3: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JNotEqual", 2, 3, None), // Jump from instruction 2 to instruction 3
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JNotEqual instruction
+    let j_not_equal_block = cfg.builder().get_block_at_pc(2).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(j_not_equal_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JNotEqual should create a True edge");
+    assert!(found_false, "JNotEqual should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JStrictEqual instruction
+#[test]
+fn test_precise_conditional_edges_j_strict_equal() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load first value
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 42,
+        }, // 1: Load second value
+        UnifiedInstruction::JStrictEqual {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+            operand_2: 2, // Register 2
+        }, // 2: Jump if strict equal
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 100,
+        }, // 3: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JStrictEqual", 2, 3, None), // Jump from instruction 2 to instruction 3
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JStrictEqual instruction
+    let j_strict_equal_block = cfg.builder().get_block_at_pc(2).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(j_strict_equal_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JStrictEqual should create a True edge");
+    assert!(found_false, "JStrictEqual should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JStrictNotEqual instruction
+#[test]
+fn test_precise_conditional_edges_j_strict_not_equal() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load first value
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 1: Load different value
+        UnifiedInstruction::JStrictNotEqual {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+            operand_2: 2, // Register 2
+        }, // 2: Jump if strict not equal
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 200,
+        }, // 3: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JStrictNotEqual", 2, 3, None), // Jump from instruction 2 to instruction 3
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JStrictNotEqual instruction
+    let j_strict_not_equal_block = cfg.builder().get_block_at_pc(2).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(j_strict_not_equal_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JStrictNotEqual should create a True edge");
+    assert!(found_false, "JStrictNotEqual should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JLess instruction
+#[test]
+fn test_precise_conditional_edges_j_less() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 10,
+        }, // 0: Load smaller value
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 20,
+        }, // 1: Load larger value
+        UnifiedInstruction::JLess {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+            operand_2: 2, // Register 2
+        }, // 2: Jump if less
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 100,
+        }, // 3: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JLess", 2, 3, None), // Jump from instruction 2 to instruction 3
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JLess instruction
+    let j_less_block = cfg.builder().get_block_at_pc(2).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(j_less_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JLess should create a True edge");
+    assert!(found_false, "JLess should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JGreater instruction
+#[test]
+fn test_precise_conditional_edges_j_greater() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 20,
+        }, // 0: Load larger value
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 10,
+        }, // 1: Load smaller value
+        UnifiedInstruction::JGreater {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+            operand_2: 2, // Register 2
+        }, // 2: Jump if greater
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 100,
+        }, // 3: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JGreater", 2, 3, None), // Jump from instruction 2 to instruction 3
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JGreater instruction
+    let j_greater_block = cfg.builder().get_block_at_pc(2).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(j_greater_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JGreater should create a True edge");
+    assert!(found_false, "JGreater should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JLessEqual instruction
+#[test]
+fn test_precise_conditional_edges_j_less_equal() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 10,
+        }, // 0: Load smaller value
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 20,
+        }, // 1: Load larger value
+        UnifiedInstruction::JLessEqual {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+            operand_2: 2, // Register 2
+        }, // 2: Jump if less or equal
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 100,
+        }, // 3: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JLessEqual", 2, 3, None), // Jump from instruction 2 to instruction 3
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JLessEqual instruction
+    let j_less_equal_block = cfg.builder().get_block_at_pc(2).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(j_less_equal_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JLessEqual should create a True edge");
+    assert!(found_false, "JLessEqual should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JGreaterEqual instruction
+#[test]
+fn test_precise_conditional_edges_j_greater_equal() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 20,
+        }, // 0: Load larger value
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 10,
+        }, // 1: Load smaller value
+        UnifiedInstruction::JGreaterEqual {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+            operand_2: 2, // Register 2
+        }, // 2: Jump if greater or equal
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 100,
+        }, // 3: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JGreaterEqual", 2, 3, None), // Jump from instruction 2 to instruction 3
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JGreaterEqual instruction
+    let j_greater_equal_block = cfg.builder().get_block_at_pc(2).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(j_greater_equal_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JGreaterEqual should create a True edge");
+    assert!(found_false, "JGreaterEqual should create a False edge");
+}
+
+/// Test precise conditional edge kinds for Long variants
+#[test]
+fn test_precise_conditional_edges_long_variants() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load value
+        UnifiedInstruction::JmpTrueLong {
+            operand_0: 0, // Placeholder jump offset (32-bit)
+            operand_1: 1, // Register 1
+        }, // 1: Jump if true (long)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 3: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrueLong", 1, 2, Some(1)), // Jump from instruction 1 to instruction 2
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JmpTrueLong instruction
+    let jmp_true_long_block = cfg.builder().get_block_at_pc(1).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(jmp_true_long_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JmpTrueLong should create a True edge");
+    assert!(found_false, "JmpTrueLong should create a False edge");
 }
