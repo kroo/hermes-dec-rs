@@ -29,12 +29,43 @@ impl PostDominatorAnalysis {
     }
 }
 
+/// Loop type classification
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LoopType {
+    /// While loop (condition at entry)
+    While,
+    /// For loop (initialization, condition, increment)
+    For,
+    /// Do-while loop (condition at exit)
+    DoWhile,
+}
+
 /// Natural loop information
 #[derive(Debug, Clone)]
 pub struct Loop {
-    pub header: NodeIndex,
+    pub headers: Vec<NodeIndex>, // Multiple headers for irreducible loops
     pub body_nodes: HashSet<NodeIndex>,
     pub back_edges: Vec<(NodeIndex, NodeIndex)>, // (tail, header) pairs
+    pub loop_type: LoopType,
+    pub exit_nodes: Vec<NodeIndex>,
+    pub is_irreducible: bool, // Whether this is an irreducible loop
+}
+
+impl Loop {
+    /// Get the primary header (first header for irreducible loops)
+    pub fn primary_header(&self) -> NodeIndex {
+        self.headers[0]
+    }
+
+    /// Check if a node is a header of this loop
+    pub fn is_header(&self, node: NodeIndex) -> bool {
+        self.headers.contains(&node)
+    }
+
+    /// Get all headers of this loop
+    pub fn get_headers(&self) -> &[NodeIndex] {
+        &self.headers
+    }
 }
 
 /// Loop analysis results

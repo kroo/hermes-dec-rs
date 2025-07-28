@@ -1,0 +1,10 @@
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+  edge [fontname="Arial"];
+
+  0 [label="Block 0 (PC 0-33)"]
+  1 [label="EXIT", style=filled, fillcolor=lightgray]
+
+  0 -> 1 [label="Uncond"]
+}

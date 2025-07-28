@@ -10,6 +10,7 @@ use crate::hbc::tables::switch_table::SwitchTable;
 use crate::hbc::HbcFile;
 use petgraph::algo::dominators::{self, Dominators};
 use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
 
 /// CFG builder and analyzer
@@ -810,6 +811,145 @@ impl<'a> CfgBuilder<'a> {
         dot
     }
 
+    /// Export CFG to DOT format with loop analysis visualization
+    pub fn to_dot_with_loops(&self, graph: &DiGraph<Block, EdgeKind>) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph {\n");
+        dot.push_str("  rankdir=TB;\n");
+        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n");
+        dot.push_str("  edge [fontname=\"Arial\"];\n\n");
+
+        // Analyze loops
+        let loop_analysis = self.analyze_loops(graph);
+
+        // Add nodes with loop information
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let mut node_attrs = Vec::new();
+
+            // Base label
+            let label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                format!(
+                    "Block {} (PC {}-{})",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                )
+            };
+            node_attrs.push(format!("label=\"{}\"", label));
+
+            // Add loop information
+            if let Some(loop_indices) = loop_analysis.node_to_loops.get(&node) {
+                if !loop_indices.is_empty() {
+                    // Find the innermost loop (last in the list)
+                    let innermost_loop_idx = loop_indices.last().unwrap();
+                    let loop_info = &loop_analysis.loops[*innermost_loop_idx];
+
+                    // Color based on loop type
+                    let color = match loop_info.loop_type {
+                        crate::cfg::analysis::LoopType::While => "lightblue",
+                        crate::cfg::analysis::LoopType::For => "lightgreen",
+                        crate::cfg::analysis::LoopType::DoWhile => "lightyellow",
+                    };
+                    node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
+
+                    // Add loop header indicator
+                    if loop_info.is_header(node) {
+                        node_attrs.push("penwidth=3".to_string());
+                        node_attrs.push("color=red".to_string());
+                    }
+
+                    // Add loop body indicator
+                    if loop_info.body_nodes.contains(&node) {
+                        node_attrs.push("shape=box".to_string());
+                    }
+                }
+            }
+
+            // Add exit node styling
+            if block.is_exit() {
+                node_attrs.push("style=filled, fillcolor=lightgray".to_string());
+            }
+
+            dot.push_str(&format!("  {} [{}]\n", node.index(), node_attrs.join(", ")));
+        }
+
+        dot.push_str("\n");
+
+        // Add edges with loop information
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            let edge_kind = graph.edge_weight(edge).unwrap();
+            let mut edge_attrs = Vec::new();
+
+            // Edge label
+            let label = match edge_kind {
+                EdgeKind::Uncond => to_title_case("uncond"),
+                EdgeKind::True => to_title_case("true"),
+                EdgeKind::False => to_title_case("false"),
+                EdgeKind::Switch(case_index) => format!("Switch({})", case_index),
+                EdgeKind::Default => to_title_case("default"),
+                EdgeKind::Fall => to_title_case("fall"),
+            };
+            edge_attrs.push(format!("label=\"{}\"", label));
+
+            // Check if this is a back-edge
+            let mut is_back_edge = false;
+            for loop_info in &loop_analysis.loops {
+                for (back_tail, back_head) in &loop_info.back_edges {
+                    if *back_tail == tail && *back_head == head {
+                        is_back_edge = true;
+                        edge_attrs.push("color=red".to_string());
+                        edge_attrs.push("penwidth=2".to_string());
+                        edge_attrs.push("style=dashed".to_string());
+                        break;
+                    }
+                }
+                if is_back_edge {
+                    break;
+                }
+            }
+
+            // Check if this is a loop exit edge
+            for loop_info in &loop_analysis.loops {
+                if loop_info.body_nodes.contains(&tail) && !loop_info.body_nodes.contains(&head) {
+                    edge_attrs.push("color=green".to_string());
+                    edge_attrs.push("penwidth=2".to_string());
+                    break;
+                }
+            }
+
+            dot.push_str(&format!(
+                "  {} -> {} [{}]\n",
+                tail.index(),
+                head.index(),
+                edge_attrs.join(", ")
+            ));
+        }
+
+        // Add loop information as subgraphs
+        for (i, loop_info) in loop_analysis.loops.iter().enumerate() {
+            dot.push_str(&format!("\n  subgraph cluster_loop_{} {{\n", i));
+            dot.push_str(&format!(
+                "    label=\"Loop {}: {:?}\";\n",
+                i, loop_info.loop_type
+            ));
+            dot.push_str("    style=dashed;\n");
+            dot.push_str("    color=blue;\n");
+
+            for &node in &loop_info.body_nodes {
+                dot.push_str(&format!("    {};\n", node.index()));
+            }
+
+            dot.push_str("  }\n");
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
     /// Export CFG to DOT format as a subgraph for a specific function
     pub fn to_dot_subgraph(
         &self,
@@ -908,6 +1048,241 @@ impl<'a> CfgBuilder<'a> {
     /// Get the EXIT node for the current function
     pub fn exit_node(&self) -> Option<NodeIndex> {
         self.exit_node
+    }
+
+    /// Analyze loops in the CFG (including both reducible and irreducible loops)
+    pub fn analyze_loops(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+    ) -> crate::cfg::analysis::LoopAnalysis {
+        use crate::cfg::analysis::{Loop, LoopAnalysis};
+        use std::collections::HashMap;
+
+        let mut loops = Vec::new();
+        let mut node_to_loops = HashMap::new();
+
+        // Get dominators for loop detection
+        if let Some(dominators) = self.analyze_dominators(graph) {
+            // Find reducible loops (natural loops)
+            let back_edges = self.find_back_edges(graph, &dominators);
+
+            for (header, tail) in back_edges {
+                let loop_body = self.compute_loop_body(graph, header, tail, &dominators);
+                let loop_type = self.classify_loop_type(graph, header, tail, &loop_body);
+                let exit_nodes = self.find_loop_exits(graph, header, &loop_body);
+
+                let loop_info = Loop {
+                    headers: vec![header],
+                    body_nodes: loop_body,
+                    back_edges: vec![(tail, header)],
+                    loop_type,
+                    exit_nodes,
+                    is_irreducible: false,
+                };
+
+                loops.push(loop_info);
+            }
+
+            // Find irreducible loops
+            let irreducible_loops = self.find_irreducible_loops(graph, &dominators);
+            loops.extend(irreducible_loops);
+        }
+
+        // Build node-to-loops mapping
+        for (loop_idx, loop_info) in loops.iter().enumerate() {
+            for &node in &loop_info.body_nodes {
+                node_to_loops
+                    .entry(node)
+                    .or_insert_with(Vec::new)
+                    .push(loop_idx);
+            }
+        }
+
+        LoopAnalysis {
+            loops,
+            node_to_loops,
+        }
+    }
+
+    /// Find irreducible loops in the CFG
+    fn find_irreducible_loops(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        _dominators: &Dominators<NodeIndex>,
+    ) -> Vec<crate::cfg::analysis::Loop> {
+        let mut irreducible_loops = Vec::new();
+
+        // Find strongly connected components (SCCs) that contain multiple headers
+        let sccs = petgraph::algo::tarjan_scc(graph);
+
+        for scc in sccs {
+            if scc.len() < 2 {
+                continue; // Need at least 2 nodes for a loop
+            }
+
+            // Check if this SCC has multiple entry points (headers)
+            let mut headers = Vec::new();
+            for &node in &scc {
+                let mut is_header = false;
+                for edge in graph.edges_directed(node, petgraph::Direction::Incoming) {
+                    let source = edge.source();
+                    if !scc.contains(&source) {
+                        is_header = true;
+                        break;
+                    }
+                }
+                if is_header {
+                    headers.push(node);
+                }
+            }
+
+            // If we have multiple headers, this is an irreducible loop
+            if headers.len() > 1 {
+                let mut loop_body = HashSet::new();
+                for &node in &scc {
+                    loop_body.insert(node);
+                }
+
+                // Find back-edges within this SCC
+                let mut back_edges = Vec::new();
+                for &node in &scc {
+                    for edge in graph.edges_directed(node, petgraph::Direction::Outgoing) {
+                        let target = edge.target();
+                        if scc.contains(&target) {
+                            back_edges.push((node, target));
+                        }
+                    }
+                }
+
+                // Find exit nodes
+                let mut exit_nodes = Vec::new();
+                for &node in &scc {
+                    for edge in graph.edges_directed(node, petgraph::Direction::Outgoing) {
+                        let target = edge.target();
+                        if !scc.contains(&target) {
+                            exit_nodes.push(target);
+                        }
+                    }
+                }
+
+                let loop_info = crate::cfg::analysis::Loop {
+                    headers,
+                    body_nodes: loop_body,
+                    back_edges,
+                    loop_type: crate::cfg::analysis::LoopType::While, // Default for irreducible
+                    exit_nodes,
+                    is_irreducible: true,
+                };
+
+                irreducible_loops.push(loop_info);
+            }
+        }
+
+        irreducible_loops
+    }
+
+    /// Find all back-edges in the CFG
+    fn find_back_edges(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        dominators: &Dominators<NodeIndex>,
+    ) -> Vec<(NodeIndex, NodeIndex)> {
+        let mut back_edges = Vec::new();
+
+        for edge in graph.edge_indices() {
+            if let Some((source, target)) = graph.edge_endpoints(edge) {
+                // Check if target dominates source (back-edge condition)
+                if self.dominates(dominators, target, source) {
+                    back_edges.push((target, source)); // (header, tail)
+                }
+            }
+        }
+
+        back_edges
+    }
+
+    /// Check if a node dominates another node
+    fn dominates(
+        &self,
+        dominators: &Dominators<NodeIndex>,
+        dominator: NodeIndex,
+        node: NodeIndex,
+    ) -> bool {
+        let mut current = node;
+        while let Some(immediate_dom) = dominators.immediate_dominator(current) {
+            if immediate_dom == dominator {
+                return true;
+            }
+            current = immediate_dom;
+        }
+        false
+    }
+
+    /// Compute the complete loop body for a back-edge
+    fn compute_loop_body(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        header: NodeIndex,
+        tail: NodeIndex,
+        dominators: &Dominators<NodeIndex>,
+    ) -> HashSet<NodeIndex> {
+        let mut loop_body = HashSet::new();
+        let mut worklist = vec![tail];
+
+        // Start from the tail and work backwards
+        while let Some(node) = worklist.pop() {
+            if loop_body.contains(&node) {
+                continue;
+            }
+
+            loop_body.insert(node);
+
+            // Add all predecessors that are dominated by the header
+            for pred in graph.neighbors_directed(node, petgraph::Direction::Incoming) {
+                if self.dominates(dominators, header, pred) && !loop_body.contains(&pred) {
+                    worklist.push(pred);
+                }
+            }
+        }
+
+        // Include the header in the loop body
+        loop_body.insert(header);
+
+        loop_body
+    }
+
+    /// Classify the type of loop
+    fn classify_loop_type(
+        &self,
+        _graph: &DiGraph<Block, EdgeKind>,
+        _header: NodeIndex,
+        _tail: NodeIndex,
+        _loop_body: &HashSet<NodeIndex>,
+    ) -> crate::cfg::analysis::LoopType {
+        use crate::cfg::analysis::LoopType;
+
+        // For now, classify as While - we'll enhance this later
+        LoopType::While
+    }
+
+    /// Find loop exit nodes
+    fn find_loop_exits(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        _header: NodeIndex,
+        loop_body: &HashSet<NodeIndex>,
+    ) -> Vec<NodeIndex> {
+        let mut exits = Vec::new();
+
+        for &node in loop_body {
+            for succ in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
+                if !loop_body.contains(&succ) {
+                    exits.push(succ);
+                }
+            }
+        }
+
+        exits
     }
 
     /// Get jump label for a block if it's a jump target
