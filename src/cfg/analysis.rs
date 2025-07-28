@@ -160,15 +160,6 @@ impl SwitchAnalysis {
     }
 }
 
-/// Analysis functions for CFGs
-///
-/// This function is deprecated - use CfgBuilder::analyze_post_dominators instead
-/// which has access to the EXIT node required for post-dominator analysis
-pub fn analyze_post_dominators(_graph: &DiGraph<Block, EdgeKind>) -> Option<PostDominatorAnalysis> {
-    // This function cannot be implemented without access to the EXIT node
-    // Use CfgBuilder::analyze_post_dominators or Cfg::analyze_post_dominators instead
-    None
-}
 
 pub fn find_natural_loops(
     _graph: &DiGraph<Block, EdgeKind>,
