@@ -1,0 +1,2159 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 963f2901006fe19044d4b62040017a2eb57299d6
+  Function count: 9
+  String count: 72
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..-1]: 
+s1[ASCII, 0..13]: Cleanup failed
+s2[ASCII, 13..18]: divide
+s3[ASCII, 18..22]: equal
+s4[ASCII, 22..35]: limit_exceeded
+s5[ASCII, 36..51]: Division by zero
+s6[ASCII, 48..51]: zero
+s7[ASCII, 52..64]: Step 2 failed
+s8[ASCII, 65..81]: Unknown operation
+s9[ASCII, 80..82]: one
+s10[ASCII, 109..118]: both_falsy
+s11[ASCII, 119..129]: both_truthy
+s12[ASCII, 130..134]: case1
+s13[ASCII, 135..139]: case2
+s14[ASCII, 140..144]: case3
+s15[ASCII, 145..149]: case4
+s16[ASCII, 150..158]: cleanup: 
+s17[ASCII, 186..191]: string
+s18[ASCII, 191..196]: global
+s19[ASCII, 196..208]: limit_reached
+s20[ASCII, 218..226]: max_depth
+s21[ASCII, 226..230]: high-
+s22[ASCII, 250..254]: mixed
+s23[ASCII, 255..260]: mode1-
+s24[ASCII, 261..266]: mode2-
+s25[ASCII, 267..272]: mode3-
+s26[ASCII, 273..279]: process
+s27[ASCII, 300..302]: two
+s28[ASCII, 303..309]: unknown
+i29[ASCII, 8..13] #EFE3DC8E: failed
+i30[ASCII, 21..21] #00018270: a
+i31[ASCII, 22..26] #A343BBEE: limit
+i32[ASCII, 81..108] #F15AE022: nestedLoopsWithBreakContinue
+i33[ASCII, 109..109] #00018E43: b
+i34[ASCII, 150..156] #D6F05A93: cleanup
+i35[ASCII, 159..186] #2233C9EE: complexLoopWithMultipleExits
+i36[ASCII, 209..213] #9102A3D0: Error
+i37[ASCII, 213..218] #50223B1A: random
+i38[ASCII, 231..243] #E7613D83: ignore_errors
+i39[ASCII, 238..243] #3759FAD8: errors
+i40[ASCII, 243..248] #0833AAEB: status
+i41[ASCII, 248..250] #BA21B760: sum
+i42[ASCII, 273..281] #358F33DE: processed
+i43[ASCII, 282..289] #71489699: critical
+i44[ASCII, 282..295] #E48020AF: critical_error
+i45[ASCII, 295..300] #D1A98FEE: result
+i46[ASCII, 310..313] #1C182460: Math
+i47[ASCII, 314..322] #1648DDA6: completed
+i48[ASCII, 323..347] #3B49831A: complexNestedConditionals
+i49[ASCII, 347..350] #F6474C57: skip
+i50[ASCII, 347..355] #6202D6D8: skip_even
+i51[ASCII, 356..372] #3626C808: continue_on_error
+i52[ASCII, 368..372] #2CC2B0DA: error
+i53[ASCII, 372..395] #80390B62: recursiveWithControlFlow
+i54[ASCII, 396..402] #63D87C1C: message
+i55[ASCII, 402..411] #9BC61079: early_exit
+i56[ASCII, 410..414] #63146EAB: items
+i57[ASCII, 414..418] #906CF614: steps
+i58[ASCII, 418..438] #EF03A676: switchWithFallthrough
+i59[ASCII, 439..441] #5DA35ACD: min
+i60[ASCII, 440..444] #A484B961: index
+i61[ASCII, 443..470] #C390283B: exceptionHandlingControlFlow
+i62[ASCII, 471..484] #12C4F154: fail_at_step_2
+i63[ASCII, 485..494] #963D04DF: fast_track
+i64[ASCII, 495..500] #15A9FF56: length
+i65[ASCII, 501..517] #8737AFD2: multipleLoopTypes
+i66[ASCII, 517..526] #CCAEE5EA: stop_after
+i67[ASCII, 524..545] #5CDD9D50: ternaryAndShortCircuit
+i68[ASCII, 546..554] #807C5F3D: prototype
+i69[ASCII, 551..554] #665957A7: type
+i70[ASCII, 555..558] #3F21B886: push
+i71[ASCII, 559..563] #DF50693D: value
+
+Array Buffer:
+Function<global>0(1 params, 3 registers, 0 symbols):
+Offset in debug table: source 0x0000, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:4:1
+    DeclareGlobalVar  "nestedLoopsWithBr"...
+; hbc_testcases/complex_control_flow.js:4:1
+    DeclareGlobalVar  "complexNestedCond"...
+; hbc_testcases/complex_control_flow.js:4:1
+    DeclareGlobalVar  "multipleLoopTypes"
+; hbc_testcases/complex_control_flow.js:4:1
+    DeclareGlobalVar  "switchWithFallthr"...
+; hbc_testcases/complex_control_flow.js:4:1
+    DeclareGlobalVar  "complexLoopWithMu"...
+; hbc_testcases/complex_control_flow.js:4:1
+    DeclareGlobalVar  "ternaryAndShortCi"...
+; hbc_testcases/complex_control_flow.js:4:1
+    DeclareGlobalVar  "exceptionHandling"...
+; hbc_testcases/complex_control_flow.js:4:1
+    DeclareGlobalVar  "recursiveWithCont"...
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateEnvironment r0
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateClosure     r2, r0, Function<nestedLoopsWithBreakContinue>1
+; hbc_testcases/complex_control_flow.js:4:1
+    GetGlobalObject   r1
+; hbc_testcases/complex_control_flow.js:4:1
+    PutById           r1, r2, 1, "nestedLoopsWithBr"...
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateClosure     r2, r0, Function<complexNestedConditionals>2
+; hbc_testcases/complex_control_flow.js:4:1
+    PutById           r1, r2, 2, "complexNestedCond"...
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateClosure     r2, r0, Function<multipleLoopTypes>3
+; hbc_testcases/complex_control_flow.js:4:1
+    PutById           r1, r2, 3, "multipleLoopTypes"
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateClosure     r2, r0, Function<switchWithFallthrough>4
+; hbc_testcases/complex_control_flow.js:4:1
+    PutById           r1, r2, 4, "switchWithFallthr"...
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateClosure     r2, r0, Function<complexLoopWithMultipleExits>5
+; hbc_testcases/complex_control_flow.js:4:1
+    PutById           r1, r2, 5, "complexLoopWithMu"...
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateClosure     r2, r0, Function<ternaryAndShortCircuit>6
+; hbc_testcases/complex_control_flow.js:4:1
+    PutById           r1, r2, 6, "ternaryAndShortCi"...
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateClosure     r2, r0, Function<exceptionHandlingControlFlow>7
+; hbc_testcases/complex_control_flow.js:4:1
+    PutById           r1, r2, 7, "exceptionHandling"...
+; hbc_testcases/complex_control_flow.js:4:1
+    CreateClosure     r0, r0, Function<recursiveWithControlFlow>8
+; hbc_testcases/complex_control_flow.js:4:1
+    PutById           r1, r0, 8, "recursiveWithCont"...
+; hbc_testcases/complex_control_flow.js:4:1
+    LoadConstUndefined r0
+; hbc_testcases/complex_control_flow.js:4:1
+    Ret               r0
+
+Function<nestedLoopsWithBreakContinue>1(2 params, 28 registers, 0 symbols):
+Offset in debug table: source 0x002c, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:4:1
+    LoadParam         r13, 1
+; hbc_testcases/complex_control_flow.js:8:36
+    GetByIdShort      r0, r13, 1, "length"
+; hbc_testcases/complex_control_flow.js:8:36
+    LoadConstZero     r12
+; hbc_testcases/complex_control_flow.js:8:26
+    Less              r0, r12, r0
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstUInt8    r9, 3
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstUInt8    r8, 50
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstUInt8    r7, 1
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstUInt8    r6, 100
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstZero     r4
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstZero     r3
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstUndefined r10
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstZero     r1
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstFalse    r2
+; hbc_testcases/complex_control_flow.js:8:26
+    JmpFalseLong      L1, r0
+L8:
+; hbc_testcases/complex_control_flow.js:9:31
+    GetByVal          r0, r13, r3
+; hbc_testcases/complex_control_flow.js:9:34
+    GetByIdShort      r0, r0, 1, "length"
+; hbc_testcases/complex_control_flow.js:9:21
+    Less              r16, r12, r0
+; hbc_testcases/complex_control_flow.js:9:21
+    Mov               r19, r4
+; hbc_testcases/complex_control_flow.js:9:21
+    Mov               r0, r3
+; hbc_testcases/complex_control_flow.js:9:21
+    Mov               r17, r10
+; hbc_testcases/complex_control_flow.js:9:21
+    LoadConstZero     r18
+; hbc_testcases/complex_control_flow.js:9:21
+    Mov               r14, r19
+; hbc_testcases/complex_control_flow.js:9:21
+    Mov               r15, r17
+; hbc_testcases/complex_control_flow.js:9:21
+    JmpFalseLong      L2, r16
+L7:
+; hbc_testcases/complex_control_flow.js:10:17
+    GetByVal          r16, r13, r0
+; hbc_testcases/complex_control_flow.js:10:20
+    GetByVal          r20, r16, r18
+; hbc_testcases/complex_control_flow.js:10:20
+    Mov               r23, r19
+; hbc_testcases/complex_control_flow.js:10:20
+    Mov               r16, r18
+; hbc_testcases/complex_control_flow.js:10:20
+    Mov               r21, r17
+; hbc_testcases/complex_control_flow.js:10:20
+    Mov               r22, r23
+; hbc_testcases/complex_control_flow.js:10:7
+    JLess             L3, r20, r12
+; hbc_testcases/complex_control_flow.js:13:17
+    GetByVal          r20, r13, r0
+; hbc_testcases/complex_control_flow.js:13:20
+    GetByVal          r20, r20, r16
+; hbc_testcases/complex_control_flow.js:13:11
+    Greater           r20, r20, r6
+; hbc_testcases/complex_control_flow.js:13:11
+    Mov               r1, r23
+; hbc_testcases/complex_control_flow.js:13:11
+    LoadConstTrue     r2
+; hbc_testcases/complex_control_flow.js:13:11
+    JmpTrue           L1, r20
+; hbc_testcases/complex_control_flow.js:17:22
+    GetByVal          r20, r13, r0
+; hbc_testcases/complex_control_flow.js:17:25
+    GetByVal          r20, r20, r16
+; hbc_testcases/complex_control_flow.js:17:13
+    Add               r23, r23, r20
+; hbc_testcases/complex_control_flow.js:17:13
+    LoadConstZero     r20
+L6:
+; hbc_testcases/complex_control_flow.js:17:13
+    Mov               r26, r23
+; hbc_testcases/complex_control_flow.js:17:13
+    Mov               r24, r20
+; hbc_testcases/complex_control_flow.js:17:13
+    JStrictNotEqual   L4, r24, r7
+; hbc_testcases/complex_control_flow.js:17:13
+    Mov               r25, r26
+; hbc_testcases/complex_control_flow.js:17:13
+    JGreater          L5, r25, r8
+L4:
+; hbc_testcases/complex_control_flow.js:23:15
+    Add               r25, r26, r24
+L5:
+; hbc_testcases/complex_control_flow.js:23:15
+    Inc               r20, r24
+; hbc_testcases/complex_control_flow.js:23:15
+    Mov               r23, r25
+; hbc_testcases/complex_control_flow.js:23:15
+    Mov               r22, r23
+; hbc_testcases/complex_control_flow.js:23:15
+    Mov               r21, r20
+; hbc_testcases/complex_control_flow.js:23:15
+    JLess             L6, r21, r9
+L3:
+; hbc_testcases/complex_control_flow.js:23:15
+    Inc               r18, r16
+; hbc_testcases/complex_control_flow.js:9:31
+    GetByVal          r16, r13, r0
+; hbc_testcases/complex_control_flow.js:9:34
+    GetByIdShort      r16, r16, 1, "length"
+; hbc_testcases/complex_control_flow.js:9:34
+    Mov               r19, r22
+; hbc_testcases/complex_control_flow.js:9:34
+    Mov               r17, r21
+; hbc_testcases/complex_control_flow.js:9:34
+    Mov               r14, r19
+; hbc_testcases/complex_control_flow.js:9:34
+    Mov               r15, r17
+; hbc_testcases/complex_control_flow.js:9:5
+    JLess             L7, r18, r16
+L2:
+; hbc_testcases/complex_control_flow.js:9:5
+    Inc               r16, r0
+; hbc_testcases/complex_control_flow.js:8:36
+    GetByIdShort      r0, r13, 1, "length"
+; hbc_testcases/complex_control_flow.js:8:26
+    Less              r0, r16, r0
+; hbc_testcases/complex_control_flow.js:8:26
+    Mov               r4, r14
+; hbc_testcases/complex_control_flow.js:8:26
+    Mov               r10, r15
+; hbc_testcases/complex_control_flow.js:8:26
+    Mov               r3, r16
+; hbc_testcases/complex_control_flow.js:8:26
+    Mov               r1, r4
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstFalse    r2
+; hbc_testcases/complex_control_flow.js:8:26
+    JmpTrueLong       L8, r0
+L1:
+; hbc_testcases/complex_control_flow.js:8:26
+    LoadConstInt      r0, -1
+; hbc_testcases/complex_control_flow.js:8:26
+    JmpTrue           L9, r2
+; hbc_testcases/complex_control_flow.js:8:26
+    Mov               r0, r1
+L9:
+; hbc_testcases/complex_control_flow.js:8:26
+    Ret               r0
+
+Function<complexNestedConditionals>2(5 params, 6 registers, 0 symbols):
+Offset in debug table: source 0x00e4, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:31:1
+    LoadParam         r3, 1
+; hbc_testcases/complex_control_flow.js:31:1
+    LoadParam         r0, 2
+; hbc_testcases/complex_control_flow.js:31:1
+    LoadParam         r2, 3
+; hbc_testcases/complex_control_flow.js:31:1
+    LoadParam         r1, 4
+; hbc_testcases/complex_control_flow.js:31:1
+    LoadConstZero     r4
+; hbc_testcases/complex_control_flow.js:32:3
+    JGreater          L1, r3, r4
+; hbc_testcases/complex_control_flow.js:32:3
+    LoadConstInt      r5, -10
+; hbc_testcases/complex_control_flow.js:58:10
+    JLess             L2, r3, r5
+; hbc_testcases/complex_control_flow.js:58:10
+    Ret               r4
+L2:
+; hbc_testcases/complex_control_flow.js:59:5
+    JNotGreater       L3, r0, r2
+; hbc_testcases/complex_control_flow.js:59:5
+    JGreater          L4, r2, r1
+L3:
+; hbc_testcases/complex_control_flow.js:62:14
+    Negate            r5, r3
+; hbc_testcases/complex_control_flow.js:62:14
+    Ret               r5
+L4:
+; hbc_testcases/complex_control_flow.js:60:14
+    Negate            r5, r3
+; hbc_testcases/complex_control_flow.js:60:14
+    Add               r5, r5, r0
+; hbc_testcases/complex_control_flow.js:60:14
+    Sub               r5, r5, r2
+; hbc_testcases/complex_control_flow.js:60:14
+    Add               r5, r5, r1
+; hbc_testcases/complex_control_flow.js:60:14
+    Ret               r5
+L1:
+; hbc_testcases/complex_control_flow.js:33:5
+    JGreater          L5, r0, r4
+; hbc_testcases/complex_control_flow.js:33:5
+    LoadConstInt      r5, -5
+; hbc_testcases/complex_control_flow.js:49:12
+    JLess             L6, r0, r5
+; hbc_testcases/complex_control_flow.js:49:12
+    Ret               r3
+L6:
+; hbc_testcases/complex_control_flow.js:50:7
+    JGreater          L7, r2, r1
+; hbc_testcases/complex_control_flow.js:53:16
+    Sub               r5, r3, r0
+; hbc_testcases/complex_control_flow.js:53:16
+    Sub               r5, r5, r2
+; hbc_testcases/complex_control_flow.js:53:16
+    Ret               r5
+L7:
+; hbc_testcases/complex_control_flow.js:51:16
+    Sub               r5, r3, r0
+; hbc_testcases/complex_control_flow.js:51:16
+    Add               r5, r5, r2
+; hbc_testcases/complex_control_flow.js:51:16
+    Ret               r5
+L5:
+; hbc_testcases/complex_control_flow.js:34:7
+    JGreater          L8, r2, r4
+; hbc_testcases/complex_control_flow.js:34:7
+    LoadConstInt      r5, -10
+; hbc_testcases/complex_control_flow.js:40:14
+    JLess             L9, r2, r5
+; hbc_testcases/complex_control_flow.js:40:14
+    LoadConstUInt8    r5, 2
+; hbc_testcases/complex_control_flow.js:43:13
+    Mod               r5, r1, r5
+; hbc_testcases/complex_control_flow.js:43:13
+    JStrictEqual      L10, r5, r4
+; hbc_testcases/complex_control_flow.js:46:18
+    Sub               r5, r3, r0
+; hbc_testcases/complex_control_flow.js:46:18
+    Ret               r5
+L10:
+; hbc_testcases/complex_control_flow.js:44:18
+    Add               r5, r3, r0
+; hbc_testcases/complex_control_flow.js:44:18
+    Ret               r5
+L9:
+; hbc_testcases/complex_control_flow.js:41:16
+    Add               r5, r3, r0
+; hbc_testcases/complex_control_flow.js:41:16
+    Sub               r5, r5, r2
+; hbc_testcases/complex_control_flow.js:41:16
+    Ret               r5
+L8:
+; hbc_testcases/complex_control_flow.js:35:9
+    JGreater          L11, r1, r4
+; hbc_testcases/complex_control_flow.js:38:18
+    Add               r4, r3, r0
+; hbc_testcases/complex_control_flow.js:38:18
+    Add               r4, r4, r2
+; hbc_testcases/complex_control_flow.js:38:18
+    Sub               r4, r4, r1
+; hbc_testcases/complex_control_flow.js:38:18
+    Ret               r4
+L11:
+; hbc_testcases/complex_control_flow.js:36:18
+    Add               r0, r3, r0
+; hbc_testcases/complex_control_flow.js:36:18
+    Add               r0, r0, r2
+; hbc_testcases/complex_control_flow.js:36:18
+    Add               r0, r0, r1
+; hbc_testcases/complex_control_flow.js:36:18
+    Ret               r0
+
+Function<multipleLoopTypes>3(2 params, 32 registers, 0 symbols):
+Offset in debug table: source 0x01f6, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:69:1
+    LoadParam         r14, 1
+; hbc_testcases/complex_control_flow.js:69:1
+    NewArray          r2, 0
+; hbc_testcases/complex_control_flow.js:74:17
+    GetByIdShort      r0, r14, 1, "length"
+; hbc_testcases/complex_control_flow.js:74:17
+    LoadConstZero     r13
+; hbc_testcases/complex_control_flow.js:74:10
+    Less              r1, r13, r0
+; hbc_testcases/complex_control_flow.js:74:10
+    LoadConstUInt8    r5, 100
+; hbc_testcases/complex_control_flow.js:74:10
+    LoadConstUInt8    r4, 5
+; hbc_testcases/complex_control_flow.js:74:10
+    LoadConstZero     r3
+; hbc_testcases/complex_control_flow.js:74:10
+    LoadConstZero     r0
+; hbc_testcases/complex_control_flow.js:74:10
+    JmpFalseLong      L1, r1
+; hbc_testcases/complex_control_flow.js:74:34
+    GetByIdShort      r1, r2, 1, "length"
+; hbc_testcases/complex_control_flow.js:74:34
+    LoadConstUInt8    r12, 10
+; hbc_testcases/complex_control_flow.js:74:28
+    Less              r1, r1, r12
+; hbc_testcases/complex_control_flow.js:74:28
+    GetGlobalObject   r10
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstUInt8    r9, 3
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstUInt8    r8, 50
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstUInt8    r7, 2
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstZero     r6
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstUndefined r11
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstZero     r3
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstZero     r0
+; hbc_testcases/complex_control_flow.js:74:28
+    JmpFalseLong      L1, r1
+L6:
+; hbc_testcases/complex_control_flow.js:75:12
+    GetByVal          r1, r14, r6
+; hbc_testcases/complex_control_flow.js:75:9
+    Mod               r15, r1, r7
+; hbc_testcases/complex_control_flow.js:75:9
+    Mov               r17, r6
+; hbc_testcases/complex_control_flow.js:75:9
+    Mov               r1, r11
+; hbc_testcases/complex_control_flow.js:75:9
+    JStrictEqual      L2, r15, r13
+; hbc_testcases/complex_control_flow.js:81:25
+    TryGetById        r19, r10, 2, "Math"
+; hbc_testcases/complex_control_flow.js:81:33
+    GetByIdShort      r18, r19, 3, "min"
+; hbc_testcases/complex_control_flow.js:81:34
+    Add               r16, r17, r9
+; hbc_testcases/complex_control_flow.js:81:44
+    GetByIdShort      r15, r14, 1, "length"
+; hbc_testcases/complex_control_flow.js:81:33
+    Call3             r16, r18, r19, r16, r15
+; hbc_testcases/complex_control_flow.js:81:33
+    Mov               r18, r17
+; hbc_testcases/complex_control_flow.js:81:33
+    Mov               r15, r18
+; hbc_testcases/complex_control_flow.js:81:5
+    JNotLess          L3, r15, r16
+L4:
+; hbc_testcases/complex_control_flow.js:82:14
+    GetByVal          r19, r14, r18
+; hbc_testcases/complex_control_flow.js:82:14
+    Mov               r16, r18
+; hbc_testcases/complex_control_flow.js:82:14
+    Mov               r15, r16
+; hbc_testcases/complex_control_flow.js:82:7
+    JGreater          L3, r19, r8
+; hbc_testcases/complex_control_flow.js:85:18
+    GetByIdShort      r20, r2, 4, "push"
+; hbc_testcases/complex_control_flow.js:85:22
+    GetByVal          r19, r14, r16
+; hbc_testcases/complex_control_flow.js:85:18
+    Call2             r19, r20, r2, r19
+; hbc_testcases/complex_control_flow.js:85:18
+    Inc               r18, r16
+; hbc_testcases/complex_control_flow.js:81:25
+    TryGetById        r22, r10, 2, "Math"
+; hbc_testcases/complex_control_flow.js:81:33
+    GetByIdShort      r21, r22, 3, "min"
+; hbc_testcases/complex_control_flow.js:81:34
+    Add               r20, r17, r9
+; hbc_testcases/complex_control_flow.js:81:44
+    GetByIdShort      r16, r14, 1, "length"
+; hbc_testcases/complex_control_flow.js:81:33
+    Call3             r16, r21, r22, r20, r16
+; hbc_testcases/complex_control_flow.js:81:33
+    Mov               r15, r18
+; hbc_testcases/complex_control_flow.js:81:5
+    JLess             L4, r15, r16
+L3:
+; hbc_testcases/complex_control_flow.js:81:5
+    Inc               r16, r17
+; hbc_testcases/complex_control_flow.js:81:5
+    Jmp               L5
+L2:
+; hbc_testcases/complex_control_flow.js:81:5
+    Inc               r16, r17
+; hbc_testcases/complex_control_flow.js:81:5
+    Mov               r15, r1
+L5:
+; hbc_testcases/complex_control_flow.js:74:17
+    GetByIdShort      r1, r14, 1, "length"
+; hbc_testcases/complex_control_flow.js:74:10
+    Less              r1, r16, r1
+; hbc_testcases/complex_control_flow.js:74:10
+    LoadConstZero     r3
+; hbc_testcases/complex_control_flow.js:74:10
+    LoadConstZero     r0
+; hbc_testcases/complex_control_flow.js:74:10
+    JmpFalse          L1, r1
+; hbc_testcases/complex_control_flow.js:74:34
+    GetByIdShort      r1, r2, 1, "length"
+; hbc_testcases/complex_control_flow.js:74:28
+    Less              r1, r1, r12
+; hbc_testcases/complex_control_flow.js:74:28
+    Mov               r6, r16
+; hbc_testcases/complex_control_flow.js:74:28
+    Mov               r11, r15
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstZero     r3
+; hbc_testcases/complex_control_flow.js:74:28
+    LoadConstZero     r0
+; hbc_testcases/complex_control_flow.js:74:28
+    JmpTrueLong       L6, r1
+L1:
+; hbc_testcases/complex_control_flow.js:95:21
+    GetByIdShort      r7, r2, 1, "length"
+; hbc_testcases/complex_control_flow.js:95:21
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:95:21
+    Mov               r6, r0
+; hbc_testcases/complex_control_flow.js:95:21
+    Mov               r1, r8
+; hbc_testcases/complex_control_flow.js:95:5
+    JNotLess          L7, r6, r7
+; hbc_testcases/complex_control_flow.js:96:20
+    GetByVal          r7, r2, r6
+; hbc_testcases/complex_control_flow.js:96:11
+    Add               r1, r8, r7
+L7:
+; hbc_testcases/complex_control_flow.js:96:11
+    Inc               r6, r6
+; hbc_testcases/complex_control_flow.js:96:11
+    JNotLess          L8, r6, r4
+; hbc_testcases/complex_control_flow.js:96:11
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:96:11
+    Mov               r3, r1
+; hbc_testcases/complex_control_flow.js:96:11
+    JLess             L1, r3, r5
+L8:
+; hbc_testcases/complex_control_flow.js:96:11
+    NewObject         r0
+; hbc_testcases/complex_control_flow.js:101:10
+    PutNewOwnByIdShort r0, r2, "result"
+; hbc_testcases/complex_control_flow.js:101:10
+    PutNewOwnByIdShort r0, r1, "sum"
+; hbc_testcases/complex_control_flow.js:101:10
+    Ret               r0
+
+Function<switchWithFallthrough>4(3 params, 11 registers, 0 symbols):
+Offset in debug table: source 0x0324, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadParam         r5, 1
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadParam         r6, 2
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadConstUInt8    r4, 1
+; hbc_testcases/complex_control_flow.js:104:1
+    JStrictEqual      L1, r4, r6
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadConstString   r9, ""
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadConstUInt8    r0, 2
+; hbc_testcases/complex_control_flow.js:104:1
+    Mov               r2, r9
+; hbc_testcases/complex_control_flow.js:104:1
+    JStrictEqual      L2, r0, r6
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadConstUInt8    r0, 3
+; hbc_testcases/complex_control_flow.js:104:1
+    Mov               r3, r9
+; hbc_testcases/complex_control_flow.js:104:1
+    JStrictEqual      L3, r0, r6
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadConstString   r0, "unknown"
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadConstUInt8    r1, 4
+; hbc_testcases/complex_control_flow.js:104:1
+    JStrictNotEqualLong L4, r1, r6
+; hbc_testcases/complex_control_flow.js:104:1
+    LoadConstZero     r7
+; hbc_testcases/complex_control_flow.js:132:23
+    Less              r8, r7, r5
+; hbc_testcases/complex_control_flow.js:132:23
+    LoadConstUInt8    r6, 5
+; hbc_testcases/complex_control_flow.js:132:23
+    Mov               r1, r9
+; hbc_testcases/complex_control_flow.js:132:23
+    Mov               r0, r1
+; hbc_testcases/complex_control_flow.js:132:23
+    JmpFalse          L4, r8
+L5:
+; hbc_testcases/complex_control_flow.js:132:23
+    Mov               r9, r1
+; hbc_testcases/complex_control_flow.js:132:23
+    Mov               r8, r7
+; hbc_testcases/complex_control_flow.js:132:23
+    Mov               r0, r9
+; hbc_testcases/complex_control_flow.js:132:23
+    JGreater          L4, r8, r6
+; hbc_testcases/complex_control_flow.js:134:16
+    Add               r1, r9, r8
+; hbc_testcases/complex_control_flow.js:134:16
+    Inc               r7, r8
+; hbc_testcases/complex_control_flow.js:134:16
+    Mov               r0, r1
+; hbc_testcases/complex_control_flow.js:132:7
+    JLess             L5, r7, r5
+; hbc_testcases/complex_control_flow.js:132:7
+    Jmp               L4
+L1:
+; hbc_testcases/complex_control_flow.js:132:7
+    LoadConstString   r2, "mode1-"
+L2:
+; hbc_testcases/complex_control_flow.js:132:7
+    LoadConstString   r1, "mode2-"
+; hbc_testcases/complex_control_flow.js:132:7
+    Add               r2, r2, r1
+; hbc_testcases/complex_control_flow.js:132:7
+    LoadConstUInt8    r1, 10
+; hbc_testcases/complex_control_flow.js:132:7
+    Mov               r3, r2
+; hbc_testcases/complex_control_flow.js:113:7
+    JGreater          L6, r5, r1
+L3:
+; hbc_testcases/complex_control_flow.js:113:7
+    LoadConstString   r1, "mode3-"
+; hbc_testcases/complex_control_flow.js:113:7
+    Add               r3, r3, r1
+; hbc_testcases/complex_control_flow.js:113:7
+    LoadConstUInt8    r1, 3
+; hbc_testcases/complex_control_flow.js:120:15
+    Mod               r1, r5, r1
+; hbc_testcases/complex_control_flow.js:120:15
+    LoadConstZero     r5
+; hbc_testcases/complex_control_flow.js:120:15
+    JStrictEqual      L7, r5, r1
+; hbc_testcases/complex_control_flow.js:120:15
+    JStrictEqual      L8, r4, r1
+; hbc_testcases/complex_control_flow.js:120:15
+    LoadConstString   r1, "two"
+; hbc_testcases/complex_control_flow.js:120:15
+    Add               r0, r3, r1
+; hbc_testcases/complex_control_flow.js:120:15
+    Jmp               L4
+L8:
+; hbc_testcases/complex_control_flow.js:120:15
+    LoadConstString   r1, "one"
+; hbc_testcases/complex_control_flow.js:120:15
+    Add               r0, r3, r1
+; hbc_testcases/complex_control_flow.js:120:15
+    Jmp               L4
+L7:
+; hbc_testcases/complex_control_flow.js:120:15
+    LoadConstString   r1, "zero"
+; hbc_testcases/complex_control_flow.js:120:15
+    Add               r0, r3, r1
+; hbc_testcases/complex_control_flow.js:120:15
+    Jmp               L4
+L6:
+; hbc_testcases/complex_control_flow.js:120:15
+    LoadConstString   r1, "high-"
+; hbc_testcases/complex_control_flow.js:120:15
+    Add               r0, r2, r1
+L4:
+; hbc_testcases/complex_control_flow.js:120:15
+    Ret               r0
+
+Function<complexLoopWithMultipleExits>5(2 params, 18 registers, 0 symbols):
+Offset in debug table: source 0x0356, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:144:1
+    LoadConstUndefined r10
+; hbc_testcases/complex_control_flow.js:144:1
+    LoadConstUndefined r11
+; hbc_testcases/complex_control_flow.js:144:1
+    LoadConstUndefined r12
+; hbc_testcases/complex_control_flow.js:144:1
+    LoadConstUndefined r13
+; hbc_testcases/complex_control_flow.js:144:1
+    LoadConstZero     r2
+; hbc_testcases/complex_control_flow.js:144:1
+    LoadConstZero     r1
+; hbc_testcases/complex_control_flow.js:144:1
+    LoadParam         r8, 1
+; hbc_testcases/complex_control_flow.js:148:13
+    IteratorBegin     r3, r8
+; hbc_testcases/complex_control_flow.js:148:13
+    LoadConstUInt8    r7, 3
+; hbc_testcases/complex_control_flow.js:148:13
+    LoadConstUInt8    r6, 5
+; hbc_testcases/complex_control_flow.js:148:13
+    LoadConstUInt8    r5, 4
+; hbc_testcases/complex_control_flow.js:148:13
+    LoadConstUInt8    r4, 100
+; hbc_testcases/complex_control_flow.js:148:13
+    LoadConstUInt8    r0, 2
+L4:
+; hbc_testcases/complex_control_flow.js:148:13
+    IteratorNext      r14, r3, r8
+; hbc_testcases/complex_control_flow.js:148:13
+    Mov               r15, r3
+; hbc_testcases/complex_control_flow.js:148:13
+    JStrictEqualLong  L1, r15, r10
+L24:
+; hbc_testcases/complex_control_flow.js:148:13
+    Mov               r11, r14
+; hbc_testcases/complex_control_flow.js:148:13
+    JmpFalse          L2, r14
+; hbc_testcases/complex_control_flow.js:148:13
+    Mov               r14, r11
+; hbc_testcases/complex_control_flow.js:149:31
+    GetByIdShort      r14, r14, 1, "items"
+; hbc_testcases/complex_control_flow.js:149:31
+    JmpTrue           L3, r14
+L2:
+; hbc_testcases/complex_control_flow.js:149:31
+    Mov               r14, r1
+; hbc_testcases/complex_control_flow.js:149:31
+    Inc               r1, r14
+L25:
+; hbc_testcases/complex_control_flow.js:151:7
+    Jmp               L4
+L3:
+; hbc_testcases/complex_control_flow.js:151:7
+    Mov               r14, r11
+; hbc_testcases/complex_control_flow.js:154:30
+    GetByIdShort      r16, r14, 1, "items"
+; hbc_testcases/complex_control_flow.js:154:30
+    Mov               r14, r16
+; hbc_testcases/complex_control_flow.js:154:5
+    IteratorBegin     r15, r14
+L15:
+; hbc_testcases/complex_control_flow.js:154:5
+    IteratorNext      r16, r15, r14
+; hbc_testcases/complex_control_flow.js:154:5
+    Mov               r17, r15
+; hbc_testcases/complex_control_flow.js:154:5
+    JStrictEqualLong  L5, r17, r10
+L21:
+; hbc_testcases/complex_control_flow.js:154:5
+    Mov               r12, r16
+; hbc_testcases/complex_control_flow.js:155:15
+    GetByIdShort      r16, r16, 2, "skip"
+; hbc_testcases/complex_control_flow.js:155:15
+    JmpTrueLong       L6, r16
+; hbc_testcases/complex_control_flow.js:155:15
+    Mov               r16, r12
+; hbc_testcases/complex_control_flow.js:159:15
+    GetByIdShort      r16, r16, 3, "critical_error"
+; hbc_testcases/complex_control_flow.js:159:15
+    JmpTrueLong       L7, r16
+; hbc_testcases/complex_control_flow.js:159:15
+    LoadConstZero     r13
+L14:
+; hbc_testcases/complex_control_flow.js:159:15
+    Mov               r16, r13
+; hbc_testcases/complex_control_flow.js:159:15
+    JStrictNotEqual   L8, r16, r0
+; hbc_testcases/complex_control_flow.js:159:15
+    Mov               r16, r12
+; hbc_testcases/complex_control_flow.js:169:31
+    GetByIdShort      r16, r16, 4, "fast_track"
+; hbc_testcases/complex_control_flow.js:169:31
+    JmpTrue           L9, r16
+L8:
+; hbc_testcases/complex_control_flow.js:169:31
+    Mov               r16, r12
+; hbc_testcases/complex_control_flow.js:174:17
+    GetByIdShort      r16, r16, 5, "value"
+; hbc_testcases/complex_control_flow.js:174:17
+    JmpFalse          L10, r16
+; hbc_testcases/complex_control_flow.js:174:17
+    Mov               r16, r12
+; hbc_testcases/complex_control_flow.js:174:31
+    GetByIdShort      r17, r16, 5, "value"
+; hbc_testcases/complex_control_flow.js:174:31
+    Mov               r16, r13
+; hbc_testcases/complex_control_flow.js:174:37
+    GetByVal          r16, r17, r16
+; hbc_testcases/complex_control_flow.js:174:37
+    JmpFalse          L10, r16
+; hbc_testcases/complex_control_flow.js:174:37
+    Mov               r16, r2
+; hbc_testcases/complex_control_flow.js:174:37
+    Inc               r16, r16
+; hbc_testcases/complex_control_flow.js:174:37
+    Mov               r2, r16
+; hbc_testcases/complex_control_flow.js:174:37
+    JGreater          L11, r16, r4
+L10:
+; hbc_testcases/complex_control_flow.js:174:37
+    Mov               r16, r13
+; hbc_testcases/complex_control_flow.js:174:37
+    JStrictNotEqual   L12, r16, r7
+; hbc_testcases/complex_control_flow.js:174:37
+    Mov               r16, r12
+; hbc_testcases/complex_control_flow.js:181:31
+    GetByIdShort      r16, r16, 6, "early_exit"
+; hbc_testcases/complex_control_flow.js:181:31
+    JmpTrue           L13, r16
+; hbc_testcases/complex_control_flow.js:181:31
+    Jmp               L12
+L11:
+; hbc_testcases/complex_control_flow.js:181:31
+    NewObject         r16
+; hbc_testcases/complex_control_flow.js:181:31
+    LoadConstString   r17, "limit_reached"
+; hbc_testcases/complex_control_flow.js:177:20
+    PutNewOwnByIdShort r16, r17, "status"
+; hbc_testcases/complex_control_flow.js:177:20
+    Mov               r17, r2
+; hbc_testcases/complex_control_flow.js:177:20
+    PutNewOwnByIdShort r16, r17, "processed"
+; hbc_testcases/complex_control_flow.js:177:20
+    Mov               r17, r1
+; hbc_testcases/complex_control_flow.js:177:20
+    PutNewOwnByIdShort r16, r17, "errors"
+L22:
+; hbc_testcases/complex_control_flow.js:177:13
+    IteratorClose     r15, 0
+L26:
+; hbc_testcases/complex_control_flow.js:177:13
+    IteratorClose     r3, 0
+; hbc_testcases/complex_control_flow.js:177:13
+    Ret               r16
+L9:
+; hbc_testcases/complex_control_flow.js:177:13
+    Mov               r13, r5
+L12:
+; hbc_testcases/complex_control_flow.js:177:13
+    Mov               r16, r13
+; hbc_testcases/complex_control_flow.js:177:13
+    Inc               r16, r16
+; hbc_testcases/complex_control_flow.js:177:13
+    Mov               r13, r16
+; hbc_testcases/complex_control_flow.js:177:13
+    JLess             L14, r16, r6
+L13:
+; hbc_testcases/complex_control_flow.js:185:5
+    JmpLong           L15
+L7:
+; hbc_testcases/complex_control_flow.js:185:5
+    Mov               r16, r1
+; hbc_testcases/complex_control_flow.js:185:5
+    Inc               r16, r16
+; hbc_testcases/complex_control_flow.js:185:5
+    Mov               r1, r16
+; hbc_testcases/complex_control_flow.js:185:5
+    JGreater          L16, r16, r7
+L23:
+; hbc_testcases/complex_control_flow.js:164:9
+    JmpLong           L15
+L16:
+; hbc_testcases/complex_control_flow.js:162:11
+    IteratorClose     r15, 0
+L27:
+; hbc_testcases/complex_control_flow.js:162:11
+    IteratorClose     r3, 0
+; hbc_testcases/complex_control_flow.js:162:11
+    Jmp               L1
+L6:
+; hbc_testcases/complex_control_flow.js:156:9
+    JmpLong           L15
+L17:
+; hbc_testcases/complex_control_flow.js:185:5
+    Catch             r14
+; hbc_testcases/complex_control_flow.js:185:5
+    IteratorClose     r15, 1
+; hbc_testcases/complex_control_flow.js:185:5
+    Throw             r14
+L5:
+; hbc_testcases/complex_control_flow.js:185:5
+    Mov               r14, r11
+; hbc_testcases/complex_control_flow.js:187:17
+    GetByIdShort      r14, r14, 7, "stop_after"
+; hbc_testcases/complex_control_flow.js:187:17
+    JmpTrue           L18, r14
+L28:
+; hbc_testcases/complex_control_flow.js:190:3
+    JmpLong           L4
+L18:
+; hbc_testcases/complex_control_flow.js:188:7
+    IteratorClose     r3, 0
+; hbc_testcases/complex_control_flow.js:188:7
+    Jmp               L1
+L19:
+; hbc_testcases/complex_control_flow.js:190:3
+    Catch             r0
+; hbc_testcases/complex_control_flow.js:190:3
+    IteratorClose     r3, 1
+; hbc_testcases/complex_control_flow.js:190:3
+    Throw             r0
+L1:
+; hbc_testcases/complex_control_flow.js:190:3
+    NewObject         r0
+; hbc_testcases/complex_control_flow.js:190:3
+    LoadConstString   r3, "completed"
+; hbc_testcases/complex_control_flow.js:192:10
+    PutNewOwnByIdShort r0, r3, "status"
+; hbc_testcases/complex_control_flow.js:192:10
+    PutNewOwnByIdShort r0, r2, "processed"
+; hbc_testcases/complex_control_flow.js:192:10
+    PutNewOwnByIdShort r0, r1, "errors"
+; hbc_testcases/complex_control_flow.js:192:10
+    Ret               r0
+
+Exception Handlers:
+0: start = L21, end = L22, target = L17
+1: start = L9, end = L13, target = L17
+2: start = L7, end = L23, target = L17
+3: start = L24, end = L25, target = L19
+4: start = L3, end = L26, target = L19
+5: start = L9, end = L27, target = L19
+6: start = L6, end = L28, target = L19
+
+Function<ternaryAndShortCircuit>6(4 params, 8 registers, 0 symbols):
+Offset in debug table: source 0x049f, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:195:1
+    LoadParam         r2, 1
+; hbc_testcases/complex_control_flow.js:195:1
+    LoadParam         r0, 2
+; hbc_testcases/complex_control_flow.js:195:1
+    LoadParam         r1, 3
+; hbc_testcases/complex_control_flow.js:195:1
+    LoadConstZero     r3
+; hbc_testcases/complex_control_flow.js:197:17
+    JGreater          L1, r2, r3
+; hbc_testcases/complex_control_flow.js:197:78
+    JGreater          L2, r0, r3
+; hbc_testcases/complex_control_flow.js:197:95
+    Negate            r4, r2
+; hbc_testcases/complex_control_flow.js:197:95
+    Sub               r7, r4, r0
+; hbc_testcases/complex_control_flow.js:197:95
+    Jmp               L3
+L2:
+; hbc_testcases/complex_control_flow.js:197:86
+    Negate            r4, r2
+; hbc_testcases/complex_control_flow.js:197:86
+    Add               r7, r4, r0
+L3:
+; hbc_testcases/complex_control_flow.js:197:86
+    Jmp               L4
+L1:
+; hbc_testcases/complex_control_flow.js:197:26
+    JGreater          L5, r0, r3
+; hbc_testcases/complex_control_flow.js:197:68
+    Sub               r4, r2, r0
+; hbc_testcases/complex_control_flow.js:197:68
+    Jmp               L6
+L5:
+; hbc_testcases/complex_control_flow.js:197:35
+    JGreater          L7, r1, r3
+; hbc_testcases/complex_control_flow.js:197:55
+    Add               r5, r2, r0
+; hbc_testcases/complex_control_flow.js:197:55
+    Sub               r5, r5, r1
+; hbc_testcases/complex_control_flow.js:197:55
+    Jmp               L8
+L7:
+; hbc_testcases/complex_control_flow.js:197:43
+    Add               r6, r2, r0
+; hbc_testcases/complex_control_flow.js:197:43
+    Add               r5, r6, r1
+L8:
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r4, r5
+L6:
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r7, r4
+L4:
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r5, r2
+; hbc_testcases/complex_control_flow.js:197:43
+    JmpFalse          L9, r2
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r5, r0
+L9:
+; hbc_testcases/complex_control_flow.js:197:43
+    JmpFalse          L10, r5
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r5, r1
+L10:
+; hbc_testcases/complex_control_flow.js:197:43
+    JmpTrue           L11, r5
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r4, r2
+; hbc_testcases/complex_control_flow.js:197:43
+    JmpFalse          L12, r2
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r4, r0
+L12:
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r5, r4
+L11:
+; hbc_testcases/complex_control_flow.js:197:43
+    JmpTrue           L13, r5
+; hbc_testcases/complex_control_flow.js:197:43
+    Mov               r5, r2
+L13:
+; hbc_testcases/complex_control_flow.js:197:43
+    JmpTrue           L14, r5
+; hbc_testcases/complex_control_flow.js:197:43
+    LoadConstZero     r5
+L14:
+; hbc_testcases/complex_control_flow.js:203:3
+    JGreater          L15, r7, r5
+; hbc_testcases/complex_control_flow.js:205:10
+    JLess             L16, r7, r5
+; hbc_testcases/complex_control_flow.js:205:10
+    LoadConstString   r3, "equal"
+; hbc_testcases/complex_control_flow.js:205:10
+    Ret               r3
+L16:
+; hbc_testcases/complex_control_flow.js:205:10
+    JmpFalse          L17, r7
+; hbc_testcases/complex_control_flow.js:205:10
+    LoadConstString   r3, "both_truthy"
+; hbc_testcases/complex_control_flow.js:205:10
+    JmpTrue           L18, r5
+L17:
+; hbc_testcases/complex_control_flow.js:205:10
+    LoadConstString   r6, "mixed"
+; hbc_testcases/complex_control_flow.js:205:10
+    Mov               r4, r6
+; hbc_testcases/complex_control_flow.js:205:10
+    JmpTrue           L19, r7
+; hbc_testcases/complex_control_flow.js:205:10
+    Mov               r4, r6
+; hbc_testcases/complex_control_flow.js:205:10
+    JmpTrue           L19, r5
+; hbc_testcases/complex_control_flow.js:205:10
+    LoadConstString   r4, "both_falsy"
+L19:
+; hbc_testcases/complex_control_flow.js:205:10
+    Mov               r3, r4
+L18:
+; hbc_testcases/complex_control_flow.js:205:10
+    Ret               r3
+L15:
+; hbc_testcases/complex_control_flow.js:204:12
+    JGreater          L20, r2, r0
+; hbc_testcases/complex_control_flow.js:204:51
+    Greater           r3, r1, r0
+; hbc_testcases/complex_control_flow.js:204:51
+    LoadConstString   r0, "case4"
+; hbc_testcases/complex_control_flow.js:204:51
+    JmpFalse          L21, r3
+; hbc_testcases/complex_control_flow.js:204:51
+    LoadConstString   r0, "case3"
+L21:
+; hbc_testcases/complex_control_flow.js:204:51
+    Jmp               L22
+L20:
+; hbc_testcases/complex_control_flow.js:204:21
+    Greater           r2, r1, r2
+; hbc_testcases/complex_control_flow.js:204:21
+    LoadConstString   r1, "case2"
+; hbc_testcases/complex_control_flow.js:204:21
+    JmpFalse          L23, r2
+; hbc_testcases/complex_control_flow.js:204:21
+    LoadConstString   r1, "case1"
+L23:
+; hbc_testcases/complex_control_flow.js:204:21
+    Mov               r0, r1
+L22:
+; hbc_testcases/complex_control_flow.js:204:21
+    Ret               r0
+
+Function<exceptionHandlingControlFlow>7(2 params, 30 registers, 0 symbols):
+Offset in debug table: source 0x0546, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:212:1
+    LoadParam         r0, 1
+; hbc_testcases/complex_control_flow.js:212:1
+    Mov               r3, r0
+; hbc_testcases/complex_control_flow.js:212:1
+    LoadConstUndefined r15
+; hbc_testcases/complex_control_flow.js:212:1
+    LoadConstUndefined r16
+; hbc_testcases/complex_control_flow.js:212:1
+    NewArray          r7, 0
+; hbc_testcases/complex_control_flow.js:212:1
+    NewArray          r1, 0
+; hbc_testcases/complex_control_flow.js:212:1
+    LoadConstZero     r14
+; hbc_testcases/complex_control_flow.js:212:1
+    LoadConstZero     r6
+; hbc_testcases/complex_control_flow.js:216:33
+    GetByIdShort      r0, r0, 1, "length"
+; hbc_testcases/complex_control_flow.js:216:33
+    LoadConstString   r5, "cleanup: "
+; hbc_testcases/complex_control_flow.js:216:33
+    GetGlobalObject   r2
+; hbc_testcases/complex_control_flow.js:216:33
+    LoadConstDouble   r4, 0.9
+; hbc_testcases/complex_control_flow.js:216:33
+    LoadConstString   r13, "processed"
+; hbc_testcases/complex_control_flow.js:216:33
+    LoadConstUInt8    r12, 5
+; hbc_testcases/complex_control_flow.js:216:33
+    LoadConstUInt8    r11, 2
+; hbc_testcases/complex_control_flow.js:216:33
+    LoadConstString   r10, "process"
+; hbc_testcases/complex_control_flow.js:216:33
+    LoadConstString   r9, "divide"
+; hbc_testcases/complex_control_flow.js:216:3
+    JNotLessLong      L1, r14, r0
+L20:
+; hbc_testcases/complex_control_flow.js:216:3
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:216:3
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:218:26
+    GetByVal          r0, r8, r0
+; hbc_testcases/complex_control_flow.js:218:26
+    Mov               r15, r0
+; hbc_testcases/complex_control_flow.js:220:13
+    GetByIdShort      r0, r0, 2, "type"
+; hbc_testcases/complex_control_flow.js:220:13
+    JStrictEqualLong  L2, r0, r9
+; hbc_testcases/complex_control_flow.js:220:13
+    Mov               r0, r15
+; hbc_testcases/complex_control_flow.js:225:20
+    GetByIdShort      r0, r0, 2, "type"
+; hbc_testcases/complex_control_flow.js:225:20
+    JStrictEqual      L3, r0, r10
+; hbc_testcases/complex_control_flow.js:242:19
+    TryGetById        r18, r2, 3, "Error"
+; hbc_testcases/complex_control_flow.js:242:24
+    GetByIdShort      r0, r18, 4, "prototype"
+; hbc_testcases/complex_control_flow.js:242:24
+    CreateThis        r8, r0, r18
+; hbc_testcases/complex_control_flow.js:242:24
+    LoadConstString   r22, "Unknown operation"
+; hbc_testcases/complex_control_flow.js:242:24
+    Mov               r23, r8
+; hbc_testcases/complex_control_flow.js:242:24
+    Construct         r0, r18, 2
+; hbc_testcases/complex_control_flow.js:242:24
+    SelectObject      r0, r8, r0
+; hbc_testcases/complex_control_flow.js:242:9
+    Throw             r0
+L3:
+; hbc_testcases/complex_control_flow.js:242:9
+    LoadConstZero     r16
+; hbc_testcases/complex_control_flow.js:242:9
+    Mov               r0, r15
+; hbc_testcases/complex_control_flow.js:226:31
+    GetByIdShort      r0, r0, 5, "steps"
+; hbc_testcases/complex_control_flow.js:226:9
+    JNotLess          L4, r14, r0
+L10:
+; hbc_testcases/complex_control_flow.js:226:9
+    Mov               r0, r16
+; hbc_testcases/complex_control_flow.js:226:9
+    JStrictNotEqual   L5, r0, r11
+; hbc_testcases/complex_control_flow.js:226:9
+    Mov               r0, r15
+; hbc_testcases/complex_control_flow.js:228:30
+    GetByIdShort      r0, r0, 6, "fail_at_step_2"
+; hbc_testcases/complex_control_flow.js:228:30
+    JmpTrue           L6, r0
+L5:
+; hbc_testcases/complex_control_flow.js:228:30
+    Mov               r0, r16
+; hbc_testcases/complex_control_flow.js:228:30
+    JGreater          L7, r0, r12
+L28:
+; hbc_testcases/complex_control_flow.js:232:11
+    Jmp               L8
+L7:
+; hbc_testcases/complex_control_flow.js:231:24
+    Jmp               L4
+L6:
+; hbc_testcases/complex_control_flow.js:229:25
+    TryGetById        r18, r2, 3, "Error"
+; hbc_testcases/complex_control_flow.js:229:30
+    GetByIdShort      r0, r18, 4, "prototype"
+; hbc_testcases/complex_control_flow.js:229:30
+    CreateThis        r8, r0, r18
+; hbc_testcases/complex_control_flow.js:229:30
+    LoadConstString   r22, "Step 2 failed"
+; hbc_testcases/complex_control_flow.js:229:30
+    Mov               r23, r8
+; hbc_testcases/complex_control_flow.js:229:30
+    Construct         r0, r18, 2
+; hbc_testcases/complex_control_flow.js:229:30
+    SelectObject      r0, r8, r0
+; hbc_testcases/complex_control_flow.js:229:15
+    Throw             r0
+L9:
+; hbc_testcases/complex_control_flow.js:232:13
+    Catch             r17
+; hbc_testcases/complex_control_flow.js:232:13
+    Mov               r0, r15
+; hbc_testcases/complex_control_flow.js:233:19
+    GetByIdShort      r0, r0, 7, "continue_on_error"
+; hbc_testcases/complex_control_flow.js:233:19
+    JmpTrue           L8, r0
+; hbc_testcases/complex_control_flow.js:233:19
+    Mov               r0, r17
+; hbc_testcases/complex_control_flow.js:236:15
+    Throw             r0
+L8:
+; hbc_testcases/complex_control_flow.js:236:15
+    Mov               r0, r16
+; hbc_testcases/complex_control_flow.js:236:15
+    Inc               r8, r0
+; hbc_testcases/complex_control_flow.js:236:15
+    Mov               r16, r8
+; hbc_testcases/complex_control_flow.js:236:15
+    Mov               r0, r15
+; hbc_testcases/complex_control_flow.js:226:31
+    GetByIdShort      r0, r0, 5, "steps"
+; hbc_testcases/complex_control_flow.js:226:9
+    JLess             L10, r8, r0
+L4:
+; hbc_testcases/complex_control_flow.js:226:9
+    Mov               r8, r7
+; hbc_testcases/complex_control_flow.js:240:23
+    GetByIdShort      r0, r8, 8, "push"
+; hbc_testcases/complex_control_flow.js:240:23
+    Call2             r0, r0, r8, r13
+; hbc_testcases/complex_control_flow.js:240:23
+    Jmp               L11
+L2:
+; hbc_testcases/complex_control_flow.js:240:23
+    Mov               r0, r15
+; hbc_testcases/complex_control_flow.js:221:15
+    GetByIdShort      r0, r0, 9, "b"
+; hbc_testcases/complex_control_flow.js:221:15
+    JStrictEqualLong  L12, r0, r14
+; hbc_testcases/complex_control_flow.js:221:15
+    Mov               r18, r7
+; hbc_testcases/complex_control_flow.js:224:23
+    GetByIdShort      r8, r18, 8, "push"
+; hbc_testcases/complex_control_flow.js:224:23
+    Mov               r0, r15
+; hbc_testcases/complex_control_flow.js:224:26
+    GetByIdShort      r19, r0, 10, "a"
+; hbc_testcases/complex_control_flow.js:224:33
+    GetByIdShort      r0, r0, 9, "b"
+; hbc_testcases/complex_control_flow.js:224:24
+    Div               r0, r19, r0
+; hbc_testcases/complex_control_flow.js:224:23
+    Call2             r0, r8, r18, r0
+L11:
+; hbc_testcases/complex_control_flow.js:252:5
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:252:5
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:254:21
+    GetByVal          r0, r8, r0
+; hbc_testcases/complex_control_flow.js:254:21
+    JmpFalseLong      L13, r0
+; hbc_testcases/complex_control_flow.js:254:21
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:254:21
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:254:38
+    GetByVal          r0, r8, r0
+; hbc_testcases/complex_control_flow.js:254:41
+    GetByIdShort      r0, r0, 11, "cleanup"
+; hbc_testcases/complex_control_flow.js:254:41
+    JmpFalseLong      L13, r0
+L29:
+; hbc_testcases/complex_control_flow.js:258:15
+    TryGetById        r8, r2, 12, "Math"
+; hbc_testcases/complex_control_flow.js:258:26
+    GetByIdShort      r0, r8, 13, "random"
+; hbc_testcases/complex_control_flow.js:258:26
+    Call1             r0, r0, r8
+; hbc_testcases/complex_control_flow.js:258:11
+    JGreater          L14, r0, r4
+L30:
+; hbc_testcases/complex_control_flow.js:261:9
+    JmpLong           L13
+L14:
+; hbc_testcases/complex_control_flow.js:259:23
+    TryGetById        r18, r2, 3, "Error"
+; hbc_testcases/complex_control_flow.js:259:28
+    GetByIdShort      r0, r18, 4, "prototype"
+; hbc_testcases/complex_control_flow.js:259:28
+    CreateThis        r8, r0, r18
+; hbc_testcases/complex_control_flow.js:259:28
+    LoadConstString   r22, "Cleanup failed"
+; hbc_testcases/complex_control_flow.js:259:28
+    Mov               r23, r8
+; hbc_testcases/complex_control_flow.js:259:28
+    Construct         r0, r18, 2
+; hbc_testcases/complex_control_flow.js:259:28
+    SelectObject      r0, r8, r0
+; hbc_testcases/complex_control_flow.js:259:13
+    Throw             r0
+L15:
+; hbc_testcases/complex_control_flow.js:261:11
+    Catch             r19
+; hbc_testcases/complex_control_flow.js:261:11
+    Mov               r18, r1
+; hbc_testcases/complex_control_flow.js:263:22
+    GetByIdShort      r8, r18, 8, "push"
+; hbc_testcases/complex_control_flow.js:263:22
+    NewObject         r0
+; hbc_testcases/complex_control_flow.js:263:22
+    Mov               r20, r6
+; hbc_testcases/complex_control_flow.js:263:23
+    PutNewOwnByIdShort r0, r20, "index"
+; hbc_testcases/complex_control_flow.js:263:67
+    GetByIdShort      r19, r19, 14, "message"
+; hbc_testcases/complex_control_flow.js:263:41
+    Add               r19, r5, r19
+; hbc_testcases/complex_control_flow.js:263:23
+    PutNewOwnByIdShort r0, r19, "error"
+; hbc_testcases/complex_control_flow.js:263:22
+    Call2             r0, r8, r18, r0
+; hbc_testcases/complex_control_flow.js:263:22
+    JmpLong           L13
+L12:
+; hbc_testcases/complex_control_flow.js:222:21
+    TryGetById        r18, r2, 3, "Error"
+; hbc_testcases/complex_control_flow.js:222:26
+    GetByIdShort      r0, r18, 4, "prototype"
+; hbc_testcases/complex_control_flow.js:222:26
+    CreateThis        r8, r0, r18
+; hbc_testcases/complex_control_flow.js:222:26
+    LoadConstString   r22, "Division by zero"
+; hbc_testcases/complex_control_flow.js:222:26
+    Mov               r23, r8
+; hbc_testcases/complex_control_flow.js:222:26
+    Construct         r0, r18, 2
+; hbc_testcases/complex_control_flow.js:222:26
+    SelectObject      r0, r8, r0
+; hbc_testcases/complex_control_flow.js:222:11
+    Throw             r0
+L16:
+; hbc_testcases/complex_control_flow.js:244:7
+    Catch             r20
+; hbc_testcases/complex_control_flow.js:244:7
+    Mov               r19, r1
+; hbc_testcases/complex_control_flow.js:245:18
+    GetByIdShort      r18, r19, 8, "push"
+; hbc_testcases/complex_control_flow.js:245:18
+    NewObject         r0
+; hbc_testcases/complex_control_flow.js:245:18
+    Mov               r8, r6
+; hbc_testcases/complex_control_flow.js:245:19
+    PutNewOwnByIdShort r0, r8, "index"
+; hbc_testcases/complex_control_flow.js:245:42
+    GetByIdShort      r20, r20, 14, "message"
+; hbc_testcases/complex_control_flow.js:245:19
+    PutNewOwnByIdShort r0, r20, "error"
+; hbc_testcases/complex_control_flow.js:245:18
+    Call2             r0, r18, r19, r0
+; hbc_testcases/complex_control_flow.js:245:18
+    Mov               r0, r3
+; hbc_testcases/complex_control_flow.js:247:21
+    GetByVal          r0, r0, r8
+; hbc_testcases/complex_control_flow.js:247:24
+    GetByIdShort      r0, r0, 15, "critical"
+; hbc_testcases/complex_control_flow.js:247:24
+    JmpTrueLong       L17, r0
+L31:
+; hbc_testcases/complex_control_flow.js:252:15
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:252:15
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:254:21
+    GetByVal          r0, r8, r0
+; hbc_testcases/complex_control_flow.js:254:21
+    JmpFalse          L13, r0
+; hbc_testcases/complex_control_flow.js:254:21
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:254:21
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:254:38
+    GetByVal          r0, r8, r0
+; hbc_testcases/complex_control_flow.js:254:41
+    GetByIdShort      r0, r0, 11, "cleanup"
+; hbc_testcases/complex_control_flow.js:254:41
+    JmpFalse          L13, r0
+L32:
+; hbc_testcases/complex_control_flow.js:258:15
+    TryGetById        r8, r2, 12, "Math"
+; hbc_testcases/complex_control_flow.js:258:26
+    GetByIdShort      r0, r8, 13, "random"
+; hbc_testcases/complex_control_flow.js:258:26
+    Call1             r0, r0, r8
+; hbc_testcases/complex_control_flow.js:258:11
+    JGreater          L18, r0, r4
+L33:
+; hbc_testcases/complex_control_flow.js:261:9
+    Jmp               L13
+L18:
+; hbc_testcases/complex_control_flow.js:259:23
+    TryGetById        r18, r2, 3, "Error"
+; hbc_testcases/complex_control_flow.js:259:28
+    GetByIdShort      r0, r18, 4, "prototype"
+; hbc_testcases/complex_control_flow.js:259:28
+    CreateThis        r8, r0, r18
+; hbc_testcases/complex_control_flow.js:259:28
+    LoadConstString   r22, "Cleanup failed"
+; hbc_testcases/complex_control_flow.js:259:28
+    Mov               r23, r8
+; hbc_testcases/complex_control_flow.js:259:28
+    Construct         r0, r18, 2
+; hbc_testcases/complex_control_flow.js:259:28
+    SelectObject      r0, r8, r0
+; hbc_testcases/complex_control_flow.js:259:13
+    Throw             r0
+L19:
+; hbc_testcases/complex_control_flow.js:261:11
+    Catch             r19
+; hbc_testcases/complex_control_flow.js:261:11
+    Mov               r18, r1
+; hbc_testcases/complex_control_flow.js:263:22
+    GetByIdShort      r8, r18, 8, "push"
+; hbc_testcases/complex_control_flow.js:263:22
+    NewObject         r0
+; hbc_testcases/complex_control_flow.js:263:22
+    Mov               r20, r6
+; hbc_testcases/complex_control_flow.js:263:23
+    PutNewOwnByIdShort r0, r20, "index"
+; hbc_testcases/complex_control_flow.js:263:67
+    GetByIdShort      r19, r19, 14, "message"
+; hbc_testcases/complex_control_flow.js:263:41
+    Add               r19, r5, r19
+; hbc_testcases/complex_control_flow.js:263:23
+    PutNewOwnByIdShort r0, r19, "error"
+; hbc_testcases/complex_control_flow.js:263:22
+    Call2             r0, r8, r18, r0
+L13:
+; hbc_testcases/complex_control_flow.js:263:22
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:263:22
+    Inc               r8, r0
+; hbc_testcases/complex_control_flow.js:263:22
+    Mov               r6, r8
+; hbc_testcases/complex_control_flow.js:263:22
+    Mov               r0, r3
+; hbc_testcases/complex_control_flow.js:216:33
+    GetByIdShort      r0, r0, 1, "length"
+; hbc_testcases/complex_control_flow.js:216:3
+    JLessLong         L20, r8, r0
+; hbc_testcases/complex_control_flow.js:216:3
+    Jmp               L1
+L17:
+; hbc_testcases/complex_control_flow.js:252:15
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:252:15
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:254:21
+    GetByVal          r0, r8, r0
+; hbc_testcases/complex_control_flow.js:254:21
+    JmpFalse          L1, r0
+; hbc_testcases/complex_control_flow.js:254:21
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:254:21
+    Mov               r0, r6
+; hbc_testcases/complex_control_flow.js:254:38
+    GetByVal          r0, r8, r0
+; hbc_testcases/complex_control_flow.js:254:41
+    GetByIdShort      r0, r0, 11, "cleanup"
+; hbc_testcases/complex_control_flow.js:254:41
+    JmpFalse          L1, r0
+L34:
+; hbc_testcases/complex_control_flow.js:258:15
+    TryGetById        r8, r2, 12, "Math"
+; hbc_testcases/complex_control_flow.js:258:26
+    GetByIdShort      r0, r8, 13, "random"
+; hbc_testcases/complex_control_flow.js:258:26
+    Call1             r0, r0, r8
+; hbc_testcases/complex_control_flow.js:258:11
+    JGreater          L21, r0, r4
+L35:
+; hbc_testcases/complex_control_flow.js:261:9
+    Jmp               L1
+L21:
+; hbc_testcases/complex_control_flow.js:259:23
+    TryGetById        r9, r2, 3, "Error"
+; hbc_testcases/complex_control_flow.js:259:28
+    GetByIdShort      r0, r9, 4, "prototype"
+; hbc_testcases/complex_control_flow.js:259:28
+    CreateThis        r8, r0, r9
+; hbc_testcases/complex_control_flow.js:259:28
+    LoadConstString   r22, "Cleanup failed"
+; hbc_testcases/complex_control_flow.js:259:28
+    Mov               r23, r8
+; hbc_testcases/complex_control_flow.js:259:28
+    Construct         r0, r9, 2
+; hbc_testcases/complex_control_flow.js:259:28
+    SelectObject      r0, r8, r0
+; hbc_testcases/complex_control_flow.js:259:13
+    Throw             r0
+L22:
+; hbc_testcases/complex_control_flow.js:261:11
+    Catch             r10
+; hbc_testcases/complex_control_flow.js:261:11
+    Mov               r9, r1
+; hbc_testcases/complex_control_flow.js:263:22
+    GetByIdShort      r8, r9, 8, "push"
+; hbc_testcases/complex_control_flow.js:263:22
+    NewObject         r0
+; hbc_testcases/complex_control_flow.js:263:22
+    Mov               r11, r6
+; hbc_testcases/complex_control_flow.js:263:23
+    PutNewOwnByIdShort r0, r11, "index"
+; hbc_testcases/complex_control_flow.js:263:67
+    GetByIdShort      r10, r10, 14, "message"
+; hbc_testcases/complex_control_flow.js:263:41
+    Add               r10, r5, r10
+; hbc_testcases/complex_control_flow.js:263:23
+    PutNewOwnByIdShort r0, r10, "error"
+; hbc_testcases/complex_control_flow.js:263:22
+    Call2             r0, r8, r9, r0
+L1:
+; hbc_testcases/complex_control_flow.js:263:22
+    NewObject         r0
+; hbc_testcases/complex_control_flow.js:269:10
+    PutNewOwnByIdShort r0, r7, "completed"
+; hbc_testcases/complex_control_flow.js:269:10
+    Mov               r7, r1
+; hbc_testcases/complex_control_flow.js:269:10
+    PutNewOwnByIdShort r0, r7, "failed"
+; hbc_testcases/complex_control_flow.js:269:10
+    Ret               r0
+L23:
+; hbc_testcases/complex_control_flow.js:252:15
+    Catch             r0
+; hbc_testcases/complex_control_flow.js:252:15
+    Mov               r8, r3
+; hbc_testcases/complex_control_flow.js:252:15
+    Mov               r7, r6
+; hbc_testcases/complex_control_flow.js:254:21
+    GetByVal          r7, r8, r7
+; hbc_testcases/complex_control_flow.js:254:21
+    JmpFalse          L24, r7
+; hbc_testcases/complex_control_flow.js:254:21
+    Mov               r7, r3
+; hbc_testcases/complex_control_flow.js:254:21
+    Mov               r3, r6
+; hbc_testcases/complex_control_flow.js:254:38
+    GetByVal          r3, r7, r3
+; hbc_testcases/complex_control_flow.js:254:41
+    GetByIdShort      r3, r3, 11, "cleanup"
+; hbc_testcases/complex_control_flow.js:254:41
+    JmpFalse          L24, r3
+L36:
+; hbc_testcases/complex_control_flow.js:258:15
+    TryGetById        r7, r2, 12, "Math"
+; hbc_testcases/complex_control_flow.js:258:26
+    GetByIdShort      r3, r7, 13, "random"
+; hbc_testcases/complex_control_flow.js:258:26
+    Call1             r3, r3, r7
+; hbc_testcases/complex_control_flow.js:258:11
+    JGreater          L25, r3, r4
+L37:
+; hbc_testcases/complex_control_flow.js:261:9
+    Jmp               L24
+L25:
+; hbc_testcases/complex_control_flow.js:259:23
+    TryGetById        r4, r2, 3, "Error"
+; hbc_testcases/complex_control_flow.js:259:28
+    GetByIdShort      r2, r4, 4, "prototype"
+; hbc_testcases/complex_control_flow.js:259:28
+    CreateThis        r3, r2, r4
+; hbc_testcases/complex_control_flow.js:259:28
+    LoadConstString   r22, "Cleanup failed"
+; hbc_testcases/complex_control_flow.js:259:28
+    Mov               r23, r3
+; hbc_testcases/complex_control_flow.js:259:28
+    Construct         r2, r4, 2
+; hbc_testcases/complex_control_flow.js:259:28
+    SelectObject      r2, r3, r2
+; hbc_testcases/complex_control_flow.js:259:13
+    Throw             r2
+L26:
+; hbc_testcases/complex_control_flow.js:261:11
+    Catch             r4
+; hbc_testcases/complex_control_flow.js:261:11
+    Mov               r3, r1
+; hbc_testcases/complex_control_flow.js:263:22
+    GetByIdShort      r2, r3, 8, "push"
+; hbc_testcases/complex_control_flow.js:263:22
+    NewObject         r1
+; hbc_testcases/complex_control_flow.js:263:23
+    PutNewOwnByIdShort r1, r6, "index"
+; hbc_testcases/complex_control_flow.js:263:67
+    GetByIdShort      r4, r4, 14, "message"
+; hbc_testcases/complex_control_flow.js:263:41
+    Add               r4, r5, r4
+; hbc_testcases/complex_control_flow.js:263:23
+    PutNewOwnByIdShort r1, r4, "error"
+; hbc_testcases/complex_control_flow.js:263:22
+    Call2             r1, r2, r3, r1
+L24:
+; hbc_testcases/complex_control_flow.js:266:5
+    Throw             r0
+
+Exception Handlers:
+0: start = L10, end = L28, target = L9
+1: start = L6, end = L9, target = L9
+2: start = L20, end = L11, target = L16
+3: start = L12, end = L16, target = L16
+4: start = L20, end = L11, target = L23
+5: start = L29, end = L30, target = L15
+6: start = L14, end = L15, target = L15
+7: start = L12, end = L31, target = L23
+8: start = L32, end = L33, target = L19
+9: start = L18, end = L19, target = L19
+10: start = L34, end = L35, target = L22
+11: start = L21, end = L22, target = L22
+12: start = L36, end = L37, target = L26
+13: start = L25, end = L26, target = L26
+
+Function<recursiveWithControlFlow>8(4 params, 27 registers, 0 symbols):
+Offset in debug table: source 0x0a0d, scope 0x0000, textified callees 0x0000
+; hbc_testcases/complex_control_flow.js:272:1
+    LoadParam         r13, 1
+; hbc_testcases/complex_control_flow.js:272:1
+    LoadParam         r2, 2
+; hbc_testcases/complex_control_flow.js:272:1
+    Mov               r8, r2
+; hbc_testcases/complex_control_flow.js:272:1
+    LoadParam         r9, 3
+; hbc_testcases/complex_control_flow.js:272:1
+    LoadConstUndefined r7
+; hbc_testcases/complex_control_flow.js:272:1
+    LoadConstUndefined r1
+; hbc_testcases/complex_control_flow.js:272:1
+    LoadConstUndefined r10
+; hbc_testcases/complex_control_flow.js:272:1
+    LoadConstUndefined r11
+; hbc_testcases/complex_control_flow.js:272:1
+    LoadConstUInt8    r0, 10
+; hbc_testcases/complex_control_flow.js:273:3
+    JGreaterLong      L1, r2, r0
+; hbc_testcases/complex_control_flow.js:273:3
+    LoadConstUInt8    r0, 1
+; hbc_testcases/complex_control_flow.js:277:3
+    JLessEqualLong    L2, r13, r0
+; hbc_testcases/complex_control_flow.js:277:3
+    LoadConstZero     r6
+; hbc_testcases/complex_control_flow.js:277:3
+    LoadConstZero     r1
+; hbc_testcases/complex_control_flow.js:277:3
+    Mov               r10, r0
+; hbc_testcases/complex_control_flow.js:277:3
+    GetGlobalObject   r5
+; hbc_testcases/complex_control_flow.js:277:3
+    LoadConstString   r4, "string"
+; hbc_testcases/complex_control_flow.js:277:3
+    LoadConstUInt8    r3, 2
+; hbc_testcases/complex_control_flow.js:283:3
+    JNotLessEqualLong L3, r0, r13
+L11:
+; hbc_testcases/complex_control_flow.js:283:3
+    Mov               r2, r9
+; hbc_testcases/complex_control_flow.js:284:16
+    GetByIdShort      r2, r2, 1, "skip_even"
+; hbc_testcases/complex_control_flow.js:284:16
+    JmpFalse          L4, r2
+; hbc_testcases/complex_control_flow.js:284:16
+    Mov               r2, r10
+; hbc_testcases/complex_control_flow.js:284:30
+    Mod               r2, r2, r3
+; hbc_testcases/complex_control_flow.js:284:30
+    JStrictEqualLong  L5, r2, r6
+L4:
+; hbc_testcases/complex_control_flow.js:284:30
+    Mov               r2, r9
+; hbc_testcases/complex_control_flow.js:288:16
+    GetByIdShort      r2, r2, 2, "early_exit"
+; hbc_testcases/complex_control_flow.js:288:16
+    JmpFalse          L6, r2
+; hbc_testcases/complex_control_flow.js:288:16
+    Mov               r14, r10
+; hbc_testcases/complex_control_flow.js:288:35
+    Div               r2, r13, r3
+; hbc_testcases/complex_control_flow.js:288:35
+    JGreaterLong      L3, r14, r2
+L6:
+; hbc_testcases/complex_control_flow.js:293:23
+    GetByIdShort      r16, r5, 3, "recursiveWithCont"...
+; hbc_testcases/complex_control_flow.js:293:23
+    Mov               r2, r10
+; hbc_testcases/complex_control_flow.js:293:48
+    Sub               r15, r2, r0
+; hbc_testcases/complex_control_flow.js:293:48
+    Mov               r2, r8
+; hbc_testcases/complex_control_flow.js:293:55
+    Add               r14, r2, r0
+; hbc_testcases/complex_control_flow.js:293:55
+    Mov               r2, r9
+; hbc_testcases/complex_control_flow.js:293:47
+    Call4             r2, r16, r7, r15, r14, r2
+; hbc_testcases/complex_control_flow.js:293:47
+    Mov               r11, r2
+; hbc_testcases/complex_control_flow.js:293:47
+    TypeOf            r2, r2
+; hbc_testcases/complex_control_flow.js:293:47
+    JStrictEqual      L7, r2, r4
+; hbc_testcases/complex_control_flow.js:293:47
+    Mov               r14, r1
+; hbc_testcases/complex_control_flow.js:293:47
+    Mov               r2, r11
+; hbc_testcases/complex_control_flow.js:299:14
+    Add               r1, r14, r2
+; hbc_testcases/complex_control_flow.js:299:14
+    Mov               r2, r9
+; hbc_testcases/complex_control_flow.js:301:18
+    GetByIdShort      r2, r2, 4, "limit"
+; hbc_testcases/complex_control_flow.js:301:18
+    JmpFalse          L8, r2
+; hbc_testcases/complex_control_flow.js:301:18
+    Mov               r14, r1
+; hbc_testcases/complex_control_flow.js:301:18
+    Mov               r2, r9
+; hbc_testcases/complex_control_flow.js:301:44
+    GetByIdShort      r2, r2, 4, "limit"
+; hbc_testcases/complex_control_flow.js:301:7
+    JGreater          L9, r14, r2
+L8:
+; hbc_testcases/complex_control_flow.js:304:5
+    Jmp               L5
+L9:
+; hbc_testcases/complex_control_flow.js:302:9
+    LoadConstString   r2, "limit_exceeded"
+; hbc_testcases/complex_control_flow.js:302:9
+    Ret               r2
+L7:
+; hbc_testcases/complex_control_flow.js:302:9
+    Mov               r2, r11
+L13:
+; hbc_testcases/complex_control_flow.js:296:9
+    Ret               r2
+L10:
+; hbc_testcases/complex_control_flow.js:304:7
+    Catch             r12
+; hbc_testcases/complex_control_flow.js:304:7
+    Mov               r2, r9
+; hbc_testcases/complex_control_flow.js:305:18
+    GetByIdShort      r2, r2, 5, "ignore_errors"
+; hbc_testcases/complex_control_flow.js:305:18
+    JmpTrue           L5, r2
+; hbc_testcases/complex_control_flow.js:305:18
+    Mov               r2, r12
+; hbc_testcases/complex_control_flow.js:308:9
+    Throw             r2
+L5:
+; hbc_testcases/complex_control_flow.js:308:9
+    Mov               r2, r10
+; hbc_testcases/complex_control_flow.js:308:9
+    Inc               r2, r2
+; hbc_testcases/complex_control_flow.js:308:9
+    Mov               r10, r2
+; hbc_testcases/complex_control_flow.js:283:3
+    JLessEqualLong    L11, r2, r13
+L3:
+; hbc_testcases/complex_control_flow.js:283:3
+    Ret               r1
+L2:
+; hbc_testcases/complex_control_flow.js:283:3
+    Ret               r0
+L1:
+; hbc_testcases/complex_control_flow.js:283:3
+    LoadConstString   r0, "max_depth"
+; hbc_testcases/complex_control_flow.js:283:3
+    Ret               r0
+
+Exception Handlers:
+0: start = L6, end = L8, target = L10
+1: start = L7, end = L13, target = L10
+
+Debug filename table:
+  0: hbc_testcases/complex_control_flow.js
+
+Debug file table:
+  source table offset 0x0000: filename id 0
+
+Debug source table:
+  0x0000  function idx 0, starts at line 4 col 1
+    bc 49: line 4 col 1 scope offset 0x0000 env r2
+    bc 60: line 4 col 1 scope offset 0x0000 env r2
+    bc 71: line 4 col 1 scope offset 0x0000 env r2
+    bc 82: line 4 col 1 scope offset 0x0000 env r2
+    bc 93: line 4 col 1 scope offset 0x0000 env r2
+    bc 104: line 4 col 1 scope offset 0x0000 env r2
+    bc 115: line 4 col 1 scope offset 0x0000 env r2
+    bc 126: line 4 col 1 scope offset 0x0000 env r0
+  0x002c  function idx 1, starts at line 4 col 1
+    bc 3: line 8 col 36 scope offset 0x0000 env none
+    bc 10: line 8 col 26 scope offset 0x0000 env none
+    bc 42: line 9 col 31 scope offset 0x0000 env none
+    bc 46: line 9 col 34 scope offset 0x0000 env none
+    bc 51: line 9 col 21 scope offset 0x0000 env none
+    bc 78: line 10 col 17 scope offset 0x0000 env none
+    bc 82: line 10 col 20 scope offset 0x0000 env none
+    bc 98: line 10 col 7 scope offset 0x0000 env none
+    bc 102: line 13 col 17 scope offset 0x0000 env none
+    bc 106: line 13 col 20 scope offset 0x0000 env none
+    bc 110: line 13 col 11 scope offset 0x0000 env none
+    bc 122: line 17 col 22 scope offset 0x0000 env none
+    bc 126: line 17 col 25 scope offset 0x0000 env none
+    bc 130: line 17 col 13 scope offset 0x0000 env none
+    bc 153: line 23 col 15 scope offset 0x0000 env none
+    bc 176: line 9 col 31 scope offset 0x0000 env none
+    bc 180: line 9 col 34 scope offset 0x0000 env none
+    bc 197: line 9 col 5 scope offset 0x0000 env none
+    bc 204: line 8 col 36 scope offset 0x0000 env none
+    bc 209: line 8 col 26 scope offset 0x0000 env none
+  0x00e4  function idx 2, starts at line 31 col 1
+    bc 14: line 32 col 3 scope offset 0x0000 env none
+    bc 24: line 58 col 10 scope offset 0x0000 env none
+    bc 30: line 59 col 5 scope offset 0x0000 env none
+    bc 34: line 59 col 5 scope offset 0x0000 env none
+    bc 38: line 62 col 14 scope offset 0x0000 env none
+    bc 43: line 60 col 14 scope offset 0x0000 env none
+    bc 46: line 60 col 14 scope offset 0x0000 env none
+    bc 50: line 60 col 14 scope offset 0x0000 env none
+    bc 54: line 60 col 14 scope offset 0x0000 env none
+    bc 60: line 33 col 5 scope offset 0x0000 env none
+    bc 70: line 49 col 12 scope offset 0x0000 env none
+    bc 76: line 50 col 7 scope offset 0x0000 env none
+    bc 80: line 53 col 16 scope offset 0x0000 env none
+    bc 84: line 53 col 16 scope offset 0x0000 env none
+    bc 90: line 51 col 16 scope offset 0x0000 env none
+    bc 94: line 51 col 16 scope offset 0x0000 env none
+    bc 100: line 34 col 7 scope offset 0x0000 env none
+    bc 110: line 40 col 14 scope offset 0x0000 env none
+    bc 117: line 43 col 13 scope offset 0x0000 env none
+    bc 125: line 46 col 18 scope offset 0x0000 env none
+    bc 131: line 44 col 18 scope offset 0x0000 env none
+    bc 137: line 41 col 16 scope offset 0x0000 env none
+    bc 141: line 41 col 16 scope offset 0x0000 env none
+    bc 147: line 35 col 9 scope offset 0x0000 env none
+    bc 151: line 38 col 18 scope offset 0x0000 env none
+    bc 155: line 38 col 18 scope offset 0x0000 env none
+    bc 159: line 38 col 18 scope offset 0x0000 env none
+    bc 165: line 36 col 18 scope offset 0x0000 env none
+    bc 169: line 36 col 18 scope offset 0x0000 env none
+    bc 173: line 36 col 18 scope offset 0x0000 env none
+  0x01f6  function idx 3, starts at line 69 col 1
+    bc 7: line 74 col 17 scope offset 0x0000 env none
+    bc 14: line 74 col 10 scope offset 0x0000 env none
+    bc 34: line 74 col 34 scope offset 0x0000 env none
+    bc 42: line 74 col 28 scope offset 0x0000 env none
+    bc 71: line 75 col 12 scope offset 0x0000 env none
+    bc 75: line 75 col 9 scope offset 0x0000 env none
+    bc 89: line 81 col 25 scope offset 0x0000 env none
+    bc 95: line 81 col 33 scope offset 0x0000 env none
+    bc 100: line 81 col 34 scope offset 0x0000 env none
+    bc 104: line 81 col 44 scope offset 0x0000 env none
+    bc 109: line 81 col 33 scope offset 0x0000 env none
+    bc 121: line 81 col 5 scope offset 0x0000 env none
+    bc 125: line 82 col 14 scope offset 0x0000 env none
+    bc 135: line 82 col 7 scope offset 0x0000 env none
+    bc 139: line 85 col 18 scope offset 0x0000 env none
+    bc 144: line 85 col 22 scope offset 0x0000 env none
+    bc 148: line 85 col 18 scope offset 0x0000 env none
+    bc 156: line 81 col 25 scope offset 0x0000 env none
+    bc 162: line 81 col 33 scope offset 0x0000 env none
+    bc 167: line 81 col 34 scope offset 0x0000 env none
+    bc 171: line 81 col 44 scope offset 0x0000 env none
+    bc 176: line 81 col 33 scope offset 0x0000 env none
+    bc 185: line 81 col 5 scope offset 0x0000 env none
+    bc 200: line 74 col 17 scope offset 0x0000 env none
+    bc 205: line 74 col 10 scope offset 0x0000 env none
+    bc 216: line 74 col 34 scope offset 0x0000 env none
+    bc 221: line 74 col 28 scope offset 0x0000 env none
+    bc 241: line 95 col 21 scope offset 0x0000 env none
+    bc 255: line 95 col 5 scope offset 0x0000 env none
+    bc 259: line 96 col 20 scope offset 0x0000 env none
+    bc 263: line 96 col 11 scope offset 0x0000 env none
+    bc 286: line 101 col 10 scope offset 0x0000 env none
+    bc 290: line 101 col 10 scope offset 0x0000 env none
+  0x0324  function idx 4, starts at line 104 col 1
+    bc 53: line 132 col 23 scope offset 0x0000 env none
+    bc 82: line 134 col 16 scope offset 0x0000 env none
+    bc 92: line 132 col 7 scope offset 0x0000 env none
+    bc 116: line 113 col 7 scope offset 0x0000 env none
+    bc 131: line 120 col 15 scope offset 0x0000 env none
+  0x0356  function idx 5, starts at line 144 col 1
+    bc 15: line 148 col 13 scope offset 0x0000 env none
+    bc 33: line 148 col 13 scope offset 0x0000 env none
+    bc 56: line 149 col 31 scope offset 0x0000 env none
+    bc 70: line 151 col 7 scope offset 0x0000 env none
+    bc 75: line 154 col 30 scope offset 0x0000 env none
+    bc 83: line 154 col 5 scope offset 0x0000 env none
+    bc 86: line 154 col 5 scope offset 0x0000 env none
+    bc 103: line 155 col 15 scope offset 0x0000 env none
+    bc 117: line 159 col 15 scope offset 0x0000 env none
+    bc 140: line 169 col 31 scope offset 0x0000 env none
+    bc 151: line 174 col 17 scope offset 0x0000 env none
+    bc 162: line 174 col 31 scope offset 0x0000 env none
+    bc 170: line 174 col 37 scope offset 0x0000 env none
+    bc 200: line 181 col 31 scope offset 0x0000 env none
+    bc 216: line 177 col 20 scope offset 0x0000 env none
+    bc 223: line 177 col 20 scope offset 0x0000 env none
+    bc 230: line 177 col 20 scope offset 0x0000 env none
+    bc 234: line 177 col 13 scope offset 0x0000 env none
+    bc 237: line 177 col 13 scope offset 0x0000 env none
+    bc 258: line 185 col 5 scope offset 0x0000 env none
+    bc 276: line 164 col 9 scope offset 0x0000 env none
+    bc 281: line 162 col 11 scope offset 0x0000 env none
+    bc 284: line 162 col 11 scope offset 0x0000 env none
+    bc 289: line 156 col 9 scope offset 0x0000 env none
+    bc 294: line 185 col 5 scope offset 0x0000 env none
+    bc 296: line 185 col 5 scope offset 0x0000 env none
+    bc 299: line 185 col 5 scope offset 0x0000 env none
+    bc 304: line 187 col 17 scope offset 0x0000 env none
+    bc 312: line 190 col 3 scope offset 0x0000 env none
+    bc 317: line 188 col 7 scope offset 0x0000 env none
+    bc 322: line 190 col 3 scope offset 0x0000 env none
+    bc 324: line 190 col 3 scope offset 0x0000 env none
+    bc 327: line 190 col 3 scope offset 0x0000 env none
+    bc 335: line 192 col 10 scope offset 0x0000 env none
+    bc 339: line 192 col 10 scope offset 0x0000 env none
+    bc 343: line 192 col 10 scope offset 0x0000 env none
+  0x049f  function idx 6, starts at line 195 col 1
+    bc 11: line 197 col 17 scope offset 0x0000 env none
+    bc 15: line 197 col 78 scope offset 0x0000 env none
+    bc 19: line 197 col 95 scope offset 0x0000 env none
+    bc 22: line 197 col 95 scope offset 0x0000 env none
+    bc 28: line 197 col 86 scope offset 0x0000 env none
+    bc 31: line 197 col 86 scope offset 0x0000 env none
+    bc 37: line 197 col 26 scope offset 0x0000 env none
+    bc 41: line 197 col 68 scope offset 0x0000 env none
+    bc 47: line 197 col 35 scope offset 0x0000 env none
+    bc 51: line 197 col 55 scope offset 0x0000 env none
+    bc 55: line 197 col 55 scope offset 0x0000 env none
+    bc 61: line 197 col 43 scope offset 0x0000 env none
+    bc 65: line 197 col 43 scope offset 0x0000 env none
+    bc 116: line 203 col 3 scope offset 0x0000 env none
+    bc 120: line 205 col 10 scope offset 0x0000 env none
+    bc 165: line 204 col 12 scope offset 0x0000 env none
+    bc 169: line 204 col 51 scope offset 0x0000 env none
+    bc 186: line 204 col 21 scope offset 0x0000 env none
+  0x0546  function idx 7, starts at line 212 col 1
+    bc 22: line 216 col 33 scope offset 0x0000 env none
+    bc 61: line 216 col 3 scope offset 0x0000 env none
+    bc 74: line 218 col 26 scope offset 0x0000 env none
+    bc 81: line 220 col 13 scope offset 0x0000 env none
+    bc 96: line 225 col 20 scope offset 0x0000 env none
+    bc 105: line 242 col 19 scope offset 0x0000 env none
+    bc 111: line 242 col 24 scope offset 0x0000 env none
+    bc 116: line 242 col 24 scope offset 0x0000 env none
+    bc 127: line 242 col 24 scope offset 0x0000 env none
+    bc 135: line 242 col 9 scope offset 0x0000 env none
+    bc 142: line 226 col 31 scope offset 0x0000 env none
+    bc 147: line 226 col 9 scope offset 0x0000 env none
+    bc 161: line 228 col 30 scope offset 0x0000 env none
+    bc 176: line 232 col 11 scope offset 0x0000 env none
+    bc 178: line 231 col 24 scope offset 0x0000 env none
+    bc 180: line 229 col 25 scope offset 0x0000 env none
+    bc 186: line 229 col 30 scope offset 0x0000 env none
+    bc 191: line 229 col 30 scope offset 0x0000 env none
+    bc 202: line 229 col 30 scope offset 0x0000 env none
+    bc 210: line 229 col 15 scope offset 0x0000 env none
+    bc 212: line 232 col 13 scope offset 0x0000 env none
+    bc 217: line 233 col 19 scope offset 0x0000 env none
+    bc 228: line 236 col 15 scope offset 0x0000 env none
+    bc 242: line 226 col 31 scope offset 0x0000 env none
+    bc 247: line 226 col 9 scope offset 0x0000 env none
+    bc 254: line 240 col 23 scope offset 0x0000 env none
+    bc 259: line 240 col 23 scope offset 0x0000 env none
+    bc 269: line 221 col 15 scope offset 0x0000 env none
+    bc 284: line 224 col 23 scope offset 0x0000 env none
+    bc 292: line 224 col 26 scope offset 0x0000 env none
+    bc 297: line 224 col 33 scope offset 0x0000 env none
+    bc 302: line 224 col 24 scope offset 0x0000 env none
+    bc 306: line 224 col 23 scope offset 0x0000 env none
+    bc 311: line 252 col 5 scope offset 0x0000 env none
+    bc 317: line 254 col 21 scope offset 0x0000 env none
+    bc 333: line 254 col 38 scope offset 0x0000 env none
+    bc 337: line 254 col 41 scope offset 0x0000 env none
+    bc 348: line 258 col 15 scope offset 0x0000 env none
+    bc 354: line 258 col 26 scope offset 0x0000 env none
+    bc 359: line 258 col 26 scope offset 0x0000 env none
+    bc 363: line 258 col 11 scope offset 0x0000 env none
+    bc 367: line 261 col 9 scope offset 0x0000 env none
+    bc 372: line 259 col 23 scope offset 0x0000 env none
+    bc 378: line 259 col 28 scope offset 0x0000 env none
+    bc 383: line 259 col 28 scope offset 0x0000 env none
+    bc 394: line 259 col 28 scope offset 0x0000 env none
+    bc 402: line 259 col 13 scope offset 0x0000 env none
+    bc 404: line 261 col 11 scope offset 0x0000 env none
+    bc 409: line 263 col 22 scope offset 0x0000 env none
+    bc 419: line 263 col 23 scope offset 0x0000 env none
+    bc 423: line 263 col 67 scope offset 0x0000 env none
+    bc 428: line 263 col 41 scope offset 0x0000 env none
+    bc 432: line 263 col 23 scope offset 0x0000 env none
+    bc 436: line 263 col 22 scope offset 0x0000 env none
+    bc 446: line 222 col 21 scope offset 0x0000 env none
+    bc 452: line 222 col 26 scope offset 0x0000 env none
+    bc 457: line 222 col 26 scope offset 0x0000 env none
+    bc 468: line 222 col 26 scope offset 0x0000 env none
+    bc 476: line 222 col 11 scope offset 0x0000 env none
+    bc 478: line 244 col 7 scope offset 0x0000 env none
+    bc 483: line 245 col 18 scope offset 0x0000 env none
+    bc 493: line 245 col 19 scope offset 0x0000 env none
+    bc 497: line 245 col 42 scope offset 0x0000 env none
+    bc 502: line 245 col 19 scope offset 0x0000 env none
+    bc 506: line 245 col 18 scope offset 0x0000 env none
+    bc 514: line 247 col 21 scope offset 0x0000 env none
+    bc 518: line 247 col 24 scope offset 0x0000 env none
+    bc 529: line 252 col 15 scope offset 0x0000 env none
+    bc 535: line 254 col 21 scope offset 0x0000 env none
+    bc 548: line 254 col 38 scope offset 0x0000 env none
+    bc 552: line 254 col 41 scope offset 0x0000 env none
+    bc 560: line 258 col 15 scope offset 0x0000 env none
+    bc 566: line 258 col 26 scope offset 0x0000 env none
+    bc 571: line 258 col 26 scope offset 0x0000 env none
+    bc 575: line 258 col 11 scope offset 0x0000 env none
+    bc 579: line 261 col 9 scope offset 0x0000 env none
+    bc 581: line 259 col 23 scope offset 0x0000 env none
+    bc 587: line 259 col 28 scope offset 0x0000 env none
+    bc 592: line 259 col 28 scope offset 0x0000 env none
+    bc 603: line 259 col 28 scope offset 0x0000 env none
+    bc 611: line 259 col 13 scope offset 0x0000 env none
+    bc 613: line 261 col 11 scope offset 0x0000 env none
+    bc 618: line 263 col 22 scope offset 0x0000 env none
+    bc 628: line 263 col 23 scope offset 0x0000 env none
+    bc 632: line 263 col 67 scope offset 0x0000 env none
+    bc 637: line 263 col 41 scope offset 0x0000 env none
+    bc 641: line 263 col 23 scope offset 0x0000 env none
+    bc 645: line 263 col 22 scope offset 0x0000 env none
+    bc 662: line 216 col 33 scope offset 0x0000 env none
+    bc 667: line 216 col 3 scope offset 0x0000 env none
+    bc 676: line 252 col 15 scope offset 0x0000 env none
+    bc 682: line 254 col 21 scope offset 0x0000 env none
+    bc 695: line 254 col 38 scope offset 0x0000 env none
+    bc 699: line 254 col 41 scope offset 0x0000 env none
+    bc 707: line 258 col 15 scope offset 0x0000 env none
+    bc 713: line 258 col 26 scope offset 0x0000 env none
+    bc 718: line 258 col 26 scope offset 0x0000 env none
+    bc 722: line 258 col 11 scope offset 0x0000 env none
+    bc 726: line 261 col 9 scope offset 0x0000 env none
+    bc 728: line 259 col 23 scope offset 0x0000 env none
+    bc 734: line 259 col 28 scope offset 0x0000 env none
+    bc 739: line 259 col 28 scope offset 0x0000 env none
+    bc 750: line 259 col 28 scope offset 0x0000 env none
+    bc 758: line 259 col 13 scope offset 0x0000 env none
+    bc 760: line 261 col 11 scope offset 0x0000 env none
+    bc 765: line 263 col 22 scope offset 0x0000 env none
+    bc 775: line 263 col 23 scope offset 0x0000 env none
+    bc 779: line 263 col 67 scope offset 0x0000 env none
+    bc 784: line 263 col 41 scope offset 0x0000 env none
+    bc 788: line 263 col 23 scope offset 0x0000 env none
+    bc 792: line 263 col 22 scope offset 0x0000 env none
+    bc 799: line 269 col 10 scope offset 0x0000 env none
+    bc 806: line 269 col 10 scope offset 0x0000 env none
+    bc 812: line 252 col 15 scope offset 0x0000 env none
+    bc 820: line 254 col 21 scope offset 0x0000 env none
+    bc 833: line 254 col 38 scope offset 0x0000 env none
+    bc 837: line 254 col 41 scope offset 0x0000 env none
+    bc 845: line 258 col 15 scope offset 0x0000 env none
+    bc 851: line 258 col 26 scope offset 0x0000 env none
+    bc 856: line 258 col 26 scope offset 0x0000 env none
+    bc 860: line 258 col 11 scope offset 0x0000 env none
+    bc 864: line 261 col 9 scope offset 0x0000 env none
+    bc 866: line 259 col 23 scope offset 0x0000 env none
+    bc 872: line 259 col 28 scope offset 0x0000 env none
+    bc 877: line 259 col 28 scope offset 0x0000 env none
+    bc 888: line 259 col 28 scope offset 0x0000 env none
+    bc 896: line 259 col 13 scope offset 0x0000 env none
+    bc 898: line 261 col 11 scope offset 0x0000 env none
+    bc 903: line 263 col 22 scope offset 0x0000 env none
+    bc 910: line 263 col 23 scope offset 0x0000 env none
+    bc 914: line 263 col 67 scope offset 0x0000 env none
+    bc 919: line 263 col 41 scope offset 0x0000 env none
+    bc 923: line 263 col 23 scope offset 0x0000 env none
+    bc 927: line 263 col 22 scope offset 0x0000 env none
+    bc 932: line 266 col 5 scope offset 0x0000 env none
+  0x0a0d  function idx 8, starts at line 272 col 1
+    bc 23: line 273 col 3 scope offset 0x0000 env none
+    bc 33: line 277 col 3 scope offset 0x0000 env none
+    bc 56: line 283 col 3 scope offset 0x0000 env none
+    bc 66: line 284 col 16 scope offset 0x0000 env none
+    bc 77: line 284 col 30 scope offset 0x0000 env none
+    bc 91: line 288 col 16 scope offset 0x0000 env none
+    bc 102: line 288 col 35 scope offset 0x0000 env none
+    bc 113: line 293 col 23 scope offset 0x0000 env none
+    bc 121: line 293 col 48 scope offset 0x0000 env none
+    bc 128: line 293 col 55 scope offset 0x0000 env none
+    bc 135: line 293 col 47 scope offset 0x0000 env none
+    bc 158: line 299 col 14 scope offset 0x0000 env none
+    bc 165: line 301 col 18 scope offset 0x0000 env none
+    bc 179: line 301 col 44 scope offset 0x0000 env none
+    bc 184: line 301 col 7 scope offset 0x0000 env none
+    bc 188: line 304 col 5 scope offset 0x0000 env none
+    bc 190: line 302 col 9 scope offset 0x0000 env none
+    bc 199: line 296 col 9 scope offset 0x0000 env none
+    bc 201: line 304 col 7 scope offset 0x0000 env none
+    bc 206: line 305 col 18 scope offset 0x0000 env none
+    bc 217: line 308 col 9 scope offset 0x0000 env none
+    bc 228: line 283 col 3 scope offset 0x0000 env none
+  0x0ad8  end of debug source table
+
+Debug scope descriptor table:
+  0x0000  lexical parent:   none, flags:    , variable count: 0
+  0x0003  end of debug scope descriptor table
+
+Textified callees table:
+  0x0000  entries: 0
+  0x0001  end of textified callees table
+
+Debug string table:
+  0x0000  end of debug string table
+
