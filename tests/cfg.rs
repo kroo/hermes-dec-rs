@@ -125,6 +125,7 @@ fn make_test_hbc_file<'a>(instructions: Vec<HbcFunctionInstruction>) -> HbcFile<
         cjs_modules,
         function_sources,
         jump_table,
+        switch_tables: hermes_dec_rs::hbc::tables::switch_table::SwitchTableCollection::new(),
     }
 }
 

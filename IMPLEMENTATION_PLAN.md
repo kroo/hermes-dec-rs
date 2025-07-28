@@ -179,17 +179,17 @@ hermes-dec-rs INPUT.hbc [-o out.js] [--comments pc|none] [--minify]
 - Golden tests for disassembly output validation
 - All 50+ tests passing with comprehensive coverage
 
-**🔄 Phase 3 (CFG + Structurer v0) - Complete**
+**🔄 Phase 3 (CFG + Structurer v0) - Foundation Complete**
 - **✅ CFG Building Algorithm Implemented:**
   - Leader identification (entry, branch targets, post-branch PCs)
   - Basic block construction from instructions
   - Edge creation based on control flow
   - Integration with existing jump table for accurate jump target resolution
-- **✅ Dominator Analysis Complete:**
+- **✅ Basic Dominator Analysis Complete:**
   - `simple_fast` dominators using petgraph algorithms
-  - Natural loop detection (back-edge where target dominates source)
-  - If/else join block detection (multiple predecessors)
-  - Switch dispatch detection (multiple successors)
+  - Basic natural loop detection (back-edge where target dominates source)
+  - Basic if/else join block detection (multiple predecessors)
+  - Basic switch dispatch detection (multiple successors)
   - Dominator tree analysis and visualization
 - **✅ CFG Infrastructure:**
   - `CfgBuilder` with `petgraph` integration
@@ -210,18 +210,28 @@ hermes-dec-rs INPUT.hbc [-o out.js] [--comments pc|none] [--minify]
   - CFG building tests with empty and single instructions
   - Real-world testing with flow_control.hbc showing complex control flow
   - 4-5 basic blocks with 6 edges for functions with loops and conditionals
-  - Natural loop detection working correctly (Block 1 -> Block 2)
-  - If/else join block detection working correctly
+  - Basic natural loop detection working correctly (Block 1 -> Block 2)
+  - Basic if/else join block detection working correctly
   - DOT visualization working correctly
 
-**✅ Pre-Lifting Infrastructure Complete**
-All algorithms prior to lifting passes are now implemented:
+**🔄 Advanced CFG Analysis - In Progress**
+**Missing for Complete CFG Implementation:**
+1. **❌ Multi-target Switch support** (CFG-03) - Core feature for switch statement decompilation
+2. **❌ Precise conditional-edge kinds** (CFG-04) - Core feature for if/else decompilation
+3. **❌ Post-dominator analysis** (CFG-06) - Required for robust region detection
+4. **❌ Complete natural loop body computation** (CFG-05) - Need full loop analysis structures
+5. **❌ Robust if/else region detection** (CFG-07) - Requires post-dominator analysis
+6. **❌ Switch dispatch grouping** (CFG-08) - Requires post-dominator analysis
+7. **❌ Enhanced Graphviz edge labels** (CFG-10) - For better debugging
+
+**✅ Foundation Complete**
+Basic algorithms prior to lifting passes are implemented:
 1. **✅ Leader scan** → basic blocks (entry, branch targets, post-branch PC)
 2. **✅ CFG build** (using `petgraph`)
-3. **✅ `simple_fast` dominators** + reverse post-dominators to detect:
-   - **✅ natural loops** (back-edge where target dominates source)
-   - **✅ `if/else` join blocks**
-   - **✅ switch dispatch** (common successor set)
+3. **✅ `simple_fast` dominators** + basic analysis:
+   - **✅ basic natural loops** (back-edge where target dominates source)
+   - **✅ basic `if/else` join blocks**
+   - **✅ basic switch dispatch** (common successor set)
 
 **Ready for Lifting Passes:**
 4. **🔄 Lifting passes** (ordered):
