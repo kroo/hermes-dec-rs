@@ -1050,7 +1050,7 @@ impl<'a> CfgBuilder<'a> {
         self.exit_node
     }
 
-    /// Analyze loops in the CFG
+    /// Analyze loops in the CFG (including both reducible and irreducible loops)
     pub fn analyze_loops(
         &self,
         graph: &DiGraph<Block, EdgeKind>,
@@ -1061,12 +1061,11 @@ impl<'a> CfgBuilder<'a> {
         let mut loops = Vec::new();
         let mut node_to_loops = HashMap::new();
 
-        // Get dominators
+        // Get dominators for loop detection
         if let Some(dominators) = self.analyze_dominators(graph) {
-            // Find all back-edges
+            // Find reducible loops (natural loops)
             let back_edges = self.find_back_edges(graph, &dominators);
 
-            // For each back-edge, compute the complete loop body
             for (header, tail) in back_edges {
                 let loop_body = self.compute_loop_body(graph, header, tail, &dominators);
                 let loop_type = self.classify_loop_type(graph, header, tail, &loop_body);
@@ -1084,14 +1083,18 @@ impl<'a> CfgBuilder<'a> {
                 loops.push(loop_info);
             }
 
-            // Build node-to-loops mapping
-            for (loop_idx, loop_info) in loops.iter().enumerate() {
-                for &node in &loop_info.body_nodes {
-                    node_to_loops
-                        .entry(node)
-                        .or_insert_with(Vec::new)
-                        .push(loop_idx);
-                }
+            // Find irreducible loops
+            let irreducible_loops = self.find_irreducible_loops(graph, &dominators);
+            loops.extend(irreducible_loops);
+        }
+
+        // Build node-to-loops mapping
+        for (loop_idx, loop_info) in loops.iter().enumerate() {
+            for &node in &loop_info.body_nodes {
+                node_to_loops
+                    .entry(node)
+                    .or_insert_with(Vec::new)
+                    .push(loop_idx);
             }
         }
 
@@ -1176,62 +1179,6 @@ impl<'a> CfgBuilder<'a> {
         }
 
         irreducible_loops
-    }
-
-    /// Analyze loops including irreducible loops
-    pub fn analyze_loops_with_irreducible(
-        &self,
-        graph: &DiGraph<Block, EdgeKind>,
-    ) -> crate::cfg::analysis::LoopAnalysis {
-        use crate::cfg::analysis::{Loop, LoopAnalysis};
-        use std::collections::HashMap;
-
-        let mut loops = Vec::new();
-        let mut node_to_loops = HashMap::new();
-
-        // Get dominators for reducible loop detection
-        if let Some(dominators) = self.analyze_dominators(graph) {
-            // Find reducible loops (natural loops)
-            let back_edges = self.find_back_edges(graph, &dominators);
-
-            for (header, tail) in back_edges {
-                let loop_body = self.compute_loop_body(graph, header, tail, &dominators);
-                let loop_type = self.classify_loop_type(graph, header, tail, &loop_body);
-                let exit_nodes = self.find_loop_exits(graph, header, &loop_body);
-
-                let loop_info = Loop {
-                    headers: vec![header],
-                    body_nodes: loop_body,
-                    back_edges: vec![(tail, header)],
-                    loop_type,
-                    exit_nodes,
-                    is_irreducible: false,
-                };
-
-                loops.push(loop_info);
-            }
-        }
-
-        // Find irreducible loops
-        if let Some(dominators) = self.analyze_dominators(graph) {
-            let irreducible_loops = self.find_irreducible_loops(graph, &dominators);
-            loops.extend(irreducible_loops);
-        }
-
-        // Build node-to-loops mapping
-        for (loop_idx, loop_info) in loops.iter().enumerate() {
-            for &node in &loop_info.body_nodes {
-                node_to_loops
-                    .entry(node)
-                    .or_insert_with(Vec::new)
-                    .push(loop_idx);
-            }
-        }
-
-        LoopAnalysis {
-            loops,
-            node_to_loops,
-        }
     }
 
     /// Find all back-edges in the CFG

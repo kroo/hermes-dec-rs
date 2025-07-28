@@ -2547,7 +2547,7 @@ fn test_irreducible_loop_detection() {
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    let loop_analysis = cfg.analyze_loops_with_irreducible();
+    let loop_analysis = cfg.analyze_loops();
 
     // Should detect irreducible loops
     assert!(!loop_analysis.loops.is_empty(), "Should detect loops");
@@ -2597,7 +2597,7 @@ fn test_irreducible_analysis_includes_reducible() {
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    let loop_analysis = cfg.analyze_loops_with_irreducible();
+    let loop_analysis = cfg.analyze_loops();
 
     // Should detect the reducible loop
     assert!(

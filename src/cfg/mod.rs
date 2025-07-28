@@ -167,11 +167,6 @@ impl<'a> Cfg<'a> {
     pub fn to_dot_with_loops(&self) -> String {
         self.builder.to_dot_with_loops(&self.graph)
     }
-
-    /// Analyze loops including irreducible loops
-    pub fn analyze_loops_with_irreducible(&self) -> analysis::LoopAnalysis {
-        self.builder.analyze_loops_with_irreducible(&self.graph)
-    }
 }
 
 // Re-export main types for convenience
