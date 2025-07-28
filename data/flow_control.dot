@@ -10,10 +10,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f0_n0 [ label = "Block 0 (PC 0-33)\l  0: DeclareGlobalVar  \"ifElseTest\"\l  1: DeclareGlobalVar  \"forLoopTest\"\l  2: DeclareGlobalVar  \"switchTest\"\l  3: DeclareGlobalVar  \"whileTest\"\l  4: DeclareGlobalVar  \"tryCatchTest\"\l  5: DeclareGlobalVar  \"asyncAwaitTest\"\l  6: DeclareGlobalVar  \"promiseChainTest\"\l  7: DeclareGlobalVar  \"generatorTest\"\l  8: DeclareGlobalVar  \"callbackTest\"\l  9: CreateEnvironment r1\l  10: CreateClosure     r0, r1, Function<ifElseTest>1\l  11: GetGlobalObject   r2\l  12: PutById           r2, r0, 1, \"ifElseTest\"\l  13: CreateClosure     r0, r1, Function<forLoopTest>2\l  14: PutById           r2, r0, 2, \"forLoopTest\"\l  15: CreateClosure     r0, r1, Function<switchTest>3\l  16: PutById           r2, r0, 3, \"switchTest\"\l  17: CreateClosure     r0, r1, Function<whileTest>4\l  18: PutById           r2, r0, 4, \"whileTest\"\l  19: CreateClosure     r0, r1, Function<tryCatchTest>5\l  20: PutById           r2, r0, 5, \"tryCatchTest\"\l  21: CreateAsyncClosure r0, r1, Function<asyncAwaitTest>6\l  22: PutById           r2, r0, 6, \"asyncAwaitTest\"\l  23: CreateClosure     r0, r1, Function<promiseChainTest>9\l  24: PutById           r2, r0, 7, \"promiseChainTest\"\l  25: CreateClosure     r0, r1, Function<generatorTest>12\l  26: PutById           r2, r0, 8, \"generatorTest\"\l  27: CreateClosure     r0, r1, Function<callbackTest>15\l  28: PutById           r2, r0, 9, \"callbackTest\"\l  29: CreateClosure     r0, r1, Function<sleep>17\l  30: StoreToEnvironment r1, 0, r0\l  31: LoadConstUndefined r0\l  32: Ret               r0\l" ]
     f0_n1 [ label = "EXIT" ]
 
-    f0_n0 -> f0_n1 [label="uncond"]
+    f0_n0 -> f0_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_1 {
@@ -21,15 +23,17 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f1_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstUInt8    r0, 10\l  2: JGreater          L1, r1, r0\l" ]
     f1_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstString   r0, \"small\"\l  1: Ret               r0\l" ]
     f1_n2 [ label = "Block 2 (PC 5-7) [L1]\l  0: LoadConstString   r0, \"large\"\l  1: Ret               r0\l" ]
     f1_n3 [ label = "EXIT" ]
 
-    f1_n0 -> f1_n2 [label="true"]
-    f1_n0 -> f1_n1 [label="false"]
-    f1_n1 -> f1_n3 [label="uncond"]
-    f1_n2 -> f1_n3 [label="uncond"]
+    f1_n0 -> f1_n2 [label="True"]
+    f1_n0 -> f1_n1 [label="False"]
+    f1_n1 -> f1_n3 [label="Uncond"]
+    f1_n2 -> f1_n3 [label="Uncond"]
   }
 
   subgraph cluster_function_2 {
@@ -37,25 +41,29 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f2_n0 [ label = "Block 0 (PC 0-8)\l  0: LoadParam         r5, 1\l  1: GetByIdShort      r1, r5, 1, \"length\"\l  2: LoadConstZero     r0\l  3: Less              r1, r0, r1\l  4: LoadConstUInt8    r4, 50\l  5: LoadConstZero     r3\l  6: LoadConstZero     r2\l  7: JmpFalse          L1, r1\l" ]
     f2_n1 [ label = "Block 1 (PC 8-13) [L2]\l  0: GetByVal          r1, r5, r2\l  1: Add               r7, r3, r1\l  2: Mov               r1, r2\l  3: Mov               r0, r7\l  4: JGreater          L1, r0, r4\l" ]
     f2_n2 [ label = "Block 2 (PC 13-18)\l  0: Inc               r2, r1\l  1: GetByIdShort      r1, r5, 1, \"length\"\l  2: Mov               r3, r7\l  3: Mov               r0, r3\l  4: JLess             L2, r2, r1\l" ]
     f2_n3 [ label = "Block 3 (PC 18-19) [L1]\l  0: Ret               r0\l" ]
     f2_n4 [ label = "EXIT" ]
 
-    f2_n0 -> f2_n3 [label="false"]
-    f2_n0 -> f2_n1 [label="true"]
-    f2_n1 -> f2_n3 [label="true"]
-    f2_n1 -> f2_n2 [label="false"]
-    f2_n2 -> f2_n1 [label="true"]
-    f2_n2 -> f2_n3 [label="false"]
-    f2_n3 -> f2_n4 [label="uncond"]
+    f2_n0 -> f2_n3 [label="False"]
+    f2_n0 -> f2_n1 [label="True"]
+    f2_n1 -> f2_n3 [label="True"]
+    f2_n1 -> f2_n2 [label="False"]
+    f2_n2 -> f2_n1 [label="True"]
+    f2_n2 -> f2_n3 [label="False"]
+    f2_n3 -> f2_n4 [label="Uncond"]
   }
 
   subgraph cluster_function_3 {
     label = "Function 3";
     style = filled;
     color = lightgrey;
+
+    edge [fontname="Arial"];
 
     f3_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstString   r0, \"a\"\l  2: JStrictEqual      L1, r0, r1\l" ]
     f3_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstString   r0, \"b\"\l  1: JStrictEqual      L2, r0, r1\l" ]
@@ -64,13 +72,13 @@ digraph {
     f3_n4 [ label = "Block 4 (PC 9-11) [L1]\l  0: LoadConstUInt8    r0, 1\l  1: Ret               r0\l" ]
     f3_n5 [ label = "EXIT" ]
 
-    f3_n0 -> f3_n4 [label="true"]
-    f3_n0 -> f3_n1 [label="false"]
-    f3_n1 -> f3_n3 [label="true"]
-    f3_n1 -> f3_n2 [label="false"]
-    f3_n2 -> f3_n5 [label="uncond"]
-    f3_n3 -> f3_n5 [label="uncond"]
-    f3_n4 -> f3_n5 [label="uncond"]
+    f3_n0 -> f3_n4 [label="True"]
+    f3_n0 -> f3_n1 [label="False"]
+    f3_n1 -> f3_n3 [label="True"]
+    f3_n1 -> f3_n2 [label="False"]
+    f3_n2 -> f3_n5 [label="Uncond"]
+    f3_n3 -> f3_n5 [label="Uncond"]
+    f3_n4 -> f3_n5 [label="Uncond"]
   }
 
   subgraph cluster_function_4 {
@@ -78,16 +86,18 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f4_n0 [ label = "Block 0 (PC 0-6)\l  0: LoadParam         r3, 1\l  1: LoadConstZero     r2\l  2: Greater           r4, r3, r2\l  3: LoadConstUInt8    r1, 1\l  4: Mov               r0, r1\l  5: JmpFalse          L1, r4\l" ]
     f4_n1 [ label = "Block 1 (PC 6-10) [L2]\l  0: Mul               r1, r1, r3\l  1: Dec               r3, r3\l  2: Mov               r0, r1\l  3: JGreater          L2, r3, r2\l" ]
     f4_n2 [ label = "Block 2 (PC 10-11) [L1]\l  0: Ret               r0\l" ]
     f4_n3 [ label = "EXIT" ]
 
-    f4_n0 -> f4_n2 [label="false"]
-    f4_n0 -> f4_n1 [label="true"]
-    f4_n1 -> f4_n1 [label="true"]
-    f4_n1 -> f4_n2 [label="false"]
-    f4_n2 -> f4_n3 [label="uncond"]
+    f4_n0 -> f4_n2 [label="False"]
+    f4_n0 -> f4_n1 [label="True"]
+    f4_n1 -> f4_n1 [label="True"]
+    f4_n1 -> f4_n2 [label="False"]
+    f4_n2 -> f4_n3 [label="Uncond"]
   }
 
   subgraph cluster_function_5 {
@@ -95,17 +105,19 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f5_n0 [ label = "Block 0 (PC 0-1)\l  0: LoadParam         r0, 1\l" ]
     f5_n1 [ label = "Block 1 (PC 1-4) [L1]\l  0: Mov               r1, r0\l  1: LoadConstUndefined r0\l  2: Call1             r0, r1, r0\l" ]
     f5_n2 [ label = "Block 2 (PC 4-5) [L2]\l  0: Ret               r0\l" ]
     f5_n3 [ label = "Block 3 (PC 5-8) [L3]\l  0: Catch             r0\l  1: LoadConstString   r0, \"error\"\l  2: Ret               r0\l" ]
     f5_n4 [ label = "EXIT" ]
 
-    f5_n0 -> f5_n1 [label="fall"]
-    f5_n1 -> f5_n2 [label="fall"]
-    f5_n2 -> f5_n4 [label="uncond"]
-    f5_n3 -> f5_n4 [label="uncond"]
-    f5_n1 -> f5_n3 [label="uncond"]
+    f5_n0 -> f5_n1 [label="Fall"]
+    f5_n1 -> f5_n2 [label="Fall"]
+    f5_n2 -> f5_n4 [label="Uncond"]
+    f5_n3 -> f5_n4 [label="Uncond"]
+    f5_n1 -> f5_n3 [label="Uncond"]
   }
 
   subgraph cluster_function_6 {
@@ -113,10 +125,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f6_n0 [ label = "Block 0 (PC 0-10)\l  0: LoadConstUndefined r4\l  1: LoadConstUndefined r0\l  2: ReifyArguments    r0\l  3: Mov               r3, r0\l  4: GetBuiltinClosure r2, 52\l  5: CreateEnvironment r0\l  6: CreateGeneratorClosure r1, r0, Function<?anon_0_asyncAwaitTest>7\l  7: LoadThisNS        r0\l  8: Call4             r0, r2, r4, r1, r0, r3\l  9: Ret               r0\l" ]
     f6_n1 [ label = "EXIT" ]
 
-    f6_n0 -> f6_n1 [label="uncond"]
+    f6_n0 -> f6_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_7 {
@@ -124,16 +138,20 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f7_n0 [ label = "Block 0 (PC 0-3)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_?anon_0_asyncAwaitTest>8\l  2: Ret               r0\l" ]
     f7_n1 [ label = "EXIT" ]
 
-    f7_n0 -> f7_n1 [label="uncond"]
+    f7_n0 -> f7_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_8 {
     label = "Function 8";
     style = filled;
     color = lightgrey;
+
+    edge [fontname="Arial"];
 
     f8_n0 [ label = "Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l" ]
     f8_n1 [ label = "Block 1 (PC 3-10)\l  0: GetEnvironment    r1, 2\l  1: LoadFromEnvironment r3, r1, 0\l  2: LoadConstUndefined r2\l  3: LoadConstUInt8    r1, 100\l  4: Call2             r1, r3, r2, r1\l  5: SaveGenerator     [4]\l  6: Ret               r1\l" ]
@@ -143,14 +161,14 @@ digraph {
     f8_n5 [ label = "Block 5 (PC 17-19) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l" ]
     f8_n6 [ label = "EXIT" ]
 
-    f8_n0 -> f8_n5 [label="true"]
-    f8_n0 -> f8_n1 [label="false"]
-    f8_n1 -> f8_n6 [label="uncond"]
-    f8_n2 -> f8_n4 [label="true"]
-    f8_n2 -> f8_n3 [label="false"]
-    f8_n3 -> f8_n6 [label="uncond"]
-    f8_n4 -> f8_n6 [label="uncond"]
-    f8_n5 -> f8_n6 [label="uncond"]
+    f8_n0 -> f8_n5 [label="True"]
+    f8_n0 -> f8_n1 [label="False"]
+    f8_n1 -> f8_n6 [label="Uncond"]
+    f8_n2 -> f8_n4 [label="True"]
+    f8_n2 -> f8_n3 [label="False"]
+    f8_n3 -> f8_n6 [label="Uncond"]
+    f8_n4 -> f8_n6 [label="Uncond"]
+    f8_n5 -> f8_n6 [label="Uncond"]
   }
 
   subgraph cluster_function_9 {
@@ -158,10 +176,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f9_n0 [ label = "Block 0 (PC 0-13)\l  0: CreateEnvironment r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"Promise\"\l  3: GetByIdShort      r2, r3, 2, \"resolve\"\l  4: LoadConstUInt8    r1, 5\l  5: Call2             r3, r2, r3, r1\l  6: GetByIdShort      r2, r3, 3, \"then\"\l  7: CreateClosure     r1, r0, Function<>10\l  8: Call2             r2, r2, r3, r1\l  9: GetByIdShort      r1, r2, 4, \"catch\"\l  10: CreateClosure     r0, r0, Function<>11\l  11: Call2             r0, r1, r2, r0\l  12: Ret               r0\l" ]
     f9_n1 [ label = "EXIT" ]
 
-    f9_n0 -> f9_n1 [label="uncond"]
+    f9_n0 -> f9_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_10 {
@@ -169,10 +189,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f10_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r1, 1\l  1: LoadConstUInt8    r0, 2\l  2: Mul               r0, r1, r0\l  3: Ret               r0\l" ]
     f10_n1 [ label = "EXIT" ]
 
-    f10_n0 -> f10_n1 [label="uncond"]
+    f10_n0 -> f10_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_11 {
@@ -180,10 +202,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f11_n0 [ label = "Block 0 (PC 0-2)\l  0: LoadConstZero     r0\l  1: Ret               r0\l" ]
     f11_n1 [ label = "EXIT" ]
 
-    f11_n0 -> f11_n1 [label="uncond"]
+    f11_n0 -> f11_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_12 {
@@ -191,10 +215,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f12_n0 [ label = "Block 0 (PC 0-11)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l  2: StoreToEnvironment r0, 0, r1\l  3: CreateGeneratorClosure r1, r0, Function<gen>13\l  4: LoadConstUndefined r0\l  5: Call1             r4, r1, r0\l  6: NewArray          r0, 0\l  7: LoadConstZero     r3\l  8: Mov               r5, r0\l  9: CallBuiltin       r1, 46, 4\l  10: Ret               r0\l" ]
     f12_n1 [ label = "EXIT" ]
 
-    f12_n0 -> f12_n1 [label="uncond"]
+    f12_n0 -> f12_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_13 {
@@ -202,16 +228,20 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f13_n0 [ label = "Block 0 (PC 0-3)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_gen>14\l  2: Ret               r0\l" ]
     f13_n1 [ label = "EXIT" ]
 
-    f13_n0 -> f13_n1 [label="uncond"]
+    f13_n0 -> f13_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_14 {
     label = "Function 14";
     style = filled;
     color = lightgrey;
+
+    edge [fontname="Arial"];
 
     f14_n0 [ label = "Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l" ]
     f14_n1 [ label = "Block 1 (PC 3-8)\l  0: GetEnvironment    r4, 1\l  1: LoadFromEnvironment r1, r4, 0\l  2: LoadConstZero     r3\l  3: Less              r1, r3, r1\l  4: JmpFalse          L2, r1\l" ]
@@ -223,18 +253,18 @@ digraph {
     f14_n7 [ label = "Block 7 (PC 21-23) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l" ]
     f14_n8 [ label = "EXIT" ]
 
-    f14_n0 -> f14_n7 [label="true"]
-    f14_n0 -> f14_n1 [label="false"]
-    f14_n1 -> f14_n5 [label="false"]
-    f14_n1 -> f14_n2 [label="true"]
-    f14_n2 -> f14_n8 [label="uncond"]
-    f14_n3 -> f14_n6 [label="true"]
-    f14_n3 -> f14_n4 [label="false"]
-    f14_n4 -> f14_n2 [label="true"]
-    f14_n4 -> f14_n5 [label="false"]
-    f14_n5 -> f14_n8 [label="uncond"]
-    f14_n6 -> f14_n8 [label="uncond"]
-    f14_n7 -> f14_n8 [label="uncond"]
+    f14_n0 -> f14_n7 [label="True"]
+    f14_n0 -> f14_n1 [label="False"]
+    f14_n1 -> f14_n5 [label="False"]
+    f14_n1 -> f14_n2 [label="True"]
+    f14_n2 -> f14_n8 [label="Uncond"]
+    f14_n3 -> f14_n6 [label="True"]
+    f14_n3 -> f14_n4 [label="False"]
+    f14_n4 -> f14_n2 [label="True"]
+    f14_n4 -> f14_n5 [label="False"]
+    f14_n5 -> f14_n8 [label="Uncond"]
+    f14_n6 -> f14_n8 [label="Uncond"]
+    f14_n7 -> f14_n8 [label="Uncond"]
   }
 
   subgraph cluster_function_15 {
@@ -242,10 +272,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f15_n0 [ label = "Block 0 (PC 0-10)\l  0: CreateEnvironment r1\l  1: LoadParam         r0, 1\l  2: StoreToEnvironment r1, 0, r0\l  3: GetGlobalObject   r0\l  4: TryGetById        r3, r0, 1, \"setTimeout\"\l  5: LoadConstUndefined r0\l  6: CreateClosure     r2, r1, Function<>16\l  7: LoadConstUInt8    r1, 50\l  8: Call3             r1, r3, r0, r2, r1\l  9: Ret               r0\l" ]
     f15_n1 [ label = "EXIT" ]
 
-    f15_n0 -> f15_n1 [label="uncond"]
+    f15_n0 -> f15_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_16 {
@@ -253,10 +285,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f16_n0 [ label = "Block 0 (PC 0-6)\l  0: GetEnvironment    r0, 0\l  1: LoadFromEnvironment r2, r0, 0\l  2: LoadConstUndefined r1\l  3: LoadConstString   r0, \"callback\"\l  4: Call2             r0, r2, r1, r0\l  5: Ret               r0\l" ]
     f16_n1 [ label = "EXIT" ]
 
-    f16_n0 -> f16_n1 [label="uncond"]
+    f16_n0 -> f16_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_17 {
@@ -264,10 +298,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f17_n0 [ label = "Block 0 (PC 0-12)\l  0: CreateEnvironment r0\l  1: LoadParam         r1, 1\l  2: StoreToEnvironment r0, 0, r1\l  3: GetGlobalObject   r1\l  4: TryGetById        r2, r1, 1, \"Promise\"\l  5: GetByIdShort      r1, r2, 2, \"prototype\"\l  6: CreateThis        r1, r1, r2\l  7: CreateClosure     r3, r0, Function<>18\l  8: Mov               r4, r1\l  9: Construct         r0, r2, 2\l  10: SelectObject      r0, r1, r0\l  11: Ret               r0\l" ]
     f17_n1 [ label = "EXIT" ]
 
-    f17_n0 -> f17_n1 [label="uncond"]
+    f17_n0 -> f17_n1 [label="Uncond"]
   }
 
   subgraph cluster_function_18 {
@@ -275,10 +311,12 @@ digraph {
     style = filled;
     color = lightgrey;
 
+    edge [fontname="Arial"];
+
     f18_n0 [ label = "Block 0 (PC 0-8)\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"setTimeout\"\l  2: GetEnvironment    r0, 0\l  3: LoadFromEnvironment r2, r0, 0\l  4: LoadConstUndefined r1\l  5: LoadParam         r0, 1\l  6: Call3             r0, r3, r1, r0, r2\l  7: Ret               r0\l" ]
     f18_n1 [ label = "EXIT" ]
 
-    f18_n0 -> f18_n1 [label="uncond"]
+    f18_n0 -> f18_n1 [label="Uncond"]
   }
 
 }

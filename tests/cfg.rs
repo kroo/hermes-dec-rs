@@ -2139,12 +2139,12 @@ fn test_edge_labels_in_dot_output() {
         "DOT output should contain edge labels"
     );
     assert!(
-        dot_output.contains("true"),
-        "DOT output should contain 'true' edge label"
+        dot_output.contains("True"),
+        "DOT output should contain 'True' edge label"
     );
     assert!(
-        dot_output.contains("false"),
-        "DOT output should contain 'false' edge label"
+        dot_output.contains("False"),
+        "DOT output should contain 'False' edge label"
     );
 
     // Verify the structure includes edge labels

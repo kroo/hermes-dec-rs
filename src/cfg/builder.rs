@@ -673,7 +673,8 @@ impl<'a> CfgBuilder<'a> {
         let mut dot = String::new();
         dot.push_str("digraph {\n");
         dot.push_str("  rankdir=TB;\n");
-        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n\n");
+        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n");
+        dot.push_str("  edge [fontname=\"Arial\"];\n\n");
 
         // Add nodes
         for node in graph.node_indices() {
@@ -700,20 +701,20 @@ impl<'a> CfgBuilder<'a> {
             let edge_kind = graph.edge_weight(edge).unwrap();
 
             let label = match edge_kind {
-                EdgeKind::Uncond => "uncond",
-                EdgeKind::True => "true",
-                EdgeKind::False => "false",
+                EdgeKind::Uncond => to_title_case("uncond"),
+                EdgeKind::True => to_title_case("true"),
+                EdgeKind::False => to_title_case("false"),
                 EdgeKind::Switch(case_index) => {
                     dot.push_str(&format!(
-                        "  {} -> {} [label=\"switch({})\"]\n",
+                        "  {} -> {} [label=\"Switch({})\"]\n",
                         tail.index(),
                         head.index(),
                         case_index
                     ));
                     continue;
                 }
-                EdgeKind::Default => "default",
-                EdgeKind::Fall => "fall",
+                EdgeKind::Default => to_title_case("default"),
+                EdgeKind::Fall => to_title_case("fall"),
             };
 
             dot.push_str(&format!(
@@ -737,7 +738,8 @@ impl<'a> CfgBuilder<'a> {
         let mut dot = String::new();
         dot.push_str("digraph {\n");
         dot.push_str("  rankdir=TB;\n");
-        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n\n");
+        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n");
+        dot.push_str("  edge [fontname=\"Arial\"];\n\n");
 
         // Add nodes with disassembled instructions
         for node in graph.node_indices() {
@@ -780,20 +782,20 @@ impl<'a> CfgBuilder<'a> {
             let edge_kind = graph.edge_weight(edge).unwrap();
 
             let label = match edge_kind {
-                EdgeKind::Uncond => "uncond",
-                EdgeKind::True => "true",
-                EdgeKind::False => "false",
+                EdgeKind::Uncond => to_title_case("uncond"),
+                EdgeKind::True => to_title_case("true"),
+                EdgeKind::False => to_title_case("false"),
                 EdgeKind::Switch(case_index) => {
                     dot.push_str(&format!(
-                        "  {} -> {} [label=\"switch({})\"]\n",
+                        "  {} -> {} [label=\"Switch({})\"]\n",
                         tail.index(),
                         head.index(),
                         case_index
                     ));
                     continue;
                 }
-                EdgeKind::Default => "default",
-                EdgeKind::Fall => "fall",
+                EdgeKind::Default => to_title_case("default"),
+                EdgeKind::Fall => to_title_case("fall"),
             };
 
             dot.push_str(&format!(
@@ -823,6 +825,7 @@ impl<'a> CfgBuilder<'a> {
         dot.push_str(&format!("    label = \"Function {}\";\n", function_index));
         dot.push_str("    style = filled;\n");
         dot.push_str("    color = lightgrey;\n\n");
+        dot.push_str("    edge [fontname=\"Arial\"];\n\n");
 
         // Add nodes with disassembled instructions
         for node in graph.node_indices() {
@@ -868,18 +871,18 @@ impl<'a> CfgBuilder<'a> {
             let head_id = format!("f{}_n{}", function_index, head.index());
 
             let label = match edge_kind {
-                EdgeKind::Uncond => "uncond",
-                EdgeKind::True => "true",
-                EdgeKind::False => "false",
+                EdgeKind::Uncond => to_title_case("uncond"),
+                EdgeKind::True => to_title_case("true"),
+                EdgeKind::False => to_title_case("false"),
                 EdgeKind::Switch(case_index) => {
                     dot.push_str(&format!(
-                        "    {} -> {} [label=\"switch({})\"]\n",
+                        "    {} -> {} [label=\"Switch({})\"]\n",
                         tail_id, head_id, case_index
                     ));
                     continue;
                 }
-                EdgeKind::Default => "default",
-                EdgeKind::Fall => "fall",
+                EdgeKind::Default => to_title_case("default"),
+                EdgeKind::Fall => to_title_case("fall"),
             };
 
             dot.push_str(&format!(
@@ -930,4 +933,15 @@ impl<'a> CfgBuilder<'a> {
             .get_label_by_inst_index(self.function_index, start_pc)
             .cloned()
     }
+}
+
+// Helper function to convert a &str to Title Case
+fn to_title_case(s: &str) -> String {
+    if s.is_empty() {
+        return String::new();
+    }
+    let mut chars = s.chars();
+    let first = chars.next().unwrap().to_uppercase();
+    let rest = chars.as_str().to_lowercase();
+    format!("{}{}", first, rest)
 }
