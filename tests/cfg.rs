@@ -2388,3 +2388,125 @@ fn test_multiple_loops() {
         "Node C should be in two loops (nested)"
     );
 }
+
+/// Test that loop visualization in DOT output works correctly
+#[test]
+fn test_loop_visualization_in_dot() {
+    // Create a simple loop: A -> B -> C -> B (loop)
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (conditional)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to B
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // Jump from B to C
+        ("Jmp", 3, 1, None),        // Jump from C back to B
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let dot_output = cfg.to_dot_with_loops();
+
+    // Should contain loop analysis visualization elements
+    assert!(
+        dot_output.contains("cluster_loop_0"),
+        "Should contain loop cluster"
+    );
+    assert!(
+        dot_output.contains("Loop 0: While"),
+        "Should show loop type"
+    );
+    assert!(
+        dot_output.contains("color=red"),
+        "Should show back-edges in red"
+    );
+    assert!(
+        dot_output.contains("style=dashed"),
+        "Should show back-edges as dashed"
+    );
+    assert!(
+        dot_output.contains("fillcolor=\"lightblue\""),
+        "Should color loop nodes"
+    );
+    assert!(
+        dot_output.contains("penwidth=3"),
+        "Should highlight loop headers"
+    );
+}
+
+/// Test that generates a DOT file for loop visualization demo
+#[test]
+fn test_generate_loop_visualization_demo() {
+    // Create a simple loop example that we know works
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A (entry)
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (loop header)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C (loop body)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to B
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // B -> C (enter loop)
+        ("Jmp", 3, 1, None),        // C -> B (loop back)
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let dot_output = cfg.to_dot_with_loops();
+
+    // Write to a file for manual inspection
+    use std::fs;
+    fs::write("loop_visualization_demo.dot", &dot_output).expect("Failed to write DOT file");
+
+    // Verify the output contains expected elements
+    assert!(
+        dot_output.contains("cluster_loop_0"),
+        "Should contain loop cluster"
+    );
+    assert!(
+        dot_output.contains("Loop 0: While"),
+        "Should show loop type"
+    );
+    assert!(
+        dot_output.contains("color=red"),
+        "Should show back-edges in red"
+    );
+    assert!(
+        dot_output.contains("style=dashed"),
+        "Should show back-edges as dashed"
+    );
+    assert!(
+        dot_output.contains("fillcolor=\"lightblue\""),
+        "Should color loop nodes"
+    );
+    assert!(
+        dot_output.contains("penwidth=3"),
+        "Should highlight loop headers"
+    );
+}

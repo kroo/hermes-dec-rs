@@ -810,6 +810,145 @@ impl<'a> CfgBuilder<'a> {
         dot
     }
 
+    /// Export CFG to DOT format with loop analysis visualization
+    pub fn to_dot_with_loops(&self, graph: &DiGraph<Block, EdgeKind>) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph {\n");
+        dot.push_str("  rankdir=TB;\n");
+        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n");
+        dot.push_str("  edge [fontname=\"Arial\"];\n\n");
+
+        // Analyze loops
+        let loop_analysis = self.analyze_loops(graph);
+
+        // Add nodes with loop information
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let mut node_attrs = Vec::new();
+
+            // Base label
+            let label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                format!(
+                    "Block {} (PC {}-{})",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                )
+            };
+            node_attrs.push(format!("label=\"{}\"", label));
+
+            // Add loop information
+            if let Some(loop_indices) = loop_analysis.node_to_loops.get(&node) {
+                if !loop_indices.is_empty() {
+                    // Find the innermost loop (last in the list)
+                    let innermost_loop_idx = loop_indices.last().unwrap();
+                    let loop_info = &loop_analysis.loops[*innermost_loop_idx];
+
+                    // Color based on loop type
+                    let color = match loop_info.loop_type {
+                        crate::cfg::analysis::LoopType::While => "lightblue",
+                        crate::cfg::analysis::LoopType::For => "lightgreen",
+                        crate::cfg::analysis::LoopType::DoWhile => "lightyellow",
+                    };
+                    node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
+
+                    // Add loop header indicator
+                    if loop_info.header == node {
+                        node_attrs.push("penwidth=3".to_string());
+                        node_attrs.push("color=red".to_string());
+                    }
+
+                    // Add loop body indicator
+                    if loop_info.body_nodes.contains(&node) {
+                        node_attrs.push("shape=box".to_string());
+                    }
+                }
+            }
+
+            // Add exit node styling
+            if block.is_exit() {
+                node_attrs.push("style=filled, fillcolor=lightgray".to_string());
+            }
+
+            dot.push_str(&format!("  {} [{}]\n", node.index(), node_attrs.join(", ")));
+        }
+
+        dot.push_str("\n");
+
+        // Add edges with loop information
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            let edge_kind = graph.edge_weight(edge).unwrap();
+            let mut edge_attrs = Vec::new();
+
+            // Edge label
+            let label = match edge_kind {
+                EdgeKind::Uncond => to_title_case("uncond"),
+                EdgeKind::True => to_title_case("true"),
+                EdgeKind::False => to_title_case("false"),
+                EdgeKind::Switch(case_index) => format!("Switch({})", case_index),
+                EdgeKind::Default => to_title_case("default"),
+                EdgeKind::Fall => to_title_case("fall"),
+            };
+            edge_attrs.push(format!("label=\"{}\"", label));
+
+            // Check if this is a back-edge
+            let mut is_back_edge = false;
+            for loop_info in &loop_analysis.loops {
+                for (back_tail, back_head) in &loop_info.back_edges {
+                    if *back_tail == tail && *back_head == head {
+                        is_back_edge = true;
+                        edge_attrs.push("color=red".to_string());
+                        edge_attrs.push("penwidth=2".to_string());
+                        edge_attrs.push("style=dashed".to_string());
+                        break;
+                    }
+                }
+                if is_back_edge {
+                    break;
+                }
+            }
+
+            // Check if this is a loop exit edge
+            for loop_info in &loop_analysis.loops {
+                if loop_info.body_nodes.contains(&tail) && !loop_info.body_nodes.contains(&head) {
+                    edge_attrs.push("color=green".to_string());
+                    edge_attrs.push("penwidth=2".to_string());
+                    break;
+                }
+            }
+
+            dot.push_str(&format!(
+                "  {} -> {} [{}]\n",
+                tail.index(),
+                head.index(),
+                edge_attrs.join(", ")
+            ));
+        }
+
+        // Add loop information as subgraphs
+        for (i, loop_info) in loop_analysis.loops.iter().enumerate() {
+            dot.push_str(&format!("\n  subgraph cluster_loop_{} {{\n", i));
+            dot.push_str(&format!(
+                "    label=\"Loop {}: {:?}\";\n",
+                i, loop_info.loop_type
+            ));
+            dot.push_str("    style=dashed;\n");
+            dot.push_str("    color=blue;\n");
+
+            for &node in &loop_info.body_nodes {
+                dot.push_str(&format!("    {};\n", node.index()));
+            }
+
+            dot.push_str("  }\n");
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
     /// Export CFG to DOT format as a subgraph for a specific function
     pub fn to_dot_subgraph(
         &self,

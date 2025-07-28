@@ -162,6 +162,11 @@ impl<'a> Cfg<'a> {
     pub fn analyze_loops(&self) -> analysis::LoopAnalysis {
         self.builder.analyze_loops(&self.graph)
     }
+
+    /// Export CFG to DOT format with loop analysis visualization
+    pub fn to_dot_with_loops(&self) -> String {
+        self.builder.to_dot_with_loops(&self.graph)
+    }
 }
 
 // Re-export main types for convenience

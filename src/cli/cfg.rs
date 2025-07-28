@@ -8,6 +8,7 @@ pub fn cfg(
     input_path: &Path,
     function_index: Option<usize>,
     output_dot: Option<&Path>,
+    output_loops: Option<&Path>,
 ) -> DecompilerResult<()> {
     // Parse the HBC file
     let data = std::fs::read(input_path)
@@ -32,13 +33,13 @@ pub fn cfg(
             });
         }
 
-        analyze_function_cfg(&hbc_file, func_idx as u32, output_dot)?;
+        analyze_function_cfg(&hbc_file, func_idx as u32, output_dot, output_loops)?;
     } else {
         // Analyze all functions
         println!("Analyzing CFG for all functions...");
         for i in 0..hbc_file.functions.count() {
             println!("Function {}: ", i);
-            analyze_function_cfg(&hbc_file, i, None)?;
+            analyze_function_cfg(&hbc_file, i, None, None)?;
         }
     }
 
@@ -50,6 +51,7 @@ fn analyze_function_cfg(
     hbc_file: &HbcFile,
     function_index: u32,
     output_dot: Option<&Path>,
+    output_loops: Option<&Path>,
 ) -> DecompilerResult<()> {
     // Get function instructions
     let instructions = hbc_file.functions.get_instructions(function_index)?;
@@ -97,6 +99,23 @@ fn analyze_function_cfg(
             }
         }
 
+        // Analyze loops with detailed information
+        let loop_analysis = cfg.analyze_loops();
+        if !loop_analysis.loops.is_empty() {
+            println!("  Loop analysis: {} loops found", loop_analysis.loops.len());
+            for (i, loop_info) in loop_analysis.loops.iter().enumerate() {
+                println!(
+                    "    Loop {}: {:?} (header: Block {}, body: {} nodes)",
+                    i,
+                    loop_info.loop_type,
+                    loop_info.header.index(),
+                    loop_info.body_nodes.len()
+                );
+                println!("      Back edges: {} found", loop_info.back_edges.len());
+                println!("      Exit nodes: {} found", loop_info.exit_nodes.len());
+            }
+        }
+
         // Find if/else join blocks
         let join_blocks = cfg.find_if_else_joins();
         if !join_blocks.is_empty() {
@@ -124,6 +143,17 @@ fn analyze_function_cfg(
         std::fs::write(dot_path, dot_content)
             .map_err(|e| DecompilerError::Io(format!("Failed to write DOT file: {}", e)))?;
         println!("  DOT exported to: {}", dot_path.display());
+    }
+
+    // Export loop visualization DOT if requested
+    if let Some(loops_path) = output_loops {
+        let loops_dot_content = cfg.to_dot_with_loops();
+        std::fs::write(loops_path, loops_dot_content)
+            .map_err(|e| DecompilerError::Io(format!("Failed to write loops DOT file: {}", e)))?;
+        println!(
+            "  Loop visualization DOT exported to: {}",
+            loops_path.display()
+        );
     }
 
     Ok(())

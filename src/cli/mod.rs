@@ -54,6 +54,9 @@ pub enum Commands {
         /// Output DOT file for visualization (optional)
         #[arg(short, long)]
         dot: Option<std::path::PathBuf>,
+        /// Generate DOT file with loop analysis visualization (optional)
+        #[arg(long)]
+        loops: Option<std::path::PathBuf>,
     },
 }
 
@@ -82,8 +85,9 @@ impl Cli {
                 input,
                 function,
                 dot,
+                loops,
             } => {
-                cfg::cfg(&input, function, dot.as_deref())?;
+                cfg::cfg(&input, function, dot.as_deref(), loops.as_deref())?;
             }
         }
 
