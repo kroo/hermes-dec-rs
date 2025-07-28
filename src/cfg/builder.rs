@@ -10,6 +10,7 @@ use crate::hbc::tables::switch_table::SwitchTable;
 use crate::hbc::HbcFile;
 use petgraph::algo::dominators::{self, Dominators};
 use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
 
 /// CFG builder and analyzer
@@ -855,7 +856,7 @@ impl<'a> CfgBuilder<'a> {
                     node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
 
                     // Add loop header indicator
-                    if loop_info.header == node {
+                    if loop_info.is_header(node) {
                         node_attrs.push("penwidth=3".to_string());
                         node_attrs.push("color=red".to_string());
                     }
@@ -1072,11 +1073,12 @@ impl<'a> CfgBuilder<'a> {
                 let exit_nodes = self.find_loop_exits(graph, header, &loop_body);
 
                 let loop_info = Loop {
-                    header,
+                    headers: vec![header],
                     body_nodes: loop_body,
                     back_edges: vec![(tail, header)],
                     loop_type,
                     exit_nodes,
+                    is_irreducible: false,
                 };
 
                 loops.push(loop_info);
@@ -1090,6 +1092,139 @@ impl<'a> CfgBuilder<'a> {
                         .or_insert_with(Vec::new)
                         .push(loop_idx);
                 }
+            }
+        }
+
+        LoopAnalysis {
+            loops,
+            node_to_loops,
+        }
+    }
+
+    /// Find irreducible loops in the CFG
+    fn find_irreducible_loops(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        _dominators: &Dominators<NodeIndex>,
+    ) -> Vec<crate::cfg::analysis::Loop> {
+        let mut irreducible_loops = Vec::new();
+
+        // Find strongly connected components (SCCs) that contain multiple headers
+        let sccs = petgraph::algo::tarjan_scc(graph);
+
+        for scc in sccs {
+            if scc.len() < 2 {
+                continue; // Need at least 2 nodes for a loop
+            }
+
+            // Check if this SCC has multiple entry points (headers)
+            let mut headers = Vec::new();
+            for &node in &scc {
+                let mut is_header = false;
+                for edge in graph.edges_directed(node, petgraph::Direction::Incoming) {
+                    let source = edge.source();
+                    if !scc.contains(&source) {
+                        is_header = true;
+                        break;
+                    }
+                }
+                if is_header {
+                    headers.push(node);
+                }
+            }
+
+            // If we have multiple headers, this is an irreducible loop
+            if headers.len() > 1 {
+                let mut loop_body = HashSet::new();
+                for &node in &scc {
+                    loop_body.insert(node);
+                }
+
+                // Find back-edges within this SCC
+                let mut back_edges = Vec::new();
+                for &node in &scc {
+                    for edge in graph.edges_directed(node, petgraph::Direction::Outgoing) {
+                        let target = edge.target();
+                        if scc.contains(&target) {
+                            back_edges.push((node, target));
+                        }
+                    }
+                }
+
+                // Find exit nodes
+                let mut exit_nodes = Vec::new();
+                for &node in &scc {
+                    for edge in graph.edges_directed(node, petgraph::Direction::Outgoing) {
+                        let target = edge.target();
+                        if !scc.contains(&target) {
+                            exit_nodes.push(target);
+                        }
+                    }
+                }
+
+                let loop_info = crate::cfg::analysis::Loop {
+                    headers,
+                    body_nodes: loop_body,
+                    back_edges,
+                    loop_type: crate::cfg::analysis::LoopType::While, // Default for irreducible
+                    exit_nodes,
+                    is_irreducible: true,
+                };
+
+                irreducible_loops.push(loop_info);
+            }
+        }
+
+        irreducible_loops
+    }
+
+    /// Analyze loops including irreducible loops
+    pub fn analyze_loops_with_irreducible(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+    ) -> crate::cfg::analysis::LoopAnalysis {
+        use crate::cfg::analysis::{Loop, LoopAnalysis};
+        use std::collections::HashMap;
+
+        let mut loops = Vec::new();
+        let mut node_to_loops = HashMap::new();
+
+        // Get dominators for reducible loop detection
+        if let Some(dominators) = self.analyze_dominators(graph) {
+            // Find reducible loops (natural loops)
+            let back_edges = self.find_back_edges(graph, &dominators);
+
+            for (header, tail) in back_edges {
+                let loop_body = self.compute_loop_body(graph, header, tail, &dominators);
+                let loop_type = self.classify_loop_type(graph, header, tail, &loop_body);
+                let exit_nodes = self.find_loop_exits(graph, header, &loop_body);
+
+                let loop_info = Loop {
+                    headers: vec![header],
+                    body_nodes: loop_body,
+                    back_edges: vec![(tail, header)],
+                    loop_type,
+                    exit_nodes,
+                    is_irreducible: false,
+                };
+
+                loops.push(loop_info);
+            }
+        }
+
+        // Find irreducible loops
+        if let Some(dominators) = self.analyze_dominators(graph) {
+            let irreducible_loops = self.find_irreducible_loops(graph, &dominators);
+            loops.extend(irreducible_loops);
+        }
+
+        // Build node-to-loops mapping
+        for (loop_idx, loop_info) in loops.iter().enumerate() {
+            for &node in &loop_info.body_nodes {
+                node_to_loops
+                    .entry(node)
+                    .or_insert_with(Vec::new)
+                    .push(loop_idx);
             }
         }
 

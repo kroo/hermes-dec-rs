@@ -2217,7 +2217,10 @@ fn test_compute_loop_body() {
         .contains(&cfg.builder().get_block_at_pc(2).unwrap()));
 
     // Loop header should be B (the conditional jump)
-    assert_eq!(loop_info.header, cfg.builder().get_block_at_pc(1).unwrap());
+    assert_eq!(
+        loop_info.primary_header(),
+        cfg.builder().get_block_at_pc(1).unwrap()
+    );
 
     // Should have one back-edge from C to B
     assert_eq!(loop_info.back_edges.len(), 1);
@@ -2509,4 +2512,100 @@ fn test_generate_loop_visualization_demo() {
         dot_output.contains("penwidth=3"),
         "Should highlight loop headers"
     );
+}
+
+/// Test irreducible loop detection
+#[test]
+fn test_irreducible_loop_detection() {
+    // Create an irreducible loop structure: A -> B -> C -> A, A -> C
+    // This creates multiple entry points to the loop
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A (entry)
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (conditional)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to A
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 4: Jump back to C
+        UnifiedInstruction::Ret { operand_0: 1 }, // 5: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // A -> B
+        ("Jmp", 3, 0, None),        // B -> A
+        ("Jmp", 4, 2, None),        // A -> C (creates irreducible structure)
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let loop_analysis = cfg.analyze_loops_with_irreducible();
+
+    // Should detect irreducible loops
+    assert!(!loop_analysis.loops.is_empty(), "Should detect loops");
+
+    // Check for irreducible loop characteristics
+    for loop_info in &loop_analysis.loops {
+        if loop_info.is_irreducible {
+            assert!(
+                loop_info.headers.len() > 1,
+                "Irreducible loop should have multiple headers"
+            );
+            assert!(
+                loop_info.body_nodes.len() >= 2,
+                "Loop should have at least 2 nodes"
+            );
+        }
+    }
+}
+
+/// Test that irreducible loop analysis includes reducible loops too
+#[test]
+fn test_irreducible_analysis_includes_reducible() {
+    // Create a simple reducible loop
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: A (entry)
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 1: B (loop header)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: C (loop body)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: Jump back to B
+        UnifiedInstruction::Ret { operand_0: 1 }, // 4: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 1, 2, Some(1)), // B -> C
+        ("Jmp", 3, 1, None),        // C -> B
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let loop_analysis = cfg.analyze_loops_with_irreducible();
+
+    // Should detect the reducible loop
+    assert!(
+        !loop_analysis.loops.is_empty(),
+        "Should detect reducible loop"
+    );
+
+    // Should have at least one reducible loop
+    let has_reducible = loop_analysis.loops.iter().any(|l| !l.is_irreducible);
+    assert!(has_reducible, "Should detect reducible loops");
 }

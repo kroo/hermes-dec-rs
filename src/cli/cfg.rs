@@ -104,11 +104,16 @@ fn analyze_function_cfg(
         if !loop_analysis.loops.is_empty() {
             println!("  Loop analysis: {} loops found", loop_analysis.loops.len());
             for (i, loop_info) in loop_analysis.loops.iter().enumerate() {
+                let header_info = if loop_info.is_irreducible {
+                    format!("irreducible with {} headers", loop_info.headers.len())
+                } else {
+                    format!("header: Block {}", loop_info.primary_header().index())
+                };
                 println!(
-                    "    Loop {}: {:?} (header: Block {}, body: {} nodes)",
+                    "    Loop {}: {:?} ({}, body: {} nodes)",
                     i,
                     loop_info.loop_type,
-                    loop_info.header.index(),
+                    header_info,
                     loop_info.body_nodes.len()
                 );
                 println!("      Back edges: {} found", loop_info.back_edges.len());
