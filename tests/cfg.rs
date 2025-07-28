@@ -2004,3 +2004,101 @@ fn test_precise_conditional_edges_long_variants() {
     assert!(found_true, "JmpTrueLong should create a True edge");
     assert!(found_false, "JmpTrueLong should create a False edge");
 }
+
+/// Test precise conditional edge kinds for JmpUndefined instructions
+#[test]
+fn test_precise_conditional_edges_jmp_undefined() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load value
+        UnifiedInstruction::JmpUndefined {
+            operand_0: 0, // Placeholder jump offset
+            operand_1: 1, // Register 1
+        }, // 1: Jump if undefined
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 3: Return
+    ];
+
+    let jumps = vec![
+        ("JmpUndefined", 1, 2, Some(1)), // Jump from instruction 1 to instruction 2
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JmpUndefined instruction
+    let jmp_undefined_block = cfg.builder().get_block_at_pc(1).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(jmp_undefined_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JmpUndefined should create a True edge");
+    assert!(found_false, "JmpUndefined should create a False edge");
+}
+
+/// Test precise conditional edge kinds for JmpUndefinedLong instructions
+#[test]
+fn test_precise_conditional_edges_jmp_undefined_long() {
+    let instructions = vec![
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 42,
+        }, // 0: Load value
+        UnifiedInstruction::JmpUndefinedLong {
+            operand_0: 0, // Placeholder jump offset (32-bit)
+            operand_1: 1, // Register 1
+        }, // 1: Jump if undefined (long)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 100,
+        }, // 2: Load another value
+        UnifiedInstruction::Ret { operand_0: 1 }, // 3: Return
+    ];
+
+    let jumps = vec![
+        ("JmpUndefinedLong", 1, 2, Some(1)), // Jump from instruction 1 to instruction 2
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Find the edge from the JmpUndefinedLong instruction
+    let jmp_undefined_long_block = cfg.builder().get_block_at_pc(1).unwrap();
+    let edges: Vec<_> = cfg.graph().edges(jmp_undefined_long_block).collect();
+
+    // Should have exactly 2 edges: True (jump) and False (fallthrough)
+    assert_eq!(edges.len(), 2);
+
+    let mut found_true = false;
+    let mut found_false = false;
+
+    for edge in edges {
+        match edge.weight() {
+            EdgeKind::True => found_true = true,
+            EdgeKind::False => found_false = true,
+            _ => panic!("Expected True/False edges, got {:?}", edge.weight()),
+        }
+    }
+
+    assert!(found_true, "JmpUndefinedLong should create a True edge");
+    assert!(found_false, "JmpUndefinedLong should create a False edge");
+}

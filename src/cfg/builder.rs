@@ -493,6 +493,8 @@ impl<'a> CfgBuilder<'a> {
             | UnifiedInstruction::JNotLessEqualNLong { .. } => EdgeKind::True,
             UnifiedInstruction::JNotGreaterEqualN { .. }
             | UnifiedInstruction::JNotGreaterEqualNLong { .. } => EdgeKind::True,
+            UnifiedInstruction::JmpUndefined { .. }
+            | UnifiedInstruction::JmpUndefinedLong { .. } => EdgeKind::True,
             UnifiedInstruction::SwitchImm { .. } => {
                 // For switch instructions, we'll handle the edge creation separately
                 // in the add_edges method to create multiple edges for each case
