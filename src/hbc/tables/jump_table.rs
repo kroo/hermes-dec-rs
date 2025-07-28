@@ -209,6 +209,123 @@ impl JumpTable {
         ))
     }
 
+    /// Parse switch tables for a function
+    pub fn parse_switch_tables_for_function(
+        function_index: u32,
+        instructions: &[HbcFunctionInstruction],
+        hbc_file_data: &[u8], // Full HBC file data instead of just function bytecode
+        jump_table_cache: &mut super::switch_table::JumpTableCache,
+        function_body_offset: u32, // Absolute offset of the function body in the HBC file
+    ) -> Result<Vec<super::switch_table::SwitchTable>, DecompilerError> {
+        let mut switch_tables = Vec::new();
+
+        // Build address-to-instruction-index mapping
+        let mut address_to_index = HashMap::new();
+        for instruction in instructions.iter() {
+            // Use absolute addresses (function_body_offset + instruction.offset)
+            let absolute_address = function_body_offset + instruction.offset;
+            address_to_index.insert(absolute_address, instruction.instruction_index);
+        }
+
+        for (_i, instruction) in instructions.iter().enumerate() {
+            if let UnifiedInstruction::SwitchImm {
+                operand_0: _register,
+                operand_1: jump_table_offset,
+                operand_2: default_offset,
+                operand_3: min_value,
+                operand_4: max_value,
+            } = &instruction.instruction
+            {
+                // Calculate the absolute offset of the switch instruction in the HBC file
+                let switch_instruction_absolute_offset = function_body_offset + instruction.offset;
+
+                // Calculate jump table address with 4-byte alignment
+                // jump_table_addr = (ip + op2 + 3) & ~3
+                let jump_table_addr =
+                    (switch_instruction_absolute_offset + jump_table_offset + 3) & !3;
+
+                // Get or create jump table from cache
+                let jump_table = jump_table_cache.get_or_create_jump_table(
+                    jump_table_addr,
+                    *min_value,
+                    *max_value,
+                );
+
+                // Only parse the jump table if it hasn't been parsed yet
+                if jump_table.entries.is_empty() {
+                    // Parse each entry in the jump table
+                    for case_value in *min_value..=*max_value {
+                        let table_index = (case_value - min_value) as usize;
+                        let entry_offset = jump_table_addr as usize + (table_index * 4);
+
+                        // Ensure we have enough bytes to read from the full HBC file data
+                        if entry_offset + 4 <= hbc_file_data.len() {
+                            // Read 32-bit signed offset (little-endian)
+                            let offset_bytes = [
+                                hbc_file_data[entry_offset],
+                                hbc_file_data[entry_offset + 1],
+                                hbc_file_data[entry_offset + 2],
+                                hbc_file_data[entry_offset + 3],
+                            ];
+                            let target_offset = i32::from_le_bytes(offset_bytes);
+
+                            // Add entry to jump table
+                            jump_table.add_entry(case_value, target_offset);
+                        } else {
+                            // If we can't read the bytecode, use a placeholder
+                            let target_offset = (case_value * 4) as i32; // Placeholder
+                            jump_table.add_entry(case_value, target_offset);
+                        }
+                    }
+                }
+
+                // Increment reference count for this jump table
+                jump_table.increment_reference_count();
+
+                // Create switch table
+                let mut switch_table = super::switch_table::SwitchTable::new(
+                    *min_value,
+                    *max_value,
+                    *default_offset,
+                    *jump_table_offset,
+                    jump_table_addr,
+                    instruction.instruction_index,
+                    function_index,
+                );
+
+                // Add cases from the cached jump table
+                for case_value in *min_value..=*max_value {
+                    if let Some(&target_offset) = jump_table.get_entry(case_value) {
+                        switch_table.add_case(case_value, target_offset);
+
+                        // Set the target instruction index if we can find it
+                        let jump_dest = switch_instruction_absolute_offset as i32 + target_offset;
+
+                        if let Some(&target_instruction_index) =
+                            address_to_index.get(&(jump_dest as u32))
+                        {
+                            // Update the case with the target instruction index
+                            if let Some(case) = switch_table.cases.last_mut() {
+                                case.target_instruction_index = Some(target_instruction_index);
+                            }
+                        }
+                    }
+                }
+
+                // Add default case
+                let default_target_offset = *default_offset;
+                let default_jump_dest =
+                    switch_instruction_absolute_offset as i32 + default_target_offset;
+                switch_table.default_instruction_index =
+                    address_to_index.get(&(default_jump_dest as u32)).copied();
+
+                switch_tables.push(switch_table);
+            }
+        }
+
+        Ok(switch_tables)
+    }
+
     /// Merge jump table data from parallel processing
     pub fn merge_function_data(
         &mut self,
