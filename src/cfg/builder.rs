@@ -385,7 +385,15 @@ impl<'a> CfgBuilder<'a> {
                         if self.is_conditional_jump(last_instruction) {
                             let fallthrough_pc = end_pc;
                             if let Some(&to_node) = self.block_starts.get(&fallthrough_pc) {
-                                graph.add_edge(from_node, to_node, EdgeKind::Fall);
+                                // For JmpFalse, the fallthrough is the True branch
+                                // For all other conditional jumps, the fallthrough is the False branch
+                                let fallthrough_edge_kind = match &last_instruction.instruction {
+                                    UnifiedInstruction::JmpFalse { .. } | UnifiedInstruction::JmpFalseLong { .. } => {
+                                        EdgeKind::True
+                                    }
+                                    _ => EdgeKind::False,
+                                };
+                                graph.add_edge(from_node, to_node, fallthrough_edge_kind);
                             }
                         }
                     }
@@ -435,12 +443,72 @@ impl<'a> CfgBuilder<'a> {
             UnifiedInstruction::JmpFalse { .. } | UnifiedInstruction::JmpFalseLong { .. } => {
                 EdgeKind::False
             }
+            UnifiedInstruction::JEqual { .. } | UnifiedInstruction::JEqualLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotEqual { .. } | UnifiedInstruction::JNotEqualLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JStrictEqual { .. } | UnifiedInstruction::JStrictEqualLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JStrictNotEqual { .. } | UnifiedInstruction::JStrictNotEqualLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JLess { .. } | UnifiedInstruction::JLessLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JGreater { .. } | UnifiedInstruction::JGreaterLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JLessEqual { .. } | UnifiedInstruction::JLessEqualLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JGreaterEqual { .. } | UnifiedInstruction::JGreaterEqualLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotLess { .. } | UnifiedInstruction::JNotLessLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotGreater { .. } | UnifiedInstruction::JNotGreaterLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotLessEqual { .. } | UnifiedInstruction::JNotLessEqualLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotGreaterEqual { .. } | UnifiedInstruction::JNotGreaterEqualLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JLessN { .. } | UnifiedInstruction::JLessNLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JGreaterN { .. } | UnifiedInstruction::JGreaterNLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JLessEqualN { .. } | UnifiedInstruction::JLessEqualNLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JGreaterEqualN { .. } | UnifiedInstruction::JGreaterEqualNLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotLessN { .. } | UnifiedInstruction::JNotLessNLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotGreaterN { .. } | UnifiedInstruction::JNotGreaterNLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotLessEqualN { .. } | UnifiedInstruction::JNotLessEqualNLong { .. } => {
+                EdgeKind::True
+            }
+            UnifiedInstruction::JNotGreaterEqualN { .. } | UnifiedInstruction::JNotGreaterEqualNLong { .. } => {
+                EdgeKind::True
+            }
             UnifiedInstruction::SwitchImm { .. } => {
                 // For switch instructions, we'll handle the edge creation separately
                 // in the add_edges method to create multiple edges for each case
                 EdgeKind::Default
             }
-            _ => EdgeKind::Uncond, // Default for other conditional jumps
+            _ => EdgeKind::Uncond, // Default for other instructions
         }
     }
 
