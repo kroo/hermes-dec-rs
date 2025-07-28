@@ -5,6 +5,7 @@
 use crate::cfg::{Block, EdgeKind};
 use petgraph::algo::dominators::Dominators;
 use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
 
 /// Post-dominator analysis results
@@ -173,14 +174,138 @@ pub fn find_natural_loops(
 }
 
 pub fn find_if_else_regions(
-    _graph: &DiGraph<Block, EdgeKind>,
-    _post_doms: &PostDominatorAnalysis,
+    graph: &DiGraph<Block, EdgeKind>,
+    post_doms: &PostDominatorAnalysis,
 ) -> IfElseAnalysis {
-    // TODO: Implement if/else region detection
-    // This will be implemented in CFG-07
+    let mut regions = Vec::new();
+    let mut node_to_regions = HashMap::new();
+
+    // Step 1: Find all conditional source blocks
+    for node in graph.node_indices() {
+        if let Some(region) = detect_if_else_region(graph, post_doms, node) {
+            let region_idx = regions.len();
+
+            // Add region to list
+            regions.push(region.clone());
+
+            // Build node-to-region mapping
+            add_nodes_to_region_mapping(&mut node_to_regions, &region, region_idx);
+        }
+    }
+
     IfElseAnalysis {
-        regions: Vec::new(),
-        node_to_regions: HashMap::new(),
+        regions,
+        node_to_regions,
+    }
+}
+
+/// Detect if/else region starting from a potential conditional source
+fn detect_if_else_region(
+    graph: &DiGraph<Block, EdgeKind>,
+    post_doms: &PostDominatorAnalysis,
+    source: NodeIndex,
+) -> Option<IfElseRegion> {
+    use petgraph::Direction;
+
+    // Check if this node has exactly True + False outgoing edges
+    let outgoing_edges = graph.edges_directed(source, Direction::Outgoing);
+
+    let mut true_target = None;
+    let mut false_target = None;
+    let mut other_edges = 0;
+
+    for edge in outgoing_edges {
+        match edge.weight() {
+            EdgeKind::True => {
+                if true_target.is_some() {
+                    return None;
+                } // Multiple True edges
+                true_target = Some(edge.target());
+            }
+            EdgeKind::False => {
+                if false_target.is_some() {
+                    return None;
+                } // Multiple False edges
+                false_target = Some(edge.target());
+            }
+            _ => other_edges += 1,
+        }
+    }
+
+    // Must have exactly True + False edges, no others
+    if let (Some(then_head), Some(else_head)) = (true_target, false_target) {
+        if other_edges == 0 {
+            // Step 2: Find lowest common post-dominator
+            if let Some(join_block) =
+                find_lowest_common_post_dominator(post_doms, then_head, else_head)
+            {
+                return Some(IfElseRegion {
+                    conditional_source: source,
+                    then_head,
+                    else_head,
+                    join_block,
+                });
+            }
+        }
+    }
+
+    None
+}
+
+/// Find the lowest common post-dominator of two nodes
+fn find_lowest_common_post_dominator(
+    post_doms: &PostDominatorAnalysis,
+    node_a: NodeIndex,
+    node_b: NodeIndex,
+) -> Option<NodeIndex> {
+    // Get all post-dominators of both nodes
+    let post_doms_a = post_doms.post_dominators.get(&node_a)?;
+    let post_doms_b = post_doms.post_dominators.get(&node_b)?;
+
+    // Find intersection (common post-dominators)
+    let common_post_doms: HashSet<_> = post_doms_a.intersection(post_doms_b).cloned().collect();
+
+    if common_post_doms.is_empty() {
+        return None;
+    }
+
+    // Find the "lowest" (closest to nodes) common post-dominator
+    // This is the one that is post-dominated by all others
+    for &candidate in &common_post_doms {
+        let mut is_lowest = true;
+        for &other in &common_post_doms {
+            if candidate != other && post_doms.dominates(other, candidate) {
+                is_lowest = false;
+                break;
+            }
+        }
+        if is_lowest {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+/// Add nodes from an if/else region to the node-to-region mapping
+fn add_nodes_to_region_mapping(
+    node_to_regions: &mut HashMap<NodeIndex, Vec<usize>>,
+    region: &IfElseRegion,
+    region_idx: usize,
+) {
+    // Add all nodes that are part of this if/else region
+    let nodes = vec![
+        region.conditional_source,
+        region.then_head,
+        region.else_head,
+        region.join_block,
+    ];
+
+    for node in nodes {
+        node_to_regions
+            .entry(node)
+            .or_insert_with(Vec::new)
+            .push(region_idx);
     }
 }
 

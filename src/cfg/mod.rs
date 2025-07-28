@@ -172,6 +172,12 @@ impl<'a> Cfg<'a> {
     pub fn analyze_post_dominators(&self) -> Option<analysis::PostDominatorAnalysis> {
         self.builder.analyze_post_dominators(&self.graph)
     }
+
+    /// Analyze if/else regions in the CFG
+    pub fn analyze_if_else_regions(&self) -> Option<analysis::IfElseAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::find_if_else_regions(&self.graph, &post_doms))
+    }
 }
 
 // Re-export main types for convenience
