@@ -1517,7 +1517,10 @@ fn test_precise_conditional_edges_jmp_false() {
         }
     }
 
-    assert!(found_true, "JmpFalse should create a True edge (fallthrough)");
+    assert!(
+        found_true,
+        "JmpFalse should create a True edge (fallthrough)"
+    );
     assert!(found_false, "JmpFalse should create a False edge (jump)");
 }
 
