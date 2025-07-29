@@ -719,9 +719,8 @@ fn operand_type_to_rust_type(operand_type: &str) -> &'static str {
         "Reg8" | "UInt8" | "StringId8" | "EnvId8" => "u8",
         "Addr8" => "i8",
         "UInt16" | "StringId16" | "BigIntId16" | "FunctionId16" => "u16",
-        "Reg32" | "UInt32" | "Imm32" | "StringId32" | "BigIntId32" | "FunctionId32"
-        | "RegExpId32" => "u32",
-        "I32" | "Addr32" => "i32",
+        "Reg32" | "UInt32" | "StringId32" | "BigIntId32" | "FunctionId32" | "RegExpId32" => "u32",
+        "Imm32" | "I32" | "Addr32" => "i32",
         "Double" => "f64",
         _ => panic!("Unknown operand type for Rust mapping: {}", operand_type),
     }

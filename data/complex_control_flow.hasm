@@ -198,7 +198,7 @@ L2:
   LoadConstFalse    r2
   JmpTrueLong       L8, r0
 L1:
-  LoadConstInt      r0, 4294967295
+  LoadConstInt      r0, -1
   JmpTrue           L9, r2
   Mov               r0, r1
 L9:
@@ -211,7 +211,7 @@ Function<complexNestedConditionals>2(5 params, 6 registers, 0 symbols):
   LoadParam         r1, 4
   LoadConstZero     r4
   JGreater          L1, r3, r4
-  LoadConstInt      r5, 4294967286
+  LoadConstInt      r5, -10
   JLess             L2, r3, r5
   Ret               r4
 L2:
@@ -228,7 +228,7 @@ L4:
   Ret               r5
 L1:
   JGreater          L5, r0, r4
-  LoadConstInt      r5, 4294967291
+  LoadConstInt      r5, -5
   JLess             L6, r0, r5
   Ret               r3
 L6:
@@ -242,7 +242,7 @@ L7:
   Ret               r5
 L5:
   JGreater          L8, r2, r4
-  LoadConstInt      r5, 4294967286
+  LoadConstInt      r5, -10
   JLess             L9, r2, r5
   LoadConstUInt8    r5, 2
   Mod               r5, r1, r5
