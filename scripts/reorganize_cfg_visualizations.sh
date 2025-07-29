@@ -48,12 +48,25 @@ move_visualization_files() {
         mkdir -p "$target_dir"
     fi
     
-    # Move visualization files (dot, pdf, png, svg)
+    # Move visualization files (dot, pdf, png, svg) - both regular and analysis
     local moved_count=0
     
+    # Move regular files
     for ext in dot pdf png svg; do
         local source_file="data/$base_name.$ext"
         local target_file="$target_dir/$base_name.$ext"
+        
+        if [ -f "$source_file" ]; then
+            print_info "Moving $source_file to $target_file"
+            mv "$source_file" "$target_file"
+            ((moved_count++))
+        fi
+    done
+    
+    # Move analysis files
+    for ext in dot pdf png svg; do
+        local source_file="data/${base_name}_analysis.$ext"
+        local target_file="$target_dir/${base_name}_analysis.$ext"
         
         if [ -f "$source_file" ]; then
             print_info "Moving $source_file to $target_file"
@@ -100,8 +113,10 @@ base_names=(
     "bigints_v96"
     "cjs_v96"
     "cjs-show-source"
+    "complex_control_flow"
     "dense_switch_test"
     "flow_control"
+    "hermes_dec_sample"
     "regex_test"
 )
 

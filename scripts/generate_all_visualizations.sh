@@ -16,6 +16,25 @@ fi
 echo "✅ DOT files generated"
 echo
 
+# Step 1.5: Generate analysis DOT files using CLI command
+echo "🔍 Step 1.5: Generating analysis DOT files..."
+for hbc_file in data/*.hbc; do
+    if [ -f "$hbc_file" ]; then
+        base_name=$(basename "$hbc_file" .hbc)
+        echo "  Processing $base_name..."
+        
+        # Generate analysis DOT file using CLI command
+        cargo run -- cfg "$hbc_file" --analysis "data/${base_name}_analysis.dot" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "    ✓ Analysis DOT generated"
+        else
+            echo "    ⚠️  Analysis DOT generation failed (continuing)"
+        fi
+    fi
+done
+echo "✅ Analysis DOT files generated"
+echo
+
 # Step 2: Generate combined visualizations (PDF, PNG, SVG)
 echo "🖼️  Step 2: Generating combined visualizations..."
 for dot_file in data/*.dot; do
