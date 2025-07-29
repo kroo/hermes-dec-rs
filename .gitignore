@@ -57,6 +57,9 @@ test/fixtures/*.hbc
 test/fixtures/*.js
 test/fixtures/*.ts
 
+# Large test files directory
+data/large_test_files/
+
 # Benchmark results
 criterion/
 
