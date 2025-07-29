@@ -85,6 +85,9 @@ enum Commands {
         /// Generate DOT file with loop analysis visualization (optional)
         #[arg(long)]
         loops: Option<PathBuf>,
+        /// Generate DOT file with comprehensive analysis visualization (optional)
+        #[arg(long)]
+        analysis: Option<PathBuf>,
     },
 }
 
@@ -115,11 +118,13 @@ fn main() -> Result<()> {
             function,
             dot,
             loops,
+            analysis,
         } => cli::cfg::cfg(
             &input,
             function,
             dot.as_ref().map(|v| &**v),
             loops.as_ref().map(|v| &**v),
+            analysis.as_ref().map(|v| &**v),
         )
         .map_err(|e| miette!("{}", e)),
     }

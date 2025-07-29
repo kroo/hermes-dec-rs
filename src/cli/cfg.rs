@@ -9,6 +9,7 @@ pub fn cfg(
     function_index: Option<usize>,
     output_dot: Option<&Path>,
     output_loops: Option<&Path>,
+    output_analysis: Option<&Path>,
 ) -> DecompilerResult<()> {
     // Parse the HBC file
     let data = std::fs::read(input_path)
@@ -33,13 +34,65 @@ pub fn cfg(
             });
         }
 
-        analyze_function_cfg(&hbc_file, func_idx as u32, output_dot, output_loops)?;
+        analyze_function_cfg(
+            &hbc_file,
+            func_idx as u32,
+            output_dot,
+            output_loops,
+            output_analysis,
+        )?;
     } else {
         // Analyze all functions
         println!("Analyzing CFG for all functions...");
+
+        // If we have an analysis output, generate one comprehensive file with all functions
+        if let Some(analysis_path) = output_analysis {
+            println!("  Generating comprehensive analysis visualization for all functions...");
+            let mut comprehensive_dot = String::new();
+            comprehensive_dot.push_str("digraph {\n");
+            comprehensive_dot.push_str("  rankdir=TB;\n");
+            comprehensive_dot.push_str("  node [shape=box, fontname=\"monospace\"];\n");
+            comprehensive_dot.push_str("  edge [fontname=\"Arial\"];\n\n");
+
+            for i in 0..hbc_file.functions.count() {
+                println!("  Processing Function {}: ", i);
+
+                // Get function instructions
+                let instructions = hbc_file.functions.get_instructions(i)?;
+                if instructions.is_empty() {
+                    println!("    Empty function, skipping");
+                    continue;
+                }
+
+                // Build CFG for this function
+                let mut cfg = Cfg::new(&hbc_file, i);
+                cfg.build();
+
+                println!("    Basic blocks: {}", cfg.graph().node_count());
+                println!("    Edges: {}", cfg.graph().edge_count());
+
+                // Add this function's analysis as a subgraph
+                let function_dot = cfg.to_dot_subgraph_with_analysis(&hbc_file, i);
+                comprehensive_dot.push_str(&function_dot);
+                comprehensive_dot.push_str("\n");
+            }
+
+            comprehensive_dot.push_str("}\n");
+
+            // Write the comprehensive analysis file
+            std::fs::write(analysis_path, comprehensive_dot).map_err(|e| {
+                DecompilerError::Io(format!("Failed to write analysis DOT file: {}", e))
+            })?;
+            println!(
+                "  Comprehensive analysis visualization DOT exported to: {}",
+                analysis_path.display()
+            );
+        }
+
+        // Also generate individual function analysis if requested
         for i in 0..hbc_file.functions.count() {
             println!("Function {}: ", i);
-            analyze_function_cfg(&hbc_file, i, None, None)?;
+            analyze_function_cfg(&hbc_file, i, output_dot, output_loops, None)?;
         }
     }
 
@@ -52,6 +105,7 @@ fn analyze_function_cfg(
     function_index: u32,
     output_dot: Option<&Path>,
     output_loops: Option<&Path>,
+    output_analysis: Option<&Path>,
 ) -> DecompilerResult<()> {
     // Get function instructions
     let instructions = hbc_file.functions.get_instructions(function_index)?;
@@ -158,6 +212,18 @@ fn analyze_function_cfg(
         println!(
             "  Loop visualization DOT exported to: {}",
             loops_path.display()
+        );
+    }
+
+    // Export comprehensive analysis visualization DOT if requested
+    if let Some(analysis_path) = output_analysis {
+        let analysis_dot_content = cfg.to_dot_with_analysis(hbc_file);
+        std::fs::write(analysis_path, analysis_dot_content).map_err(|e| {
+            DecompilerError::Io(format!("Failed to write analysis DOT file: {}", e))
+        })?;
+        println!(
+            "  Comprehensive analysis visualization DOT exported to: {}",
+            analysis_path.display()
         );
     }
 

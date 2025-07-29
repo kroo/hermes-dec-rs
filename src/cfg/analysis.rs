@@ -1083,13 +1083,199 @@ fn compute_chain_statistics(chains: &[ConditionalChain]) -> ChainStatistics {
     }
 }
 
-pub fn find_switch_regions() -> SwitchAnalysis {
-    // TODO: Implement switch region detection
-    // This will be implemented in CFG-08
-    SwitchAnalysis {
-        regions: Vec::new(),
-        node_to_regions: HashMap::new(),
+pub fn find_switch_regions(
+    graph: &DiGraph<Block, EdgeKind>,
+    post_doms: &PostDominatorAnalysis,
+) -> SwitchAnalysis {
+    let mut regions = Vec::new();
+    let mut node_to_regions = HashMap::new();
+
+    // Step 1: Find all switch dispatch blocks
+    let switch_dispatches = find_switch_dispatch_blocks(graph);
+
+    // Step 2: Detect switch regions for each dispatch
+    for dispatch in switch_dispatches {
+        if let Some(region) = detect_switch_region(graph, post_doms, dispatch) {
+            let region_idx = regions.len();
+
+            // Add region to list
+            regions.push(region.clone());
+
+            // Build node-to-region mapping
+            add_nodes_to_switch_region_mapping(&mut node_to_regions, &region, region_idx);
+        }
     }
+
+    SwitchAnalysis {
+        regions,
+        node_to_regions,
+    }
+}
+
+/// Find all switch dispatch blocks (nodes with Switch(idx) edges)
+fn find_switch_dispatch_blocks(graph: &DiGraph<Block, EdgeKind>) -> Vec<NodeIndex> {
+    use petgraph::Direction;
+
+    let mut switch_dispatches = Vec::new();
+
+    for node in graph.node_indices() {
+        let outgoing_edges: Vec<_> = graph.edges_directed(node, Direction::Outgoing).collect();
+
+        let mut has_switch_edges = false;
+        let mut other_edges = 0;
+
+        for edge in &outgoing_edges {
+            match edge.weight() {
+                EdgeKind::Switch(_) => {
+                    has_switch_edges = true;
+                }
+                EdgeKind::Default => {
+                    // Default is part of switch structure, not "other"
+                }
+                _ => other_edges += 1,
+            }
+        }
+
+        // Must have at least one Switch edge and no other edge types
+        if has_switch_edges && other_edges == 0 {
+            switch_dispatches.push(node);
+        }
+    }
+
+    switch_dispatches
+}
+
+/// Detect switch region starting from a potential switch dispatch
+fn detect_switch_region(
+    graph: &DiGraph<Block, EdgeKind>,
+    post_doms: &PostDominatorAnalysis,
+    dispatch: NodeIndex,
+) -> Option<SwitchRegion> {
+    // Collect all switch cases and default case
+    let (cases, default_head) = find_switch_case_heads(graph, dispatch);
+
+    if cases.is_empty() {
+        return None; // No switch cases found
+    }
+
+    // Extract case heads for join point computation
+    let case_heads: Vec<NodeIndex> = cases.iter().map(|case| case.case_head).collect();
+
+    // Find common post-dominator for all case heads
+    if let Some(join_block) = find_switch_join_block(post_doms, &case_heads) {
+        return Some(SwitchRegion {
+            dispatch,
+            cases,
+            default_head,
+            join_block,
+        });
+    }
+
+    None
+}
+
+/// Find switch case heads and default case from a dispatch block
+fn find_switch_case_heads(
+    graph: &DiGraph<Block, EdgeKind>,
+    dispatch: NodeIndex,
+) -> (Vec<SwitchCase>, Option<NodeIndex>) {
+    use petgraph::Direction;
+
+    let mut cases = Vec::new();
+    let mut default_head = None;
+
+    let outgoing_edges = graph.edges_directed(dispatch, Direction::Outgoing);
+
+    for edge in outgoing_edges {
+        match edge.weight() {
+            EdgeKind::Switch(case_index) => {
+                cases.push(SwitchCase {
+                    case_index: *case_index,
+                    case_head: edge.target(),
+                });
+            }
+            EdgeKind::Default => {
+                if default_head.is_some() {
+                    // Multiple default edges - invalid switch
+                    return (Vec::new(), None);
+                }
+                default_head = Some(edge.target());
+            }
+            _ => {
+                // Other edge types - invalid switch
+                return (Vec::new(), None);
+            }
+        }
+    }
+
+    // Sort cases by index for consistent ordering
+    cases.sort_by_key(|case| case.case_index);
+
+    (cases, default_head)
+}
+
+/// Find the common post-dominator for all switch case heads
+fn find_switch_join_block(
+    post_doms: &PostDominatorAnalysis,
+    case_heads: &[NodeIndex],
+) -> Option<NodeIndex> {
+    if case_heads.is_empty() {
+        return None;
+    }
+
+    if case_heads.len() == 1 {
+        // Single case - use its immediate post-dominator
+        return post_doms.immediate_post_dominator(case_heads[0]);
+    }
+
+    // Find lowest common post-dominator of all case heads
+    let mut common_join = case_heads[0];
+
+    for &case_head in &case_heads[1..] {
+        if let Some(join) = find_lowest_common_post_dominator(post_doms, common_join, case_head) {
+            common_join = join;
+        } else {
+            // No common post-dominator found
+            return None;
+        }
+    }
+
+    Some(common_join)
+}
+
+/// Add nodes from a switch region to the node-to-region mapping
+fn add_nodes_to_switch_region_mapping(
+    node_to_regions: &mut HashMap<NodeIndex, Vec<usize>>,
+    region: &SwitchRegion,
+    region_idx: usize,
+) {
+    // Add dispatch node
+    node_to_regions
+        .entry(region.dispatch)
+        .or_insert_with(Vec::new)
+        .push(region_idx);
+
+    // Add all case heads
+    for case in &region.cases {
+        node_to_regions
+            .entry(case.case_head)
+            .or_insert_with(Vec::new)
+            .push(region_idx);
+    }
+
+    // Add default head if present
+    if let Some(default_head) = region.default_head {
+        node_to_regions
+            .entry(default_head)
+            .or_insert_with(Vec::new)
+            .push(region_idx);
+    }
+
+    // Add join block
+    node_to_regions
+        .entry(region.join_block)
+        .or_insert_with(Vec::new)
+        .push(region_idx);
 }
 
 /// Find the next conditional source in a false branch by following edges
@@ -1526,5 +1712,132 @@ mod tests {
         let stats = &conditional_analysis.chain_statistics;
         assert_eq!(stats.total_chains, 1);
         assert_eq!(stats.max_nesting_depth, 1);
+    }
+
+    /// Test basic switch region detection
+    #[test]
+    fn test_switch_region_detection() {
+        let mut graph = DiGraph::new();
+
+        // Create a simple switch CFG: entry -> dispatch -> case1/case2/default -> join -> exit
+        let entry = graph.add_node(Block {
+            start_pc: 0,
+            end_pc: 0,
+            instructions: vec![],
+            is_exit: false,
+        });
+        let dispatch = graph.add_node(Block {
+            start_pc: 1,
+            end_pc: 1,
+            instructions: vec![],
+            is_exit: false,
+        });
+        let case1 = graph.add_node(Block {
+            start_pc: 2,
+            end_pc: 2,
+            instructions: vec![],
+            is_exit: false,
+        });
+        let case2 = graph.add_node(Block {
+            start_pc: 3,
+            end_pc: 3,
+            instructions: vec![],
+            is_exit: false,
+        });
+        let default_case = graph.add_node(Block {
+            start_pc: 4,
+            end_pc: 4,
+            instructions: vec![],
+            is_exit: false,
+        });
+        let join = graph.add_node(Block {
+            start_pc: 5,
+            end_pc: 5,
+            instructions: vec![],
+            is_exit: false,
+        });
+        let exit = graph.add_node(Block {
+            start_pc: 6,
+            end_pc: 6,
+            instructions: vec![],
+            is_exit: true,
+        });
+
+        // Add edges: entry -> dispatch -> cases -> join -> exit
+        graph.add_edge(entry, dispatch, EdgeKind::Uncond);
+        graph.add_edge(dispatch, case1, EdgeKind::Switch(0));
+        graph.add_edge(dispatch, case2, EdgeKind::Switch(1));
+        graph.add_edge(dispatch, default_case, EdgeKind::Default);
+        graph.add_edge(case1, join, EdgeKind::Uncond);
+        graph.add_edge(case2, join, EdgeKind::Uncond);
+        graph.add_edge(default_case, join, EdgeKind::Uncond);
+        graph.add_edge(join, exit, EdgeKind::Uncond);
+
+        // Create mock post-dominator analysis
+        let mut post_dominators = HashMap::new();
+        let mut immediate_post_dominators = HashMap::new();
+
+        // Set up proper post-dominator relationships
+        // exit post-dominates everything
+        let exit_doms: HashSet<_> = graph.node_indices().collect();
+        post_dominators.insert(exit, exit_doms);
+
+        // join post-dominates case1, case2, default_case, and itself
+        let join_doms: HashSet<_> = vec![case1, case2, default_case, join].into_iter().collect();
+        post_dominators.insert(join, join_doms);
+
+        // case1, case2, default_case post-dominate themselves and join
+        for &case in &[case1, case2, default_case] {
+            let mut doms = HashSet::new();
+            doms.insert(case);
+            doms.insert(join);
+            post_dominators.insert(case, doms);
+        }
+
+        // dispatch post-dominates itself
+        let mut dispatch_doms = HashSet::new();
+        dispatch_doms.insert(dispatch);
+        post_dominators.insert(dispatch, dispatch_doms);
+
+        // entry post-dominates itself
+        let mut entry_doms = HashSet::new();
+        entry_doms.insert(entry);
+        post_dominators.insert(entry, entry_doms);
+
+        // Set immediate post-dominators
+        immediate_post_dominators.insert(entry, Some(dispatch));
+        immediate_post_dominators.insert(dispatch, Some(join));
+        immediate_post_dominators.insert(case1, Some(join));
+        immediate_post_dominators.insert(case2, Some(join));
+        immediate_post_dominators.insert(default_case, Some(join));
+        immediate_post_dominators.insert(join, Some(exit));
+        immediate_post_dominators.insert(exit, None);
+
+        let post_doms = PostDominatorAnalysis {
+            post_dominators,
+            immediate_post_dominators,
+        };
+
+        // Analyze switch regions
+        let analysis = find_switch_regions(&graph, &post_doms);
+
+        // Verify switch region detection
+        assert_eq!(analysis.regions.len(), 1);
+        let region = &analysis.regions[0];
+        assert_eq!(region.dispatch, dispatch);
+        assert_eq!(region.cases.len(), 2);
+        assert_eq!(region.cases[0].case_index, 0);
+        assert_eq!(region.cases[0].case_head, case1);
+        assert_eq!(region.cases[1].case_index, 1);
+        assert_eq!(region.cases[1].case_head, case2);
+        assert_eq!(region.default_head, Some(default_case));
+        assert_eq!(region.join_block, join);
+
+        // Verify node-to-region mapping
+        assert!(analysis.node_to_regions.contains_key(&dispatch));
+        assert!(analysis.node_to_regions.contains_key(&case1));
+        assert!(analysis.node_to_regions.contains_key(&case2));
+        assert!(analysis.node_to_regions.contains_key(&default_case));
+        assert!(analysis.node_to_regions.contains_key(&join));
     }
 }

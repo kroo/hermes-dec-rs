@@ -187,6 +187,23 @@ impl<'a> Cfg<'a> {
         let post_doms = self.analyze_post_dominators()?;
         Some(analysis::find_if_else_regions(&self.graph, &post_doms))
     }
+
+    /// Analyze switch regions in the CFG
+    pub fn analyze_switch_regions(&self) -> Option<analysis::SwitchAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::find_switch_regions(&self.graph, &post_doms))
+    }
+
+    /// Export CFG to DOT format with comprehensive analysis visualization
+    pub fn to_dot_with_analysis(&self, hbc_file: &HbcFile) -> String {
+        self.builder.to_dot_with_analysis(&self.graph, hbc_file)
+    }
+
+    /// Export CFG to DOT format as a subgraph with comprehensive analysis
+    pub fn to_dot_subgraph_with_analysis(&self, hbc_file: &HbcFile, function_index: u32) -> String {
+        self.builder
+            .to_dot_subgraph_with_analysis(&self.graph, hbc_file, function_index)
+    }
 }
 
 // Re-export main types for convenience

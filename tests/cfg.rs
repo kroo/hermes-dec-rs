@@ -1150,10 +1150,7 @@ fn test_cfg_integration_with_hbc_files() {
                 let path = entry.path();
                 if let Some(extension) = path.extension() {
                     if extension == "hbc" {
-                        // Skip hermes_dec_sample as requested
-                        if !path.to_string_lossy().contains("hermes_dec_sample") {
-                            hbc_files.push(path);
-                        }
+                        hbc_files.push(path);
                     }
                 }
             }

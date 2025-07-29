@@ -1035,6 +1035,370 @@ impl<'a> CfgBuilder<'a> {
         dot
     }
 
+    /// Export CFG to DOT format with comprehensive analysis visualization
+    pub fn to_dot_with_analysis(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        _hbc_file: &HbcFile,
+    ) -> String {
+        let mut dot = String::new();
+        dot.push_str("digraph {\n");
+        dot.push_str("  rankdir=TB;\n");
+        dot.push_str("  node [shape=box, fontname=\"monospace\"];\n");
+        dot.push_str("  edge [fontname=\"Arial\"];\n\n");
+
+        // Perform all analyses
+        let loop_analysis = self.analyze_loops(graph);
+        let conditional_analysis = self.analyze_conditional_chains(graph);
+        let switch_analysis = self.analyze_switch_regions(graph);
+
+        // Add nodes with comprehensive analysis information
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let mut node_attrs = Vec::new();
+
+            // Base label
+            let label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                format!(
+                    "Block {} (PC {}-{})",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                )
+            };
+            node_attrs.push(format!("label=\"{}\"", label));
+
+            // Add loop information (highest priority for coloring)
+            if let Some(loop_indices) = loop_analysis.node_to_loops.get(&node) {
+                if !loop_indices.is_empty() {
+                    let innermost_loop_idx = loop_indices.last().unwrap();
+                    let loop_info = &loop_analysis.loops[*innermost_loop_idx];
+
+                    let color = match loop_info.loop_type {
+                        crate::cfg::analysis::LoopType::While => "lightblue",
+                        crate::cfg::analysis::LoopType::For => "lightgreen",
+                        crate::cfg::analysis::LoopType::DoWhile => "lightyellow",
+                    };
+                    node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
+
+                    if loop_info.is_header(node) {
+                        node_attrs.push("penwidth=3, color=red".to_string());
+                    }
+                }
+            } else {
+                // Add conditional chain information (if not in a loop)
+                if let Some(chain_indices) = conditional_analysis.node_to_chains.get(&node) {
+                    if !chain_indices.is_empty() {
+                        let chain_idx = chain_indices.last().unwrap();
+                        let chain = &conditional_analysis.chains[*chain_idx];
+
+                        let color = match chain.chain_type {
+                            crate::cfg::analysis::ChainType::SimpleIfElse => "lightpink",
+                            crate::cfg::analysis::ChainType::ElseIfChain => "lightcoral",
+                            crate::cfg::analysis::ChainType::NestedConditional => "lightsteelblue",
+                            crate::cfg::analysis::ChainType::GuardClausePattern => {
+                                "lightgoldenrodyellow"
+                            }
+                            crate::cfg::analysis::ChainType::SwitchLikeChain => "lightcyan",
+                        };
+                        node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
+                    }
+                } else {
+                    // Add switch region information (if not in loop or conditional)
+                    if let Some(region_indices) = switch_analysis.node_to_regions.get(&node) {
+                        if !region_indices.is_empty() {
+                            node_attrs.push("style=filled, fillcolor=lightseagreen".to_string());
+                        }
+                    }
+                }
+            }
+
+            // Add exit node styling
+            if block.is_exit() {
+                node_attrs.push("style=filled, fillcolor=lightgray".to_string());
+            }
+
+            dot.push_str(&format!("  {} [{}]\n", node.index(), node_attrs.join(", ")));
+        }
+
+        dot.push_str("\n");
+
+        // Add edges with comprehensive information
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            let edge_kind = graph.edge_weight(edge).unwrap();
+            let mut edge_attrs = Vec::new();
+
+            // Edge label
+            let label = match edge_kind {
+                EdgeKind::Uncond => to_title_case("uncond"),
+                EdgeKind::True => to_title_case("true"),
+                EdgeKind::False => to_title_case("false"),
+                EdgeKind::Switch(case_index) => format!("Switch({})", case_index),
+                EdgeKind::Default => to_title_case("default"),
+                EdgeKind::Fall => to_title_case("fall"),
+            };
+            edge_attrs.push(format!("label=\"{}\"", label));
+
+            // Check for back-edges (loops)
+            let mut is_back_edge = false;
+            for loop_info in &loop_analysis.loops {
+                for (back_tail, back_head) in &loop_info.back_edges {
+                    if *back_tail == tail && *back_head == head {
+                        is_back_edge = true;
+                        edge_attrs.push("color=red, penwidth=2, style=dashed".to_string());
+                        break;
+                    }
+                }
+                if is_back_edge {
+                    break;
+                }
+            }
+
+            // Check for conditional chain edges
+            if !is_back_edge {
+                if let (Some(tail_chains), Some(head_chains)) = (
+                    conditional_analysis.node_to_chains.get(&tail),
+                    conditional_analysis.node_to_chains.get(&head),
+                ) {
+                    if !tail_chains.is_empty() && !head_chains.is_empty() {
+                        edge_attrs.push("color=purple, penwidth=2".to_string());
+                    }
+                }
+            }
+
+            // Check for switch region edges
+            if !is_back_edge {
+                if let (Some(tail_regions), Some(head_regions)) = (
+                    switch_analysis.node_to_regions.get(&tail),
+                    switch_analysis.node_to_regions.get(&head),
+                ) {
+                    if !tail_regions.is_empty() && !head_regions.is_empty() {
+                        edge_attrs.push("color=orange, penwidth=2".to_string());
+                    }
+                }
+            }
+
+            dot.push_str(&format!(
+                "  {} -> {} [{}]\n",
+                tail.index(),
+                head.index(),
+                edge_attrs.join(", ")
+            ));
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
+    /// Export CFG to DOT format as a subgraph with comprehensive analysis
+    pub fn to_dot_subgraph_with_analysis(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        hbc_file: &HbcFile,
+        function_index: u32,
+    ) -> String {
+        let mut dot = String::new();
+        dot.push_str(&format!(
+            "  subgraph cluster_function_{} {{\n",
+            function_index
+        ));
+        dot.push_str(&format!("    label = \"Function {}\";\n", function_index));
+        dot.push_str("    style = filled;\n");
+        dot.push_str("    color = lightgrey;\n\n");
+        dot.push_str("    edge [fontname=\"Arial\"];\n\n");
+
+        // Perform all analyses
+        let loop_analysis = self.analyze_loops(graph);
+        let conditional_analysis = self.analyze_conditional_chains(graph);
+        let switch_analysis = self.analyze_switch_regions(graph);
+
+        // Track analysis types for legend
+        let mut analysis_types = std::collections::HashSet::new();
+
+        // Add nodes with comprehensive analysis information
+        for node in graph.node_indices() {
+            let block = &graph[node];
+            let node_id = format!("f{}_n{}", function_index, node.index());
+            let mut node_attrs = Vec::new();
+
+            // Base label
+            let mut block_label = if block.is_exit() {
+                "EXIT".to_string()
+            } else {
+                let mut label = format!(
+                    "Block {} (PC {}-{})",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                );
+
+                // Add jump label to block title if this block is a jump target
+                if let Some(jump_label) = self.get_block_jump_label(node, graph, hbc_file) {
+                    label.push_str(&format!(" [{}]", jump_label));
+                }
+
+                label.push_str("\\l");
+
+                for (i, instruction) in block.instructions().iter().enumerate() {
+                    let disassembled = instruction.format_instruction(hbc_file);
+                    let escaped = disassembled.replace("\"", "\\\"").replace("\n", "\\l");
+                    label.push_str(&format!("  {}: {}\\l", i, escaped));
+                }
+
+                label
+            };
+
+            // Add analysis labels and colors
+            if let Some(loop_indices) = loop_analysis.node_to_loops.get(&node) {
+                if !loop_indices.is_empty() {
+                    let innermost_loop_idx = loop_indices.last().unwrap();
+                    let loop_info = &loop_analysis.loops[*innermost_loop_idx];
+
+                    let (color, loop_type_name) = match loop_info.loop_type {
+                        crate::cfg::analysis::LoopType::While => ("lightblue", "While Loop"),
+                        crate::cfg::analysis::LoopType::For => ("lightgreen", "For Loop"),
+                        crate::cfg::analysis::LoopType::DoWhile => ("lightyellow", "Do-While Loop"),
+                    };
+
+                    analysis_types.insert(format!("Loop: {}", loop_type_name));
+
+                    if loop_info.is_header(node) {
+                        block_label =
+                            format!("{}[LOOP HEADER: {}]\\l", block_label, loop_type_name);
+                        node_attrs.push(format!(
+                            "style=filled, fillcolor=\"{}\", penwidth=3, color=red",
+                            color
+                        ));
+                    } else {
+                        block_label = format!("{}[LOOP BODY: {}]\\l", block_label, loop_type_name);
+                        node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
+                    }
+                }
+            } else {
+                // Add conditional chain information (if not in a loop)
+                if let Some(chain_indices) = conditional_analysis.node_to_chains.get(&node) {
+                    if !chain_indices.is_empty() {
+                        let chain_idx = chain_indices.last().unwrap();
+                        let chain = &conditional_analysis.chains[*chain_idx];
+
+                        let (color, chain_type_name, border_style, shape) = match chain.chain_type {
+                            crate::cfg::analysis::ChainType::SimpleIfElse => {
+                                ("lightpink", "IF-ELSE", "solid", "box")
+                            }
+                            crate::cfg::analysis::ChainType::ElseIfChain => {
+                                ("lightcoral", "ELSE-IF CHAIN", "dashed", "diamond")
+                            }
+                            crate::cfg::analysis::ChainType::NestedConditional => {
+                                ("lightsteelblue", "NESTED CONDITIONAL", "dotted", "ellipse")
+                            }
+                            crate::cfg::analysis::ChainType::GuardClausePattern => {
+                                ("lightgoldenrodyellow", "GUARD CLAUSE", "double", "hexagon")
+                            }
+                            crate::cfg::analysis::ChainType::SwitchLikeChain => {
+                                ("lightcyan", "SWITCH-LIKE", "bold", "octagon")
+                            }
+                        };
+
+                        analysis_types.insert(format!("Conditional: {}", chain_type_name));
+                        block_label =
+                            format!("{}[CONDITIONAL: {}]\\l", block_label, chain_type_name);
+                        node_attrs.push(format!(
+                            "style=filled, fillcolor=\"{}\", shape={}, penwidth=2",
+                            color, shape
+                        ));
+
+                        // Add border style based on conditional type
+                        match border_style {
+                            "solid" => node_attrs.push("color=black".to_string()),
+                            "dashed" => node_attrs.push("color=red, style=dashed".to_string()),
+                            "dotted" => node_attrs.push("color=blue, style=dotted".to_string()),
+                            "double" => node_attrs.push("color=green, penwidth=3".to_string()),
+                            "bold" => node_attrs.push("color=purple, penwidth=4".to_string()),
+                            _ => node_attrs.push("color=black".to_string()),
+                        }
+                    }
+                } else {
+                    // Add switch region information (if not in loop or conditional)
+                    if let Some(region_indices) = switch_analysis.node_to_regions.get(&node) {
+                        if !region_indices.is_empty() {
+                            analysis_types.insert("Switch Region".to_string());
+                            block_label = format!("{}[SWITCH REGION]\\l", block_label);
+                            node_attrs.push(
+                                "style=filled, fillcolor=lightseagreen, shape=parallelogram"
+                                    .to_string(),
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Add exit node styling
+            if block.is_exit() {
+                node_attrs.push("style=filled, fillcolor=lightgray".to_string());
+            }
+
+            node_attrs.push(format!("label=\"{}\"", block_label));
+            dot.push_str(&format!("    {} [{}]\n", node_id, node_attrs.join(", ")));
+        }
+
+        dot.push_str("\n");
+
+        // Add edges with comprehensive information
+        for edge in graph.edge_indices() {
+            let (tail, head) = graph.edge_endpoints(edge).unwrap();
+            let edge_kind = graph.edge_weight(edge).unwrap();
+            let mut edge_attrs = Vec::new();
+
+            let tail_id = format!("f{}_n{}", function_index, tail.index());
+            let head_id = format!("f{}_n{}", function_index, head.index());
+
+            // Edge label with descriptive text
+            let (label, edge_style) = match edge_kind {
+                EdgeKind::Uncond => ("Unconditional".to_string(), "black"),
+                EdgeKind::True => ("True Branch".to_string(), "green"),
+                EdgeKind::False => ("False Branch".to_string(), "red"),
+                EdgeKind::Switch(case_index) => (format!("Switch Case {}", case_index), "blue"),
+                EdgeKind::Default => ("Default Case".to_string(), "purple"),
+                EdgeKind::Fall => ("Fall Through".to_string(), "orange"),
+            };
+            edge_attrs.push(format!("label=\"{}\"", label));
+            edge_attrs.push(format!("color={}", edge_style));
+
+            // Special styling for back edges (loops)
+            if let Some(loop_indices) = loop_analysis.node_to_loops.get(&tail) {
+                if !loop_indices.is_empty() {
+                    let innermost_loop_idx = loop_indices.last().unwrap();
+                    let loop_info = &loop_analysis.loops[*innermost_loop_idx];
+                    if loop_info.back_edges.contains(&(tail, head)) {
+                        edge_attrs.push("color=red, penwidth=2, style=dashed".to_string());
+                        edge_attrs.push("label=\"Back Edge\"".to_string());
+                    }
+                }
+            }
+
+            dot.push_str(&format!(
+                "    {} -> {} [{}]\n",
+                tail_id,
+                head_id,
+                edge_attrs.join(", ")
+            ));
+        }
+
+        // Add legend if there are analysis types
+        if !analysis_types.is_empty() {
+            dot.push_str("\n    // Analysis Legend\n");
+            for analysis_type in analysis_types {
+                dot.push_str(&format!("    // {}\n", analysis_type));
+            }
+        }
+
+        dot.push_str("  }\n");
+        dot
+    }
+
     /// Get the block containing the given PC, if any
     pub fn get_block_at_pc(&self, pc: u32) -> Option<NodeIndex> {
         self.pc_to_block.get(&pc).copied()
@@ -1101,6 +1465,43 @@ impl<'a> CfgBuilder<'a> {
         LoopAnalysis {
             loops,
             node_to_loops,
+        }
+    }
+
+    /// Analyze conditional chains in the CFG
+    pub fn analyze_conditional_chains(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+    ) -> crate::cfg::analysis::ConditionalAnalysis {
+        if let Some(post_doms) = self.analyze_post_dominators(graph) {
+            crate::cfg::analysis::analyze_conditional_chains(graph, &post_doms)
+        } else {
+            crate::cfg::analysis::ConditionalAnalysis {
+                chains: Vec::new(),
+                node_to_chains: HashMap::new(),
+                chain_statistics: crate::cfg::analysis::ChainStatistics {
+                    total_chains: 0,
+                    simple_if_else_count: 0,
+                    else_if_chain_count: 0,
+                    max_chain_length: 0,
+                    max_nesting_depth: 0,
+                },
+            }
+        }
+    }
+
+    /// Analyze switch regions in the CFG
+    pub fn analyze_switch_regions(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+    ) -> crate::cfg::analysis::SwitchAnalysis {
+        if let Some(post_doms) = self.analyze_post_dominators(graph) {
+            crate::cfg::analysis::find_switch_regions(graph, &post_doms)
+        } else {
+            crate::cfg::analysis::SwitchAnalysis {
+                regions: Vec::new(),
+                node_to_regions: HashMap::new(),
+            }
         }
     }
 
