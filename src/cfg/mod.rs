@@ -187,6 +187,12 @@ impl<'a> Cfg<'a> {
         let post_doms = self.analyze_post_dominators()?;
         Some(analysis::find_if_else_regions(&self.graph, &post_doms))
     }
+
+    /// Analyze switch regions in the CFG
+    pub fn analyze_switch_regions(&self) -> Option<analysis::SwitchAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::find_switch_regions(&self.graph, &post_doms))
+    }
 }
 
 // Re-export main types for convenience
