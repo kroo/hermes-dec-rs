@@ -991,8 +991,8 @@ fn compute_chain_nesting_depths(
 
 /// Recursively compute nesting depth for a specific chain
 fn compute_chain_nesting_depth_recursive(
-    graph: &DiGraph<Block, EdgeKind>,
-    post_doms: &PostDominatorAnalysis,
+    _graph: &DiGraph<Block, EdgeKind>,
+    _post_doms: &PostDominatorAnalysis,
     chains: &[ConditionalChain],
     chain_nodes: &[HashSet<NodeIndex>],
     chain_index: usize,
