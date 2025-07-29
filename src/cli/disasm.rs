@@ -349,7 +349,7 @@ fn generate_exception_handlers(
             let (start_idx, end_idx, target_idx) = match (
                 jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.start),
                 jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.end),
-                jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.target)
+                jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.target),
             ) {
                 (Some(s), Some(e), Some(t)) => (s, e, t),
                 _ => {
@@ -364,14 +364,12 @@ fn generate_exception_handlers(
             let (start, end, target) = match (
                 jump_table.get_label_by_inst_index(parsed_header.index, start_idx),
                 jump_table.get_label_by_inst_index(parsed_header.index, end_idx),
-                jump_table.get_label_by_inst_index(parsed_header.index, target_idx)
+                jump_table.get_label_by_inst_index(parsed_header.index, target_idx),
             ) {
                 (Some(s), Some(e), Some(t)) => (s, e, t),
                 _ => {
-                    exception_output.push_str(&format!(
-                        "{}: Failed to resolve labels for handler\n",
-                        i
-                    ));
+                    exception_output
+                        .push_str(&format!("{}: Failed to resolve labels for handler\n", i));
                     continue;
                 }
             };
