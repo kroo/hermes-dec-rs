@@ -997,45 +997,53 @@ fn compute_chain_nesting_depth_recursive(
     chain_nodes: &[HashSet<NodeIndex>],
     chain_index: usize,
 ) -> usize {
+    // Use iterative approach to avoid stack overflow on large files
+    let mut visited = HashSet::new();
+    let mut stack = vec![(chain_index, 1)]; // (chain_index, current_depth)
     let mut max_depth = 1;
 
-    // Check if any other chain is nested within this chain
-    for j in 0..chains.len() {
-        if chain_index == j {
-            continue; // Skip self
+    while let Some((current_chain_idx, current_depth)) = stack.pop() {
+        if visited.contains(&current_chain_idx) {
+            continue;
+        }
+        visited.insert(current_chain_idx);
+        max_depth = max_depth.max(current_depth);
+
+        // Check if any other chain is nested within this chain
+        for j in 0..chains.len() {
+            if current_chain_idx == j {
+                continue; // Skip self
+            }
+
+            // Check if other chain's nodes are contained within current chain's branches
+            let other_nodes = &chain_nodes[j];
+            let current_nodes = &chain_nodes[current_chain_idx];
+
+            // Check if other chain is nested within current chain
+            if other_nodes
+                .iter()
+                .all(|&node| current_nodes.contains(&node))
+            {
+                // Other chain is nested within current chain
+                // Add to stack for iterative processing
+                stack.push((j, current_depth + 1));
+            }
         }
 
-        // Check if other chain's nodes are contained within current chain's branches
-        let other_nodes = &chain_nodes[j];
-        let current_nodes = &chain_nodes[chain_index];
+        // Check for indirect nesting through control flow
+        for (j, other_chain) in chains.iter().enumerate() {
+            if current_chain_idx == j {
+                continue; // Skip self
+            }
 
-        // Check if other chain is nested within current chain
-        if other_nodes
-            .iter()
-            .all(|&node| current_nodes.contains(&node))
-        {
-            // Other chain is nested within current chain
-            // Recursively compute depth of nested chain
-            let nested_depth =
-                compute_chain_nesting_depth_recursive(graph, post_doms, chains, chain_nodes, j);
-            max_depth = max_depth.max(nested_depth + 1);
-        }
-    }
+            let current_nodes = &chain_nodes[current_chain_idx];
 
-    // Check for indirect nesting through control flow
-    for (j, other_chain) in chains.iter().enumerate() {
-        if chain_index == j {
-            continue; // Skip self
-        }
-
-        let current_nodes = &chain_nodes[chain_index];
-
-        // Check if other chain's join block is within our chain's branches
-        if current_nodes.contains(&other_chain.join_block) {
-            // This indicates indirect nesting
-            let nested_depth =
-                compute_chain_nesting_depth_recursive(graph, post_doms, chains, chain_nodes, j);
-            max_depth = max_depth.max(nested_depth + 1);
+            // Check if other chain's join block is within our chain's branches
+            if current_nodes.contains(&other_chain.join_block) {
+                // This indicates indirect nesting
+                // Add to stack for iterative processing
+                stack.push((j, current_depth + 1));
+            }
         }
     }
 

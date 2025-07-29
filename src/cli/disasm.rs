@@ -346,25 +346,35 @@ fn generate_exception_handlers(
         exception_output.push_str("\nException Handlers:\n");
         for (i, handler) in parsed_header.exc_handlers.iter().enumerate() {
             // Copy values to avoid packed struct access issues
-            let start_idx = jump_table
-                .byte_offset_to_instruction_index(parsed_header.index, handler.start)
-                .unwrap();
-            let end_idx = jump_table
-                .byte_offset_to_instruction_index(parsed_header.index, handler.end)
-                .unwrap();
-            let target_idx = jump_table
-                .byte_offset_to_instruction_index(parsed_header.index, handler.target)
-                .unwrap();
+            let (start_idx, end_idx, target_idx) = match (
+                jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.start),
+                jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.end),
+                jump_table.byte_offset_to_instruction_index(parsed_header.index, handler.target)
+            ) {
+                (Some(s), Some(e), Some(t)) => (s, e, t),
+                _ => {
+                    exception_output.push_str(&format!(
+                        "{}: Failed to resolve instruction indices for handler\n",
+                        i
+                    ));
+                    continue;
+                }
+            };
 
-            let start = jump_table
-                .get_label_by_inst_index(parsed_header.index, start_idx)
-                .unwrap();
-            let end = jump_table
-                .get_label_by_inst_index(parsed_header.index, end_idx)
-                .unwrap();
-            let target = jump_table
-                .get_label_by_inst_index(parsed_header.index, target_idx)
-                .unwrap();
+            let (start, end, target) = match (
+                jump_table.get_label_by_inst_index(parsed_header.index, start_idx),
+                jump_table.get_label_by_inst_index(parsed_header.index, end_idx),
+                jump_table.get_label_by_inst_index(parsed_header.index, target_idx)
+            ) {
+                (Some(s), Some(e), Some(t)) => (s, e, t),
+                _ => {
+                    exception_output.push_str(&format!(
+                        "{}: Failed to resolve labels for handler\n",
+                        i
+                    ));
+                    continue;
+                }
+            };
 
             exception_output.push_str(&format!(
                 "{}: start = {}, end = {}, target = {}\n",
