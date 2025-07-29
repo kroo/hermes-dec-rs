@@ -19,7 +19,7 @@ digraph {
     label="Loop 0: While";
     style=dashed;
     color=blue;
-    2;
     1;
+    2;
   }
 }
