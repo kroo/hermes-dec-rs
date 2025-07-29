@@ -1,0 +1,1044 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 963f2901006fe19044d4b62040017a2eb57299d6
+  Function count: 9
+  String count: 72
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..-1] #EFE3DC8E: 
+s1[ASCII, 0..13] #00018270: Cleanup failed
+s2[ASCII, 13..18] #A343BBEE: divide
+s3[ASCII, 18..22] #F15AE022: equal
+s4[ASCII, 22..35] #00018E43: limit_exceeded
+s5[ASCII, 36..51] #D6F05A93: Division by zero
+s6[ASCII, 48..51] #2233C9EE: zero
+s7[ASCII, 52..64] #9102A3D0: Step 2 failed
+s8[ASCII, 65..81] #50223B1A: Unknown operation
+s9[ASCII, 80..82] #E7613D83: one
+s10[ASCII, 109..118] #3759FAD8: both_falsy
+s11[ASCII, 119..129] #0833AAEB: both_truthy
+s12[ASCII, 130..134] #BA21B760: case1
+s13[ASCII, 135..139] #358F33DE: case2
+s14[ASCII, 140..144] #71489699: case3
+s15[ASCII, 145..149] #E48020AF: case4
+s16[ASCII, 150..158] #D1A98FEE: cleanup: 
+s17[ASCII, 186..191] #1C182460: string
+s18[ASCII, 191..196] #1648DDA6: global
+s19[ASCII, 196..208] #3B49831A: limit_reached
+s20[ASCII, 218..226] #F6474C57: max_depth
+s21[ASCII, 226..230] #6202D6D8: high-
+s22[ASCII, 250..254] #3626C808: mixed
+s23[ASCII, 255..260] #2CC2B0DA: mode1-
+s24[ASCII, 261..266] #80390B62: mode2-
+s25[ASCII, 267..272] #63D87C1C: mode3-
+s26[ASCII, 273..279] #9BC61079: process
+s27[ASCII, 300..302] #63146EAB: two
+s28[ASCII, 303..309] #906CF614: unknown
+s29[ASCII, 8..13] #EF03A676: failed
+s30[ASCII, 21..21] #5DA35ACD: a
+s31[ASCII, 22..26] #A484B961: limit
+s32[ASCII, 81..108] #C390283B: nestedLoopsWithBreakContinue
+s33[ASCII, 109..109] #12C4F154: b
+s34[ASCII, 150..156] #963D04DF: cleanup
+s35[ASCII, 159..186] #15A9FF56: complexLoopWithMultipleExits
+s36[ASCII, 209..213] #8737AFD2: Error
+s37[ASCII, 213..218] #CCAEE5EA: random
+s38[ASCII, 231..243] #5CDD9D50: ignore_errors
+s39[ASCII, 238..243] #807C5F3D: errors
+s40[ASCII, 243..248] #665957A7: status
+s41[ASCII, 248..250] #3F21B886: sum
+s42[ASCII, 273..281] #DF50693D: processed
+s43[ASCII, 282..289] critical
+s44[ASCII, 282..295] critical_error
+s45[ASCII, 295..300] result
+s46[ASCII, 310..313] Math
+s47[ASCII, 314..322] completed
+s48[ASCII, 323..347] complexNestedConditionals
+s49[ASCII, 347..350] skip
+s50[ASCII, 347..355] skip_even
+s51[ASCII, 356..372] continue_on_error
+s52[ASCII, 368..372] error
+s53[ASCII, 372..395] recursiveWithControlFlow
+s54[ASCII, 396..402] message
+s55[ASCII, 402..411] early_exit
+s56[ASCII, 410..414] items
+s57[ASCII, 414..418] steps
+s58[ASCII, 418..438] switchWithFallthrough
+s59[ASCII, 439..441] min
+s60[ASCII, 440..444] index
+s61[ASCII, 443..470] exceptionHandlingControlFlow
+s62[ASCII, 471..484] fail_at_step_2
+s63[ASCII, 485..494] fast_track
+s64[ASCII, 495..500] length
+s65[ASCII, 501..517] multipleLoopTypes
+s66[ASCII, 517..526] stop_after
+s67[ASCII, 524..545] ternaryAndShortCircuit
+s68[ASCII, 546..554] prototype
+s69[ASCII, 551..554] type
+s70[ASCII, 555..558] push
+s71[ASCII, 559..563] value
+
+Array Buffer:
+
+Function<global>0(1 params, 3 registers, 0 symbols):
+  DeclareGlobalVar  "nestedLoopsWithBreakContinue"
+  DeclareGlobalVar  "complexNestedConditionals"
+  DeclareGlobalVar  "multipleLoopTypes"
+  DeclareGlobalVar  "switchWithFallthrough"
+  DeclareGlobalVar  "complexLoopWithMultipleExits"
+  DeclareGlobalVar  "ternaryAndShortCircuit"
+  DeclareGlobalVar  "exceptionHandlingControlFlow"
+  DeclareGlobalVar  "recursiveWithControlFlow"
+  CreateEnvironment r0
+  CreateClosure     r2, r0, Function<nestedLoopsWithBreakContinue>1
+  GetGlobalObject   r1
+  PutById           r1, r2, 1, "nestedLoopsWithBreakContinue"
+  CreateClosure     r2, r0, Function<complexNestedConditionals>2
+  PutById           r1, r2, 2, "complexNestedConditionals"
+  CreateClosure     r2, r0, Function<multipleLoopTypes>3
+  PutById           r1, r2, 3, "multipleLoopTypes"
+  CreateClosure     r2, r0, Function<switchWithFallthrough>4
+  PutById           r1, r2, 4, "switchWithFallthrough"
+  CreateClosure     r2, r0, Function<complexLoopWithMultipleExits>5
+  PutById           r1, r2, 5, "complexLoopWithMultipleExits"
+  CreateClosure     r2, r0, Function<ternaryAndShortCircuit>6
+  PutById           r1, r2, 6, "ternaryAndShortCircuit"
+  CreateClosure     r2, r0, Function<exceptionHandlingControlFlow>7
+  PutById           r1, r2, 7, "exceptionHandlingControlFlow"
+  CreateClosure     r0, r0, Function<recursiveWithControlFlow>8
+  PutById           r1, r0, 8, "recursiveWithControlFlow"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<nestedLoopsWithBreakContinue>1(2 params, 28 registers, 0 symbols):
+  LoadParam         r13, 1
+  GetByIdShort      r0, r13, 1, "length"
+  LoadConstZero     r12
+  Less              r0, r12, r0
+  LoadConstUInt8    r9, 3
+  LoadConstUInt8    r8, 50
+  LoadConstUInt8    r7, 1
+  LoadConstUInt8    r6, 100
+  LoadConstZero     r4
+  LoadConstZero     r3
+  LoadConstUndefined r10
+  LoadConstZero     r1
+  LoadConstFalse    r2
+  JmpFalseLong      L1, r0
+L8:
+  GetByVal          r0, r13, r3
+  GetByIdShort      r0, r0, 1, "length"
+  Less              r16, r12, r0
+  Mov               r19, r4
+  Mov               r0, r3
+  Mov               r17, r10
+  LoadConstZero     r18
+  Mov               r14, r19
+  Mov               r15, r17
+  JmpFalseLong      L2, r16
+L7:
+  GetByVal          r16, r13, r0
+  GetByVal          r20, r16, r18
+  Mov               r23, r19
+  Mov               r16, r18
+  Mov               r21, r17
+  Mov               r22, r23
+  JLess             L3, r20, r12
+  GetByVal          r20, r13, r0
+  GetByVal          r20, r20, r16
+  Greater           r20, r20, r6
+  Mov               r1, r23
+  LoadConstTrue     r2
+  JmpTrue           L1, r20
+  GetByVal          r20, r13, r0
+  GetByVal          r20, r20, r16
+  Add               r23, r23, r20
+  LoadConstZero     r20
+L6:
+  Mov               r26, r23
+  Mov               r24, r20
+  JStrictNotEqual   L4, r24, r7
+  Mov               r25, r26
+  JGreater          L5, r25, r8
+L4:
+  Add               r25, r26, r24
+L5:
+  Inc               r20, r24
+  Mov               r23, r25
+  Mov               r22, r23
+  Mov               r21, r20
+  JLess             L6, r21, r9
+L3:
+  Inc               r18, r16
+  GetByVal          r16, r13, r0
+  GetByIdShort      r16, r16, 1, "length"
+  Mov               r19, r22
+  Mov               r17, r21
+  Mov               r14, r19
+  Mov               r15, r17
+  JLess             L7, r18, r16
+L2:
+  Inc               r16, r0
+  GetByIdShort      r0, r13, 1, "length"
+  Less              r0, r16, r0
+  Mov               r4, r14
+  Mov               r10, r15
+  Mov               r3, r16
+  Mov               r1, r4
+  LoadConstFalse    r2
+  JmpTrueLong       L8, r0
+L1:
+  LoadConstInt      r0, 4294967295
+  JmpTrue           L9, r2
+  Mov               r0, r1
+L9:
+  Ret               r0
+
+Function<complexNestedConditionals>2(5 params, 6 registers, 0 symbols):
+  LoadParam         r3, 1
+  LoadParam         r0, 2
+  LoadParam         r2, 3
+  LoadParam         r1, 4
+  LoadConstZero     r4
+  JGreater          L1, r3, r4
+  LoadConstInt      r5, 4294967286
+  JLess             L2, r3, r5
+  Ret               r4
+L2:
+  JNotGreater       L3, r0, r2
+  JGreater          L4, r2, r1
+L3:
+  Negate            r5, r3
+  Ret               r5
+L4:
+  Negate            r5, r3
+  Add               r5, r5, r0
+  Sub               r5, r5, r2
+  Add               r5, r5, r1
+  Ret               r5
+L1:
+  JGreater          L5, r0, r4
+  LoadConstInt      r5, 4294967291
+  JLess             L6, r0, r5
+  Ret               r3
+L6:
+  JGreater          L7, r2, r1
+  Sub               r5, r3, r0
+  Sub               r5, r5, r2
+  Ret               r5
+L7:
+  Sub               r5, r3, r0
+  Add               r5, r5, r2
+  Ret               r5
+L5:
+  JGreater          L8, r2, r4
+  LoadConstInt      r5, 4294967286
+  JLess             L9, r2, r5
+  LoadConstUInt8    r5, 2
+  Mod               r5, r1, r5
+  JStrictEqual      L10, r5, r4
+  Sub               r5, r3, r0
+  Ret               r5
+L10:
+  Add               r5, r3, r0
+  Ret               r5
+L9:
+  Add               r5, r3, r0
+  Sub               r5, r5, r2
+  Ret               r5
+L8:
+  JGreater          L11, r1, r4
+  Add               r4, r3, r0
+  Add               r4, r4, r2
+  Sub               r4, r4, r1
+  Ret               r4
+L11:
+  Add               r0, r3, r0
+  Add               r0, r0, r2
+  Add               r0, r0, r1
+  Ret               r0
+
+Function<multipleLoopTypes>3(2 params, 32 registers, 0 symbols):
+  LoadParam         r14, 1
+  NewArray          r2, 0
+  GetByIdShort      r0, r14, 1, "length"
+  LoadConstZero     r13
+  Less              r1, r13, r0
+  LoadConstUInt8    r5, 100
+  LoadConstUInt8    r4, 5
+  LoadConstZero     r3
+  LoadConstZero     r0
+  JmpFalseLong      L1, r1
+  GetByIdShort      r1, r2, 1, "length"
+  LoadConstUInt8    r12, 10
+  Less              r1, r1, r12
+  GetGlobalObject   r10
+  LoadConstUInt8    r9, 3
+  LoadConstUInt8    r8, 50
+  LoadConstUInt8    r7, 2
+  LoadConstZero     r6
+  LoadConstUndefined r11
+  LoadConstZero     r3
+  LoadConstZero     r0
+  JmpFalseLong      L1, r1
+L6:
+  GetByVal          r1, r14, r6
+  Mod               r15, r1, r7
+  Mov               r17, r6
+  Mov               r1, r11
+  JStrictEqual      L2, r15, r13
+  TryGetById        r19, r10, 2, "Math"
+  GetByIdShort      r18, r19, 3, "min"
+  Add               r16, r17, r9
+  GetByIdShort      r15, r14, 1, "length"
+  Call3             r16, r18, r19, r16, r15
+  Mov               r18, r17
+  Mov               r15, r18
+  JNotLess          L3, r15, r16
+L4:
+  GetByVal          r19, r14, r18
+  Mov               r16, r18
+  Mov               r15, r16
+  JGreater          L3, r19, r8
+  GetByIdShort      r20, r2, 4, "push"
+  GetByVal          r19, r14, r16
+  Call2             r19, r20, r2, r19
+  Inc               r18, r16
+  TryGetById        r22, r10, 2, "Math"
+  GetByIdShort      r21, r22, 3, "min"
+  Add               r20, r17, r9
+  GetByIdShort      r16, r14, 1, "length"
+  Call3             r16, r21, r22, r20, r16
+  Mov               r15, r18
+  JLess             L4, r15, r16
+L3:
+  Inc               r16, r17
+  Jmp               L5
+L2:
+  Inc               r16, r17
+  Mov               r15, r1
+L5:
+  GetByIdShort      r1, r14, 1, "length"
+  Less              r1, r16, r1
+  LoadConstZero     r3
+  LoadConstZero     r0
+  JmpFalse          L1, r1
+  GetByIdShort      r1, r2, 1, "length"
+  Less              r1, r1, r12
+  Mov               r6, r16
+  Mov               r11, r15
+  LoadConstZero     r3
+  LoadConstZero     r0
+  JmpTrueLong       L6, r1
+L1:
+  GetByIdShort      r7, r2, 1, "length"
+  Mov               r8, r3
+  Mov               r6, r0
+  Mov               r1, r8
+  JNotLess          L7, r6, r7
+  GetByVal          r7, r2, r6
+  Add               r1, r8, r7
+L7:
+  Inc               r6, r6
+  JNotLess          L8, r6, r4
+  Mov               r0, r6
+  Mov               r3, r1
+  JLess             L1, r3, r5
+L8:
+  NewObject         r0
+  PutNewOwnByIdShort r0, r2, "result"
+  PutNewOwnByIdShort r0, r1, "sum"
+  Ret               r0
+
+Function<switchWithFallthrough>4(3 params, 11 registers, 0 symbols):
+  LoadParam         r5, 1
+  LoadParam         r6, 2
+  LoadConstUInt8    r4, 1
+  JStrictEqual      L1, r4, r6
+  LoadConstString   r9, ""
+  LoadConstUInt8    r0, 2
+  Mov               r2, r9
+  JStrictEqual      L2, r0, r6
+  LoadConstUInt8    r0, 3
+  Mov               r3, r9
+  JStrictEqual      L3, r0, r6
+  LoadConstString   r0, "unknown"
+  LoadConstUInt8    r1, 4
+  JStrictNotEqualLong L4, r1, r6
+  LoadConstZero     r7
+  Less              r8, r7, r5
+  LoadConstUInt8    r6, 5
+  Mov               r1, r9
+  Mov               r0, r1
+  JmpFalse          L4, r8
+L5:
+  Mov               r9, r1
+  Mov               r8, r7
+  Mov               r0, r9
+  JGreater          L4, r8, r6
+  Add               r1, r9, r8
+  Inc               r7, r8
+  Mov               r0, r1
+  JLess             L5, r7, r5
+  Jmp               L4
+L1:
+  LoadConstString   r2, "mode1-"
+L2:
+  LoadConstString   r1, "mode2-"
+  Add               r2, r2, r1
+  LoadConstUInt8    r1, 10
+  Mov               r3, r2
+  JGreater          L6, r5, r1
+L3:
+  LoadConstString   r1, "mode3-"
+  Add               r3, r3, r1
+  LoadConstUInt8    r1, 3
+  Mod               r1, r5, r1
+  LoadConstZero     r5
+  JStrictEqual      L7, r5, r1
+  JStrictEqual      L8, r4, r1
+  LoadConstString   r1, "two"
+  Add               r0, r3, r1
+  Jmp               L4
+L8:
+  LoadConstString   r1, "one"
+  Add               r0, r3, r1
+  Jmp               L4
+L7:
+  LoadConstString   r1, "zero"
+  Add               r0, r3, r1
+  Jmp               L4
+L6:
+  LoadConstString   r1, "high-"
+  Add               r0, r2, r1
+L4:
+  Ret               r0
+
+Function<complexLoopWithMultipleExits>5(2 params, 18 registers, 0 symbols):
+  LoadConstUndefined r10
+  LoadConstUndefined r11
+  LoadConstUndefined r12
+  LoadConstUndefined r13
+  LoadConstZero     r2
+  LoadConstZero     r1
+  LoadParam         r8, 1
+  IteratorBegin     r3, r8
+  LoadConstUInt8    r7, 3
+  LoadConstUInt8    r6, 5
+  LoadConstUInt8    r5, 4
+  LoadConstUInt8    r4, 100
+  LoadConstUInt8    r0, 2
+L4:
+  IteratorNext      r14, r3, r8
+  Mov               r15, r3
+  JStrictEqualLong  L1, r15, r10
+L22:
+  Mov               r11, r14
+  JmpFalse          L2, r14
+  Mov               r14, r11
+  GetByIdShort      r14, r14, 1, "items"
+  JmpTrue           L3, r14
+L2:
+  Mov               r14, r1
+  Inc               r1, r14
+L23:
+  Jmp               L4
+L3:
+  Mov               r14, r11
+  GetByIdShort      r16, r14, 1, "items"
+  Mov               r14, r16
+  IteratorBegin     r15, r14
+L15:
+  IteratorNext      r16, r15, r14
+  Mov               r17, r15
+  JStrictEqualLong  L5, r17, r10
+L18:
+  Mov               r12, r16
+  GetByIdShort      r16, r16, 2, "skip"
+  JmpTrueLong       L6, r16
+  Mov               r16, r12
+  GetByIdShort      r16, r16, 3, "critical_error"
+  JmpTrueLong       L7, r16
+  LoadConstZero     r13
+L14:
+  Mov               r16, r13
+  JStrictNotEqual   L8, r16, r0
+  Mov               r16, r12
+  GetByIdShort      r16, r16, 4, "fast_track"
+  JmpTrue           L9, r16
+L8:
+  Mov               r16, r12
+  GetByIdShort      r16, r16, 5, "value"
+  JmpFalse          L10, r16
+  Mov               r16, r12
+  GetByIdShort      r17, r16, 5, "value"
+  Mov               r16, r13
+  GetByVal          r16, r17, r16
+  JmpFalse          L10, r16
+  Mov               r16, r2
+  Inc               r16, r16
+  Mov               r2, r16
+  JGreater          L11, r16, r4
+L10:
+  Mov               r16, r13
+  JStrictNotEqual   L12, r16, r7
+  Mov               r16, r12
+  GetByIdShort      r16, r16, 6, "early_exit"
+  JmpTrue           L13, r16
+  Jmp               L12
+L11:
+  NewObject         r16
+  LoadConstString   r17, "limit_reached"
+  PutNewOwnByIdShort r16, r17, "status"
+  Mov               r17, r2
+  PutNewOwnByIdShort r16, r17, "processed"
+  Mov               r17, r1
+  PutNewOwnByIdShort r16, r17, "errors"
+L19:
+  IteratorClose     r15, 0
+L25:
+  IteratorClose     r3, 0
+  Ret               r16
+L9:
+  Mov               r13, r5
+L12:
+  Mov               r16, r13
+  Inc               r16, r16
+  Mov               r13, r16
+  JLess             L14, r16, r6
+L13:
+  JmpLong           L15
+L7:
+  Mov               r16, r1
+  Inc               r16, r16
+  Mov               r1, r16
+  JGreater          L16, r16, r7
+L21:
+  JmpLong           L15
+L16:
+  IteratorClose     r15, 0
+L26:
+  IteratorClose     r3, 0
+  Jmp               L1
+L6:
+  JmpLong           L15
+L20:
+  Catch             r14
+  IteratorClose     r15, 1
+  Throw             r14
+L5:
+  Mov               r14, r11
+  GetByIdShort      r14, r14, 7, "stop_after"
+  JmpTrue           L17, r14
+L27:
+  JmpLong           L4
+L17:
+  IteratorClose     r3, 0
+  Jmp               L1
+L24:
+  Catch             r0
+  IteratorClose     r3, 1
+  Throw             r0
+L1:
+  NewObject         r0
+  LoadConstString   r3, "completed"
+  PutNewOwnByIdShort r0, r3, "status"
+  PutNewOwnByIdShort r0, r2, "processed"
+  PutNewOwnByIdShort r0, r1, "errors"
+  Ret               r0
+
+Exception Handlers:
+0: start = L18, end = L19, target = L20
+1: start = L9, end = L13, target = L20
+2: start = L7, end = L21, target = L20
+3: start = L22, end = L23, target = L24
+4: start = L3, end = L25, target = L24
+5: start = L9, end = L26, target = L24
+6: start = L6, end = L27, target = L24
+
+Function<ternaryAndShortCircuit>6(4 params, 8 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadParam         r0, 2
+  LoadParam         r1, 3
+  LoadConstZero     r3
+  JGreater          L1, r2, r3
+  JGreater          L2, r0, r3
+  Negate            r4, r2
+  Sub               r7, r4, r0
+  Jmp               L3
+L2:
+  Negate            r4, r2
+  Add               r7, r4, r0
+L3:
+  Jmp               L4
+L1:
+  JGreater          L5, r0, r3
+  Sub               r4, r2, r0
+  Jmp               L6
+L5:
+  JGreater          L7, r1, r3
+  Add               r5, r2, r0
+  Sub               r5, r5, r1
+  Jmp               L8
+L7:
+  Add               r6, r2, r0
+  Add               r5, r6, r1
+L8:
+  Mov               r4, r5
+L6:
+  Mov               r7, r4
+L4:
+  Mov               r5, r2
+  JmpFalse          L9, r2
+  Mov               r5, r0
+L9:
+  JmpFalse          L10, r5
+  Mov               r5, r1
+L10:
+  JmpTrue           L11, r5
+  Mov               r4, r2
+  JmpFalse          L12, r2
+  Mov               r4, r0
+L12:
+  Mov               r5, r4
+L11:
+  JmpTrue           L13, r5
+  Mov               r5, r2
+L13:
+  JmpTrue           L14, r5
+  LoadConstZero     r5
+L14:
+  JGreater          L15, r7, r5
+  JLess             L16, r7, r5
+  LoadConstString   r3, "equal"
+  Ret               r3
+L16:
+  JmpFalse          L17, r7
+  LoadConstString   r3, "both_truthy"
+  JmpTrue           L18, r5
+L17:
+  LoadConstString   r6, "mixed"
+  Mov               r4, r6
+  JmpTrue           L19, r7
+  Mov               r4, r6
+  JmpTrue           L19, r5
+  LoadConstString   r4, "both_falsy"
+L19:
+  Mov               r3, r4
+L18:
+  Ret               r3
+L15:
+  JGreater          L20, r2, r0
+  Greater           r3, r1, r0
+  LoadConstString   r0, "case4"
+  JmpFalse          L21, r3
+  LoadConstString   r0, "case3"
+L21:
+  Jmp               L22
+L20:
+  Greater           r2, r1, r2
+  LoadConstString   r1, "case2"
+  JmpFalse          L23, r2
+  LoadConstString   r1, "case1"
+L23:
+  Mov               r0, r1
+L22:
+  Ret               r0
+
+Function<exceptionHandlingControlFlow>7(2 params, 30 registers, 0 symbols):
+  LoadParam         r0, 1
+  Mov               r3, r0
+  LoadConstUndefined r15
+  LoadConstUndefined r16
+  NewArray          r7, 0
+  NewArray          r1, 0
+  LoadConstZero     r14
+  LoadConstZero     r6
+  GetByIdShort      r0, r0, 1, "length"
+  LoadConstString   r5, "cleanup: "
+  GetGlobalObject   r2
+  LoadConstDouble   r4, 0.9
+  LoadConstString   r13, "processed"
+  LoadConstUInt8    r12, 5
+  LoadConstUInt8    r11, 2
+  LoadConstString   r10, "process"
+  LoadConstString   r9, "divide"
+  JNotLessLong      L1, r14, r0
+L16:
+  Mov               r8, r3
+  Mov               r0, r6
+  GetByVal          r0, r8, r0
+  Mov               r15, r0
+  GetByIdShort      r0, r0, 2, "type"
+  JStrictEqualLong  L2, r0, r9
+  Mov               r0, r15
+  GetByIdShort      r0, r0, 2, "type"
+  JStrictEqual      L3, r0, r10
+  TryGetById        r18, r2, 3, "Error"
+  GetByIdShort      r0, r18, 4, "prototype"
+  CreateThis        r8, r0, r18
+  LoadConstString   r22, "Unknown operation"
+  Mov               r23, r8
+  Construct         r0, r18, 2
+  SelectObject      r0, r8, r0
+  Throw             r0
+L3:
+  LoadConstZero     r16
+  Mov               r0, r15
+  GetByIdShort      r0, r0, 5, "steps"
+  JNotLess          L4, r14, r0
+L9:
+  Mov               r0, r16
+  JStrictNotEqual   L5, r0, r11
+  Mov               r0, r15
+  GetByIdShort      r0, r0, 6, "fail_at_step_2"
+  JmpTrue           L6, r0
+L5:
+  Mov               r0, r16
+  JGreater          L7, r0, r12
+L20:
+  Jmp               L8
+L7:
+  Jmp               L4
+L6:
+  TryGetById        r18, r2, 3, "Error"
+  GetByIdShort      r0, r18, 4, "prototype"
+  CreateThis        r8, r0, r18
+  LoadConstString   r22, "Step 2 failed"
+  Mov               r23, r8
+  Construct         r0, r18, 2
+  SelectObject      r0, r8, r0
+  Throw             r0
+L21:
+  Catch             r17
+  Mov               r0, r15
+  GetByIdShort      r0, r0, 7, "continue_on_error"
+  JmpTrue           L8, r0
+  Mov               r0, r17
+  Throw             r0
+L8:
+  Mov               r0, r16
+  Inc               r8, r0
+  Mov               r16, r8
+  Mov               r0, r15
+  GetByIdShort      r0, r0, 5, "steps"
+  JLess             L9, r8, r0
+L4:
+  Mov               r8, r7
+  GetByIdShort      r0, r8, 8, "push"
+  Call2             r0, r0, r8, r13
+  Jmp               L10
+L2:
+  Mov               r0, r15
+  GetByIdShort      r0, r0, 9, "b"
+  JStrictEqualLong  L11, r0, r14
+  Mov               r18, r7
+  GetByIdShort      r8, r18, 8, "push"
+  Mov               r0, r15
+  GetByIdShort      r19, r0, 10, "a"
+  GetByIdShort      r0, r0, 9, "b"
+  Div               r0, r19, r0
+  Call2             r0, r8, r18, r0
+L10:
+  Mov               r8, r3
+  Mov               r0, r6
+  GetByVal          r0, r8, r0
+  JmpFalseLong      L12, r0
+  Mov               r8, r3
+  Mov               r0, r6
+  GetByVal          r0, r8, r0
+  GetByIdShort      r0, r0, 11, "cleanup"
+  JmpFalseLong      L12, r0
+L24:
+  TryGetById        r8, r2, 12, "Math"
+  GetByIdShort      r0, r8, 13, "random"
+  Call1             r0, r0, r8
+  JGreater          L13, r0, r4
+L25:
+  JmpLong           L12
+L13:
+  TryGetById        r18, r2, 3, "Error"
+  GetByIdShort      r0, r18, 4, "prototype"
+  CreateThis        r8, r0, r18
+  LoadConstString   r22, "Cleanup failed"
+  Mov               r23, r8
+  Construct         r0, r18, 2
+  SelectObject      r0, r8, r0
+  Throw             r0
+L26:
+  Catch             r19
+  Mov               r18, r1
+  GetByIdShort      r8, r18, 8, "push"
+  NewObject         r0
+  Mov               r20, r6
+  PutNewOwnByIdShort r0, r20, "index"
+  GetByIdShort      r19, r19, 14, "message"
+  Add               r19, r5, r19
+  PutNewOwnByIdShort r0, r19, "error"
+  Call2             r0, r8, r18, r0
+  JmpLong           L12
+L11:
+  TryGetById        r18, r2, 3, "Error"
+  GetByIdShort      r0, r18, 4, "prototype"
+  CreateThis        r8, r0, r18
+  LoadConstString   r22, "Division by zero"
+  Mov               r23, r8
+  Construct         r0, r18, 2
+  SelectObject      r0, r8, r0
+  Throw             r0
+L22:
+  Catch             r20
+  Mov               r19, r1
+  GetByIdShort      r18, r19, 8, "push"
+  NewObject         r0
+  Mov               r8, r6
+  PutNewOwnByIdShort r0, r8, "index"
+  GetByIdShort      r20, r20, 14, "message"
+  PutNewOwnByIdShort r0, r20, "error"
+  Call2             r0, r18, r19, r0
+  Mov               r0, r3
+  GetByVal          r0, r0, r8
+  GetByIdShort      r0, r0, 15, "critical"
+  JmpTrueLong       L14, r0
+L27:
+  Mov               r8, r3
+  Mov               r0, r6
+  GetByVal          r0, r8, r0
+  JmpFalse          L12, r0
+  Mov               r8, r3
+  Mov               r0, r6
+  GetByVal          r0, r8, r0
+  GetByIdShort      r0, r0, 11, "cleanup"
+  JmpFalse          L12, r0
+L28:
+  TryGetById        r8, r2, 12, "Math"
+  GetByIdShort      r0, r8, 13, "random"
+  Call1             r0, r0, r8
+  JGreater          L15, r0, r4
+L29:
+  Jmp               L12
+L15:
+  TryGetById        r18, r2, 3, "Error"
+  GetByIdShort      r0, r18, 4, "prototype"
+  CreateThis        r8, r0, r18
+  LoadConstString   r22, "Cleanup failed"
+  Mov               r23, r8
+  Construct         r0, r18, 2
+  SelectObject      r0, r8, r0
+  Throw             r0
+L30:
+  Catch             r19
+  Mov               r18, r1
+  GetByIdShort      r8, r18, 8, "push"
+  NewObject         r0
+  Mov               r20, r6
+  PutNewOwnByIdShort r0, r20, "index"
+  GetByIdShort      r19, r19, 14, "message"
+  Add               r19, r5, r19
+  PutNewOwnByIdShort r0, r19, "error"
+  Call2             r0, r8, r18, r0
+L12:
+  Mov               r0, r6
+  Inc               r8, r0
+  Mov               r6, r8
+  Mov               r0, r3
+  GetByIdShort      r0, r0, 1, "length"
+  JLessLong         L16, r8, r0
+  Jmp               L1
+L14:
+  Mov               r8, r3
+  Mov               r0, r6
+  GetByVal          r0, r8, r0
+  JmpFalse          L1, r0
+  Mov               r8, r3
+  Mov               r0, r6
+  GetByVal          r0, r8, r0
+  GetByIdShort      r0, r0, 11, "cleanup"
+  JmpFalse          L1, r0
+L31:
+  TryGetById        r8, r2, 12, "Math"
+  GetByIdShort      r0, r8, 13, "random"
+  Call1             r0, r0, r8
+  JGreater          L17, r0, r4
+L32:
+  Jmp               L1
+L17:
+  TryGetById        r9, r2, 3, "Error"
+  GetByIdShort      r0, r9, 4, "prototype"
+  CreateThis        r8, r0, r9
+  LoadConstString   r22, "Cleanup failed"
+  Mov               r23, r8
+  Construct         r0, r9, 2
+  SelectObject      r0, r8, r0
+  Throw             r0
+L33:
+  Catch             r10
+  Mov               r9, r1
+  GetByIdShort      r8, r9, 8, "push"
+  NewObject         r0
+  Mov               r11, r6
+  PutNewOwnByIdShort r0, r11, "index"
+  GetByIdShort      r10, r10, 14, "message"
+  Add               r10, r5, r10
+  PutNewOwnByIdShort r0, r10, "error"
+  Call2             r0, r8, r9, r0
+L1:
+  NewObject         r0
+  PutNewOwnByIdShort r0, r7, "completed"
+  Mov               r7, r1
+  PutNewOwnByIdShort r0, r7, "failed"
+  Ret               r0
+L23:
+  Catch             r0
+  Mov               r8, r3
+  Mov               r7, r6
+  GetByVal          r7, r8, r7
+  JmpFalse          L18, r7
+  Mov               r7, r3
+  Mov               r3, r6
+  GetByVal          r3, r7, r3
+  GetByIdShort      r3, r3, 11, "cleanup"
+  JmpFalse          L18, r3
+L34:
+  TryGetById        r7, r2, 12, "Math"
+  GetByIdShort      r3, r7, 13, "random"
+  Call1             r3, r3, r7
+  JGreater          L19, r3, r4
+L35:
+  Jmp               L18
+L19:
+  TryGetById        r4, r2, 3, "Error"
+  GetByIdShort      r2, r4, 4, "prototype"
+  CreateThis        r3, r2, r4
+  LoadConstString   r22, "Cleanup failed"
+  Mov               r23, r3
+  Construct         r2, r4, 2
+  SelectObject      r2, r3, r2
+  Throw             r2
+L36:
+  Catch             r4
+  Mov               r3, r1
+  GetByIdShort      r2, r3, 8, "push"
+  NewObject         r1
+  PutNewOwnByIdShort r1, r6, "index"
+  GetByIdShort      r4, r4, 14, "message"
+  Add               r4, r5, r4
+  PutNewOwnByIdShort r1, r4, "error"
+  Call2             r1, r2, r3, r1
+L18:
+  Throw             r0
+
+Exception Handlers:
+0: start = L9, end = L20, target = L21
+1: start = L6, end = L21, target = L21
+2: start = L16, end = L10, target = L22
+3: start = L11, end = L22, target = L22
+4: start = L16, end = L10, target = L23
+5: start = L24, end = L25, target = L26
+6: start = L13, end = L26, target = L26
+7: start = L11, end = L27, target = L23
+8: start = L28, end = L29, target = L30
+9: start = L15, end = L30, target = L30
+10: start = L31, end = L32, target = L33
+11: start = L17, end = L33, target = L33
+12: start = L34, end = L35, target = L36
+13: start = L19, end = L36, target = L36
+
+Function<recursiveWithControlFlow>8(4 params, 27 registers, 0 symbols):
+  LoadParam         r13, 1
+  LoadParam         r2, 2
+  Mov               r8, r2
+  LoadParam         r9, 3
+  LoadConstUndefined r7
+  LoadConstUndefined r1
+  LoadConstUndefined r10
+  LoadConstUndefined r11
+  LoadConstUInt8    r0, 10
+  JGreaterLong      L1, r2, r0
+  LoadConstUInt8    r0, 1
+  JLessEqualLong    L2, r13, r0
+  LoadConstZero     r6
+  LoadConstZero     r1
+  Mov               r10, r0
+  GetGlobalObject   r5
+  LoadConstString   r4, "string"
+  LoadConstUInt8    r3, 2
+  JNotLessEqualLong L3, r0, r13
+L10:
+  Mov               r2, r9
+  GetByIdShort      r2, r2, 1, "skip_even"
+  JmpFalse          L4, r2
+  Mov               r2, r10
+  Mod               r2, r2, r3
+  JStrictEqualLong  L5, r2, r6
+L4:
+  Mov               r2, r9
+  GetByIdShort      r2, r2, 2, "early_exit"
+  JmpFalse          L6, r2
+  Mov               r14, r10
+  Div               r2, r13, r3
+  JGreaterLong      L3, r14, r2
+L6:
+  GetByIdShort      r16, r5, 3, "recursiveWithControlFlow"
+  Mov               r2, r10
+  Sub               r15, r2, r0
+  Mov               r2, r8
+  Add               r14, r2, r0
+  Mov               r2, r9
+  Call4             r2, r16, r7, r15, r14, r2
+  Mov               r11, r2
+  TypeOf            r2, r2
+  JStrictEqual      L7, r2, r4
+  Mov               r14, r1
+  Mov               r2, r11
+  Add               r1, r14, r2
+  Mov               r2, r9
+  GetByIdShort      r2, r2, 4, "limit"
+  JmpFalse          L8, r2
+  Mov               r14, r1
+  Mov               r2, r9
+  GetByIdShort      r2, r2, 4, "limit"
+  JGreater          L9, r14, r2
+L8:
+  Jmp               L5
+L9:
+  LoadConstString   r2, "limit_exceeded"
+  Ret               r2
+L7:
+  Mov               r2, r11
+L12:
+  Ret               r2
+L11:
+  Catch             r12
+  Mov               r2, r9
+  GetByIdShort      r2, r2, 5, "ignore_errors"
+  JmpTrue           L5, r2
+  Mov               r2, r12
+  Throw             r2
+L5:
+  Mov               r2, r10
+  Inc               r2, r2
+  Mov               r10, r2
+  JLessEqualLong    L10, r2, r13
+L3:
+  Ret               r1
+L2:
+  Ret               r0
+L1:
+  LoadConstString   r0, "max_depth"
+  Ret               r0
+
+Exception Handlers:
+0: start = L6, end = L8, target = L11
+1: start = L7, end = L12, target = L11
+

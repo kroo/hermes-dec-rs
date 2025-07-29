@@ -172,6 +172,21 @@ impl<'a> Cfg<'a> {
     pub fn analyze_post_dominators(&self) -> Option<analysis::PostDominatorAnalysis> {
         self.builder.analyze_post_dominators(&self.graph)
     }
+
+    /// Analyze conditional chains including if/else-if/else patterns
+    pub fn analyze_conditional_chains(&self) -> Option<analysis::ConditionalAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::analyze_conditional_chains(
+            &self.graph,
+            &post_doms,
+        ))
+    }
+
+    /// Legacy analyze if/else regions (deprecated - use analyze_conditional_chains)
+    pub fn analyze_if_else_regions(&self) -> Option<analysis::IfElseAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::find_if_else_regions(&self.graph, &post_doms))
+    }
 }
 
 // Re-export main types for convenience
