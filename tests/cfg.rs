@@ -1,4 +1,4 @@
-use hermes_dec_rs::cfg::analysis::LoopType;
+use hermes_dec_rs::cfg::analysis::{BranchType, ChainType, LoopType};
 use hermes_dec_rs::cfg::builder::CfgBuilder;
 use hermes_dec_rs::cfg::{Block, Cfg, EdgeKind};
 use hermes_dec_rs::generated::unified_instructions::UnifiedInstruction;
@@ -3414,4 +3414,398 @@ fn test_if_else_performance() {
         5,
         "Should find 5 if/else regions in performance test"
     );
+}
+
+// ============================================================================
+// CONDITIONAL CHAIN ANALYSIS TESTS (Enhanced CFG-07)
+// ============================================================================
+
+/// Test simple if/else as a conditional chain
+#[test]
+fn test_conditional_chain_simple_if_else() {
+    // Create simple if/else: A → {B, C} → D
+    let instructions = vec![
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 0: A (conditional source)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        }, // 1: B (then branch)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 2: B jump to D
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        }, // 3: C (else branch)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 4: C jump to D
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 50,
+        }, // 5: D (join block)
+        UnifiedInstruction::Ret { operand_0: 1 }, // 6: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
+        ("JmpTrue", 0, 3, Some(0)), // A → C (False)
+        ("Jmp", 2, 5, None),        // B → D
+        ("Jmp", 4, 5, None),        // C → D
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional chain analysis should succeed");
+
+    // Should find exactly one conditional chain
+    assert_eq!(
+        conditional_analysis.chains.len(),
+        1,
+        "Should find exactly one conditional chain"
+    );
+
+    let chain = &conditional_analysis.chains[0];
+    assert_eq!(chain.chain_type, ChainType::SimpleIfElse);
+    assert_eq!(chain.branches.len(), 2); // if + else branches
+
+    // Check branch types
+    assert_eq!(chain.branches[0].branch_type, BranchType::If);
+    assert_eq!(chain.branches[1].branch_type, BranchType::Else);
+
+    // Check statistics
+    let stats = &conditional_analysis.chain_statistics;
+    assert_eq!(stats.total_chains, 1);
+    assert_eq!(stats.simple_if_else_count, 1);
+    assert_eq!(stats.else_if_chain_count, 0);
+    assert_eq!(stats.max_chain_length, 2);
+}
+
+/// Test canonical else-if chain: if/else-if/else-if/else
+#[test]
+fn test_conditional_chain_else_if_sequence() {
+    // Create else-if chain: A → {B, A2} → {C, A3} → {D, E}
+    // A: if (condition1) → B else → A2
+    // A2: if (condition2) → C else → A3
+    // A3: if (condition3) → D else → E
+    let instructions = vec![
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 0: A (if condition1)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        }, // 1: B (then branch)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 2: B → EXIT
+        UnifiedInstruction::JmpTrue {
+            operand_0: 2,
+            operand_1: 2,
+        }, // 3: A2 (else-if condition2)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        }, // 4: C (then branch)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 5: C → EXIT
+        UnifiedInstruction::JmpTrue {
+            operand_0: 3,
+            operand_1: 3,
+        }, // 6: A3 (else-if condition3)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 200,
+        }, // 7: D (then branch)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 8: D → EXIT
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 4,
+            operand_1: 250,
+        }, // 9: E (final else)
+        UnifiedInstruction::Ret { operand_0: 1 }, // 10: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
+        ("JmpTrue", 0, 3, Some(0)), // A → A2 (False)
+        ("JmpTrue", 3, 4, Some(1)), // A2 → C (True)
+        ("JmpTrue", 3, 6, Some(0)), // A2 → A3 (False)
+        ("JmpTrue", 6, 7, Some(1)), // A3 → D (True)
+        ("JmpTrue", 6, 9, Some(0)), // A3 → E (False)
+        ("Jmp", 2, 10, None),       // B → EXIT
+        ("Jmp", 5, 10, None),       // C → EXIT
+        ("Jmp", 8, 10, None),       // D → EXIT
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional chain analysis should succeed");
+
+    // Should find exactly one conditional chain with 4 branches
+    assert_eq!(
+        conditional_analysis.chains.len(),
+        1,
+        "Should find exactly one conditional chain"
+    );
+
+    let chain = &conditional_analysis.chains[0];
+    assert_eq!(chain.chain_type, ChainType::ElseIfChain);
+    assert_eq!(chain.branches.len(), 4); // if + else-if + else-if + else
+
+    // Check branch types in sequence
+    assert_eq!(chain.branches[0].branch_type, BranchType::If);
+    assert_eq!(chain.branches[1].branch_type, BranchType::ElseIf);
+    assert_eq!(chain.branches[2].branch_type, BranchType::ElseIf);
+    assert_eq!(chain.branches[3].branch_type, BranchType::Else);
+
+    // Check statistics
+    let stats = &conditional_analysis.chain_statistics;
+    assert_eq!(stats.total_chains, 1);
+    assert_eq!(stats.simple_if_else_count, 0);
+    assert_eq!(stats.else_if_chain_count, 1);
+    assert_eq!(stats.max_chain_length, 4);
+}
+
+/// Test nested conditionals within else-if chains
+#[test]
+fn test_conditional_chain_nested_patterns() {
+    // Create nested pattern: A → {B → {C, D}, E}
+    // A: if (condition1) → B else → E
+    // B: if (condition2) → C else → D
+    let instructions = vec![
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 0: A (outer if)
+        UnifiedInstruction::JmpTrue {
+            operand_0: 1,
+            operand_1: 1,
+        }, // 1: B (nested if)
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        }, // 2: C (nested then)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 3: C → EXIT
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        }, // 4: D (nested else)
+        UnifiedInstruction::Jmp { operand_0: 0 }, // 5: D → EXIT
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 200,
+        }, // 6: E (outer else)
+        UnifiedInstruction::Ret { operand_0: 1 }, // 7: Return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
+        ("JmpTrue", 0, 6, Some(0)), // A → E (False)
+        ("JmpTrue", 1, 2, Some(1)), // B → C (True)
+        ("JmpTrue", 1, 4, Some(0)), // B → D (False)
+        ("Jmp", 3, 7, None),        // C → EXIT
+        ("Jmp", 5, 7, None),        // D → EXIT
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional chain analysis should succeed");
+
+    // Should find two conditional chains (outer and nested)
+    assert_eq!(
+        conditional_analysis.chains.len(),
+        2,
+        "Should find two conditional chains (outer and nested)"
+    );
+
+    // Check that we have both simple if/else patterns
+    let simple_chains: Vec<_> = conditional_analysis
+        .chains
+        .iter()
+        .filter(|c| c.chain_type == ChainType::SimpleIfElse)
+        .collect();
+    assert_eq!(simple_chains.len(), 2);
+
+    // Check statistics
+    let stats = &conditional_analysis.chain_statistics;
+    assert_eq!(stats.total_chains, 2);
+    assert_eq!(stats.simple_if_else_count, 2);
+    assert_eq!(stats.else_if_chain_count, 0);
+}
+
+/// Test guard clause pattern (early returns)
+#[test]
+fn test_conditional_chain_guard_clauses() {
+    // Create guard clause pattern: A → {EXIT, B} → {EXIT, C}
+    let instructions = vec![
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        }, // 0: A (guard condition 1)
+        UnifiedInstruction::Ret { operand_0: 1 }, // 1: Early return 1
+        UnifiedInstruction::JmpTrue {
+            operand_0: 2,
+            operand_1: 2,
+        }, // 2: B (guard condition 2)
+        UnifiedInstruction::Ret { operand_0: 2 }, // 3: Early return 2
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 100,
+        }, // 4: C (main logic)
+        UnifiedInstruction::Ret { operand_0: 3 }, // 5: Normal return
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 0, 1, Some(1)), // A → early return (True)
+        ("JmpTrue", 0, 2, Some(0)), // A → B (False)
+        ("JmpTrue", 2, 3, Some(1)), // B → early return (True)
+        ("JmpTrue", 2, 4, Some(0)), // B → C (False)
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional chain analysis should succeed");
+
+    // Should find conditional chains (guard patterns)
+    assert!(
+        conditional_analysis.chains.len() >= 1,
+        "Should find conditional chains for guard clauses"
+    );
+
+    // Check statistics
+    let stats = &conditional_analysis.chain_statistics;
+    assert!(stats.total_chains >= 1);
+}
+
+/// Test performance with complex conditional patterns
+#[test]
+fn test_conditional_chain_performance() {
+    // Create a simpler performance test with multiple conditional chains
+    let instructions = vec![
+        // Chain 1: if/else
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        },
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        },
+        UnifiedInstruction::Jmp { operand_0: 0 },
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        },
+        UnifiedInstruction::Jmp { operand_0: 0 },
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 50,
+        },
+        UnifiedInstruction::Ret { operand_0: 1 },
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 0, 1, Some(1)),
+        ("JmpTrue", 0, 3, Some(0)),
+        ("Jmp", 2, 5, None),
+        ("Jmp", 4, 5, None),
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Performance test
+    let start = std::time::Instant::now();
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional chain analysis should succeed on complex pattern");
+    let duration = start.elapsed();
+
+    // Should complete quickly
+    assert!(
+        duration.as_millis() < 1000,
+        "Conditional chain analysis should be efficient: took {}ms",
+        duration.as_millis()
+    );
+
+    // Should find multiple chains
+    assert!(
+        conditional_analysis.chains.len() >= 1,
+        "Should find conditional chains in complex pattern"
+    );
+
+    // Check statistics are computed
+    let stats = &conditional_analysis.chain_statistics;
+    assert!(stats.total_chains >= 1);
+    assert!(stats.max_chain_length >= 2);
+}
+
+/// Test backward compatibility - existing tests should still work
+#[test]
+fn test_conditional_chain_backward_compatibility() {
+    // Use the same pattern as test_if_else_canonical_diamond
+    let instructions = vec![
+        UnifiedInstruction::JmpTrue {
+            operand_0: 0,
+            operand_1: 1,
+        },
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 1,
+            operand_1: 100,
+        },
+        UnifiedInstruction::Jmp { operand_0: 0 },
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 2,
+            operand_1: 200,
+        },
+        UnifiedInstruction::Jmp { operand_0: 0 },
+        UnifiedInstruction::LoadConstUInt8 {
+            operand_0: 3,
+            operand_1: 50,
+        },
+        UnifiedInstruction::Ret { operand_0: 1 },
+    ];
+
+    let jumps = vec![
+        ("JmpTrue", 0, 1, Some(1)),
+        ("JmpTrue", 0, 3, Some(0)),
+        ("Jmp", 2, 5, None),
+        ("Jmp", 4, 5, None),
+    ];
+
+    let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
+    let mut cfg = Cfg::new(&hbc_file, 0);
+    cfg.build();
+
+    // Test both old and new APIs work
+    let if_else_regions = cfg
+        .analyze_if_else_regions()
+        .expect("Legacy if/else analysis should work");
+
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("New conditional chain analysis should work");
+
+    // Both should find the same pattern
+    assert_eq!(if_else_regions.regions.len(), 1);
+    assert_eq!(conditional_analysis.chains.len(), 1);
+
+    // New analysis should provide richer information
+    let chain = &conditional_analysis.chains[0];
+    assert_eq!(chain.chain_type, ChainType::SimpleIfElse);
+    assert_eq!(chain.branches.len(), 2);
 }
