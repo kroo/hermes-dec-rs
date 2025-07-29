@@ -121,7 +121,7 @@ fn test_sparse_switch_disassembly() {
 
     // Verify negative number handling in sparse switch
     assert!(
-        actual_content.contains("LoadConstInt      r0, 4294967291"), // -5
+        actual_content.contains("LoadConstInt      r0, -5"),
         "Expected negative number constant not found"
     );
 
