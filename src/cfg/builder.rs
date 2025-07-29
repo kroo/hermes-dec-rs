@@ -182,7 +182,10 @@ impl<'a> CfgBuilder<'a> {
                         leaders.insert(post_terminator);
                     }
                 }
-            } else if matches!(instruction.instruction.name(), "SaveGenerator" | "SaveGeneratorLong") {
+            } else if matches!(
+                instruction.instruction.name(),
+                "SaveGenerator" | "SaveGeneratorLong"
+            ) {
                 // SaveGenerator instructions have two control flow paths:
                 // 1. Fallthrough to next instruction (initial execution)
                 // 2. Resume at target label (when generator is resumed)
@@ -434,7 +437,10 @@ impl<'a> CfgBuilder<'a> {
                             }
                         }
                     }
-                } else if matches!(last_instruction.instruction.name(), "SaveGenerator" | "SaveGeneratorLong") {
+                } else if matches!(
+                    last_instruction.instruction.name(),
+                    "SaveGenerator" | "SaveGeneratorLong"
+                ) {
                     // Handle SaveGenerator instructions - create both fallthrough and resume edges
                     // 1. Generator Resume edge: to the resumption label
                     if let Some(target) = self.get_jump_target(last_instruction, jump_table) {
@@ -1398,7 +1404,9 @@ impl<'a> CfgBuilder<'a> {
                 EdgeKind::Switch(case_index) => (format!("Switch Case {}", case_index), "blue"),
                 EdgeKind::Default => ("Default Case".to_string(), "purple"),
                 EdgeKind::Fall => ("Fall Through".to_string(), "orange"),
-                EdgeKind::GeneratorFallthrough => ("Generator Fallthrough".to_string(), "lightblue"),
+                EdgeKind::GeneratorFallthrough => {
+                    ("Generator Fallthrough".to_string(), "lightblue")
+                }
                 EdgeKind::GeneratorResume => ("Generator Resume".to_string(), "cyan"),
             };
             edge_attrs.push(format!("label=\"{}\"", label));
