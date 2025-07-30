@@ -28,6 +28,10 @@ pub enum EdgeKind {
     Default,
     /// Fallthrough to next block
     Fall,
+    /// Generator fallthrough (initial execution continues to next instruction)
+    GeneratorFallthrough,
+    /// Generator resume (resumes execution at suspension label)
+    GeneratorResume,
 }
 
 /// Main CFG struct that provides high-level interface

@@ -1,0 +1,196 @@
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+  edge [fontname="Arial"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [label="Block 0 (PC 0-46)\l  0: DeclareGlobalVar  \"testx\"\l  1: DeclareGlobalVar  \"gen\"\l  2: DeclareGlobalVar  \"ze\"\l  3: CreateEnvironment r1\l  4: CreateAsyncClosure r2, r1, Function<testx>1\l  5: GetGlobalObject   r0\l  6: PutById           r0, r2, 1, \"testx\"\l  7: CreateGeneratorClosure r2, r1, Function<gen>4\l  8: PutById           r0, r2, 2, \"gen\"\l  9: CreateClosure     r1, r1, Function<ze>6\l  10: PutById           r0, r1, 3, \"ze\"\l  11: TryGetById        r2, r0, 1, \"window\"\l  12: GetByIdShort      r1, r0, 2, \"ze\"\l  13: PutById           r2, r1, 4, \"onload\"\l  14: GetByIdShort      r1, r0, 2, \"ze\"\l  15: LoadConstUndefined r4\l  16: Call1             r1, r1, r4\l  17: CreateRegExp      r1, \"dkooDD JPOD D09D\n\\  @ .\r\n\t@ \x00 D+D  \", \"gmi\", 0\l  18: PutById           r0, r1, 5, \"test2\"\l  19: TryGetById        r3, r0, 3, \"console\"\l  20: GetByIdShort      r2, r3, 4, \"log\"\l  21: TryGetById        r6, r0, 5, \"test2\"\l  22: GetByIdShort      r5, r6, 6, \"exec\"\l  23: LoadConstString   r1, \"bonjour\"\l  24: Call2             r1, r5, r6, r1\l  25: Call2             r1, r2, r3, r1\l  26: TryGetById        r5, r0, 3, \"console\"\l  27: GetByIdShort      r3, r5, 4, \"log\"\l  28: GetByIdShort      r1, r0, 7, \"gen\"\l  29: Call1             r2, r1, r4\l  30: GetByIdShort      r1, r2, 8, \"next\"\l  31: Call1             r2, r1, r2\l  32: LoadConstString   r1, \"a\"\l  33: Call3             r1, r3, r5, r1, r2\l  34: TryGetById        r3, r0, 3, \"console\"\l  35: GetByIdShort      r2, r3, 4, \"log\"\l  36: GetByIdShort      r1, r0, 9, \"testx\"\l  37: LoadConstDouble   r5, 7.3\l  38: LoadConstString   r0, \"le\"\l  39: Add               r0, r5, r0\l  40: Call2             r1, r1, r4, r0\l  41: GetByIdShort      r0, r1, 8, \"next\"\l  42: Call1             r1, r0, r1\l  43: LoadConstString   r0, \"b\"\l  44: Call3             r0, r2, r3, r0, r1\l  45: Ret               r0\l"]
+    f0_n1 [style=filled, fillcolor=lightgray, label="EXIT"]
+
+    f0_n0 -> f0_n1 [label="Unconditional", color=black]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [label="Block 0 (PC 0-10)\l  0: LoadConstUndefined r4\l  1: LoadConstUndefined r0\l  2: ReifyArguments    r0\l  3: Mov               r3, r0\l  4: GetBuiltinClosure r2, 52\l  5: CreateEnvironment r0\l  6: CreateGeneratorClosure r1, r0, Function<?anon_0_testx>2\l  7: LoadThisNS        r0\l  8: Call4             r0, r2, r4, r1, r0, r3\l  9: Ret               r0\l"]
+    f1_n1 [style=filled, fillcolor=lightgray, label="EXIT"]
+
+    f1_n0 -> f1_n1 [label="Unconditional", color=black]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [label="Block 0 (PC 0-3)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_?anon_0_testx>3\l  2: Ret               r0\l"]
+    f2_n1 [style=filled, fillcolor=lightgray, label="EXIT"]
+
+    f2_n0 -> f2_n1 [label="Unconditional", color=black]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n1 [label="Block 1 (PC 3-13)\l  0: GetGlobalObject   r4\l  1: GetByIdShort      r2, r4, 1, \"testx\"\l  2: TryGetById        r3, r4, 2, \"test2\"\l  3: LoadConstUInt8    r5, 42\l  4: LoadConstString   r1, \"D+D +D +D +\lD+ÉD \"\l  5: Add               r1, r5, r1\l  6: Add               r1, r1, r3\l  7: LoadConstUndefined r3\l  8: Call2             r1, r2, r3, r1\l  9: SaveGenerator     [4]\l"]
+    f3_n2 [label="Block 2 (PC 13-14)\l  0: Ret               r1\l"]
+    f3_n3 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 3 (PC 14-16)\l  0: ResumeGenerator   r1, r2\l  1: JmpTrue           L2, r2\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n4 [label="Block 4 (PC 16-19)\l  0: GetByIdShort      r2, r4, 3, \"gen\"\l  1: Call1             r2, r2, r3\l  2: SaveGenerator     [4]\l"]
+    f3_n5 [label="Block 5 (PC 19-20)\l  0: Ret               r2\l"]
+    f3_n6 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 6 (PC 20-22)\l  0: ResumeGenerator   r2, r5\l  1: JmpTrue           L3, r5\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n7 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 7 (PC 22-32)\l  0: TryGetById        r7, r4, 4, \"console\"\l  1: GetByIdShort      r6, r7, 5, \"log\"\l  2: LoadParam         r5, 1\l  3: Call2             r5, r6, r7, r5\l  4: TryGetById        r6, r4, 4, \"console\"\l  5: GetByIdShort      r5, r6, 5, \"log\"\l  6: TryGetById        r4, r4, 6, \"xy\"\l  7: Call2             r4, r5, r6, r4\l  8: CompleteGenerator \l  9: Ret               r3\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n8 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 8 (PC 32-34) [L3]\l  0: CompleteGenerator \l  1: Ret               r2\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n9 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 9 (PC 34-36) [L2]\l  0: CompleteGenerator \l  1: Ret               r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n10 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 10 (PC 36-38) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n11 [style=filled, fillcolor=lightgray, label="EXIT"]
+
+    f3_n0 -> f3_n10 [label="True Branch", color=green]
+    f3_n0 -> f3_n1 [label="False Branch", color=red]
+    f3_n1 -> f3_n2 [label="Generator Fallthrough", color=lightblue]
+    f3_n2 -> f3_n11 [label="Unconditional", color=black]
+    f3_n3 -> f3_n9 [label="True Branch", color=green]
+    f3_n3 -> f3_n4 [label="False Branch", color=red]
+    f3_n4 -> f3_n5 [label="Generator Fallthrough", color=lightblue]
+    f3_n5 -> f3_n11 [label="Unconditional", color=black]
+    f3_n6 -> f3_n8 [label="True Branch", color=green]
+    f3_n6 -> f3_n7 [label="False Branch", color=red]
+    f3_n7 -> f3_n11 [label="Unconditional", color=black]
+    f3_n8 -> f3_n11 [label="Unconditional", color=black]
+    f3_n9 -> f3_n11 [label="Unconditional", color=black]
+    f3_n10 -> f3_n11 [label="Unconditional", color=black]
+
+    // Analysis Legend
+    // Conditional: ELSE-IF CHAIN
+  }
+
+  subgraph cluster_function_4 {
+    label = "Function 4";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f4_n0 [label="Block 0 (PC 0-3)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_gen>5\l  2: Ret               r0\l"]
+    f4_n1 [style=filled, fillcolor=lightgray, label="EXIT"]
+
+    f4_n0 -> f4_n1 [label="Unconditional", color=black]
+  }
+
+  subgraph cluster_function_5 {
+    label = "Function 5";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f5_n0 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 0 (PC 0-5)\l  0: StartGenerator    \l  1: LoadConstUndefined r2\l  2: LoadConstUndefined r3\l  3: ResumeGenerator   r0, r1\l  4: JmpTrueLong       L1, r1\l[CONDITIONAL: IF-ELSE]\l"]
+    f5_n1 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 1 (PC 5-7)\l  0: LoadConstUInt8    r1, 42\l  1: SaveGenerator     [4]\l[CONDITIONAL: IF-ELSE]\l"]
+    f5_n2 [label="Block 2 (PC 7-8)\l  0: Ret               r1\l"]
+    f5_n3 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 3 (PC 8-10)\l  0: ResumeGenerator   r1, r4\l  1: JmpTrueLong       L2, r4\l[CONDITIONAL: IF-ELSE]\l"]
+    f5_n4 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 4 (PC 10-15) [L6]\l  0: GetGlobalObject   r4\l  1: GetByIdShort      r4, r4, 1, \"gen\"\l  2: Call1             r5, r4, r2\l  3: GetByIdShort      r4, r5, 2, \"next\"\l  4: Call1             r4, r4, r5\l[CONDITIONAL: IF-ELSE]\l"]
+    f5_n5 [label="Block 5 (PC 15-16) [L7]\l  0: Jmp               L3\l"]
+    f5_n6 [label="Block 6 (PC 16-21) [L8]\l  0: Catch             r4\l  1: GetGlobalObject   r4\l  2: TryGetById        r5, r4, 3, \"print\"\l  3: LoadConstString   r4, \"Hello! Exception handling\"\l  4: Call2             r4, r5, r2, r4\l"]
+    f5_n7 [label="Block 7 (PC 21-22) [L3]\l  0: Jmp               L4\l"]
+    f5_n8 [label="Block 8 (PC 22-23) [L9]\l  0: Catch             r3\l"]
+    f5_n9 [label="Block 9 (PC 23-29) [L10]\l  0: LoadConstInt      r5, 432\l  1: LoadConstString   r4, \"dçdàçD°D+D\"\l  2: Mul               r5, r5, r4\l  3: LoadConstInt      r4, 478\l  4: AddN              r4, r5, r4\l  5: JmpFalse          L5, r4\l"]
+    f5_n10 [label="Block 10 (PC 29-40)\l  0: GetGlobalObject   r4\l  1: TryGetById        r6, r4, 4, \"console\"\l  2: GetByIdShort      r5, r6, 5, \"log\"\l  3: Mov               r7, r3\l  4: LoadConstString   r3, \"Bon-jour : \"\l  5: Add               r4, r3, r7\l  6: LoadConstInt      r3, 340000\l  7: Mul               r7, r7, r3\l  8: LoadConstUInt8    r3, 6\l  9: AddN              r3, r7, r3\l  10: Call3             r3, r5, r6, r4, r3\l"]
+    f5_n11 [label="Block 11 (PC 40-41) [L5]\l  0: Jmp               L4\l"]
+    f5_n12 [label="Block 12 (PC 41-46) [L11]\l  0: Catch             r3\l  1: GetGlobalObject   r3\l  2: TryGetById        r4, r3, 6, \"alert\"\l  3: LoadConstString   r3, \"AAAAAAAA\"\l  4: Call2             r3, r4, r2, r3\l"]
+    f5_n13 [label="Block 13 (PC 46-48) [L4]\l  0: CompleteGenerator \l  1: Ret               r2\l"]
+    f5_n14 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 14 (PC 48-50) [L2]\l  0: CompleteGenerator \l  1: Ret               r1\l[CONDITIONAL: IF-ELSE]\l"]
+    f5_n15 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 15 (PC 50-52) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f5_n16 [style=filled, fillcolor=lightgray, label="EXIT"]
+
+    f5_n0 -> f5_n15 [label="True Branch", color=green]
+    f5_n0 -> f5_n1 [label="False Branch", color=red]
+    f5_n1 -> f5_n2 [label="Generator Fallthrough", color=lightblue]
+    f5_n2 -> f5_n16 [label="Unconditional", color=black]
+    f5_n3 -> f5_n14 [label="True Branch", color=green]
+    f5_n3 -> f5_n4 [label="False Branch", color=red]
+    f5_n4 -> f5_n5 [label="Fall Through", color=orange]
+    f5_n5 -> f5_n7 [label="Unconditional", color=black]
+    f5_n6 -> f5_n7 [label="Fall Through", color=orange]
+    f5_n7 -> f5_n13 [label="Unconditional", color=black]
+    f5_n8 -> f5_n16 [label="Unconditional", color=black]
+    f5_n9 -> f5_n11 [label="False Branch", color=red]
+    f5_n9 -> f5_n10 [label="True Branch", color=green]
+    f5_n10 -> f5_n11 [label="Fall Through", color=orange]
+    f5_n11 -> f5_n13 [label="Unconditional", color=black]
+    f5_n12 -> f5_n13 [label="Fall Through", color=orange]
+    f5_n13 -> f5_n16 [label="Unconditional", color=black]
+    f5_n14 -> f5_n16 [label="Unconditional", color=black]
+    f5_n15 -> f5_n16 [label="Unconditional", color=black]
+    f5_n4 -> f5_n6 [label="Unconditional", color=black]
+    f5_n4 -> f5_n8 [label="Unconditional", color=black]
+    f5_n5 -> f5_n8 [label="Unconditional", color=black]
+    f5_n6 -> f5_n8 [label="Unconditional", color=black]
+    f5_n9 -> f5_n12 [label="Unconditional", color=black]
+    f5_n10 -> f5_n12 [label="Unconditional", color=black]
+
+    // Analysis Legend
+    // Conditional: IF-ELSE
+  }
+
+  subgraph cluster_function_6 {
+    label = "Function 6";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f6_n0 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 0 (PC 0-7)\l  0: LoadConstUndefined r0\l  1: CreateEnvironment r3\l  2: GetGlobalObject   r1\l  3: TryGetById        r4, r1, 1, \"Math\"\l  4: GetByIdShort      r2, r4, 2, \"random\"\l  5: Call1             r2, r2, r4\l  6: JmpTrue           L1, r2\l[CONDITIONAL: IF-ELSE]\l"]
+    f6_n1 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 1 (PC 7-9)\l  0: StoreNPToEnvironment r3, 0, r0\l  1: Jmp               L2\l[CONDITIONAL: IF-ELSE]\l"]
+    f6_n2 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 2 (PC 9-14) [L1]\l  0: CreateClosure     r2, r3, Function<zb>7\l  1: StoreToEnvironment r3, 0, r2\l  2: Call1             r2, r2, r0\l  3: GetByIdShort      r1, r1, 3, \"ze\"\l  4: Call1             r1, r1, r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f6_n3 [label="Block 3 (PC 14-15) [L2]\l  0: Ret               r0\l"]
+    f6_n4 [style=filled, fillcolor=lightgray, label="EXIT"]
+
+    f6_n0 -> f6_n2 [label="True Branch", color=green]
+    f6_n0 -> f6_n1 [label="False Branch", color=red]
+    f6_n1 -> f6_n3 [label="Unconditional", color=black]
+    f6_n2 -> f6_n3 [label="Fall Through", color=orange]
+    f6_n3 -> f6_n4 [label="Unconditional", color=black]
+
+    // Analysis Legend
+    // Conditional: IF-ELSE
+  }
+
+  subgraph cluster_function_7 {
+    label = "Function 7";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f7_n0 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 0 (PC 0-5)\l  0: GetGlobalObject   r0\l  1: TryGetById        r1, r0, 1, \"Date\"\l  2: GetByIdShort      r0, r1, 2, \"now\"\l  3: Call1             r0, r0, r1\l  4: JmpFalse          L1, r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f7_n1 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 1 (PC 5-9)\l  0: GetEnvironment    r0, 0\l  1: LoadFromEnvironment r1, r0, 0\l  2: LoadConstUndefined r0\l  3: Call1             r0, r1, r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f7_n2 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 2 (PC 9-11) [L1]\l  0: LoadConstUndefined r0\l  1: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f7_n3 [style=filled, fillcolor=lightgray, label="EXIT"]
+
+    f7_n0 -> f7_n2 [label="False Branch", color=red]
+    f7_n0 -> f7_n1 [label="True Branch", color=green]
+    f7_n1 -> f7_n2 [label="Fall Through", color=orange]
+    f7_n2 -> f7_n3 [label="Unconditional", color=black]
+
+    // Analysis Legend
+    // Conditional: IF-ELSE
+  }
+
+}
