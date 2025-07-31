@@ -23,6 +23,8 @@ pub struct UnifiedInstructionDef {
     pub is_variadic: bool,
     pub doc: Option<String>,
     pub category: String,
+    pub expression_type: String,
+    pub expression_operator: Option<String>,
 }
 
 /// A registry containing all generated instruction definitions and their version mappings.
@@ -145,12 +147,15 @@ fn process_instructions_for_version(
             if !operands.is_empty() {
                 operand_shapes.insert(OperandShape::new(&operands));
             }
+            let (expr_type, expr_op) = get_expression_metadata(&name);
             let unified_def = UnifiedInstructionDef {
                 name: name.clone(),
                 operands,
                 is_variadic: inst.is_variadic,
                 doc: inst.doc,
                 category: categorize_instruction(&name),
+                expression_type: expr_type.to_string(),
+                expression_operator: expr_op.map(|s| s.to_string()),
             };
             all_instructions.insert(name.clone(), unified_def);
         }
@@ -260,6 +265,93 @@ fn categorize_instruction(name: &str) -> String {
         _ => "Other",
     };
     category.to_string()
+}
+
+/// Determines the expression type and operator for an instruction.
+fn get_expression_metadata(name: &str) -> (&'static str, Option<&'static str>) {
+    let lower = name.to_lowercase();
+    match lower.as_str() {
+        // Binary arithmetic operators
+        "add" | "add32" | "addn" => ("Binary", Some("Addition")),
+        "sub" | "sub32" | "subn" => ("Binary", Some("Subtraction")),
+        "mul" | "mul32" | "muln" => ("Binary", Some("Multiplication")),
+        "div" | "divn" | "divi32" | "divu32" => ("Binary", Some("Division")),
+        "mod" => ("Binary", Some("Remainder")),
+        
+        // Binary comparison operators
+        "less" | "jless" | "jlessn" => ("Binary", Some("LessThan")),
+        "lessorequaln" | "jlessequal" | "jlessequaln" => ("Binary", Some("LessEqualThan")),
+        "greater" | "jgreater" | "jgreatern" => ("Binary", Some("GreaterThan")),
+        "greaterorequaln" | "jgreaterequal" | "jgreaterequaln" | "greatereq" => ("Binary", Some("GreaterEqualThan")),
+        "eq" | "jeq" | "jequal" => ("Binary", Some("Equality")),
+        "neq" | "jneq" | "jnotequal" => ("Binary", Some("Inequality")),
+        "stricteq" | "jstricteq" | "jstrictequal" => ("Binary", Some("StrictEquality")),
+        "strictneq" | "jstrictneq" | "jstrictnotequal" => ("Binary", Some("StrictInequality")),
+        "instanceof" => ("Binary", Some("Instanceof")),
+        "in" => ("Binary", Some("In")),
+        
+        // Bitwise binary operators
+        "bitand" => ("Binary", Some("BitwiseAnd")),
+        "bitor" => ("Binary", Some("BitwiseOR")),
+        "bitxor" => ("Binary", Some("BitwiseXOR")),
+        "lshift" => ("Binary", Some("ShiftLeft")),
+        "rshift" => ("Binary", Some("ShiftRight")),
+        "urshift" => ("Binary", Some("ShiftRightZeroFill")),
+        
+        // Unary operators
+        "negate" => ("Unary", Some("UnaryNegation")),
+        "not" => ("Unary", Some("LogicalNot")),
+        "bitnot" => ("Unary", Some("BitwiseNot")),
+        "typeof" => ("Unary", Some("Typeof")),
+        
+        // Update operators
+        "inc" => ("Update", Some("Increment")),
+        "dec" => ("Update", Some("Decrement")),
+        
+        // Literal constants
+        s if s.starts_with("loadconst") => {
+            if s.contains("uint8") || s.contains("int") || s.contains("zero") || s.contains("double") {
+                ("Literal", Some("Numeric"))
+            } else if s.contains("string") {
+                ("Literal", Some("String"))
+            } else if s.contains("bigint") {
+                ("Literal", Some("BigInt"))
+            } else if s.contains("true") || s.contains("false") {
+                ("Literal", Some("Boolean"))
+            } else if s.contains("null") {
+                ("Literal", Some("Null"))
+            } else if s.contains("undefined") {
+                ("Literal", Some("Undefined"))
+            } else if s.contains("empty") {
+                ("Literal", Some("Empty"))
+            } else {
+                ("Other", None)
+            }
+        }
+        
+        // Variable operations
+        "mov" | "movlong" => ("Variable", Some("Move")),
+        "loadparam" | "loadparamlong" => ("Variable", Some("LoadParam")),
+        "getenv" | "getenvironment" => ("Variable", Some("GetEnvironment")),
+        "loadfromenv" | "loadfromenvironment" | "loadfromenvironmentl" => ("Variable", Some("LoadFromEnvironment")),
+        "storetoenv" | "storetoenvironment" | "storetoenvironmentl" => ("Variable", Some("StoreToEnvironment")),
+        
+        // Member expression operations
+        "getbyval" => ("Member", Some("GetByVal")),
+        "putbyval" => ("Member", Some("PutByVal")),
+        "getbyid" | "getbyidshort" | "getbyidlong" => ("Member", Some("GetById")),
+        "putbyid" | "putbyidlong" => ("Member", Some("PutById")),
+        "trygetbyid" | "trygetbyidlong" => ("Member", Some("TryGetById")),
+        "tryputbyid" | "tryputbyidlong" => ("Member", Some("TryPutById")),
+        "delbyval" => ("Member", Some("DelByVal")),
+        "delbyid" | "delbyidlong" => ("Member", Some("DelById")),
+        
+        // Special cases
+        "addemptystring" => ("Binary", Some("Addition")), // String concatenation
+        
+        // Everything else
+        _ => ("Other", None),
+    }
 }
 
 /// Converts an instruction name to a valid Rust identifier.
@@ -648,6 +740,78 @@ fn generate_traits_module(
         "    matches!(get_category_from_name(instruction_name), {})",
         match_arms
     )?;
+    writeln!(code, "}}\n")?;
+
+    // Expression conversion metadata
+    writeln!(code, "/// Expression type metadata for instruction-to-AST conversion")?;
+    writeln!(code, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
+    writeln!(code, "pub enum ExpressionType {{")?;
+    writeln!(code, "    Binary(BinaryOperator),")?;
+    writeln!(code, "    Unary(UnaryOperator),")?;
+    writeln!(code, "    Update(UpdateOperator),")?;
+    writeln!(code, "    Literal(LiteralType),")?;
+    writeln!(code, "    Variable(VariableOperator),")?;
+    writeln!(code, "    Member(MemberOperator),")?;
+    writeln!(code, "    Other,")?;
+    writeln!(code, "}}\n")?;
+
+    writeln!(code, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
+    writeln!(code, "pub enum BinaryOperator {{")?;
+    writeln!(code, "    Equality, Inequality, StrictEquality, StrictInequality,")?;
+    writeln!(code, "    LessThan, LessEqualThan, GreaterThan, GreaterEqualThan,")?;
+    writeln!(code, "    Addition, Subtraction, Multiplication, Division, Remainder,")?;
+    writeln!(code, "    ShiftLeft, ShiftRight, ShiftRightZeroFill,")?;
+    writeln!(code, "    BitwiseOR, BitwiseXOR, BitwiseAnd,")?;
+    writeln!(code, "    In, Instanceof,")?;
+    writeln!(code, "}}\n")?;
+
+    writeln!(code, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
+    writeln!(code, "pub enum UnaryOperator {{")?;
+    writeln!(code, "    UnaryNegation, LogicalNot, BitwiseNot, Typeof,")?;
+    writeln!(code, "}}\n")?;
+
+    writeln!(code, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
+    writeln!(code, "pub enum UpdateOperator {{")?;
+    writeln!(code, "    Increment, Decrement,")?;
+    writeln!(code, "}}\n")?;
+
+    writeln!(code, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
+    writeln!(code, "pub enum LiteralType {{")?;
+    writeln!(code, "    Numeric, String, BigInt, Boolean, Null, Undefined, Empty,")?;
+    writeln!(code, "}}\n")?;
+    
+    writeln!(code, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
+    writeln!(code, "pub enum VariableOperator {{")?;
+    writeln!(code, "    Move, LoadParam, GetEnvironment, LoadFromEnvironment, StoreToEnvironment,")?;
+    writeln!(code, "}}\n")?;
+    
+    writeln!(code, "#[derive(Debug, Clone, Copy, PartialEq, Eq)]")?;
+    writeln!(code, "pub enum MemberOperator {{")?;
+    writeln!(code, "    GetByVal, PutByVal, GetById, PutById, TryGetById, TryPutById, DelByVal, DelById,")?;
+    writeln!(code, "}}\n")?;
+
+    // Generate expression metadata lookup function
+    writeln!(code, "pub fn get_expression_type(instruction_name: &str) -> ExpressionType {{")?;
+    writeln!(code, "    match instruction_name {{")?;
+    
+    // Generate match arms for each instruction based on their expression metadata
+    for inst in &registry.instructions {
+        if inst.expression_type != "Other" {
+            write!(code, "        \"{}\" => ", sanitize_rust_identifier(&inst.name))?;
+            match (inst.expression_type.as_str(), inst.expression_operator.as_deref()) {
+                ("Binary", Some(op)) => writeln!(code, "ExpressionType::Binary(BinaryOperator::{}),", op)?,
+                ("Unary", Some(op)) => writeln!(code, "ExpressionType::Unary(UnaryOperator::{}),", op)?,
+                ("Update", Some(op)) => writeln!(code, "ExpressionType::Update(UpdateOperator::{}),", op)?,
+                ("Literal", Some(lt)) => writeln!(code, "ExpressionType::Literal(LiteralType::{}),", lt)?,
+                ("Variable", Some(op)) => writeln!(code, "ExpressionType::Variable(VariableOperator::{}),", op)?,
+                ("Member", Some(op)) => writeln!(code, "ExpressionType::Member(MemberOperator::{}),", op)?,
+                _ => writeln!(code, "ExpressionType::Other,")?,
+            }
+        }
+    }
+    
+    writeln!(code, "        _ => ExpressionType::Other,")?;
+    writeln!(code, "    }}")?;
     writeln!(code, "}}\n")?;
 
     // Static Version Data with corrected struct construction

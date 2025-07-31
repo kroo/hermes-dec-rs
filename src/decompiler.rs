@@ -3,24 +3,17 @@
 //!
 //! This module orchestrates the entire decompilation process from HBC to JavaScript.
 
-use crate::ast::AstBuilder;
 use crate::cfg::Cfg;
 use crate::hbc::HbcFile;
 use crate::{DecompilerError, DecompilerResult};
-use oxc_allocator::Allocator;
 
 /// Main decompiler struct
-pub struct Decompiler {
-    /// Allocator for AST nodes
-    allocator: Allocator,
-}
+pub struct Decompiler {}
 
 impl Decompiler {
     /// Create a new decompiler
     pub fn new() -> DecompilerResult<Self> {
-        Ok(Decompiler {
-            allocator: Allocator::default(),
-        })
+        Ok(Decompiler {})
     }
 
     /// Decompile an HBC file to JavaScript
@@ -52,9 +45,8 @@ impl Decompiler {
         let mut cfg = Cfg::new(hbc_file, function_index);
         cfg.build();
 
-        // Build AST from CFG
-        let mut ast_builder = AstBuilder::new(&self.allocator);
-        let _program = ast_builder.build_from_cfg(&cfg);
+        // TODO: Implement AST building from CFG using InstructionToExpressionConverter
+        // This will be implemented in future tickets
 
         // For now, return a placeholder
         Ok(format!(
