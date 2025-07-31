@@ -321,6 +321,7 @@ impl<'a> BlockToStatementConverter<'a> {
             UnifiedInstruction::PutById { .. } => None,
 
             // For any unhandled instructions, assume no target register
+            // TODO: Remove this catch all case to ensure all instructions are handled
             _ => None,
         }
     }
