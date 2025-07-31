@@ -6,7 +6,7 @@
 use crate::hbc::HbcFile;
 
 /// Context for expression generation
-/// 
+///
 /// Provides access to HBC file tables and tracks the current state of
 /// expression generation, including which basic block is being processed.
 #[derive(Debug)]
@@ -43,11 +43,7 @@ impl<'a> ExpressionContext<'a> {
     }
 
     /// Create a new expression context with full initialization
-    pub fn with_context(
-        hbc_file: &'a HbcFile<'a>,
-        function_index: u32,
-        initial_pc: u32,
-    ) -> Self {
+    pub fn with_context(hbc_file: &'a HbcFile<'a>, function_index: u32, initial_pc: u32) -> Self {
         Self {
             current_block: None,
             current_pc: initial_pc,
@@ -104,10 +100,10 @@ impl<'a> ExpressionContext<'a> {
     /// Look up a string from the string table
     pub fn lookup_string(&self, string_id: u32) -> Result<String, ExpressionContextError> {
         match self.hbc_file {
-            Some(hbc_file) => {
-                hbc_file.strings.get(string_id)
-                    .map_err(|e| ExpressionContextError::StringTableError(e.to_string()))
-            }
+            Some(hbc_file) => hbc_file
+                .strings
+                .get(string_id)
+                .map_err(|e| ExpressionContextError::StringTableError(e.to_string())),
             None => Err(ExpressionContextError::NoHbcFile),
         }
     }
@@ -129,10 +125,10 @@ impl<'a> ExpressionContext<'a> {
     /// Look up a function name from the function table
     pub fn lookup_function_name(&self, function_id: u32) -> Result<String, ExpressionContextError> {
         match self.hbc_file {
-            Some(hbc_file) => {
-                hbc_file.functions.get_function_name(function_id, &hbc_file.strings)
-                    .ok_or_else(|| ExpressionContextError::FunctionNotFound(function_id))
-            }
+            Some(hbc_file) => hbc_file
+                .functions
+                .get_function_name(function_id, &hbc_file.strings)
+                .ok_or_else(|| ExpressionContextError::FunctionNotFound(function_id)),
             None => Err(ExpressionContextError::NoHbcFile),
         }
     }
@@ -202,15 +198,15 @@ mod tests {
     #[test]
     fn test_expression_context_state_management() {
         let mut ctx = ExpressionContext::new();
-        
+
         // Test setting block
         ctx.set_block(42);
         assert_eq!(ctx.current_block(), Some(42));
-        
+
         // Test setting PC
         ctx.set_pc(100);
         assert_eq!(ctx.current_pc(), 100);
-        
+
         // Test setting function index
         ctx.set_function_index(5);
         assert_eq!(ctx.function_index(), Some(5));
@@ -219,13 +215,13 @@ mod tests {
     #[test]
     fn test_expression_context_reset() {
         let mut ctx = ExpressionContext::new();
-        
+
         ctx.set_block(42);
         ctx.set_pc(100);
         ctx.set_function_index(5);
-        
+
         ctx.reset();
-        
+
         assert_eq!(ctx.current_block(), None);
         assert_eq!(ctx.current_pc(), 0);
         // function_index should be preserved
@@ -236,9 +232,9 @@ mod tests {
     fn test_child_context_creation() {
         let mut parent_ctx = ExpressionContext::new();
         parent_ctx.set_function_index(10);
-        
+
         let child_ctx = parent_ctx.create_child_context();
-        
+
         // Child should start fresh but preserve function context
         assert_eq!(child_ctx.current_block(), None);
         assert_eq!(child_ctx.current_pc(), 0);
@@ -249,18 +245,18 @@ mod tests {
     #[test]
     fn test_error_cases_without_hbc_file() {
         let ctx = ExpressionContext::new();
-        
+
         // Should return errors when trying to access tables without HBC file
         assert!(matches!(
             ctx.lookup_string(0),
             Err(ExpressionContextError::NoHbcFile)
         ));
-        
+
         assert!(matches!(
             ctx.lookup_bigint(0),
             Err(ExpressionContextError::NoHbcFile)
         ));
-        
+
         assert!(matches!(
             ctx.lookup_function_name(0),
             Err(ExpressionContextError::NoHbcFile)

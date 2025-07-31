@@ -332,50 +332,170 @@ impl<'a> InstructionToExpressionConverter<'a> {
         // Extract left and right operand registers based on instruction type
         let (left_reg, right_reg) = match instruction {
             // Arithmetic operations: dest = left op right
-            Add { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Sub { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Mul { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Div { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Mod { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            
+            Add {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Sub {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Mul {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Div {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Mod {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+
             // Arithmetic with immediate values
-            AddN { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            SubN { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            MulN { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            DivN { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            
+            AddN {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            SubN {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            MulN {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            DivN {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+
             // 32-bit arithmetic
-            Add32 { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Sub32 { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Mul32 { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Divi32 { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Divu32 { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            
+            Add32 {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Sub32 {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Mul32 {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Divi32 {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Divu32 {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+
             // Bitwise operations
-            BitOr { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            BitAnd { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            BitXor { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            LShift { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            RShift { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            URshift { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            
+            BitOr {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            BitAnd {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            BitXor {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            LShift {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            RShift {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            URshift {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+
             // Comparison operations
-            Less { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            LessEq { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Greater { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            GreaterEq { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Eq { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            Neq { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            StrictEq { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            StrictNeq { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            InstanceOf { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            IsIn { operand_1, operand_2, .. } => (*operand_1, *operand_2),
-            
+            Less {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            LessEq {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Greater {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            GreaterEq {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Eq {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            Neq {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            StrictEq {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            StrictNeq {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            InstanceOf {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+            IsIn {
+                operand_1,
+                operand_2,
+                ..
+            } => (*operand_1, *operand_2),
+
             // Special case: AddEmptyString converts value to string by adding empty string
             AddEmptyString { operand_1, .. } => {
                 // Create a special case where right operand is empty string literal
                 let left_reg = *operand_1;
-                
+
                 // Track register usage for left operand
                 self.register_manager
                     .track_usage(left_reg, self.expression_context.current_pc());
@@ -390,7 +510,7 @@ impl<'a> InstructionToExpressionConverter<'a> {
 
                 return Ok((left_expr, right_expr));
             }
-            
+
             _ => {
                 return Err(ConversionError::InvalidOperand {
                     instruction: instruction.name().to_string(),
@@ -432,19 +552,19 @@ impl<'a> InstructionToExpressionConverter<'a> {
         let operand_reg = match instruction {
             // Unary arithmetic operations
             Negate { operand_1, .. } => *operand_1,
-            
+
             // Logical operations
             Not { operand_1, .. } => *operand_1,
-            
+
             // Bitwise operations
             BitNot { operand_1, .. } => *operand_1,
-            
+
             // Type operations
             TypeOf { operand_1, .. } => *operand_1,
             ToNumber { operand_1, .. } => *operand_1,
             ToNumeric { operand_1, .. } => *operand_1,
             ToInt32 { operand_1, .. } => *operand_1,
-            
+
             _ => {
                 return Err(ConversionError::InvalidOperand {
                     instruction: instruction.name().to_string(),
@@ -1560,7 +1680,7 @@ impl<'a> InstructionToExpressionConverter<'a> {
     // ===== Control Flow Expression Handlers =====
 
     /// Handle conditional jump instructions that might be part of conditional expressions
-    /// 
+    ///
     /// TODO (AST-16): Implement advanced pattern detection for control flow expressions
     /// Priority: Low - Enhanced decompilation quality
     /// Should analyze instruction sequences to detect ternary operators and complex conditionals
@@ -1571,7 +1691,7 @@ impl<'a> InstructionToExpressionConverter<'a> {
         let span = Span::default();
 
         use UnifiedInstruction::*;
-        
+
         match instruction {
             JmpTrue { operand_1, .. } | JmpTrueLong { operand_1, .. } => {
                 // Track condition register usage
@@ -1586,7 +1706,7 @@ impl<'a> InstructionToExpressionConverter<'a> {
                 // TODO (AST-16): Integrate with pattern analysis system for complex conditionals
                 // Priority: Low - Part of advanced control flow reconstruction
                 let condition_expr = self.ast_builder.expression_identifier(span, condition_atom);
-                
+
                 // Create a simple conditional expression: condition || false
                 let false_expr = self.ast_builder.expression_boolean_literal(span, false);
                 Ok(self.ast_builder.expression_logical(
@@ -1608,7 +1728,7 @@ impl<'a> InstructionToExpressionConverter<'a> {
 
                 // For JmpFalse, we create the negated condition
                 let condition_expr = self.ast_builder.expression_identifier(span, condition_atom);
-                
+
                 // Create negated condition: !condition
                 Ok(self.ast_builder.expression_unary(
                     span,
@@ -1629,7 +1749,7 @@ impl<'a> InstructionToExpressionConverter<'a> {
                 // Create undefined check: variable === undefined
                 let var_expr = self.ast_builder.expression_identifier(span, var_atom);
                 let undefined_expr = self.ast_builder.expression_identifier(span, "undefined");
-                
+
                 Ok(self.ast_builder.expression_binary(
                     span,
                     var_expr,
@@ -1646,7 +1766,7 @@ impl<'a> InstructionToExpressionConverter<'a> {
     }
 
     /// Create a conditional expression (ternary operator: condition ? consequent : alternate)
-    /// 
+    ///
     /// This is a utility method that can be used by higher-level analysis to create
     /// conditional expressions when patterns are detected in instruction sequences.
     pub fn create_conditional_expression(
@@ -1661,7 +1781,7 @@ impl<'a> InstructionToExpressionConverter<'a> {
     }
 
     /// Create a logical expression (&&, ||)
-    /// 
+    ///
     /// This can be used for short-circuit evaluation patterns often found in
     /// conditional logic compiled from JavaScript.
     pub fn create_logical_expression(
@@ -1676,7 +1796,8 @@ impl<'a> InstructionToExpressionConverter<'a> {
             LogicalOperator::Or => oxc_ast::ast::LogicalOperator::Or,
             LogicalOperator::Coalesce => oxc_ast::ast::LogicalOperator::Coalesce,
         };
-        self.ast_builder.expression_logical(span, left, oxc_op, right)
+        self.ast_builder
+            .expression_logical(span, left, oxc_op, right)
     }
 }
 
@@ -2444,7 +2565,9 @@ mod tests {
             operand_0: 50, // target offset
             operand_1: 4,  // condition register
         };
-        converter.convert_instruction(&jmp_true_instruction).unwrap();
+        converter
+            .convert_instruction(&jmp_true_instruction)
+            .unwrap();
 
         // Check that condition register is tracked
         let stats = converter.get_stats();
@@ -2481,54 +2604,42 @@ mod tests {
         // Test logical expression creation - create fresh expressions for each test
         let left_expr1 = ast_builder.expression_boolean_literal(span, true);
         let right_expr1 = ast_builder.expression_boolean_literal(span, false);
-        let and_expr = converter.create_logical_expression(
-            left_expr1,
-            LogicalOperator::And,
-            right_expr1,
-        );
+        let and_expr =
+            converter.create_logical_expression(left_expr1, LogicalOperator::And, right_expr1);
         // Verify it's a logical expression by checking if it compiles
-        assert!(matches!(
-            and_expr,
-            Expression::LogicalExpression(_)
-        ), "Should create logical AND expression");
+        assert!(
+            matches!(and_expr, Expression::LogicalExpression(_)),
+            "Should create logical AND expression"
+        );
 
         let left_expr2 = ast_builder.expression_boolean_literal(span, true);
         let right_expr2 = ast_builder.expression_boolean_literal(span, false);
-        let or_expr = converter.create_logical_expression(
-            left_expr2,
-            LogicalOperator::Or,
-            right_expr2,
+        let or_expr =
+            converter.create_logical_expression(left_expr2, LogicalOperator::Or, right_expr2);
+        assert!(
+            matches!(or_expr, Expression::LogicalExpression(_)),
+            "Should create logical OR expression"
         );
-        assert!(matches!(
-            or_expr,
-            Expression::LogicalExpression(_)
-        ), "Should create logical OR expression");
 
         let left_expr3 = ast_builder.expression_boolean_literal(span, true);
         let right_expr3 = ast_builder.expression_boolean_literal(span, false);
-        let coalesce_expr = converter.create_logical_expression(
-            left_expr3,
-            LogicalOperator::Coalesce,
-            right_expr3,
+        let coalesce_expr =
+            converter.create_logical_expression(left_expr3, LogicalOperator::Coalesce, right_expr3);
+        assert!(
+            matches!(coalesce_expr, Expression::LogicalExpression(_)),
+            "Should create logical coalesce expression"
         );
-        assert!(matches!(
-            coalesce_expr,
-            Expression::LogicalExpression(_)
-        ), "Should create logical coalesce expression");
 
         // Test conditional expression creation
         let condition_expr = ast_builder.expression_boolean_literal(span, true);
         let left_expr4 = ast_builder.expression_boolean_literal(span, true);
         let right_expr4 = ast_builder.expression_boolean_literal(span, false);
-        let ternary_expr = converter.create_conditional_expression(
-            condition_expr,
-            left_expr4,
-            right_expr4,
+        let ternary_expr =
+            converter.create_conditional_expression(condition_expr, left_expr4, right_expr4);
+        assert!(
+            matches!(ternary_expr, Expression::ConditionalExpression(_)),
+            "Should create conditional (ternary) expression"
         );
-        assert!(matches!(
-            ternary_expr,
-            Expression::ConditionalExpression(_)
-        ), "Should create conditional (ternary) expression");
     }
 
     #[test]
@@ -2560,15 +2671,23 @@ mod tests {
         };
 
         let result = converter.convert_instruction(&add_instruction);
-        assert!(result.is_ok(), "Add instruction should convert successfully");
-        
+        assert!(
+            result.is_ok(),
+            "Add instruction should convert successfully"
+        );
+
         let expr = result.unwrap();
-        assert!(matches!(expr, Expression::BinaryExpression(_)), 
-               "Add should produce binary expression");
+        assert!(
+            matches!(expr, Expression::BinaryExpression(_)),
+            "Add should produce binary expression"
+        );
 
         // Verify register tracking worked
         let stats = converter.get_stats();
-        assert!(stats.register_stats.total_registers > 0, "Should track operand registers");
+        assert!(
+            stats.register_stats.total_registers > 0,
+            "Should track operand registers"
+        );
     }
 
     #[test]
@@ -2582,26 +2701,52 @@ mod tests {
 
         // Test various constant types
         let test_cases = vec![
-            (UnifiedInstruction::LoadConstTrue { operand_0: 1 }, "BooleanLiteral"),
-            (UnifiedInstruction::LoadConstFalse { operand_0: 2 }, "BooleanLiteral"),
-            (UnifiedInstruction::LoadConstNull { operand_0: 3 }, "NullLiteral"),
-            (UnifiedInstruction::LoadConstUndefined { operand_0: 4 }, "Identifier"),
-            (UnifiedInstruction::LoadConstUInt8 { operand_0: 5, operand_1: 42 }, "NumericLiteral"),
+            (
+                UnifiedInstruction::LoadConstTrue { operand_0: 1 },
+                "BooleanLiteral",
+            ),
+            (
+                UnifiedInstruction::LoadConstFalse { operand_0: 2 },
+                "BooleanLiteral",
+            ),
+            (
+                UnifiedInstruction::LoadConstNull { operand_0: 3 },
+                "NullLiteral",
+            ),
+            (
+                UnifiedInstruction::LoadConstUndefined { operand_0: 4 },
+                "Identifier",
+            ),
+            (
+                UnifiedInstruction::LoadConstUInt8 {
+                    operand_0: 5,
+                    operand_1: 42,
+                },
+                "NumericLiteral",
+            ),
         ];
 
         for (instruction, expected_type) in test_cases {
             let result = converter.convert_instruction(&instruction);
-            assert!(result.is_ok(), "Constant load should convert successfully: {:?}", instruction);
-            
+            assert!(
+                result.is_ok(),
+                "Constant load should convert successfully: {:?}",
+                instruction
+            );
+
             let expr = result.unwrap();
             let expr_name = match expr {
                 Expression::BooleanLiteral(_) => "BooleanLiteral",
-                Expression::NullLiteral(_) => "NullLiteral", 
+                Expression::NullLiteral(_) => "NullLiteral",
                 Expression::Identifier(_) => "Identifier",
                 Expression::NumericLiteral(_) => "NumericLiteral",
                 _ => "Other",
             };
-            assert_eq!(expr_name, expected_type, "Expected {} for {:?}", expected_type, instruction);
+            assert_eq!(
+                expr_name, expected_type,
+                "Expected {} for {:?}",
+                expected_type, instruction
+            );
         }
     }
 
@@ -2617,20 +2762,25 @@ mod tests {
         // Test GetByVal (computed member access)
         let getbyval_instruction = UnifiedInstruction::GetByVal {
             operand_0: 3,
-            operand_1: 1,  // object register
-            operand_2: 2,  // property register
+            operand_1: 1, // object register
+            operand_2: 2, // property register
         };
 
         let result = converter.convert_instruction(&getbyval_instruction);
         assert!(result.is_ok(), "GetByVal should convert successfully");
-        
+
         let expr = result.unwrap();
-        assert!(matches!(expr, Expression::ComputedMemberExpression(_)), 
-               "GetByVal should produce computed member expression");
+        assert!(
+            matches!(expr, Expression::ComputedMemberExpression(_)),
+            "GetByVal should produce computed member expression"
+        );
 
         // Verify both object and property registers were tracked
         let stats = converter.get_stats();
-        assert!(stats.register_stats.total_registers >= 2, "Should track object and property registers");
+        assert!(
+            stats.register_stats.total_registers >= 2,
+            "Should track object and property registers"
+        );
     }
 
     #[test]
@@ -2645,20 +2795,25 @@ mod tests {
         // Test Call instruction
         let call_instruction = UnifiedInstruction::Call {
             operand_0: 4,
-            operand_1: 1,  // function register
-            operand_2: 2,  // arg count
+            operand_1: 1, // function register
+            operand_2: 2, // arg count
         };
 
         let result = converter.convert_instruction(&call_instruction);
         assert!(result.is_ok(), "Call should convert successfully");
-        
+
         let expr = result.unwrap();
-        assert!(matches!(expr, Expression::CallExpression(_)), 
-               "Call should produce call expression");
+        assert!(
+            matches!(expr, Expression::CallExpression(_)),
+            "Call should produce call expression"
+        );
 
         // Verify function register was tracked
         let stats = converter.get_stats();
-        assert!(stats.register_stats.total_registers >= 1, "Should track at least function register");
+        assert!(
+            stats.register_stats.total_registers >= 1,
+            "Should track at least function register"
+        );
     }
 
     #[test]
@@ -2672,19 +2827,38 @@ mod tests {
 
         // Test various unary operations
         let test_cases = vec![
-            UnifiedInstruction::Negate { operand_0: 2, operand_1: 1 },
-            UnifiedInstruction::Not { operand_0: 3, operand_1: 1 },
-            UnifiedInstruction::BitNot { operand_0: 4, operand_1: 1 },
-            UnifiedInstruction::TypeOf { operand_0: 5, operand_1: 1 },
+            UnifiedInstruction::Negate {
+                operand_0: 2,
+                operand_1: 1,
+            },
+            UnifiedInstruction::Not {
+                operand_0: 3,
+                operand_1: 1,
+            },
+            UnifiedInstruction::BitNot {
+                operand_0: 4,
+                operand_1: 1,
+            },
+            UnifiedInstruction::TypeOf {
+                operand_0: 5,
+                operand_1: 1,
+            },
         ];
 
         for instruction in test_cases {
             let result = converter.convert_instruction(&instruction);
-            assert!(result.is_ok(), "Unary instruction should convert successfully: {:?}", instruction);
-            
+            assert!(
+                result.is_ok(),
+                "Unary instruction should convert successfully: {:?}",
+                instruction
+            );
+
             let expr = result.unwrap();
-            assert!(matches!(expr, Expression::UnaryExpression(_)), 
-                   "Unary instruction should produce unary expression: {:?}", instruction);
+            assert!(
+                matches!(expr, Expression::UnaryExpression(_)),
+                "Unary instruction should produce unary expression: {:?}",
+                instruction
+            );
         }
     }
 
@@ -2699,17 +2873,30 @@ mod tests {
 
         // Test increment/decrement operations
         let test_cases = vec![
-            UnifiedInstruction::Inc { operand_0: 2, operand_1: 1 },
-            UnifiedInstruction::Dec { operand_0: 3, operand_1: 1 },
+            UnifiedInstruction::Inc {
+                operand_0: 2,
+                operand_1: 1,
+            },
+            UnifiedInstruction::Dec {
+                operand_0: 3,
+                operand_1: 1,
+            },
         ];
 
         for instruction in test_cases {
             let result = converter.convert_instruction(&instruction);
-            assert!(result.is_ok(), "Update instruction should convert successfully: {:?}", instruction);
-            
+            assert!(
+                result.is_ok(),
+                "Update instruction should convert successfully: {:?}",
+                instruction
+            );
+
             let expr = result.unwrap();
-            assert!(matches!(expr, Expression::UpdateExpression(_)), 
-                   "Update instruction should produce update expression: {:?}", instruction);
+            assert!(
+                matches!(expr, Expression::UpdateExpression(_)),
+                "Update instruction should produce update expression: {:?}",
+                instruction
+            );
         }
     }
 
@@ -2725,16 +2912,47 @@ mod tests {
 
         // Create a sample of various instruction types for performance testing
         let instructions = vec![
-            UnifiedInstruction::Add { operand_0: 10, operand_1: 1, operand_2: 2 },
+            UnifiedInstruction::Add {
+                operand_0: 10,
+                operand_1: 1,
+                operand_2: 2,
+            },
             UnifiedInstruction::LoadConstTrue { operand_0: 11 },
-            UnifiedInstruction::Mov { operand_0: 12, operand_1: 11 },
-            UnifiedInstruction::GetByVal { operand_0: 13, operand_1: 10, operand_2: 12 },
-            UnifiedInstruction::Call { operand_0: 14, operand_1: 13, operand_2: 1 },
-            UnifiedInstruction::Negate { operand_0: 15, operand_1: 14 },
-            UnifiedInstruction::Inc { operand_0: 16, operand_1: 15 },
-            UnifiedInstruction::LoadConstUInt8 { operand_0: 17, operand_1: 42 },
-            UnifiedInstruction::Not { operand_0: 18, operand_1: 17 },
-            UnifiedInstruction::Sub { operand_0: 19, operand_1: 18, operand_2: 16 },
+            UnifiedInstruction::Mov {
+                operand_0: 12,
+                operand_1: 11,
+            },
+            UnifiedInstruction::GetByVal {
+                operand_0: 13,
+                operand_1: 10,
+                operand_2: 12,
+            },
+            UnifiedInstruction::Call {
+                operand_0: 14,
+                operand_1: 13,
+                operand_2: 1,
+            },
+            UnifiedInstruction::Negate {
+                operand_0: 15,
+                operand_1: 14,
+            },
+            UnifiedInstruction::Inc {
+                operand_0: 16,
+                operand_1: 15,
+            },
+            UnifiedInstruction::LoadConstUInt8 {
+                operand_0: 17,
+                operand_1: 42,
+            },
+            UnifiedInstruction::Not {
+                operand_0: 18,
+                operand_1: 17,
+            },
+            UnifiedInstruction::Sub {
+                operand_0: 19,
+                operand_1: 18,
+                operand_2: 16,
+            },
         ];
 
         // Warm up
@@ -2752,9 +2970,9 @@ mod tests {
                 let start = Instant::now();
                 let result = converter.convert_instruction(instruction);
                 let duration = start.elapsed();
-                
+
                 total_duration += duration;
-                
+
                 if result.is_ok() {
                     successful_conversions += 1;
                 }
@@ -2773,15 +2991,15 @@ mod tests {
 
         // Verify performance target: <1ms per instruction
         assert!(
-            average_time_micros < 1000, 
-            "Performance target not met: {}μs per instruction (target: <1000μs)", 
+            average_time_micros < 1000,
+            "Performance target not met: {}μs per instruction (target: <1000μs)",
             average_time_micros
         );
 
         // Verify all conversions were successful
         assert_eq!(
             successful_conversions, total_instructions,
-            "Not all instructions converted successfully: {}/{}", 
+            "Not all instructions converted successfully: {}/{}",
             successful_conversions, total_instructions
         );
     }
@@ -2797,15 +3015,30 @@ mod tests {
 
         // Test a variety of instructions to ensure comprehensive coverage
         let instructions = vec![
-            UnifiedInstruction::Add { operand_0: 10, operand_1: 1, operand_2: 2 },
+            UnifiedInstruction::Add {
+                operand_0: 10,
+                operand_1: 1,
+                operand_2: 2,
+            },
             UnifiedInstruction::LoadConstTrue { operand_0: 11 },
-            UnifiedInstruction::Mov { operand_0: 12, operand_1: 11 },
-            UnifiedInstruction::GetByVal { operand_0: 13, operand_1: 10, operand_2: 12 },
-            UnifiedInstruction::Call { operand_0: 14, operand_1: 13, operand_2: 1 },
+            UnifiedInstruction::Mov {
+                operand_0: 12,
+                operand_1: 11,
+            },
+            UnifiedInstruction::GetByVal {
+                operand_0: 13,
+                operand_1: 10,
+                operand_2: 12,
+            },
+            UnifiedInstruction::Call {
+                operand_0: 14,
+                operand_1: 13,
+                operand_2: 1,
+            },
         ];
 
         let mut successful_conversions = 0;
-        
+
         for instruction in instructions {
             let result = converter.convert_instruction(&instruction);
             if result.is_ok() {
@@ -2813,10 +3046,16 @@ mod tests {
             }
         }
 
-        assert_eq!(successful_conversions, 5, "All test instructions should convert successfully");
-        
+        assert_eq!(
+            successful_conversions, 5,
+            "All test instructions should convert successfully"
+        );
+
         // Verify converter tracked multiple registers
         let stats = converter.get_stats();
-        assert!(stats.register_stats.total_registers > 0, "Should have tracked multiple registers");
+        assert!(
+            stats.register_stats.total_registers > 0,
+            "Should have tracked multiple registers"
+        );
     }
 }

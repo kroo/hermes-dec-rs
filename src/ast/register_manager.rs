@@ -52,7 +52,7 @@ impl RegisterManager {
                 return format!("param{}", register);
             }
         }
-        
+
         // For now, use simple naming scheme
         format!("var{}", register)
     }
@@ -78,13 +78,16 @@ impl RegisterManager {
 
     /// Track register usage at a specific PC for lifetime analysis
     pub fn track_usage(&mut self, register: u8, pc: u32) {
-        let lifetime = self.register_lifetimes.entry(register).or_insert(RegisterLifetime {
-            first_use: pc,
-            last_use: pc,
-            is_parameter: false,
-            is_local: false,
-        });
-        
+        let lifetime = self
+            .register_lifetimes
+            .entry(register)
+            .or_insert(RegisterLifetime {
+                first_use: pc,
+                last_use: pc,
+                is_parameter: false,
+                is_local: false,
+            });
+
         if pc < lifetime.first_use {
             lifetime.first_use = pc;
         }
@@ -95,13 +98,16 @@ impl RegisterManager {
 
     /// Mark a register as a local variable (not parameter, not temporary)
     pub fn mark_as_local(&mut self, register: u8, first_use: u32) {
-        let lifetime = self.register_lifetimes.entry(register).or_insert(RegisterLifetime {
-            first_use,
-            last_use: first_use,
-            is_parameter: false,
-            is_local: true,
-        });
-        
+        let lifetime = self
+            .register_lifetimes
+            .entry(register)
+            .or_insert(RegisterLifetime {
+                first_use,
+                last_use: first_use,
+                is_parameter: false,
+                is_local: true,
+            });
+
         if !lifetime.is_parameter {
             lifetime.is_local = true;
         }
@@ -136,13 +142,19 @@ impl RegisterManager {
     /// Get statistics about register usage
     pub fn get_stats(&self) -> RegisterStats {
         let total_registers = self.register_lifetimes.len();
-        let parameter_count = self.register_lifetimes.values()
+        let parameter_count = self
+            .register_lifetimes
+            .values()
             .filter(|l| l.is_parameter)
             .count();
-        let local_count = self.register_lifetimes.values()
+        let local_count = self
+            .register_lifetimes
+            .values()
             .filter(|l| l.is_local && !l.is_parameter)
             .count();
-        let single_use_count = self.register_lifetimes.iter()
+        let single_use_count = self
+            .register_lifetimes
+            .iter()
             .filter(|(_, lifetime)| lifetime.first_use == lifetime.last_use)
             .count();
 
@@ -181,13 +193,13 @@ mod tests {
     #[test]
     fn test_register_manager_basic_functionality() {
         let mut rm = RegisterManager::new();
-        
+
         // Test variable name generation
         let var1 = rm.get_variable_name(0);
         let var2 = rm.get_variable_name(1);
         assert_eq!(var1, "var0");
         assert_eq!(var2, "var1");
-        
+
         // Test consistent naming
         let var1_again = rm.get_variable_name(0);
         assert_eq!(var1, var1_again);
@@ -196,7 +208,7 @@ mod tests {
     #[test]
     fn test_parameter_naming() {
         let mut rm = RegisterManager::new();
-        
+
         // Mark register as parameter
         rm.mark_as_parameter(0, 0);
         let param_name = rm.get_variable_name(0);
@@ -206,7 +218,7 @@ mod tests {
     #[test]
     fn test_temp_variable_generation() {
         let mut rm = RegisterManager::new();
-        
+
         let temp1 = rm.generate_temp_var();
         let temp2 = rm.generate_temp_var();
         assert_eq!(temp1, "_temp1");
@@ -216,12 +228,12 @@ mod tests {
     #[test]
     fn test_lifetime_tracking() {
         let mut rm = RegisterManager::new();
-        
+
         // Track usage
         rm.track_usage(5, 10);
         rm.track_usage(5, 20);
         rm.track_usage(5, 5); // Earlier use
-        
+
         let lifetime = rm.get_lifetime(5).unwrap();
         assert_eq!(lifetime.first_use, 5);
         assert_eq!(lifetime.last_use, 20);
@@ -232,11 +244,11 @@ mod tests {
     #[test]
     fn test_single_use_detection() {
         let mut rm = RegisterManager::new();
-        
+
         // Single use register
         rm.track_usage(10, 15);
         assert!(rm.is_single_use(10));
-        
+
         // Multi-use register
         rm.track_usage(11, 15);
         rm.track_usage(11, 20);
@@ -246,14 +258,14 @@ mod tests {
     #[test]
     fn test_register_stats() {
         let mut rm = RegisterManager::new();
-        
+
         rm.mark_as_parameter(0, 0);
         rm.mark_as_parameter(1, 0);
         rm.mark_as_local(2, 5);
         rm.track_usage(3, 10); // temporary
         rm.track_usage(4, 15); // single use
         let _temp = rm.generate_temp_var();
-        
+
         let stats = rm.get_stats();
         assert_eq!(stats.parameter_count, 2);
         assert_eq!(stats.local_count, 1);
@@ -265,15 +277,15 @@ mod tests {
     #[test]
     fn test_reset() {
         let mut rm = RegisterManager::new();
-        
+
         rm.mark_as_parameter(0, 0);
         rm.generate_temp_var();
         rm.track_usage(1, 5);
-        
+
         assert!(!rm.tracked_registers().collect::<Vec<_>>().is_empty());
-        
+
         rm.reset();
-        
+
         assert!(rm.tracked_registers().collect::<Vec<_>>().is_empty());
         let new_temp = rm.generate_temp_var();
         assert_eq!(new_temp, "_temp1"); // Counter reset

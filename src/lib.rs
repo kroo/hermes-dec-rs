@@ -15,6 +15,6 @@ pub use decompiler::Decompiler;
 pub use error::{Error as DecompilerError, Result as DecompilerResult};
 
 // Re-export commonly used types
-pub use ast::{InstructionToExpressionConverter, RegisterManager, ExpressionContext};
+pub use ast::{ExpressionContext, InstructionToExpressionConverter, RegisterManager};
 pub use cfg::{Block, Cfg};
 pub use hbc::{HbcFile, HbcHeader};
