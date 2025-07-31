@@ -179,17 +179,26 @@ impl<'a> BlockToStatementConverter<'a> {
     ) -> Result<Vec<Statement<'a>>, BlockConversionError> {
         let mut statements = Vec::new();
 
-        // Convert instruction to expression first
-        let expression = self
-            .expression_converter
-            .convert_instruction(&instruction.instruction)?;
-
-        // Determine how to convert the expression to statement(s)
+        // Handle statement-only instructions first (no expression conversion needed)
         match &instruction.instruction {
             // Return instructions become return statements
             UnifiedInstruction::Ret { operand_0 } => {
                 let return_value = if *operand_0 != 0 {
-                    Some(expression)
+                    // Convert the return value register to an expression
+                    let return_expr = self
+                        .expression_converter
+                        .register_manager_mut()
+                        .get_variable_name(*operand_0);
+                    let return_atom = self
+                        .expression_converter
+                        .ast_builder()
+                        .allocator
+                        .alloc_str(&return_expr);
+                    let return_identifier = self
+                        .expression_converter
+                        .ast_builder()
+                        .expression_identifier(oxc_span::Span::default(), return_atom);
+                    Some(return_identifier)
                 } else {
                     None
                 };
@@ -197,12 +206,33 @@ impl<'a> BlockToStatementConverter<'a> {
             }
 
             // Throw instructions become throw statements
-            UnifiedInstruction::Throw { .. } => {
-                statements.push(self.statement_builder.create_throw_statement(expression)?);
+            UnifiedInstruction::Throw { operand_0 } => {
+                // Convert the throw value register to an expression
+                let throw_expr = self
+                    .expression_converter
+                    .register_manager_mut()
+                    .get_variable_name(*operand_0);
+                let throw_atom = self
+                    .expression_converter
+                    .ast_builder()
+                    .allocator
+                    .alloc_str(&throw_expr);
+                let throw_identifier = self
+                    .expression_converter
+                    .ast_builder()
+                    .expression_identifier(oxc_span::Span::default(), throw_atom);
+                statements.push(
+                    self.statement_builder
+                        .create_throw_statement(throw_identifier)?,
+                );
             }
 
-            // Most instructions become either variable declarations or assignments
+            // Most instructions need expression conversion first
             _ => {
+                // Convert instruction to expression first
+                let expression = self
+                    .expression_converter
+                    .convert_instruction(&instruction.instruction)?;
                 if let Some(target_register) = self.get_target_register(&instruction.instruction) {
                     if self.scope_manager.requires_declaration(target_register)
                         && !self.scope_manager.is_declared(target_register)
@@ -232,7 +262,10 @@ impl<'a> BlockToStatementConverter<'a> {
                     }
                 } else if self.statement_builder.has_side_effects(&expression) {
                     // Create expression statement for side effects
-                    statements.push(self.statement_builder.create_expression_statement(expression));
+                    statements.push(
+                        self.statement_builder
+                            .create_expression_statement(expression),
+                    );
                 }
                 // If no target register and no side effects, this is likely dead code
                 // TODO: Track dead code elimination statistics
@@ -248,7 +281,8 @@ impl<'a> BlockToStatementConverter<'a> {
             if let Some(target_register) = self.get_target_register(&instruction.instruction) {
                 // For now, mark all target registers as requiring declaration
                 // TODO: Implement more sophisticated analysis based on register lifetimes
-                self.scope_manager.mark_requires_declaration(target_register);
+                self.scope_manager
+                    .mark_requires_declaration(target_register);
             }
         }
         Ok(())
@@ -337,8 +371,21 @@ impl<'a> BlockToStatementConverter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::ExpressionContext;
+    use crate::{
+        ast::ExpressionContext, cfg::Block, generated::unified_instructions::UnifiedInstruction,
+        hbc::function_table::HbcFunctionInstruction,
+    };
     use oxc_allocator::Allocator;
+    use petgraph::Graph;
+
+    fn create_test_instruction(instruction: UnifiedInstruction) -> HbcFunctionInstruction {
+        HbcFunctionInstruction {
+            instruction,
+            offset: 0,
+            function_index: 0,
+            instruction_index: 0,
+        }
+    }
 
     #[test]
     fn test_block_converter_creation() {
@@ -353,6 +400,250 @@ mod tests {
         assert_eq!(stats.blocks_processed, 0);
         assert_eq!(stats.instructions_converted, 0);
         assert_eq!(stats.statements_generated, 0);
+    }
+
+    #[test]
+    fn test_target_register_extraction() {
+        let allocator = Allocator::default();
+        let ast_builder = OxcAstBuilder::new(&allocator);
+        let context = ExpressionContext::new();
+        let converter = BlockToStatementConverter::new(&ast_builder, context);
+
+        // Test various instruction types
+        assert_eq!(
+            converter.get_target_register(&UnifiedInstruction::Add {
+                operand_0: 5,
+                operand_1: 1,
+                operand_2: 2
+            }),
+            Some(5)
+        );
+
+        assert_eq!(
+            converter.get_target_register(&UnifiedInstruction::LoadConstTrue { operand_0: 3 }),
+            Some(3)
+        );
+
+        assert_eq!(
+            converter.get_target_register(&UnifiedInstruction::Mov {
+                operand_0: 10,
+                operand_1: 5
+            }),
+            Some(10)
+        );
+
+        // Instructions without target registers
+        assert_eq!(
+            converter.get_target_register(&UnifiedInstruction::Ret { operand_0: 1 }),
+            None
+        );
+
+        assert_eq!(
+            converter.get_target_register(&UnifiedInstruction::PutByVal {
+                operand_0: 1,
+                operand_1: 2,
+                operand_2: 3
+            }),
+            None
+        );
+    }
+
+    #[test]
+    fn test_convert_simple_block() {
+        let allocator = Allocator::default();
+        let ast_builder = OxcAstBuilder::new(&allocator);
+        let context = ExpressionContext::new();
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+
+        // Create a simple block with load constant instruction
+        let instructions = vec![create_test_instruction(UnifiedInstruction::LoadConstTrue {
+            operand_0: 1,
+        })];
+
+        let block = Block::new(0, instructions);
+
+        // Create empty graph for the test
+        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
+        let block_id = cfg.add_node(block.clone());
+
+        // Convert the block
+        let result = converter.convert_block(&block, block_id, &cfg);
+        assert!(result.is_ok(), "Block conversion should succeed");
+
+        let statements = result.unwrap();
+        assert_eq!(statements.len(), 1, "Should generate one statement");
+
+        // Verify statistics
+        let stats = converter.get_stats();
+        assert_eq!(stats.blocks_processed, 1);
+        assert_eq!(stats.instructions_converted, 1);
+        assert_eq!(stats.statements_generated, 1);
+    }
+
+    #[test]
+    fn test_convert_arithmetic_block() {
+        let allocator = Allocator::default();
+        let ast_builder = OxcAstBuilder::new(&allocator);
+        let context = ExpressionContext::new();
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+
+        // Create a block with arithmetic instructions
+        let instructions = vec![
+            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
+                operand_0: 1,
+                operand_1: 42,
+            }),
+            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
+                operand_0: 2,
+                operand_1: 10,
+            }),
+            create_test_instruction(UnifiedInstruction::Add {
+                operand_0: 3,
+                operand_1: 1,
+                operand_2: 2,
+            }),
+        ];
+
+        let block = Block::new(0, instructions);
+
+        // Create empty graph for the test
+        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
+        let block_id = cfg.add_node(block.clone());
+
+        // Convert the block
+        let result = converter.convert_block(&block, block_id, &cfg);
+        assert!(result.is_ok(), "Block conversion should succeed");
+
+        let statements = result.unwrap();
+        assert_eq!(statements.len(), 3, "Should generate three statements");
+
+        // Verify statistics
+        let stats = converter.get_stats();
+        assert_eq!(stats.blocks_processed, 1);
+        assert_eq!(stats.instructions_converted, 3);
+        assert_eq!(stats.statements_generated, 3);
+    }
+
+    #[test]
+    fn test_convert_return_block() {
+        let allocator = Allocator::default();
+        let ast_builder = OxcAstBuilder::new(&allocator);
+        let context = ExpressionContext::new();
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+
+        // Create a block with return instruction
+        let instructions = vec![
+            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
+                operand_0: 1,
+                operand_1: 42,
+            }),
+            create_test_instruction(UnifiedInstruction::Ret { operand_0: 1 }),
+        ];
+
+        let block = Block::new(0, instructions);
+
+        // Create empty graph for the test
+        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
+        let block_id = cfg.add_node(block.clone());
+
+        // Convert the block
+        let result = converter.convert_block(&block, block_id, &cfg);
+        if let Err(e) = &result {
+            println!("Error: {:?}", e);
+        }
+        assert!(
+            result.is_ok(),
+            "Block conversion should succeed: {:?}",
+            result.as_ref().err()
+        );
+
+        let statements = result.unwrap();
+        assert_eq!(statements.len(), 2, "Should generate two statements");
+
+        // Check that the last statement is a return statement
+        if let Some(last_stmt) = statements.last() {
+            assert!(
+                matches!(last_stmt, oxc_ast::ast::Statement::ReturnStatement(_)),
+                "Last statement should be a return statement"
+            );
+        }
+    }
+
+    #[test]
+    fn test_convert_assignment_sequence() {
+        let allocator = Allocator::default();
+        let ast_builder = OxcAstBuilder::new(&allocator);
+        let context = ExpressionContext::new();
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+
+        // Create a block with move operations (assignments)
+        let instructions = vec![
+            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
+                operand_0: 1,
+                operand_1: 5,
+            }),
+            create_test_instruction(UnifiedInstruction::Mov {
+                operand_0: 2,
+                operand_1: 1,
+            }),
+            create_test_instruction(UnifiedInstruction::Mov {
+                operand_0: 3,
+                operand_1: 2,
+            }),
+        ];
+
+        let block = Block::new(0, instructions);
+
+        // Create empty graph for the test
+        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
+        let block_id = cfg.add_node(block.clone());
+
+        // Convert the block
+        let result = converter.convert_block(&block, block_id, &cfg);
+        assert!(result.is_ok(), "Block conversion should succeed");
+
+        let statements = result.unwrap();
+        assert_eq!(statements.len(), 3, "Should generate three statements");
+
+        // First should be a variable declaration, rest should be assignments
+        // (Note: exact behavior depends on scope manager logic)
+        let stats = converter.get_stats();
+        assert!(
+            stats.variables_declared > 0,
+            "Should have declared some variables"
+        );
+    }
+
+    #[test]
+    fn test_side_effect_instructions() {
+        let allocator = Allocator::default();
+        let ast_builder = OxcAstBuilder::new(&allocator);
+        let context = ExpressionContext::new();
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+
+        // Create a block with call instruction (has side effects)
+        let instructions = vec![create_test_instruction(UnifiedInstruction::Call {
+            operand_0: 3, // result register
+            operand_1: 1, // function register
+            operand_2: 0, // arg count
+        })];
+
+        let block = Block::new(0, instructions);
+
+        // Create empty graph for the test
+        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
+        let block_id = cfg.add_node(block.clone());
+
+        // Convert the block
+        let result = converter.convert_block(&block, block_id, &cfg);
+        assert!(result.is_ok(), "Block conversion should succeed");
+
+        let statements = result.unwrap();
+        assert_eq!(statements.len(), 1, "Should generate one statement");
+
+        // Should generate a statement for the call
+        let stats = converter.get_stats();
+        assert_eq!(stats.statements_generated, 1);
     }
 
     #[test]
@@ -388,5 +679,59 @@ mod tests {
         assert!(!scope_manager.is_declared(5));
         assert!(!scope_manager.requires_declaration(10));
         assert_eq!(scope_manager.get_block_local(1), None);
+    }
+
+    #[test]
+    fn test_conversion_stats_tracking() {
+        let mut stats = BlockConversionStats::default();
+
+        assert_eq!(stats.blocks_processed, 0);
+        assert_eq!(stats.instructions_converted, 0);
+        assert_eq!(stats.statements_generated, 0);
+
+        // Stats should be updateable
+        stats.blocks_processed += 1;
+        stats.instructions_converted += 5;
+        stats.statements_generated += 5;
+
+        assert_eq!(stats.blocks_processed, 1);
+        assert_eq!(stats.instructions_converted, 5);
+        assert_eq!(stats.statements_generated, 5);
+    }
+
+    #[test]
+    fn test_block_variable_analysis() {
+        let allocator = Allocator::default();
+        let ast_builder = OxcAstBuilder::new(&allocator);
+        let context = ExpressionContext::new();
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+
+        // Create a block with various target registers
+        let instructions = vec![
+            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
+                operand_0: 1,
+                operand_1: 42,
+            }),
+            create_test_instruction(UnifiedInstruction::Add {
+                operand_0: 2,
+                operand_1: 1,
+                operand_2: 1,
+            }),
+            create_test_instruction(UnifiedInstruction::Mov {
+                operand_0: 3,
+                operand_1: 2,
+            }),
+        ];
+
+        let block = Block::new(0, instructions);
+
+        // Test variable analysis
+        let result = converter.analyze_block_variables(&block);
+        assert!(result.is_ok(), "Variable analysis should succeed");
+
+        // Check that target registers are marked for declaration
+        assert!(converter.scope_manager.requires_declaration(1));
+        assert!(converter.scope_manager.requires_declaration(2));
+        assert!(converter.scope_manager.requires_declaration(3));
     }
 }

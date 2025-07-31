@@ -40,7 +40,8 @@ impl<'a> StatementBuilder<'a> {
     /// Create an expression statement from an expression
     /// Used for expressions with side effects that should be executed as statements
     pub fn create_expression_statement(&self, expression: Expression<'a>) -> Statement<'a> {
-        self.ast_builder.statement_expression(Span::default(), expression)
+        self.ast_builder
+            .statement_expression(Span::default(), expression)
     }
 
     /// Create a variable declaration statement
@@ -63,9 +64,7 @@ impl<'a> StatementBuilder<'a> {
 
         // Create the binding pattern
         let binding_pattern = BindingPattern {
-            kind: BindingPatternKind::BindingIdentifier(
-                self.ast_builder.alloc(binding_identifier),
-            ),
+            kind: BindingPatternKind::BindingIdentifier(self.ast_builder.alloc(binding_identifier)),
             type_annotation: None,
             optional: false,
         };
@@ -127,19 +126,15 @@ impl<'a> StatementBuilder<'a> {
             right: value_expression,
         };
 
-        let assignment_expr_node = Expression::AssignmentExpression(
-            self.ast_builder.alloc(assignment_expr),
-        );
+        let assignment_expr_node =
+            Expression::AssignmentExpression(self.ast_builder.alloc(assignment_expr));
 
         Ok(self.create_expression_statement(assignment_expr_node))
     }
 
     /// Create a return statement
     /// Example: return expression; or return;
-    pub fn create_return_statement(
-        &self,
-        return_value: Option<Expression<'a>>,
-    ) -> Statement<'a> {
+    pub fn create_return_statement(&self, return_value: Option<Expression<'a>>) -> Statement<'a> {
         self.ast_builder
             .statement_return(Span::default(), return_value)
     }
@@ -155,7 +150,9 @@ impl<'a> StatementBuilder<'a> {
             argument: throw_expression,
         };
 
-        Ok(Statement::ThrowStatement(self.ast_builder.alloc(throw_stmt)))
+        Ok(Statement::ThrowStatement(
+            self.ast_builder.alloc(throw_stmt),
+        ))
     }
 
     /// Create a block statement from a vector of statements
@@ -171,16 +168,16 @@ impl<'a> StatementBuilder<'a> {
             // Call expressions always have potential side effects
             Expression::CallExpression(_) => true,
             Expression::NewExpression(_) => true,
-            
+
             // Assignment expressions have side effects
             Expression::AssignmentExpression(_) => true,
             Expression::UpdateExpression(_) => true,
-            
+
             // Member expressions might have side effects (getters/setters)
             Expression::ComputedMemberExpression(_) => true,
             Expression::StaticMemberExpression(_) => true,
             Expression::PrivateFieldExpression(_) => true,
-            
+
             // These typically don't have side effects
             Expression::Identifier(_) => false,
             Expression::NumericLiteral(_) => false,
@@ -188,15 +185,13 @@ impl<'a> StatementBuilder<'a> {
             Expression::BooleanLiteral(_) => false,
             Expression::NullLiteral(_) => false,
             Expression::BigIntLiteral(_) => false,
-            
+
             // Binary/unary expressions depend on their operands
             Expression::BinaryExpression(bin_expr) => {
                 self.has_side_effects(&bin_expr.left) || self.has_side_effects(&bin_expr.right)
             }
-            Expression::UnaryExpression(unary_expr) => {
-                self.has_side_effects(&unary_expr.argument)
-            }
-            
+            Expression::UnaryExpression(unary_expr) => self.has_side_effects(&unary_expr.argument),
+
             // For other expression types, assume they might have side effects
             _ => true,
         }
@@ -245,7 +240,12 @@ mod tests {
         assert!(matches!(stmt, Statement::VariableDeclaration(_)));
 
         // Create variable declaration with initializer
-        let init_expr = ast_builder.expression_numeric_literal(Span::default(), 42.0, Some(Atom::from("42")), oxc_syntax::number::NumberBase::Decimal);
+        let init_expr = ast_builder.expression_numeric_literal(
+            Span::default(),
+            42.0,
+            Some(Atom::from("42")),
+            oxc_syntax::number::NumberBase::Decimal,
+        );
         let stmt_with_init = builder
             .create_variable_declaration("myVar2", Some(init_expr), VariableDeclarationKind::Const)
             .unwrap();
@@ -266,7 +266,10 @@ mod tests {
         // Test return with value
         let return_expr = ast_builder.expression_identifier(Span::default(), "result");
         let return_stmt_with_value = builder.create_return_statement(Some(return_expr));
-        assert!(matches!(return_stmt_with_value, Statement::ReturnStatement(_)));
+        assert!(matches!(
+            return_stmt_with_value,
+            Statement::ReturnStatement(_)
+        ));
     }
 
     #[test]
@@ -276,7 +279,12 @@ mod tests {
         let builder = StatementBuilder::new(&ast_builder);
 
         // Test expressions without side effects
-        let literal = ast_builder.expression_numeric_literal(Span::default(), 42.0, Some(Atom::from("42")), oxc_syntax::number::NumberBase::Decimal);
+        let literal = ast_builder.expression_numeric_literal(
+            Span::default(),
+            42.0,
+            Some(Atom::from("42")),
+            oxc_syntax::number::NumberBase::Decimal,
+        );
         assert!(!builder.has_side_effects(&literal));
 
         let identifier = ast_builder.expression_identifier(Span::default(), "var1");
