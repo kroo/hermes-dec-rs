@@ -711,6 +711,11 @@ impl<'a> InstructionToExpressionConverter<'a> {
         &self.register_manager
     }
 
+    /// Get access to the AST builder
+    pub fn ast_builder(&self) -> &'a OxcAstBuilder<'a> {
+        self.ast_builder
+    }
+
     /// Get reference to expression context
     pub fn expression_context(&self) -> &ExpressionContext<'a> {
         &self.expression_context
