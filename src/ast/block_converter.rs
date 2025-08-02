@@ -5,8 +5,9 @@
 
 use super::{
     expression_context::ExpressionContext,
-    instruction_converter::{ConversionError, InstructionToExpressionConverter},
-    statement_builder::{StatementBuilder, StatementBuilderError},
+    instruction_to_statement_converter::{
+        InstructionResult, InstructionToStatementConverter, JumpCondition, StatementConversionError,
+    },
 };
 use crate::{
     cfg::{block::Block, EdgeKind},
@@ -14,20 +15,15 @@ use crate::{
     hbc::function_table::HbcFunctionInstruction,
 };
 use oxc_allocator::Vec as ArenaVec;
-use oxc_ast::{
-    ast::{Statement, VariableDeclarationKind},
-    AstBuilder as OxcAstBuilder,
-};
-use petgraph::{graph::NodeIndex, Graph};
+use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
+use petgraph::{graph::NodeIndex, visit::EdgeRef, Graph};
 use std::collections::{HashMap, HashSet};
 
 /// Error types for block-to-statement conversion
 #[derive(Debug, thiserror::Error)]
 pub enum BlockConversionError {
-    #[error("Instruction conversion error: {0}")]
-    InstructionConversion(#[from] ConversionError),
-    #[error("Statement builder error: {0}")]
-    StatementBuilder(#[from] StatementBuilderError),
+    #[error("Statement conversion error: {0}")]
+    StatementConversion(#[from] StatementConversionError),
     #[error("Invalid block structure: {0}")]
     InvalidBlock(String),
     #[error("Variable scoping error: {0}")]
@@ -106,14 +102,14 @@ impl BlockScopeManager {
 
 /// Converts CFG basic blocks into JavaScript statement sequences
 pub struct BlockToStatementConverter<'a> {
-    /// Instruction-to-expression converter
-    expression_converter: InstructionToExpressionConverter<'a>,
-    /// Statement builder for creating OXC statements
-    statement_builder: StatementBuilder<'a>,
+    /// New instruction-to-statement converter (1:1 mapping)
+    instruction_converter: InstructionToStatementConverter<'a>,
     /// Variable scoping manager
     scope_manager: BlockScopeManager,
     /// Conversion statistics
     stats: BlockConversionStats,
+    /// Whether to include instruction-level comments
+    include_instruction_comments: bool,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
@@ -121,17 +117,66 @@ impl<'a> BlockToStatementConverter<'a> {
     pub fn new(
         ast_builder: &'a OxcAstBuilder<'a>,
         expression_context: ExpressionContext<'a>,
+        include_instruction_comments: bool,
     ) -> Self {
-        let expression_converter =
-            InstructionToExpressionConverter::new(ast_builder, expression_context);
-        let statement_builder = StatementBuilder::new(ast_builder);
+        let instruction_converter =
+            InstructionToStatementConverter::new(ast_builder, expression_context.clone());
 
         Self {
-            expression_converter,
-            statement_builder,
+            instruction_converter,
             scope_manager: BlockScopeManager::new(),
             stats: BlockConversionStats::default(),
+            include_instruction_comments,
         }
+    }
+
+    /// Convert multiple blocks from a CFG into a sequence of JavaScript statements
+    /// This method handles proper block ordering and labeling
+    pub fn convert_blocks_from_cfg(
+        &mut self,
+        cfg: &crate::cfg::Cfg,
+    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
+        let mut all_statements =
+            ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
+
+        // Get blocks in structured execution order
+        let block_order = cfg.structured_execution_order();
+        let blocks_needing_labels = cfg.blocks_needing_labels();
+
+        for (order_idx, block_id) in block_order.iter().enumerate() {
+            let block = &cfg.graph()[*block_id];
+
+            // Skip exit blocks
+            if block.is_exit() {
+                continue;
+            }
+
+            // Add block information comment
+            let block_comment = self.create_block_info_comment(*block_id, block, cfg)?;
+            all_statements.push(block_comment);
+
+            // Add incoming edge information comments
+            if order_idx > 0 {
+                let edge_comments = self.create_incoming_edge_comments(*block_id, cfg)?;
+                for comment in edge_comments {
+                    all_statements.push(comment);
+                }
+            }
+
+            // Add label if this block needs one
+            if blocks_needing_labels.contains(block_id) {
+                let label_stmt = self.create_block_label(*block_id)?;
+                all_statements.push(label_stmt);
+            }
+
+            // Convert the block to statements
+            let block_statements = self.convert_block(block, *block_id, cfg.graph())?;
+            for stmt in block_statements {
+                all_statements.push(stmt);
+            }
+        }
+
+        Ok(all_statements)
     }
 
     /// Convert a basic block into a sequence of JavaScript statements
@@ -148,11 +193,17 @@ impl<'a> BlockToStatementConverter<'a> {
         self.analyze_block_variables(block)?;
 
         // Convert instructions to statements
-        let mut statements = ArenaVec::new_in(self.statement_builder.ast_builder.allocator);
+        let mut statements = ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
 
         for (pc_offset, instruction) in block.instructions().iter().enumerate() {
             let pc = block.start_pc() + pc_offset as u32;
-            self.expression_converter.set_current_pc(pc);
+            // Process instruction
+
+            // Add instruction comment if enabled
+            if self.include_instruction_comments {
+                let instruction_comment = self.create_instruction_comment(pc, instruction)?;
+                statements.push(instruction_comment);
+            }
 
             let instruction_statements = self.convert_instruction_to_statements(instruction, pc)?;
             for stmt in instruction_statements {
@@ -175,100 +226,59 @@ impl<'a> BlockToStatementConverter<'a> {
     fn convert_instruction_to_statements(
         &mut self,
         instruction: &HbcFunctionInstruction,
-        _pc: u32,
+        pc: u32,
     ) -> Result<Vec<Statement<'a>>, BlockConversionError> {
         let mut statements = Vec::new();
 
-        // Handle statement-only instructions first (no expression conversion needed)
-        match &instruction.instruction {
-            // Return instructions become return statements
-            UnifiedInstruction::Ret { operand_0 } => {
-                let return_value = if *operand_0 != 0 {
-                    // Convert the return value register to an expression
-                    let return_expr = self
-                        .expression_converter
-                        .register_manager_mut()
-                        .get_variable_name(*operand_0);
-                    let return_atom = self
-                        .expression_converter
-                        .ast_builder()
-                        .allocator
-                        .alloc_str(&return_expr);
-                    let return_identifier = self
-                        .expression_converter
-                        .ast_builder()
-                        .expression_identifier(oxc_span::Span::default(), return_atom);
-                    Some(return_identifier)
-                } else {
-                    None
-                };
-                statements.push(self.statement_builder.create_return_statement(return_value));
-            }
+        // Set current PC in the instruction converter
+        self.instruction_converter.set_current_pc(pc);
 
-            // Throw instructions become throw statements
-            UnifiedInstruction::Throw { operand_0 } => {
-                // Convert the throw value register to an expression
-                let throw_expr = self
-                    .expression_converter
-                    .register_manager_mut()
-                    .get_variable_name(*operand_0);
-                let throw_atom = self
-                    .expression_converter
-                    .ast_builder()
-                    .allocator
-                    .alloc_str(&throw_expr);
-                let throw_identifier = self
-                    .expression_converter
-                    .ast_builder()
-                    .expression_identifier(oxc_span::Span::default(), throw_atom);
-                statements.push(
-                    self.statement_builder
-                        .create_throw_statement(throw_identifier)?,
-                );
-            }
-
-            // Most instructions need expression conversion first
-            _ => {
-                // Convert instruction to expression first
-                let expression = self
-                    .expression_converter
-                    .convert_instruction(&instruction.instruction)?;
-                if let Some(target_register) = self.get_target_register(&instruction.instruction) {
-                    if self.scope_manager.requires_declaration(target_register)
-                        && !self.scope_manager.is_declared(target_register)
-                    {
-                        // Create variable declaration
-                        let var_name = self
-                            .expression_converter
-                            .register_manager_mut()
-                            .get_variable_name(target_register);
-                        statements.push(self.statement_builder.create_variable_declaration(
-                            &var_name,
-                            Some(expression),
-                            VariableDeclarationKind::Let,
-                        )?);
-                        self.scope_manager.mark_declared(target_register);
-                        self.stats.variables_declared += 1;
-                    } else {
-                        // Create assignment statement
-                        let var_name = self
-                            .expression_converter
-                            .register_manager_mut()
-                            .get_variable_name(target_register);
-                        statements.push(
-                            self.statement_builder
-                                .create_assignment_statement(&var_name, expression)?,
-                        );
-                    }
-                } else if self.statement_builder.has_side_effects(&expression) {
-                    // Create expression statement for side effects
-                    statements.push(
-                        self.statement_builder
-                            .create_expression_statement(expression),
-                    );
+        // Use the new InstructionToStatementConverter for direct 1:1 instruction mapping
+        match self
+            .instruction_converter
+            .convert_instruction(&instruction.instruction)
+            .map_err(BlockConversionError::StatementConversion)?
+        {
+            InstructionResult::Statement(stmt) => {
+                // Track variable declarations for statistics
+                if matches!(stmt, Statement::VariableDeclaration(_)) {
+                    self.stats.variables_declared += 1;
                 }
-                // If no target register and no side effects, this is likely dead code
-                // TODO: Track dead code elimination statistics
+                statements.push(stmt);
+            }
+            InstructionResult::JumpCondition(jump_info) => {
+                // Jump instructions don't generate statements directly
+                // They provide condition info for the block converter to handle control flow
+                // For now, we'll create a comment about the jump
+                let jump_comment = self.create_jump_comment(&jump_info)?;
+                statements.push(jump_comment);
+            }
+            InstructionResult::None => {
+                // Instruction like nops that don't produce output
+            }
+        }
+
+        // Handle only the special instructions that need block-level context
+        // Most instructions are now handled by the InstructionToStatementConverter
+        match &instruction.instruction {
+            // Instructions that don't need to generate visible statements
+            UnifiedInstruction::CreateEnvironment { operand_0 } => {
+                // CreateEnvironment is an internal VM operation that sets up lexical scopes
+                // Track the environment register but don't generate visible JavaScript
+                self.instruction_converter
+                    .register_manager_mut()
+                    .track_usage(*operand_0, pc);
+                // Mark this register as representing an environment
+                let env_var_name = format!("__env_{}", operand_0);
+                self.instruction_converter
+                    .register_manager_mut()
+                    .set_variable_name(*operand_0, env_var_name);
+            }
+
+            // All other instructions are handled by InstructionToStatementConverter
+            _ => {
+                // Already handled above by the InstructionToStatementConverter
+                // This branch is kept for future special cases
             }
         }
 
@@ -291,38 +301,217 @@ impl<'a> BlockToStatementConverter<'a> {
     /// Extract the target register from an instruction (if any)
     fn get_target_register(&self, instruction: &UnifiedInstruction) -> Option<u8> {
         match instruction {
-            // Most instructions use operand_0 as destination
+            // Instructions with destination registers (Reg8 as first parameter)
             UnifiedInstruction::Add { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::Sub { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::Mul { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::Div { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::Mod { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::LoadConstTrue { operand_0 } => Some(*operand_0),
-            UnifiedInstruction::LoadConstFalse { operand_0 } => Some(*operand_0),
-            UnifiedInstruction::LoadConstNull { operand_0 } => Some(*operand_0),
-            UnifiedInstruction::LoadConstUndefined { operand_0 } => Some(*operand_0),
-            UnifiedInstruction::LoadConstUInt8 { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::LoadConstInt { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::LoadConstString { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::LoadConstBigInt { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::Mov { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::GetByVal { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::GetById { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Add32 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::AddEmptyString { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::AddN { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::BitAnd { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::BitNot { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::BitOr { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::BitXor { operand_0, .. } => Some(*operand_0),
             UnifiedInstruction::Call { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::Negate { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::Not { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::Inc { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Call1 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Call2 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Call3 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Call4 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CallBuiltin { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CallBuiltinLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CallDirect { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CallDirectLongIndex { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CallLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Catch { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::CoerceThisNS { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Construct { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::ConstructLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateAsyncClosure { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateAsyncClosureLongIndex { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateClosure { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateClosureLongIndex { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateGenerator { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateGeneratorClosure { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateGeneratorClosureLongIndex { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateGeneratorLongIndex { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateInnerEnvironment { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateRegExp { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateThis { operand_0, .. } => Some(*operand_0),
             UnifiedInstruction::Dec { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::DelById { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::DelByIdLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::DelByVal { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::DirectEval { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Div { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::DivN { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Divi32 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Divu32 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Eq { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetArgumentsLength { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetArgumentsPropByVal { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetBuiltinClosure { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetById { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetByIdLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetByIdShort { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetByVal { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetEnvironment { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetGlobalObject { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::GetNewTarget { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::GetNextPName { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GetPNameList { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Greater { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::GreaterEq { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Inc { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::InstanceOf { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::IsIn { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::IteratorBegin { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::IteratorClose { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::IteratorNext { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LShift { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Less { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LessEq { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadConstBigInt { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadConstBigIntLongIndex { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadConstDouble { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadConstEmpty { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::LoadConstFalse { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::LoadConstInt { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadConstNull { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::LoadConstString { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadConstStringLongIndex { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadConstTrue { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::LoadConstUInt8 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadConstUndefined { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::LoadConstZero { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::LoadFromEnvironment { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadFromEnvironmentL { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadParam { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadParamLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::LoadThisNS { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::Loadi16 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Loadi32 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Loadi8 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Loadu16 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Loadu32 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Loadu8 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Mod { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Mov { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Mul { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Mul32 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::MulN { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Negate { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Neq { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::NewArray { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::NewArrayWithBuffer { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::NewArrayWithBufferLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::NewObject { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::NewObjectWithBuffer { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::NewObjectWithBufferLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::NewObjectWithParent { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Not { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::RShift { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::ReifyArguments { operand_0 } => Some(*operand_0),
+            UnifiedInstruction::ResumeGenerator { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::SelectObject { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::StrictEq { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::StrictNeq { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Sub { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::Sub32 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::SubN { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::ThrowIfEmpty { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::ToInt32 { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::ToNumber { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::ToNumeric { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::TryGetById { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::TryGetByIdLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::TryPutById { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::TryPutByIdLong { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::TypeOf { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::URshift { operand_0, .. } => Some(*operand_0),
 
             // Instructions without target registers
-            UnifiedInstruction::Ret { .. } => None,
-            UnifiedInstruction::Throw { .. } => None,
-            UnifiedInstruction::PutByVal { .. } => None,
+            UnifiedInstruction::AsyncBreakCheck { .. } => None,
+            UnifiedInstruction::MovLong { .. } => None,
+            UnifiedInstruction::CompleteGenerator { .. } => None,
+            UnifiedInstruction::CreateEnvironment { .. } => None,
+            UnifiedInstruction::Debugger { .. } => None,
+            UnifiedInstruction::DebuggerCheckBreak { .. } => None,
+            UnifiedInstruction::DeclareGlobalVar { .. } => None,
+            UnifiedInstruction::Jmp { .. } => None,
+            UnifiedInstruction::JmpFalse { .. } => None,
+            UnifiedInstruction::JmpFalseLong { .. } => None,
+            UnifiedInstruction::JmpLong { .. } => None,
+            UnifiedInstruction::JmpTrue { .. } => None,
+            UnifiedInstruction::JmpTrueLong { .. } => None,
+            UnifiedInstruction::JmpUndefined { .. } => None,
+            UnifiedInstruction::JmpUndefinedLong { .. } => None,
+            UnifiedInstruction::JEqual { .. } => None,
+            UnifiedInstruction::JEqualLong { .. } => None,
+            UnifiedInstruction::JNotEqual { .. } => None,
+            UnifiedInstruction::JNotEqualLong { .. } => None,
+            UnifiedInstruction::JStrictEqual { .. } => None,
+            UnifiedInstruction::JStrictEqualLong { .. } => None,
+            UnifiedInstruction::JStrictNotEqual { .. } => None,
+            UnifiedInstruction::JStrictNotEqualLong { .. } => None,
+            UnifiedInstruction::JLess { .. } => None,
+            UnifiedInstruction::JLessLong { .. } => None,
+            UnifiedInstruction::JLessEqual { .. } => None,
+            UnifiedInstruction::JLessEqualLong { .. } => None,
+            UnifiedInstruction::JLessN { .. } => None,
+            UnifiedInstruction::JLessNLong { .. } => None,
+            UnifiedInstruction::JLessEqualN { .. } => None,
+            UnifiedInstruction::JLessEqualNLong { .. } => None,
+            UnifiedInstruction::JNotLess { .. } => None,
+            UnifiedInstruction::JNotLessLong { .. } => None,
+            UnifiedInstruction::JNotLessEqual { .. } => None,
+            UnifiedInstruction::JNotLessEqualLong { .. } => None,
+            UnifiedInstruction::JNotLessN { .. } => None,
+            UnifiedInstruction::JNotLessNLong { .. } => None,
+            UnifiedInstruction::JNotLessEqualN { .. } => None,
+            UnifiedInstruction::JNotLessEqualNLong { .. } => None,
+            UnifiedInstruction::JGreater { .. } => None,
+            UnifiedInstruction::JGreaterLong { .. } => None,
+            UnifiedInstruction::JGreaterEqual { .. } => None,
+            UnifiedInstruction::JGreaterEqualLong { .. } => None,
+            UnifiedInstruction::JGreaterN { .. } => None,
+            UnifiedInstruction::JGreaterNLong { .. } => None,
+            UnifiedInstruction::JGreaterEqualN { .. } => None,
+            UnifiedInstruction::JGreaterEqualNLong { .. } => None,
+            UnifiedInstruction::JNotGreater { .. } => None,
+            UnifiedInstruction::JNotGreaterLong { .. } => None,
+            UnifiedInstruction::JNotGreaterEqual { .. } => None,
+            UnifiedInstruction::JNotGreaterEqualLong { .. } => None,
+            UnifiedInstruction::JNotGreaterN { .. } => None,
+            UnifiedInstruction::JNotGreaterNLong { .. } => None,
+            UnifiedInstruction::JNotGreaterEqualN { .. } => None,
+            UnifiedInstruction::JNotGreaterEqualNLong { .. } => None,
+            UnifiedInstruction::ProfilePoint { .. } => None,
             UnifiedInstruction::PutById { .. } => None,
-
-            // For any unhandled instructions, assume no target register
-            // TODO: Remove this catch all case to ensure all instructions are handled
-            _ => None,
+            UnifiedInstruction::PutByIdLong { .. } => None,
+            UnifiedInstruction::PutByVal { .. } => None,
+            UnifiedInstruction::PutNewOwnById { .. } => None,
+            UnifiedInstruction::PutNewOwnByIdLong { .. } => None,
+            UnifiedInstruction::PutNewOwnByIdShort { .. } => None,
+            UnifiedInstruction::PutNewOwnNEById { .. } => None,
+            UnifiedInstruction::PutNewOwnNEByIdLong { .. } => None,
+            UnifiedInstruction::PutOwnByIndex { .. } => None,
+            UnifiedInstruction::PutOwnByIndexL { .. } => None,
+            UnifiedInstruction::PutOwnByVal { .. } => None,
+            UnifiedInstruction::PutOwnGetterSetterByVal { .. } => None,
+            UnifiedInstruction::Ret { .. } => None,
+            UnifiedInstruction::SaveGenerator { .. } => None,
+            UnifiedInstruction::SaveGeneratorLong { .. } => None,
+            UnifiedInstruction::StartGenerator { .. } => None,
+            UnifiedInstruction::Store16 { .. } => None,
+            UnifiedInstruction::Store32 { .. } => None,
+            UnifiedInstruction::Store8 { .. } => None,
+            UnifiedInstruction::StoreNPToEnvironment { .. } => None,
+            UnifiedInstruction::StoreNPToEnvironmentL { .. } => None,
+            UnifiedInstruction::StoreToEnvironment { .. } => None,
+            UnifiedInstruction::StoreToEnvironmentL { .. } => None,
+            UnifiedInstruction::SwitchImm { .. } => None,
+            UnifiedInstruction::Throw { .. } => None,
+            UnifiedInstruction::ThrowIfHasRestrictedGlobalProperty { .. } => None,
+            UnifiedInstruction::ThrowIfUndefinedInst { .. } => None,
+            UnifiedInstruction::Unreachable { .. } => None,
         }
     }
 
@@ -348,24 +537,233 @@ impl<'a> BlockToStatementConverter<'a> {
         self.stats = BlockConversionStats::default();
     }
 
-    /// Get access to the underlying expression converter
-    pub fn expression_converter(&self) -> &InstructionToExpressionConverter<'a> {
-        &self.expression_converter
+    /// Get access to the underlying instruction converter
+    pub fn instruction_converter(&self) -> &InstructionToStatementConverter<'a> {
+        &self.instruction_converter
     }
 
-    /// Get mutable access to the underlying expression converter
-    pub fn expression_converter_mut(&mut self) -> &mut InstructionToExpressionConverter<'a> {
-        &mut self.expression_converter
-    }
-
-    /// Get access to the statement builder
-    pub fn statement_builder(&self) -> &StatementBuilder<'a> {
-        &self.statement_builder
+    /// Get mutable access to the underlying instruction converter
+    pub fn instruction_converter_mut(&mut self) -> &mut InstructionToStatementConverter<'a> {
+        &mut self.instruction_converter
     }
 
     /// Get access to the scope manager
     pub fn scope_manager(&self) -> &BlockScopeManager {
         &self.scope_manager
+    }
+
+    // ===== Private Helper Methods =====
+
+    /// Get property name from the string table using property index
+    // Dead methods removed: get_property_name, create_property_assignment_statement,
+    // create_computed_property_assignment_statement, create_identifier_expression
+    // These are now handled by InstructionToStatementConverter
+
+    /// Create a label statement for a block
+    fn create_block_label(
+        &self,
+        block_id: NodeIndex,
+    ) -> Result<Statement<'a>, BlockConversionError> {
+        let span = oxc_span::Span::default();
+        let label_name = format!("L{}", block_id.index());
+        let label_atom = self
+            .instruction_converter
+            .ast_builder()
+            .allocator
+            .alloc_str(&label_name);
+
+        // Create an empty statement as the labeled statement body
+        let empty_stmt = self
+            .instruction_converter
+            .ast_builder()
+            .statement_empty(span);
+
+        // Create the label identifier
+        let label_id = self
+            .instruction_converter
+            .ast_builder()
+            .label_identifier(span, label_atom);
+
+        // Create the label statement
+        Ok(self
+            .instruction_converter
+            .ast_builder()
+            .statement_labeled(span, label_id, empty_stmt))
+    }
+
+    /// Create a comment statement with block information
+    fn create_block_info_comment(
+        &self,
+        block_id: NodeIndex,
+        block: &Block,
+        _cfg: &crate::cfg::Cfg,
+    ) -> Result<Statement<'a>, BlockConversionError> {
+        let span = oxc_span::Span::default();
+
+        // Gather block information
+        let block_info = format!(
+            "/* Block {}: PC {}..{}, {} instructions */",
+            block_id.index(),
+            block.start_pc(),
+            block.end_pc(),
+            block.instructions().len()
+        );
+
+        // Create as a string literal expression statement that will be rendered as a comment
+        let comment_atom = self
+            .instruction_converter
+            .ast_builder()
+            .allocator
+            .alloc_str(&block_info);
+        let comment_expr = self
+            .instruction_converter
+            .ast_builder()
+            .expression_string_literal(span, comment_atom, None);
+
+        // Mark this as a comment by wrapping it in a special way
+        // We'll use void to indicate this should be rendered as a comment
+        let void_expr = self.instruction_converter.ast_builder().expression_unary(
+            span,
+            oxc_ast::ast::UnaryOperator::Void,
+            comment_expr,
+        );
+
+        Ok(self
+            .instruction_converter
+            .ast_builder()
+            .statement_expression(span, void_expr))
+    }
+
+    /// Create comment statements for incoming edges to a block
+    fn create_incoming_edge_comments(
+        &self,
+        block_id: NodeIndex,
+        cfg: &crate::cfg::Cfg,
+    ) -> Result<Vec<Statement<'a>>, BlockConversionError> {
+        let mut comments = Vec::new();
+        let span = oxc_span::Span::default();
+
+        // Get incoming edges
+        let incoming_edges: Vec<_> = cfg
+            .graph()
+            .edges_directed(block_id, petgraph::Direction::Incoming)
+            .collect();
+
+        if !incoming_edges.is_empty() {
+            for edge in incoming_edges {
+                let edge_info = format!(
+                    "/* Edge from Block {} -> Block {} ({:?}) */",
+                    edge.source().index(),
+                    edge.target().index(),
+                    edge.weight()
+                );
+
+                let comment_atom = self
+                    .instruction_converter
+                    .ast_builder()
+                    .allocator
+                    .alloc_str(&edge_info);
+                let comment_expr = self
+                    .instruction_converter
+                    .ast_builder()
+                    .expression_string_literal(span, comment_atom, None);
+
+                let void_expr = self.instruction_converter.ast_builder().expression_unary(
+                    span,
+                    oxc_ast::ast::UnaryOperator::Void,
+                    comment_expr,
+                );
+
+                comments.push(
+                    self.instruction_converter
+                        .ast_builder()
+                        .statement_expression(span, void_expr),
+                );
+            }
+        }
+
+        Ok(comments)
+    }
+
+    /// Create a comment statement for an individual instruction
+    fn create_instruction_comment(
+        &self,
+        pc: u32,
+        instruction: &HbcFunctionInstruction,
+    ) -> Result<Statement<'a>, BlockConversionError> {
+        let span = oxc_span::Span::default();
+
+        // Format the instruction information
+        let instruction_info = if let Some(hbc_file) = self.instruction_converter.get_expression_context().hbc_file() {
+            // Use the formatted instruction display
+            format!("/* PC {}: {} */", pc, instruction.format_instruction(hbc_file))
+        } else {
+            // Fallback to debug formatting if no HBC file access
+            format!("/* PC {}: {:?} */", pc, instruction.instruction)
+        };
+
+        let comment_atom = self
+            .instruction_converter
+            .ast_builder()
+            .allocator
+            .alloc_str(&instruction_info);
+        let comment_expr = self
+            .instruction_converter
+            .ast_builder()
+            .expression_string_literal(span, comment_atom, None);
+
+        let void_expr = self.instruction_converter.ast_builder().expression_unary(
+            span,
+            oxc_ast::ast::UnaryOperator::Void,
+            comment_expr,
+        );
+
+        Ok(self
+            .instruction_converter
+            .ast_builder()
+            .statement_expression(span, void_expr))
+    }
+
+    /// Create a comment statement for jump conditions
+    fn create_jump_comment(
+        &self,
+        jump_info: &JumpCondition,
+    ) -> Result<Statement<'a>, BlockConversionError> {
+        let span = oxc_span::Span::default();
+
+        // Format the jump information
+        let jump_info_str = if let Some(_condition_expr) = &jump_info.condition_expression {
+            format!(
+                "/* Jump: {:?} condition with expression to offset {:?} */",
+                jump_info.jump_type, jump_info.target_offset
+            )
+        } else {
+            format!(
+                "/* Jump: {:?} to offset {:?} */",
+                jump_info.jump_type, jump_info.target_offset
+            )
+        };
+
+        let comment_atom = self
+            .instruction_converter
+            .ast_builder()
+            .allocator
+            .alloc_str(&jump_info_str);
+        let comment_expr = self
+            .instruction_converter
+            .ast_builder()
+            .expression_string_literal(span, comment_atom, None);
+
+        let void_expr = self.instruction_converter.ast_builder().expression_unary(
+            span,
+            oxc_ast::ast::UnaryOperator::Void,
+            comment_expr,
+        );
+
+        Ok(self
+            .instruction_converter
+            .ast_builder()
+            .statement_expression(span, void_expr))
     }
 }
 
@@ -394,7 +792,7 @@ mod tests {
         let ast_builder = OxcAstBuilder::new(&allocator);
         let context = ExpressionContext::new();
 
-        let converter = BlockToStatementConverter::new(&ast_builder, context);
+        let converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
         // Verify initial state
         let stats = converter.get_stats();
@@ -408,7 +806,7 @@ mod tests {
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
         let context = ExpressionContext::new();
-        let converter = BlockToStatementConverter::new(&ast_builder, context);
+        let converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
         // Test various instruction types
         assert_eq!(
@@ -454,7 +852,7 @@ mod tests {
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
         let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
         // Create a simple block with load constant instruction
         let instructions = vec![create_test_instruction(UnifiedInstruction::LoadConstTrue {
@@ -486,7 +884,7 @@ mod tests {
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
         let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
         // Create a block with arithmetic instructions
         let instructions = vec![
@@ -530,7 +928,7 @@ mod tests {
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
         let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
         // Create a block with return instruction
         let instructions = vec![
@@ -575,7 +973,7 @@ mod tests {
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
         let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
         // Create a block with move operations (assignments)
         let instructions = vec![
@@ -620,7 +1018,7 @@ mod tests {
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
         let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
         // Create a block with call instruction (has side effects)
         let instructions = vec![create_test_instruction(UnifiedInstruction::Call {
@@ -705,7 +1103,7 @@ mod tests {
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
         let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
         // Create a block with various target registers
         let instructions = vec![

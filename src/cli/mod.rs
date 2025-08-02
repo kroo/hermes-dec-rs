@@ -25,8 +25,14 @@ pub enum Commands {
     Decompile {
         /// Input HBC file
         input: std::path::PathBuf,
+        /// Function index to decompile (required for now)
+        #[arg(long)]
+        function: usize,
         /// Output source file (optional, defaults to stdout)
         output: Option<std::path::PathBuf>,
+        /// Include comments (pc, reg, instructions, none)
+        #[arg(long, default_value = "none")]
+        comments: String,
     },
     /// Disassemble Hermes bytecode to assembly-like format
     Disasm {
@@ -68,8 +74,8 @@ impl Cli {
         let cli = Cli::parse();
 
         match cli.command {
-            Commands::Decompile { input, output } => {
-                decompile::decompile(&input, output.as_deref())?;
+            Commands::Decompile { input, function, output, comments } => {
+                decompile::decompile(&input, function, output.as_deref(), &comments)?;
             }
             Commands::Disasm { input } => {
                 disasm::disasm(&input)?;

@@ -28,7 +28,7 @@ fn test_end_to_end_simple_function() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create a simple function: let x = 42; return x;
     let instructions = vec![
@@ -69,7 +69,7 @@ fn test_end_to_end_arithmetic_chain() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create arithmetic chain: let a = 10; let b = 20; let c = a + b; return c;
     let instructions = vec![
@@ -115,7 +115,7 @@ fn test_end_to_end_function_call() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create function call: let fn = true; let result = fn(); return result;
     // Using LoadConstTrue instead of LoadConstString to avoid string table dependency
@@ -164,7 +164,7 @@ fn test_end_to_end_member_access() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create member access: let obj = 42; let prop = obj[1]; return prop;
     // Using numeric constants to avoid string table dependency
@@ -207,7 +207,7 @@ fn test_end_to_end_variable_assignment_sequence() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create assignment sequence: let x = 5; let y = x; let z = y; return z;
     let instructions = vec![
@@ -255,7 +255,7 @@ fn test_end_to_end_side_effect_statements() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create side effect operations: call function (discard result), load const, return const
     let instructions = vec![
@@ -299,7 +299,7 @@ fn test_end_to_end_throw_statement() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create throw statement: let error = 404; throw error;
     let instructions = vec![
@@ -340,7 +340,7 @@ fn test_multiple_blocks_conversion() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Test converting multiple blocks independently
     let block1_instructions = vec![create_test_instruction(
@@ -397,7 +397,7 @@ fn test_converter_reset_and_reuse() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Convert first block
     let instructions1 = vec![create_test_instruction(UnifiedInstruction::LoadConstTrue {
@@ -441,7 +441,7 @@ fn test_performance_targets() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context);
+    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create a moderately complex block with 20 instructions
     let instructions = vec![
