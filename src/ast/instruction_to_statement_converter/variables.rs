@@ -353,15 +353,18 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
     /// Store to environment (placeholder comment)
     fn create_store_to_environment(
         &mut self,
-        _env_reg: u8,
-        _index: u8,
-        _value_reg: u8,
+        env_reg: u8,
+        index: u8,
+        value_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Environment storage is a runtime concept that doesn't directly translate to JS
         // We'll return a comment for now
         let span = Span::default();
-        let comment_text = "/* STORE_TO_ENVIRONMENT */";
-        let comment_atom = self.ast_builder.allocator.alloc_str(comment_text);
+        let comment_text = format!(
+            "/* STORE_TO_ENVIRONMENT env={} index={} value={} */",
+            env_reg, index, value_reg
+        );
+        let comment_atom = self.ast_builder.allocator.alloc_str(comment_text.as_str());
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
         let stmt = self.ast_builder.statement_expression(span, comment_expr);

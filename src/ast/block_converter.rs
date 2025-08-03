@@ -741,16 +741,48 @@ impl<'a> BlockToStatementConverter<'a> {
     ) -> Result<Statement<'a>, BlockConversionError> {
         let span = oxc_span::Span::default();
 
+        let target_label = if let Some(hbc_file) = self
+            .instruction_converter
+            .get_expression_context()
+            .hbc_file()
+        {
+            if let Some(function_id) = self
+                .instruction_converter()
+                .get_expression_context()
+                .function_index()
+            {
+                let jump_op_index = self
+                    .instruction_converter()
+                    .get_expression_context()
+                    .current_pc();
+
+                if let Some(target_label) = hbc_file
+                    .jump_table
+                    .get_label_by_jump_op_index(function_id, jump_op_index)
+                {
+                    Some(target_label)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Format the jump information
         let jump_info_str = if let Some(_condition_expr) = &jump_info.condition_expression {
             format!(
-                "/* Jump: {:?} condition with expression to offset {:?} */",
-                jump_info.jump_type, jump_info.target_offset
+                "/* Jump: {:?} condition with expression to offset {} */",
+                jump_info.jump_type,
+                target_label.unwrap_or(&format!("{:?}", jump_info.target_offset))
             )
         } else {
             format!(
-                "/* Jump: {:?} to offset {:?} */",
-                jump_info.jump_type, jump_info.target_offset
+                "/* Jump: {:?} to offset {} */",
+                jump_info.jump_type,
+                target_label.unwrap_or(&format!("{:?}", jump_info.target_offset))
             )
         };
 
