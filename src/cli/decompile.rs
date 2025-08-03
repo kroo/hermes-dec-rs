@@ -6,7 +6,9 @@ use std::fs;
 /// Run the decompile subcommand
 pub fn decompile(
     input_path: &std::path::Path,
+    function_index: usize,
     output_path: Option<&std::path::Path>,
+    comments: &str,
 ) -> DecompilerResult<()> {
     // Read the input file
     let data = match fs::read(input_path) {
@@ -30,14 +32,18 @@ pub fn decompile(
     };
 
     // Create decompiler
-    let mut decompiler = Decompiler::new()?;
+    let decompiler = Decompiler::new()?;
 
-    // Decompile the file
-    let output = match decompiler.decompile(&hbc_file) {
+    // Decompile the specific function
+    let output = match decompiler.decompile_function_with_options(
+        &hbc_file,
+        function_index as u32,
+        comments,
+    ) {
         Ok(output) => output,
-        Err(_) => {
+        Err(e) => {
             return Err(DecompilerError::Internal {
-                message: "Failed to decompile HBC file".to_string(),
+                message: format!("Failed to decompile function {}: {}", function_index, e),
             });
         }
     };

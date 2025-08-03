@@ -44,6 +44,10 @@ enum Commands {
         /// Input HBC file
         input: PathBuf,
 
+        /// Function index to decompile (required for now)
+        #[arg(long)]
+        function: usize,
+
         /// Output file (defaults to stdout)
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -52,7 +56,7 @@ enum Commands {
         #[arg(short, long, default_value = "js")]
         format: String,
 
-        /// Include comments (pc, reg, none)
+        /// Include comments (pc, reg, instructions, none)
         #[arg(long, default_value = "none")]
         comments: String,
 
@@ -106,10 +110,14 @@ fn main() -> Result<()> {
             output: _,
             annotate_pc: _,
         } => cli::disasm::disasm(&input).map_err(|e| miette!("{}", e)),
-        Commands::Decompile { input, output, .. } => {
-            cli::decompile::decompile(&input, output.as_ref().map(|v| &**v))
-                .map_err(|e| miette!("{}", e))
-        }
+        Commands::Decompile {
+            input,
+            function,
+            output,
+            comments,
+            ..
+        } => cli::decompile::decompile(&input, function, output.as_ref().map(|v| &**v), &comments)
+            .map_err(|e| miette!("{}", e)),
         Commands::Generate { force: _ } => {
             cli::generate::generate_instructions().map_err(|e| miette!("{}", e))
         }

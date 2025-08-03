@@ -75,7 +75,11 @@ impl<'a> BigIntTable<'a> {
         }
     }
 
-    pub fn get(&self, index: u32) -> Result<String, String> {
+    pub fn get_string(&self, index: u32) -> Result<String, String> {
+        self.get(index).map(|value| value.to_string())
+    }
+
+    pub fn get(&self, index: u32) -> Result<num_bigint::BigUint, String> {
         let entry_offset = index * 8; // 8 bytes per entry (4 bytes offset + 4 bytes length)
         if entry_offset + 8 > self.table.len() as u32 {
             return Err(format!(
@@ -105,7 +109,7 @@ impl<'a> BigIntTable<'a> {
         let bigint_data = &self.storage[storage_offset..storage_end];
         // Decode as little-endian integer
         let value = num_bigint::BigUint::from_bytes_le(bigint_data);
-        Ok(value.to_string())
+        Ok(value)
     }
 
     pub fn extract_bigints(&self) -> Result<Vec<String>, String> {
@@ -113,7 +117,7 @@ impl<'a> BigIntTable<'a> {
 
         // Parse BigInt table entries
         for i in 0..self.count as u32 {
-            let bigint = self.get(i)?;
+            let bigint = self.get_string(i)?;
             bigints.push(bigint);
         }
 

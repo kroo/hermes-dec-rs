@@ -9,7 +9,7 @@ use crate::hbc::HbcFile;
 ///
 /// Provides access to HBC file tables and tracks the current state of
 /// expression generation, including which basic block is being processed.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExpressionContext<'a> {
     /// Current basic block being processed
     pub current_block: Option<u32>,
@@ -82,6 +82,11 @@ impl<'a> ExpressionContext<'a> {
         self.current_pc
     }
 
+    /// Set the current program counter
+    pub fn set_current_pc(&mut self, pc: u32) {
+        self.current_pc = pc;
+    }
+
     /// Get the current function index
     pub fn function_index(&self) -> Option<u32> {
         self.function_index
@@ -113,7 +118,7 @@ impl<'a> ExpressionContext<'a> {
         match self.hbc_file {
             Some(hbc_file) => {
                 // Get BigInt value from table and append 'n' suffix for JavaScript BigInt literal
-                match hbc_file.bigints.get(bigint_id) {
+                match hbc_file.bigints.get_string(bigint_id) {
                     Ok(bigint_str) => Ok(format!("{}n", bigint_str)),
                     Err(e) => Err(ExpressionContextError::BigIntTableError(e)),
                 }
@@ -128,6 +133,21 @@ impl<'a> ExpressionContext<'a> {
             Some(hbc_file) => hbc_file
                 .functions
                 .get_function_name(function_id, &hbc_file.strings)
+                .ok_or_else(|| ExpressionContextError::FunctionNotFound(function_id)),
+            None => Err(ExpressionContextError::NoHbcFile),
+        }
+    }
+
+    /// Look up a function's parameter count from the function table
+    pub fn lookup_function_param_count(
+        &self,
+        function_id: u32,
+    ) -> Result<u32, ExpressionContextError> {
+        match self.hbc_file {
+            Some(hbc_file) => hbc_file
+                .functions
+                .get_parsed_header(function_id)
+                .map(|header| header.header.param_count())
                 .ok_or_else(|| ExpressionContextError::FunctionNotFound(function_id)),
             None => Err(ExpressionContextError::NoHbcFile),
         }
@@ -159,6 +179,173 @@ impl<'a> ExpressionContext<'a> {
         self.current_pc = 0;
         // Keep hbc_file and function_index
     }
+
+    /// Look up an array literal from the serialized literal tables
+    pub fn lookup_array_literal(
+        &self,
+        array_id: u32,
+    ) -> Result<Vec<crate::hbc::serialized_literal_parser::SLPValue>, ExpressionContextError> {
+        match self.hbc_file {
+            Some(hbc_file) => {
+                let literal_tables = &hbc_file.serialized_literals;
+                if array_id as usize >= literal_tables.arrays.items.len() {
+                    return Err(ExpressionContextError::InvalidTableIndex {
+                        table_name: "arrays".to_string(),
+                        index: array_id,
+                    });
+                }
+                // For now, return a single-item array with the value at array_id
+                // TODO: This might need adjustment based on how the arrays are structured
+                Ok(vec![literal_tables.arrays.items[array_id as usize].clone()])
+            }
+            None => Err(ExpressionContextError::NoHbcFile),
+        }
+    }
+
+    /// Look up object literal keys and values from the serialized literal tables
+    pub fn lookup_object_literal(
+        &self,
+        object_id: u32,
+    ) -> Result<
+        (
+            Vec<crate::hbc::serialized_literal_parser::SLPValue>,
+            Vec<crate::hbc::serialized_literal_parser::SLPValue>,
+        ),
+        ExpressionContextError,
+    > {
+        match self.hbc_file {
+            Some(hbc_file) => {
+                let literal_tables = &hbc_file.serialized_literals;
+                if object_id as usize >= literal_tables.object_keys.items.len() {
+                    return Err(ExpressionContextError::InvalidTableIndex {
+                        table_name: "object_keys".to_string(),
+                        index: object_id,
+                    });
+                }
+                if object_id as usize >= literal_tables.object_values.items.len() {
+                    return Err(ExpressionContextError::InvalidTableIndex {
+                        table_name: "object_values".to_string(),
+                        index: object_id,
+                    });
+                }
+                // For now, return single-item arrays with the key and value at object_id
+                // TODO: This might need adjustment based on how the objects are structured
+                let keys = vec![literal_tables.object_keys.items[object_id as usize].clone()];
+                let values = vec![literal_tables.object_values.items[object_id as usize].clone()];
+                Ok((keys, values))
+            }
+            None => Err(ExpressionContextError::NoHbcFile),
+        }
+    }
+
+    /// Look up array literal values from the serialized literal tables (range-based)
+    /// Note: start_index is a BYTE OFFSET into the raw SLP buffer, not an element index
+    pub fn lookup_array_literal_range(
+        &self,
+        start_index: u32,
+        count: u32,
+    ) -> Result<Vec<crate::hbc::serialized_literal_parser::SLPValue>, ExpressionContextError> {
+        match self.hbc_file {
+            Some(hbc_file) => {
+                let literal_tables = &hbc_file.serialized_literals;
+
+                // Validate byte offset bounds
+                if start_index as usize >= literal_tables.arrays_data.len() {
+                    return Err(ExpressionContextError::InvalidTableIndex {
+                        table_name: "arrays_data (byte offset)".to_string(),
+                        index: start_index,
+                    });
+                }
+
+                // Parse SLP from the specified byte offset
+                let slice_from_offset = &literal_tables.arrays_data[start_index as usize..];
+                let parsed_array = crate::hbc::serialized_literal_parser::unpack_slp_array(
+                    slice_from_offset,
+                    Some(count as usize),
+                )
+                .map_err(|_| ExpressionContextError::SerializedLiteralTablesNotAvailable)?;
+
+                Ok(parsed_array.items)
+            }
+            None => Err(ExpressionContextError::NoHbcFile),
+        }
+    }
+
+    /// Look up object literal keys and values from the serialized literal tables (range-based)
+    pub fn lookup_object_literal_range(
+        &self,
+        key_start_index: u32,
+        value_start_index: u32,
+        count: u32,
+    ) -> Result<
+        (
+            Vec<crate::hbc::serialized_literal_parser::SLPValue>,
+            Vec<crate::hbc::serialized_literal_parser::SLPValue>,
+        ),
+        ExpressionContextError,
+    > {
+        match self.hbc_file {
+            Some(hbc_file) => {
+                let literal_tables = &hbc_file.serialized_literals;
+                let key_end_index = key_start_index + count;
+                let value_end_index = value_start_index + count;
+
+                if key_end_index as usize > literal_tables.object_keys.items.len() {
+                    return Err(ExpressionContextError::InvalidTableIndex {
+                        table_name: "object_keys".to_string(),
+                        index: key_end_index - 1,
+                    });
+                }
+
+                if value_end_index as usize > literal_tables.object_values.items.len() {
+                    return Err(ExpressionContextError::InvalidTableIndex {
+                        table_name: "object_values".to_string(),
+                        index: value_end_index - 1,
+                    });
+                }
+
+                // Read consecutive entries from both key and value buffers
+                let mut keys = Vec::new();
+                let mut values = Vec::new();
+
+                for i in 0..count {
+                    keys.push(
+                        literal_tables.object_keys.items[(key_start_index + i) as usize].clone(),
+                    );
+                    values.push(
+                        literal_tables.object_values.items[(value_start_index + i) as usize]
+                            .clone(),
+                    );
+                }
+
+                Ok((keys, values))
+            }
+            None => Err(ExpressionContextError::NoHbcFile),
+        }
+    }
+
+    /// Look up a regular expression pattern and flags from the regexp table
+    pub fn lookup_regexp(
+        &self,
+        regexp_id: u32,
+    ) -> Result<(String, String), ExpressionContextError> {
+        match self.hbc_file {
+            Some(hbc_file) => {
+                if let Some(decompiled_regexp) = hbc_file.regexps.get(regexp_id) {
+                    Ok((
+                        decompiled_regexp.pattern.clone(),
+                        decompiled_regexp.flags.clone(),
+                    ))
+                } else {
+                    Err(ExpressionContextError::InvalidTableIndex {
+                        table_name: "regexp".to_string(),
+                        index: regexp_id,
+                    })
+                }
+            }
+            None => Err(ExpressionContextError::NoHbcFile),
+        }
+    }
 }
 
 impl<'a> Default for ExpressionContext<'a> {
@@ -180,6 +367,8 @@ pub enum ExpressionContextError {
     FunctionNotFound(u32),
     #[error("Invalid table index {index} for table {table_name}")]
     InvalidTableIndex { table_name: String, index: u32 },
+    #[error("Serialized literal tables not available in HBC file")]
+    SerializedLiteralTablesNotAvailable,
 }
 
 #[cfg(test)]
