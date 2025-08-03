@@ -1,8 +1,9 @@
 //! Register management and variable naming system
 //!
-//! This module handles the mapping of Hermes virtual registers to JavaScript variable names,
-//! including lifetime analysis and optimization for register usage patterns.
+//! This module provides a pure lookup service for variable names during AST generation.
+//! All naming logic has been moved to the VariableMapper for clean separation of concerns.
 
+use crate::ast::variable_mapper::VariableMapping;
 use std::collections::HashMap;
 
 /// Register lifetime information for optimization
@@ -14,170 +15,95 @@ pub struct RegisterLifetime {
     pub is_local: bool,
 }
 
-/// Manages virtual register mapping to JavaScript variables
+/// Pure lookup service for variable names during AST generation
 ///
-/// TODO (AST-03): Current SSA-like implementation has limitations with control flow
-///
-/// CURRENT LIMITATIONS:
-/// The current implementation uses naive SSA-like naming (var0_1, var0_2, etc.) that works
-/// well for straight-line code but has issues with complex control flow:
-///
-/// 1. **Phi Functions Missing**: When control flow merges (e.g., after if/else), we need
-///    phi functions to handle cases where different versions of a register are available
-///    from different predecessors:
-///    ```js
-///    if (condition) {
-///        let var0_1 = "branch1";
-///    } else {
-///        let var0_2 = "branch2";
-///    }
-///    // Here we need: let var0_3 = φ(var0_1, var0_2)
-///    console.log(var0_3); // Which version to use?
-///    ```
-///
-/// 2. **Cross-block Variable Resolution**: Variables defined in one block may be used in
-///    multiple successor blocks, but our current per-block processing doesn't track this.
-///
-/// 3. **Loop Variable Handling**: Loop-carried dependencies need special handling:
-///    ```js
-///    let var0_1 = initial;
-///    while (condition) {
-///        let var0_2 = φ(var0_1, var0_3); // Loop entry phi
-///        let var0_3 = transform(var0_2);  // Loop body update
-///    }
-///    ```
-///
-/// PROPER SOLUTION (AST-03):
-/// To fix this correctly, we need:
-///
-/// 1. **Dominance Analysis**: Identify which blocks dominate others to determine where
-///    variables are live and visible.
-///
-/// 2. **Live Variable Analysis**: Track which registers are live at each program point
-///    and across block boundaries.
-///
-/// 3. **Phi Function Insertion**: Insert phi functions at merge points where multiple
-///    definitions of the same register are available from different predecessors.
-///
-/// 4. **Variable Renaming with CFG Context**: Instead of naive sequential naming,
-///    use CFG-aware renaming that ensures variables are accessible where needed.
-///
-/// 5. **Structured Control Flow Recovery**: Convert low-level CFG with phi functions
-///    back to high-level constructs (if/else, loops) where possible to avoid explicit
-///    phi functions in the final output.
-///
-/// IMPLEMENTATION STRATEGY:
-/// - Phase 1: Build complete CFG with dominance information
-/// - Phase 2: Insert phi functions at join points
-/// - Phase 3: Rename variables with SSA construction algorithm
-/// - Phase 4: Recover structured control flow (if/while/for)
-/// - Phase 5: Emit JavaScript with proper variable scoping
-///
-/// For now, the current implementation works well for function-level code with simple
-/// control flow, but will need this upgrade for complex control structures.
+/// This is now a clean, simple lookup service that uses pre-computed variable mappings
+/// from the VariableMapper. It has no naming logic of its own.
 pub struct RegisterManager {
-    /// Map Hermes register numbers to JavaScript variable names
-    register_to_var: HashMap<u8, String>,
-    /// Track register lifetime for optimization
+    /// Pre-computed variable mapping from VariableMapper
+    variable_mapping: Option<VariableMapping>,
+    /// Current program counter for lookup
+    current_pc: Option<u32>,
+    /// Track register lifetime for optimization/statistics
     register_lifetimes: HashMap<u8, RegisterLifetime>,
-    /// Generate unique temporary variable names
-    temp_counter: u32,
-    /// Track global variable names by string table index
-    global_variables: HashMap<usize, String>,
-    /// Track current version of each register for SSA-like naming
-    /// TODO (AST-03): Replace with proper SSA construction with phi functions
-    register_versions: HashMap<u8, u32>,
-    /// Track the current variable name for each register at current PC
-    /// TODO (AST-03): Replace with CFG-aware variable resolution
-    current_register_vars: HashMap<u8, String>,
 }
 
 impl RegisterManager {
     pub fn new() -> Self {
         Self {
-            register_to_var: HashMap::new(),
+            variable_mapping: None,
+            current_pc: None,
             register_lifetimes: HashMap::new(),
-            temp_counter: 0,
-            global_variables: HashMap::new(),
-            register_versions: HashMap::new(),
-            current_register_vars: HashMap::new(),
         }
     }
 
+    /// Set the pre-computed variable mapping (from VariableMapper)
+    pub fn set_variable_mapping(&mut self, mapping: VariableMapping) {
+        self.variable_mapping = Some(mapping);
+    }
+
+    /// Update the current program counter for variable lookup
+    pub fn set_current_pc(&mut self, pc: u32) {
+        self.current_pc = Some(pc);
+    }
+
     /// Get the current variable name for a register (for reading)
+    /// Pure lookup - no naming logic
     pub fn get_variable_name(&mut self, register: u8) -> String {
-        if let Some(name) = self.current_register_vars.get(&register) {
-            name.clone()
-        } else {
-            // First use of this register, create initial version (version 0)
-            let name = self.generate_variable_name(register, 0);
-            self.current_register_vars.insert(register, name.clone());
-            // Initialize the version counter to 0 for this register
-            self.register_versions.insert(register, 0);
-            name
+        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            if let Some(var_name) = mapping.get_variable_name_with_fallback(register, pc) {
+                return var_name.clone();
+            }
         }
+        // Fallback to simple naming for backward compatibility
+        format!("var{}", register)
     }
 
     /// Get the current variable name for a register if it exists (for reading)
     /// Returns None if the register has never been assigned to
     pub fn try_get_variable_name(&self, register: u8) -> Option<String> {
-        self.current_register_vars.get(&register).cloned()
+        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            if let Some(var_name) = mapping.get_variable_name_with_fallback(register, pc) {
+                return Some(var_name.clone());
+            }
+        }
+        None
     }
 
     /// Get a variable name for reading, with fallback if not defined
     pub fn get_variable_name_for_read(&mut self, register: u8) -> String {
-        if let Some(name) = self.current_register_vars.get(&register) {
-            name.clone()
-        } else {
-            // For undefined registers used in expressions, create a placeholder that indicates this is an error
-            // This helps identify when we're using undefined registers in function arguments
-            format!("/* undefined var{} */", register)
+        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            if let Some(var_name) = mapping.get_variable_name_with_fallback(register, pc) {
+                return var_name.clone();
+            }
         }
+        // For undefined registers used in expressions, create a placeholder
+        format!("/* undefined var{} */", register)
     }
 
     /// Create a new variable name when a register is written to (for definitions)
+    /// Pure lookup - the name is already pre-computed by VariableMapper
     pub fn create_new_variable_for_register(&mut self, register: u8) -> String {
-        // Increment the version for this register
-        let version = *self.register_versions.entry(register).or_insert(0) + 1;
-        self.register_versions.insert(register, version);
-
-        // Generate new variable name with version
-        let name = self.generate_variable_name(register, version);
-
-        // Update current variable for this register
-        self.current_register_vars.insert(register, name.clone());
-
-        name
-    }
-
-    /// Generate a new variable name for a register with version
-    fn generate_variable_name(&mut self, register: u8, version: u32) -> String {
-        // Check if this is a parameter register (typically 0-n)
-        if let Some(lifetime) = self.register_lifetimes.get(&register) {
-            if lifetime.is_parameter {
-                if version == 0 {
-                    return format!("param{}", register);
-                } else {
-                    return format!("param{}_{}", register, version);
-                }
+        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            if let Some(var_name) = mapping.get_variable_name_with_fallback(register, pc) {
+                return var_name.clone();
             }
         }
-
-        // Use SSA-like naming: var0_0, var0_1, var0_2, etc.
-        if version == 0 {
-            format!("var{}", register)
-        } else {
-            format!("var{}_{}", register, version)
-        }
+        // Fallback to simple naming for backward compatibility
+        format!("var{}", register)
     }
 
     /// Generate a unique temporary variable name
     pub fn generate_temp_var(&mut self) -> String {
-        self.temp_counter += 1;
-        format!("_temp{}", self.temp_counter)
+        if let Some(mapping) = &mut self.variable_mapping {
+            mapping.generate_temp_name()
+        } else {
+            // Fallback if no mapping available
+            "_temp".to_string()
+        }
     }
 
-    /// Set register as parameter
+    /// Set register as parameter (for lifetime tracking)
     pub fn mark_as_parameter(&mut self, register: u8, first_use: u32) {
         self.register_lifetimes.insert(
             register,
@@ -248,44 +174,57 @@ impl RegisterManager {
 
     /// Register a global variable by string table index and name
     pub fn register_global_variable(&mut self, string_index: usize, var_name: String) {
-        self.global_variables.insert(string_index, var_name);
+        if let Some(mapping) = &mut self.variable_mapping {
+            mapping.register_global_variable(string_index, var_name);
+        }
     }
 
     /// Get a global variable name by string table index
-    pub fn get_global_variable(&self, string_index: usize) -> Option<&String> {
-        self.global_variables.get(&string_index)
+    pub fn get_global_variable(&self, string_index: usize) -> Option<String> {
+        if let Some(mapping) = &self.variable_mapping {
+            mapping.get_global_variable(string_index).cloned()
+        } else {
+            None
+        }
     }
 
     /// Check if a string table index represents a known global variable
     pub fn is_global_variable(&self, string_index: usize) -> bool {
-        self.global_variables.contains_key(&string_index)
+        if let Some(mapping) = &self.variable_mapping {
+            mapping.is_global_variable(string_index)
+        } else {
+            false
+        }
     }
 
     /// Get all global variables
-    pub fn get_all_globals(&self) -> &HashMap<usize, String> {
-        &self.global_variables
+    pub fn get_all_globals(&self) -> HashMap<usize, String> {
+        if let Some(mapping) = &self.variable_mapping {
+            mapping.global_variables.clone()
+        } else {
+            HashMap::new()
+        }
     }
 
     /// Set a custom variable name for a register (for special cases like environments)
     pub fn set_variable_name(&mut self, register: u8, name: String) {
-        self.register_to_var.insert(register, name);
+        if let Some(mapping) = &mut self.variable_mapping {
+            mapping.set_fallback_variable_name(register, name);
+        }
     }
 
     /// Clear all register mappings (useful for function boundaries)
     /// Note: Global variables are preserved across function boundaries
     pub fn reset(&mut self) {
-        self.register_to_var.clear();
         self.register_lifetimes.clear();
-        self.temp_counter = 0;
-        // Note: We keep global_variables as they persist across functions
+        // Note: We keep variable_mapping as it's function-scoped
     }
 
-    /// Reset everything including global variables (for complete cleanup)
+    /// Reset everything including variable mapping (for complete cleanup)
     pub fn reset_all(&mut self) {
-        self.register_to_var.clear();
         self.register_lifetimes.clear();
-        self.temp_counter = 0;
-        self.global_variables.clear();
+        self.variable_mapping = None;
+        self.current_pc = None;
     }
 
     /// Get statistics about register usage
@@ -313,8 +252,16 @@ impl RegisterManager {
             local_count,
             temporary_count: total_registers - parameter_count - local_count,
             single_use_count,
-            temp_var_count: self.temp_counter as usize,
-            global_var_count: self.global_variables.len(),
+            temp_var_count: if let Some(mapping) = &self.variable_mapping {
+                mapping.temp_counter as usize
+            } else {
+                0
+            },
+            global_var_count: if let Some(mapping) = &self.variable_mapping {
+                mapping.global_variables.len()
+            } else {
+                0
+            },
         }
     }
 }
@@ -343,37 +290,21 @@ mod tests {
 
     #[test]
     fn test_register_manager_basic_functionality() {
-        let mut rm = RegisterManager::new();
+        let rm = RegisterManager::new();
 
-        // Test variable name generation
-        let var1 = rm.get_variable_name(0);
-        let var2 = rm.get_variable_name(1);
-        assert_eq!(var1, "var0");
-        assert_eq!(var2, "var1");
-
-        // Test consistent naming
-        let var1_again = rm.get_variable_name(0);
-        assert_eq!(var1, var1_again);
+        // Without variable mapping, should return None
+        assert_eq!(rm.try_get_variable_name(0), None);
     }
 
     #[test]
-    fn test_parameter_naming() {
+    fn test_parameter_marking() {
         let mut rm = RegisterManager::new();
 
         // Mark register as parameter
         rm.mark_as_parameter(0, 0);
-        let param_name = rm.get_variable_name(0);
-        assert_eq!(param_name, "param0");
-    }
-
-    #[test]
-    fn test_temp_variable_generation() {
-        let mut rm = RegisterManager::new();
-
-        let temp1 = rm.generate_temp_var();
-        let temp2 = rm.generate_temp_var();
-        assert_eq!(temp1, "_temp1");
-        assert_eq!(temp2, "_temp2");
+        let lifetime = rm.get_lifetime(0).unwrap();
+        assert!(lifetime.is_parameter);
+        assert_eq!(lifetime.first_use, 0);
     }
 
     #[test]
@@ -415,14 +346,13 @@ mod tests {
         rm.mark_as_local(2, 5);
         rm.track_usage(3, 10); // temporary
         rm.track_usage(4, 15); // single use
-        let _temp = rm.generate_temp_var();
 
         let stats = rm.get_stats();
         assert_eq!(stats.parameter_count, 2);
         assert_eq!(stats.local_count, 1);
         assert_eq!(stats.temporary_count, 2); // registers 3 and 4
-        assert_eq!(stats.single_use_count, 5); // registers 0, 1, 2, 3, and 4 (all have first_use == last_use)
-        assert_eq!(stats.temp_var_count, 1);
+        assert_eq!(stats.single_use_count, 5); // all have first_use == last_use
+        assert_eq!(stats.temp_var_count, 0); // no variable mapping set
         assert_eq!(stats.global_var_count, 0);
     }
 
@@ -431,7 +361,6 @@ mod tests {
         let mut rm = RegisterManager::new();
 
         rm.mark_as_parameter(0, 0);
-        rm.generate_temp_var();
         rm.track_usage(1, 5);
 
         assert!(!rm.tracked_registers().collect::<Vec<_>>().is_empty());
@@ -439,40 +368,5 @@ mod tests {
         rm.reset();
 
         assert!(rm.tracked_registers().collect::<Vec<_>>().is_empty());
-        let new_temp = rm.generate_temp_var();
-        assert_eq!(new_temp, "_temp1"); // Counter reset
-    }
-
-    #[test]
-    fn test_global_variable_tracking() {
-        let mut rm = RegisterManager::new();
-
-        // Register global variables
-        rm.register_global_variable(5, "testVar".to_string());
-        rm.register_global_variable(10, "anotherGlobal".to_string());
-
-        // Test retrieval
-        assert_eq!(rm.get_global_variable(5), Some(&"testVar".to_string()));
-        assert_eq!(
-            rm.get_global_variable(10),
-            Some(&"anotherGlobal".to_string())
-        );
-        assert_eq!(rm.get_global_variable(15), None);
-
-        // Test is_global_variable
-        assert!(rm.is_global_variable(5));
-        assert!(rm.is_global_variable(10));
-        assert!(!rm.is_global_variable(15));
-
-        // Test stats include globals
-        let stats = rm.get_stats();
-        assert_eq!(stats.global_var_count, 2);
-
-        // Test that reset preserves globals but reset_all clears them
-        rm.reset();
-        assert_eq!(rm.global_variables.len(), 2);
-
-        rm.reset_all();
-        assert_eq!(rm.global_variables.len(), 0);
     }
 }
