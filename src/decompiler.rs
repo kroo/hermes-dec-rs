@@ -69,11 +69,27 @@ impl Decompiler {
         // Determine if instruction comments should be included
         let include_instruction_comments = comments == "instructions";
 
-        // Create block-to-statement converter
-        let mut converter = BlockToStatementConverter::new(
+        // Always run SSA analysis for correct variable naming
+        let ssa_analysis = match crate::cfg::ssa::construct_ssa(&cfg, function_index) {
+            Ok(analysis) => analysis,
+            Err(e) => {
+                return Err(DecompilerError::Internal {
+                    message: format!("SSA analysis failed: {}", e),
+                });
+            }
+        };
+
+        // Determine if SSA comments should be included
+        let include_ssa_comments = comments == "ssa";
+
+        // Create block-to-statement converter with SSA analysis
+        let mut converter = BlockToStatementConverter::with_ssa_analysis(
             &ast_builder,
             expression_context,
             include_instruction_comments,
+            include_ssa_comments,
+            ssa_analysis,
+            &cfg,
         );
 
         // Process all blocks in the CFG with proper ordering and labeling

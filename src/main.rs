@@ -56,7 +56,7 @@ enum Commands {
         #[arg(short, long, default_value = "js")]
         format: String,
 
-        /// Include comments (pc, reg, instructions, none)
+        /// Include comments (pc, reg, instructions, ssa, none)
         #[arg(long, default_value = "none")]
         comments: String,
 

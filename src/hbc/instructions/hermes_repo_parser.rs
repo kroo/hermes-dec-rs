@@ -118,6 +118,16 @@ impl OperandType {
         }
     }
 
+    /// Returns true if this operand type represents a register
+    pub fn is_register(&self) -> bool {
+        matches!(self, OperandType::Reg8 | OperandType::Reg32)
+    }
+
+    /// Returns true if this operand type represents an address (jump target)
+    pub fn is_address(&self) -> bool {
+        matches!(self, OperandType::Addr8 | OperandType::Addr32)
+    }
+
     pub fn from_str_and_prev_type(
         target_type: &str,
         prev_type: OperandType,
