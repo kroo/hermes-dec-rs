@@ -107,6 +107,7 @@ impl<'a> InstructionToStatementConverter<'a> {
     /// Set the current program counter for context-aware operations
     pub fn set_current_pc(&mut self, pc: u32) {
         self.expression_context.set_current_pc(pc);
+        self.register_manager.set_current_pc(pc);
     }
 
     /// Get mutable reference to register manager
