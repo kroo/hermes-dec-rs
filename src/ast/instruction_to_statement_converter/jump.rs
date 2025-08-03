@@ -4,7 +4,10 @@
 //! Jump instructions don't generate statements but provide condition information
 //! for the block converter to use in control flow analysis.
 
-use super::{InstructionResult, InstructionToStatementConverter, JumpCondition, JumpType, StatementConversionError};
+use super::{
+    InstructionResult, InstructionToStatementConverter, JumpCondition, JumpType,
+    StatementConversionError,
+};
 use oxc_span::Span;
 
 /// Trait providing jump condition builder methods
@@ -70,18 +73,18 @@ impl<'a> JumpHelpers<'a> for InstructionToStatementConverter<'a> {
             "NotEqual" => oxc_ast::ast::BinaryOperator::Inequality,
             "StrictEqual" => oxc_ast::ast::BinaryOperator::StrictEquality,
             "StrictNotEqual" => oxc_ast::ast::BinaryOperator::StrictInequality,
-            _ => return Err(StatementConversionError::UnsupportedInstruction(
-                format!("Unknown comparison operator: {}", comparison_op)
-            )),
+            _ => {
+                return Err(StatementConversionError::UnsupportedInstruction(format!(
+                    "Unknown comparison operator: {}",
+                    comparison_op
+                )))
+            }
         };
 
         // Create binary expression
-        let condition_expr = self.ast_builder.expression_binary(
-            span,
-            left_expr,
-            binary_op,
-            right_expr,
-        );
+        let condition_expr = self
+            .ast_builder
+            .expression_binary(span, left_expr, binary_op, right_expr);
 
         Ok(InstructionResult::JumpCondition(JumpCondition {
             condition_expression: Some(condition_expr),

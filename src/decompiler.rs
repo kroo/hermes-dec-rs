@@ -62,16 +62,20 @@ impl Decompiler {
         // Create allocator and AST builder
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
-        
+
         // Create expression context with HBC file access
         let expression_context = ExpressionContext::with_context(hbc_file, function_index, 0);
-        
+
         // Determine if instruction comments should be included
         let include_instruction_comments = comments == "instructions";
-        
+
         // Create block-to-statement converter
-        let mut converter = BlockToStatementConverter::new(&ast_builder, expression_context, include_instruction_comments);
-        
+        let mut converter = BlockToStatementConverter::new(
+            &ast_builder,
+            expression_context,
+            include_instruction_comments,
+        );
+
         // Process all blocks in the CFG with proper ordering and labeling
         let all_statements = match converter.convert_blocks_from_cfg(&cfg) {
             Ok(statements) => statements,
@@ -81,32 +85,36 @@ impl Decompiler {
                 });
             }
         };
-        
+
         // For now, just generate code for the statements directly
         // We'll wrap them in a function declaration as text
         let function_name = format!("function_{}", function_index);
-        
+
         // Create a temporary program with just the statements
         let program = ast_builder.program(
             oxc_span::Span::default(),
             oxc_ast::ast::SourceType::default(),
-            "", // source text  
+            "",                                     // source text
             oxc_allocator::Vec::new_in(&allocator), // directives
-            None, // hashbang
+            None,                                   // hashbang
             oxc_allocator::Vec::new_in(&allocator), // body
-            all_statements, // statements
+            all_statements,                         // statements
         );
-        
+
         // Generate JavaScript code using oxc_codegen
         let codegen = Codegen::new();
         let result = codegen.build(&program);
-        
+
         // Post-process the generated code to convert void expressions to comments
         let processed_code = self.convert_void_expressions_to_comments(&result.code);
-        
+
         // Wrap the processed code in a function declaration
-        let code = format!("function {}() {{\n{}\n}}", function_name, processed_code.trim());
-        
+        let code = format!(
+            "function {}() {{\n{}\n}}",
+            function_name,
+            processed_code.trim()
+        );
+
         Ok(code)
     }
 
@@ -120,17 +128,17 @@ impl Decompiler {
     /// Looks for patterns like `void "/* comment */";` and converts them to `/* comment */`
     fn convert_void_expressions_to_comments(&self, code: &str) -> String {
         use regex::Regex;
-        
+
         // Pattern to match void expressions with string literals containing comment markers
         let void_comment_regex = Regex::new(r#"void\s+"(/\*[^"]*\*/)"\s*;"#).unwrap();
-        
+
         // Replace void expressions with actual comments
         let processed = void_comment_regex.replace_all(code, |caps: &regex::Captures| {
             // Extract the comment content from the captured group
             let comment = &caps[1];
             format!("{}", comment)
         });
-        
+
         processed.to_string()
     }
 

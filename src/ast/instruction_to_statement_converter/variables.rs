@@ -40,7 +40,6 @@ pub trait VariableHelpers<'a> {
         conversion_type: &str,
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
 
-
     /// Create global object access: `let var0_1 = globalThis;`
     fn create_get_global_object(
         &mut self,
@@ -67,7 +66,7 @@ pub trait VariableHelpers<'a> {
         value_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
 
-    /// Create inner environment: `let var0_1 = createInnerEnv(env, size);` 
+    /// Create inner environment: `let var0_1 = createInnerEnv(env, size);`
     fn create_inner_environment(
         &mut self,
         dest_reg: u8,
@@ -138,9 +137,11 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         let src_atom = self.ast_builder.allocator.alloc_str(&src_var);
         let src_expr = self.ast_builder.expression_identifier(span, src_atom);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(src_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(src_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -177,15 +178,13 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         let comment_atom = self.ast_builder.allocator.alloc_str(&comment_text);
         let _comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-        let stmt = self
-            .create_variable_declaration(
-                &dest_var,
-                Some(oxc_ast::ast::Expression::ComputedMemberExpression(
-                    member_expr,
-                )),
-                VariableDeclarationKind::Let,
-            )
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(oxc_ast::ast::Expression::ComputedMemberExpression(
+                member_expr,
+            )),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -262,13 +261,14 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
-
 
     /// Create global object access: `let var0_1 = globalThis;`
     fn create_get_global_object(
@@ -285,9 +285,11 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
         let global_expr = self.ast_builder.expression_identifier(span, global_atom);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(global_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(global_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -366,7 +368,7 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         Ok(InstructionResult::Statement(stmt))
     }
 
-    /// Create inner environment: `let var0_1 = createInnerEnv(env, size);` 
+    /// Create inner environment: `let var0_1 = createInnerEnv(env, size);`
     fn create_inner_environment(
         &mut self,
         dest_reg: u8,
@@ -407,9 +409,11 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -449,9 +453,11 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -476,10 +482,10 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let method_atom = self.ast_builder.allocator.alloc_str("getVar");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span, env_expr, method_name, false
-        );
+
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, env_expr, method_name, false);
 
         // Create index argument
         let index_expr = self.ast_builder.expression_numeric_literal(
@@ -500,9 +506,11 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -527,10 +535,10 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let method_atom = self.ast_builder.allocator.alloc_str("getVar");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span, env_expr, method_name, false
-        );
+
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, env_expr, method_name, false);
 
         // Create index argument
         let index_expr = self.ast_builder.expression_numeric_literal(
@@ -551,9 +559,11 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -576,10 +586,10 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let method_atom = self.ast_builder.allocator.alloc_str("setVar");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span, env_expr, method_name, false
-        );
+
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, env_expr, method_name, false);
 
         // Create arguments: index and value
         let index_expr = self.ast_builder.expression_numeric_literal(
@@ -626,10 +636,10 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let method_atom = self.ast_builder.allocator.alloc_str("setVarNP");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span, env_expr, method_name, false
-        );
+
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, env_expr, method_name, false);
 
         // Create arguments: index and value
         let index_expr = self.ast_builder.expression_numeric_literal(
@@ -676,10 +686,10 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let method_atom = self.ast_builder.allocator.alloc_str("setVarNP");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span, env_expr, method_name, false
-        );
+
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, env_expr, method_name, false);
 
         // Create arguments: index and value
         let index_expr = self.ast_builder.expression_numeric_literal(

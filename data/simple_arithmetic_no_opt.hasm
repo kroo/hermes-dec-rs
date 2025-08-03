@@ -1,0 +1,100 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 8d56cd481f079348610d15b626608f24738c749b
+  Function count: 2
+  String count: 2
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..5]: global
+i1[ASCII, 6..9] #1100B6AC: test
+
+Function<global>0(1 params, 3 registers, 0 symbols):
+Offset in debug table: source 0x0000, scope 0x0000, textified callees 0x0000
+; hbc_testcases/simple_arithmetic.js:1:1
+    DeclareGlobalVar  "test"
+; hbc_testcases/simple_arithmetic.js:1:1
+    CreateEnvironment r1
+; hbc_testcases/simple_arithmetic.js:1:1
+    CreateClosure     r1, r1, Function<test>1
+; hbc_testcases/simple_arithmetic.js:1:1
+    GetGlobalObject   r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    PutById           r2, r1, 1, "test"
+; hbc_testcases/simple_arithmetic.js:1:1
+    LoadConstUndefined r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    Mov               r1, r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    Ret               r1
+
+Function<test>1(1 params, 4 registers, 3 symbols):
+Offset in debug table: source 0x000d, scope 0x0000, textified callees 0x0000
+; hbc_testcases/simple_arithmetic.js:1:1
+    CreateEnvironment r1
+; hbc_testcases/simple_arithmetic.js:1:1
+    LoadConstUndefined r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    StoreNPToEnvironment r1, 0, r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    LoadConstUndefined r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    StoreNPToEnvironment r1, 1, r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    LoadConstUndefined r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    StoreNPToEnvironment r1, 2, r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    LoadConstUInt8    r2, 42
+; hbc_testcases/simple_arithmetic.js:1:1
+    StoreNPToEnvironment r1, 0, r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    LoadConstUInt8    r2, 10
+; hbc_testcases/simple_arithmetic.js:1:1
+    StoreNPToEnvironment r1, 1, r2
+; hbc_testcases/simple_arithmetic.js:1:1
+    LoadFromEnvironment r2, r1, 0
+; hbc_testcases/simple_arithmetic.js:1:1
+    LoadFromEnvironment r3, r1, 1
+; hbc_testcases/simple_arithmetic.js:4:13
+    Add               r2, r2, r3
+; hbc_testcases/simple_arithmetic.js:4:13
+    StoreToEnvironment r1, 2, r2
+; hbc_testcases/simple_arithmetic.js:4:13
+    LoadFromEnvironment r1, r1, 2
+; hbc_testcases/simple_arithmetic.js:4:13
+    Ret               r1
+
+Debug filename table:
+  0: hbc_testcases/simple_arithmetic.js
+
+Debug file table:
+  source table offset 0x0000: filename id 0
+
+Debug source table:
+  0x0000  function idx 0, starts at line 1 col 1
+    bc 14: line 1 col 1 scope offset 0x0000 env none
+  0x000d  function idx 1, starts at line 1 col 1
+    bc 42: line 4 col 13 scope offset 0x0000 env none
+  0x001a  end of debug source table
+
+Debug scope descriptor table:
+  0x0000  lexical parent:   none, flags:    , variable count: 0
+  0x0003  end of debug scope descriptor table
+
+Textified callees table:
+  0x0000  entries: 0
+  0x0001  end of textified callees table
+
+Debug string table:
+  0x0000  end of debug string table
+

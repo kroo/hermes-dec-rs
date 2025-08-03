@@ -35,7 +35,11 @@ pub fn decompile(
     let decompiler = Decompiler::new()?;
 
     // Decompile the specific function
-    let output = match decompiler.decompile_function_with_options(&hbc_file, function_index as u32, comments) {
+    let output = match decompiler.decompile_function_with_options(
+        &hbc_file,
+        function_index as u32,
+        comments,
+    ) {
         Ok(output) => output,
         Err(e) => {
             return Err(DecompilerError::Internal {

@@ -17,10 +17,10 @@ fn create_object_property<'a>(
     expression_context: &ExpressionContext,
 ) -> Result<oxc_allocator::Box<'a, oxc_ast::ast::ObjectProperty<'a>>, StatementConversionError> {
     let span = Span::default();
-    
+
     // Convert the value to an expression
     let value_expr = slp_value_to_expression(value, ast_builder, expression_context)?;
-    
+
     // Handle the key - try to create an identifier if it's a string, otherwise use computed property
     let property_key = match key {
         SLPValue::LongString(string_id) => {
@@ -34,7 +34,8 @@ fn create_object_property<'a>(
                         oxc_ast::ast::PropertyKey::StaticIdentifier(ast_builder.alloc(identifier))
                     } else {
                         // Use computed property for non-identifier strings
-                        let key_expr = slp_value_to_expression(key, ast_builder, expression_context)?;
+                        let key_expr =
+                            slp_value_to_expression(key, ast_builder, expression_context)?;
                         oxc_ast::ast::PropertyKey::from(key_expr)
                     }
                 }
@@ -54,7 +55,8 @@ fn create_object_property<'a>(
                         let identifier = ast_builder.identifier_name(span, key_atom);
                         oxc_ast::ast::PropertyKey::StaticIdentifier(ast_builder.alloc(identifier))
                     } else {
-                        let key_expr = slp_value_to_expression(key, ast_builder, expression_context)?;
+                        let key_expr =
+                            slp_value_to_expression(key, ast_builder, expression_context)?;
                         oxc_ast::ast::PropertyKey::from(key_expr)
                     }
                 }
@@ -73,7 +75,8 @@ fn create_object_property<'a>(
                         let identifier = ast_builder.identifier_name(span, key_atom);
                         oxc_ast::ast::PropertyKey::StaticIdentifier(ast_builder.alloc(identifier))
                     } else {
-                        let key_expr = slp_value_to_expression(key, ast_builder, expression_context)?;
+                        let key_expr =
+                            slp_value_to_expression(key, ast_builder, expression_context)?;
                         oxc_ast::ast::PropertyKey::from(key_expr)
                     }
                 }
@@ -89,7 +92,7 @@ fn create_object_property<'a>(
             oxc_ast::ast::PropertyKey::from(key_expr)
         }
     };
-    
+
     // Create the object property
     let property = ast_builder.object_property(
         span,
@@ -100,7 +103,7 @@ fn create_object_property<'a>(
         false, // shorthand
         false, // method
     );
-    
+
     Ok(ast_builder.alloc(property))
 }
 
@@ -109,29 +112,63 @@ fn is_valid_identifier(s: &str) -> bool {
     if s.is_empty() {
         return false;
     }
-    
+
     // Check first character
     let mut chars = s.chars();
     let first = chars.next().unwrap();
     if !first.is_ascii_alphabetic() && first != '_' && first != '$' {
         return false;
     }
-    
+
     // Check remaining characters
     for c in chars {
         if !c.is_ascii_alphanumeric() && c != '_' && c != '$' {
             return false;
         }
     }
-    
+
     // Check if it's a reserved keyword (simplified check)
-    matches!(s, 
-        "break" | "case" | "catch" | "class" | "const" | "continue" | "debugger" |
-        "default" | "delete" | "do" | "else" | "export" | "extends" | "false" |
-        "finally" | "for" | "function" | "if" | "import" | "in" | "instanceof" |
-        "new" | "null" | "return" | "super" | "switch" | "this" | "throw" |
-        "true" | "try" | "typeof" | "var" | "void" | "while" | "with" | "yield"
-    ).then(|| false).unwrap_or(true)
+    matches!(
+        s,
+        "break"
+            | "case"
+            | "catch"
+            | "class"
+            | "const"
+            | "continue"
+            | "debugger"
+            | "default"
+            | "delete"
+            | "do"
+            | "else"
+            | "export"
+            | "extends"
+            | "false"
+            | "finally"
+            | "for"
+            | "function"
+            | "if"
+            | "import"
+            | "in"
+            | "instanceof"
+            | "new"
+            | "null"
+            | "return"
+            | "super"
+            | "switch"
+            | "this"
+            | "throw"
+            | "true"
+            | "try"
+            | "typeof"
+            | "var"
+            | "void"
+            | "while"
+            | "with"
+            | "yield"
+    )
+    .then(|| false)
+    .unwrap_or(true)
 }
 
 /// Convert an SLPValue to an AST expression
@@ -141,34 +178,26 @@ fn slp_value_to_expression<'a>(
     expression_context: &ExpressionContext,
 ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
     let span = Span::default();
-    
+
     match value {
         SLPValue::Null => {
             let null_atom = ast_builder.allocator.alloc_str("null");
             Ok(ast_builder.expression_identifier(span, null_atom))
         }
-        SLPValue::True => {
-            Ok(ast_builder.expression_boolean_literal(span, true))
-        }
-        SLPValue::False => {
-            Ok(ast_builder.expression_boolean_literal(span, false))
-        }
-        SLPValue::Number(n) => {
-            Ok(ast_builder.expression_numeric_literal(
-                span,
-                *n,
-                None,
-                oxc_syntax::number::NumberBase::Decimal,
-            ))
-        }
-        SLPValue::Integer(i) => {
-            Ok(ast_builder.expression_numeric_literal(
-                span,
-                *i as f64,
-                None,
-                oxc_syntax::number::NumberBase::Decimal,
-            ))
-        }
+        SLPValue::True => Ok(ast_builder.expression_boolean_literal(span, true)),
+        SLPValue::False => Ok(ast_builder.expression_boolean_literal(span, false)),
+        SLPValue::Number(n) => Ok(ast_builder.expression_numeric_literal(
+            span,
+            *n,
+            None,
+            oxc_syntax::number::NumberBase::Decimal,
+        )),
+        SLPValue::Integer(i) => Ok(ast_builder.expression_numeric_literal(
+            span,
+            *i as f64,
+            None,
+            oxc_syntax::number::NumberBase::Decimal,
+        )),
         SLPValue::LongString(string_id) => {
             // Look up the string from the string table
             match expression_context.lookup_string(*string_id) {
@@ -533,15 +562,13 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             self.ast_builder
                 .alloc_static_member_expression(span, obj_expr, property_name, false);
 
-        let stmt = self
-            .create_variable_declaration(
-                &dest_var,
-                Some(oxc_ast::ast::Expression::StaticMemberExpression(
-                    member_expr,
-                )),
-                VariableDeclarationKind::Let,
-            )
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(oxc_ast::ast::Expression::StaticMemberExpression(
+                member_expr,
+            )),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -572,15 +599,13 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .alloc_computed_member_expression(span, obj_expr, key_expr, false);
 
-        let stmt = self
-            .create_variable_declaration(
-                &dest_var,
-                Some(oxc_ast::ast::Expression::ComputedMemberExpression(
-                    member_expr,
-                )),
-                VariableDeclarationKind::Let,
-            )
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(oxc_ast::ast::Expression::ComputedMemberExpression(
+                member_expr,
+            )),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -598,9 +623,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_object(span, self.ast_builder.vec());
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(obj_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(obj_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -639,9 +666,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             arguments,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(new_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(new_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -685,9 +714,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -727,9 +758,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(delete_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(delete_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -768,9 +801,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_ast::ast::Expression::ComputedMemberExpression(member_expr),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(delete_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(delete_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -791,27 +826,44 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Try to look up actual array data from HBC file
         let mut elements = self.ast_builder.vec();
-        
-        match self.expression_context.lookup_array_literal_range(buffer_start_index as u32, num_literals as u32) {
+
+        match self
+            .expression_context
+            .lookup_array_literal_range(buffer_start_index as u32, num_literals as u32)
+        {
             Ok(slp_values) => {
                 // Convert each SLPValue to an AST expression
                 for slp_value in slp_values {
-                    match slp_value_to_expression(&slp_value, &self.ast_builder, &self.expression_context) {
+                    match slp_value_to_expression(
+                        &slp_value,
+                        &self.ast_builder,
+                        &self.expression_context,
+                    ) {
                         Ok(expr) => {
                             elements.push(oxc_ast::ast::ArrayExpressionElement::from(expr));
                         }
                         Err(_) => {
                             // Fallback to placeholder if conversion fails
-                            let placeholder_atom = self.ast_builder.allocator.alloc_str("/* conversion error */");
-                            let placeholder_expr = self.ast_builder.expression_identifier(span, placeholder_atom);
-                            elements.push(oxc_ast::ast::ArrayExpressionElement::from(placeholder_expr));
+                            let placeholder_atom = self
+                                .ast_builder
+                                .allocator
+                                .alloc_str("/* conversion error */");
+                            let placeholder_expr = self
+                                .ast_builder
+                                .expression_identifier(span, placeholder_atom);
+                            elements
+                                .push(oxc_ast::ast::ArrayExpressionElement::from(placeholder_expr));
                         }
                     }
                 }
             }
             Err(_) => {
                 // Fallback: create comment indicating the buffer range (short array)
-                let comment_text = format!("/* Array buffer range {}-{} */", buffer_start_index as u32, buffer_start_index as u32 + num_literals as u32);
+                let comment_text = format!(
+                    "/* Array buffer range {}-{} */",
+                    buffer_start_index as u32,
+                    buffer_start_index as u32 + num_literals as u32
+                );
                 let comment_atom = self.ast_builder.allocator.alloc_str(&comment_text);
                 let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
                 elements.push(oxc_ast::ast::ArrayExpressionElement::from(comment_expr));
@@ -820,9 +872,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let array_expr = self.ast_builder.expression_array(span, elements);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(array_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(array_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -843,27 +897,44 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Try to look up actual array data from HBC file
         let mut elements = self.ast_builder.vec();
-        
-        match self.expression_context.lookup_array_literal_range(buffer_start_index, num_literals as u32) {
+
+        match self
+            .expression_context
+            .lookup_array_literal_range(buffer_start_index, num_literals as u32)
+        {
             Ok(slp_values) => {
                 // Convert each SLPValue to an AST expression
                 for slp_value in slp_values {
-                    match slp_value_to_expression(&slp_value, &self.ast_builder, &self.expression_context) {
+                    match slp_value_to_expression(
+                        &slp_value,
+                        &self.ast_builder,
+                        &self.expression_context,
+                    ) {
                         Ok(expr) => {
                             elements.push(oxc_ast::ast::ArrayExpressionElement::from(expr));
                         }
                         Err(_) => {
                             // Fallback to placeholder if conversion fails
-                            let placeholder_atom = self.ast_builder.allocator.alloc_str("/* conversion error */");
-                            let placeholder_expr = self.ast_builder.expression_identifier(span, placeholder_atom);
-                            elements.push(oxc_ast::ast::ArrayExpressionElement::from(placeholder_expr));
+                            let placeholder_atom = self
+                                .ast_builder
+                                .allocator
+                                .alloc_str("/* conversion error */");
+                            let placeholder_expr = self
+                                .ast_builder
+                                .expression_identifier(span, placeholder_atom);
+                            elements
+                                .push(oxc_ast::ast::ArrayExpressionElement::from(placeholder_expr));
                         }
                     }
                 }
             }
             Err(_) => {
                 // Fallback: create comment indicating the buffer ID
-                let comment_text = format!("/* Array buffer range {}-{} */", buffer_start_index, buffer_start_index + num_literals as u32);
+                let comment_text = format!(
+                    "/* Array buffer range {}-{} */",
+                    buffer_start_index,
+                    buffer_start_index + num_literals as u32
+                );
                 let comment_atom = self.ast_builder.allocator.alloc_str(&comment_text);
                 let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
                 elements.push(oxc_ast::ast::ArrayExpressionElement::from(comment_expr));
@@ -872,9 +943,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let array_expr = self.ast_builder.expression_array(span, elements);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(array_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(array_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -896,15 +969,25 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Try to look up actual object data from HBC file
         let mut properties = self.ast_builder.vec();
-        
+
         // Try to look up object data from HBC file
-        match self.expression_context.lookup_object_literal_range(key_buffer_start_index as u32, value_buffer_start_index as u32, num_literals as u32) {
+        match self.expression_context.lookup_object_literal_range(
+            key_buffer_start_index as u32,
+            value_buffer_start_index as u32,
+            num_literals as u32,
+        ) {
             Ok((keys, values)) => {
                 // Successfully looked up data - convert key-value pairs to object properties
                 for (key, value) in keys.iter().zip(values.iter()) {
-                    match create_object_property(key, value, &self.ast_builder, &self.expression_context) {
+                    match create_object_property(
+                        key,
+                        value,
+                        &self.ast_builder,
+                        &self.expression_context,
+                    ) {
                         Ok(property) => {
-                            properties.push(oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property));
+                            properties
+                                .push(oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property));
                         }
                         Err(_) => {
                             // Fallback: skip this property if conversion fails
@@ -920,9 +1003,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let object_expr = self.ast_builder.expression_object(span, properties);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(object_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(object_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -945,14 +1030,24 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         // Use same logic as short version, just call the lookup with the buffer_id directly
         // Try to look up actual object data from HBC file
         let mut properties = self.ast_builder.vec();
-        
-        match self.expression_context.lookup_object_literal_range(key_buffer_start_index, value_buffer_start_index, num_literals as u32) {
+
+        match self.expression_context.lookup_object_literal_range(
+            key_buffer_start_index,
+            value_buffer_start_index,
+            num_literals as u32,
+        ) {
             Ok((keys, values)) => {
                 // Successfully looked up data - convert key-value pairs to object properties
                 for (key, value) in keys.iter().zip(values.iter()) {
-                    match create_object_property(key, value, &self.ast_builder, &self.expression_context) {
+                    match create_object_property(
+                        key,
+                        value,
+                        &self.ast_builder,
+                        &self.expression_context,
+                    ) {
                         Ok(property) => {
-                            properties.push(oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property));
+                            properties
+                                .push(oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property));
                         }
                         Err(_) => {
                             // Fallback: skip this property if conversion fails
@@ -968,9 +1063,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let object_expr = self.ast_builder.expression_object(span, properties);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(object_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(object_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -995,12 +1092,9 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         let create_atom = self.ast_builder.allocator.alloc_str("create");
         let create_name = self.ast_builder.identifier_name(span, create_atom);
 
-        let method_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            object_expr,
-            create_name,
-            false,
-        );
+        let method_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, object_expr, create_name, false);
 
         // Create parent argument
         let parent_atom = self.ast_builder.allocator.alloc_str(&parent_var);
@@ -1017,9 +1111,11 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1202,7 +1298,12 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let define_prop_atom = self.ast_builder.allocator.alloc_str("defineProperty");
         let define_prop_name = self.ast_builder.identifier_name(span, define_prop_atom);
-        let define_prop_expr = self.ast_builder.alloc_static_member_expression(span, object_expr, define_prop_name, false);
+        let define_prop_expr = self.ast_builder.alloc_static_member_expression(
+            span,
+            object_expr,
+            define_prop_name,
+            false,
+        );
 
         // Create arguments
         let obj_atom = self.ast_builder.allocator.alloc_str(&obj_var);
@@ -1217,7 +1318,8 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         // Add get property
         let get_atom = self.ast_builder.allocator.alloc_str("get");
         let get_key = oxc_ast::ast::PropertyKey::StaticIdentifier(
-            self.ast_builder.alloc(self.ast_builder.identifier_name(span, get_atom))
+            self.ast_builder
+                .alloc(self.ast_builder.identifier_name(span, get_atom)),
         );
         let getter_atom = self.ast_builder.allocator.alloc_str(&getter_var);
         let getter_expr = self.ast_builder.expression_identifier(span, getter_atom);
@@ -1235,7 +1337,8 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         // Add set property
         let set_atom = self.ast_builder.allocator.alloc_str("set");
         let set_key = oxc_ast::ast::PropertyKey::StaticIdentifier(
-            self.ast_builder.alloc(self.ast_builder.identifier_name(span, set_atom))
+            self.ast_builder
+                .alloc(self.ast_builder.identifier_name(span, set_atom)),
         );
         let setter_atom = self.ast_builder.allocator.alloc_str(&setter_var);
         let setter_expr = self.ast_builder.expression_identifier(span, setter_atom);

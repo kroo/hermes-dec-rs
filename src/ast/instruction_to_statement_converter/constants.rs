@@ -3,7 +3,7 @@
 //! This module provides helper methods for creating constant loading statements.
 //! These handle literal values (numbers, strings, booleans, null, undefined, etc.).
 
-use super::{InstructionResult, StatementConversionError, InstructionToStatementConverter};
+use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
 use oxc_ast::ast::VariableDeclarationKind;
 use oxc_span::Span;
 
@@ -87,7 +87,6 @@ pub trait ConstantHelpers<'a> {
         addr_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
 
-
     /// Create 8-bit integer store: `__uasm.store8(array, addr, value);`
     fn create_store8(
         &mut self,
@@ -103,8 +102,6 @@ pub trait ConstantHelpers<'a> {
         addr_reg: u8,
         value_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
-
-
 }
 
 impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
@@ -125,8 +122,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_syntax::number::NumberBase::Decimal,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(value_expr), VariableDeclarationKind::Let)?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(value_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -143,8 +143,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
         let value_expr = self.ast_builder.expression_boolean_literal(span, value);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(value_expr), VariableDeclarationKind::Let)?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(value_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -160,8 +163,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
         let value_expr = self.ast_builder.expression_null_literal(span);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(value_expr), VariableDeclarationKind::Let)?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(value_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -178,13 +184,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
         let undefined_expr = self.ast_builder.expression_identifier(span, undefined_atom);
 
-        let stmt = self
-            .create_variable_declaration(
-                &dest_var,
-                Some(undefined_expr),
-                VariableDeclarationKind::Let,
-            )
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(undefined_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -207,9 +211,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_string_literal(span, string_atom, None);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(string_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(string_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -235,9 +241,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_syntax::number::BigintBase::Decimal,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(bigint_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(bigint_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -252,15 +260,17 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             .create_new_variable_for_register(dest_reg);
 
         let span = Span::default();
-        
+
         // Create a comment expression representing the empty value
         let empty_comment = "/* empty */";
         let comment_atom = self.ast_builder.allocator.alloc_str(empty_comment);
         let empty_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(empty_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(empty_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -282,15 +292,12 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         // Create __uasm.loadi8(array, addr) call
         let uasm_atom = self.ast_builder.allocator.alloc_str("__uasm");
         let uasm_expr = self.ast_builder.expression_identifier(span, uasm_atom);
-        
+
         let method_atom = self.ast_builder.allocator.alloc_str("loadi8");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            uasm_expr,
-            method_name,
-            false,
-        );
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, uasm_expr, method_name, false);
 
         let array_atom = self.ast_builder.allocator.alloc_str(&array_var);
         let array_expr = self.ast_builder.expression_identifier(span, array_atom);
@@ -310,9 +317,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -334,15 +343,12 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         // Create __uasm.loadi32(array, addr) call
         let uasm_atom = self.ast_builder.allocator.alloc_str("__uasm");
         let uasm_expr = self.ast_builder.expression_identifier(span, uasm_atom);
-        
+
         let method_atom = self.ast_builder.allocator.alloc_str("loadi32");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            uasm_expr,
-            method_name,
-            false,
-        );
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, uasm_expr, method_name, false);
 
         let array_atom = self.ast_builder.allocator.alloc_str(&array_var);
         let array_expr = self.ast_builder.expression_identifier(span, array_atom);
@@ -362,9 +368,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -386,15 +394,12 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         // Create __uasm.loadu8(array, addr) call
         let uasm_atom = self.ast_builder.allocator.alloc_str("__uasm");
         let uasm_expr = self.ast_builder.expression_identifier(span, uasm_atom);
-        
+
         let method_atom = self.ast_builder.allocator.alloc_str("loadu8");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            uasm_expr,
-            method_name,
-            false,
-        );
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, uasm_expr, method_name, false);
 
         let array_atom = self.ast_builder.allocator.alloc_str(&array_var);
         let array_expr = self.ast_builder.expression_identifier(span, array_atom);
@@ -414,9 +419,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -438,15 +445,12 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         // Create __uasm.loadu16(array, addr) call
         let uasm_atom = self.ast_builder.allocator.alloc_str("__uasm");
         let uasm_expr = self.ast_builder.expression_identifier(span, uasm_atom);
-        
+
         let method_atom = self.ast_builder.allocator.alloc_str("loadu16");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            uasm_expr,
-            method_name,
-            false,
-        );
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, uasm_expr, method_name, false);
 
         let array_atom = self.ast_builder.allocator.alloc_str(&array_var);
         let array_expr = self.ast_builder.expression_identifier(span, array_atom);
@@ -466,9 +470,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -488,15 +494,12 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         // Create __uasm.store8(array, addr, value) call
         let uasm_atom = self.ast_builder.allocator.alloc_str("__uasm");
         let uasm_expr = self.ast_builder.expression_identifier(span, uasm_atom);
-        
+
         let method_atom = self.ast_builder.allocator.alloc_str("store8");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            uasm_expr,
-            method_name,
-            false,
-        );
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, uasm_expr, method_name, false);
 
         let array_atom = self.ast_builder.allocator.alloc_str(&array_var);
         let array_expr = self.ast_builder.expression_identifier(span, array_atom);
@@ -539,15 +542,12 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         // Create __uasm.store16(array, addr, value) call
         let uasm_atom = self.ast_builder.allocator.alloc_str("__uasm");
         let uasm_expr = self.ast_builder.expression_identifier(span, uasm_atom);
-        
+
         let method_atom = self.ast_builder.allocator.alloc_str("store16");
         let method_name = self.ast_builder.identifier_name(span, method_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            uasm_expr,
-            method_name,
-            false,
-        );
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, uasm_expr, method_name, false);
 
         let array_atom = self.ast_builder.allocator.alloc_str(&array_var);
         let array_expr = self.ast_builder.expression_identifier(span, array_atom);
@@ -574,6 +574,4 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let stmt = self.ast_builder.statement_expression(span, call_expr);
         Ok(InstructionResult::Statement(stmt))
     }
-
-
 }

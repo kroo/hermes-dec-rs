@@ -25,7 +25,6 @@ pub trait MiscHelpers<'a> {
         &mut self,
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
 
-
     /// Create an "Add empty string" statement
     fn create_add_empty_string(
         &mut self,
@@ -121,14 +120,11 @@ pub trait MiscHelpers<'a> {
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
 
     /// Create unreachable statement: `throw new Error("Unreachable code");`
-    fn create_unreachable(
-        &mut self,
-    ) -> Result<InstructionResult<'a>, StatementConversionError>;
+    fn create_unreachable(&mut self) -> Result<InstructionResult<'a>, StatementConversionError>;
 
     /// Create start generator: `/* Start generator */;`
-    fn create_start_generator(
-        &mut self,
-    ) -> Result<InstructionResult<'a>, StatementConversionError>;
+    fn create_start_generator(&mut self)
+        -> Result<InstructionResult<'a>, StatementConversionError>;
 
     /// Create complete generator: `/* Complete generator */;`
     fn create_complete_generator(
@@ -191,7 +187,6 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         Ok(InstructionResult::Statement(stmt))
     }
 
-
     /// Create add empty string: `let var0_1 = "" + var1_0;`
     fn create_add_empty_string(
         &mut self,
@@ -223,9 +218,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             src_expr,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(binary_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(binary_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -248,9 +245,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
         let this_expr = self.ast_builder.expression_this(span);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(this_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(this_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -307,9 +306,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -334,9 +335,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_meta_property(span, new_name, target_name);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(meta_prop), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(meta_prop),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -353,9 +356,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
         let this_expr = self.ast_builder.expression_this(span);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(this_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(this_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -403,13 +408,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_conditional(span, condition, test_expr2, alt_expr);
 
-        let stmt = self
-            .create_variable_declaration(
-                &dest_var,
-                Some(conditional_expr),
-                VariableDeclarationKind::Let,
-            )
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(conditional_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -433,15 +436,17 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
                 // Create new RegExp() expression
                 let regexp_atom = self.ast_builder.allocator.alloc_str("RegExp");
                 let regexp_ident = self.ast_builder.expression_identifier(span, regexp_atom);
-                
+
                 // Create arguments: pattern and flags
                 let mut args = self.ast_builder.vec();
-                
+
                 // Add pattern as string literal
                 let pattern_atom = self.ast_builder.allocator.alloc_str(&pattern);
-                let pattern_expr = self.ast_builder.expression_string_literal(span, pattern_atom, None);
+                let pattern_expr =
+                    self.ast_builder
+                        .expression_string_literal(span, pattern_atom, None);
                 args.push(oxc_ast::ast::Argument::from(pattern_expr));
-                
+
                 // Combine flags from the table with the flags parameter
                 // The flags parameter from the instruction might override or add to pattern flags
                 let combined_flags = if flags > 0 {
@@ -451,14 +456,16 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
                 } else {
                     pattern_flags
                 };
-                
+
                 // Add flags if present
                 if !combined_flags.is_empty() {
                     let flags_atom = self.ast_builder.allocator.alloc_str(&combined_flags);
-                    let flags_expr = self.ast_builder.expression_string_literal(span, flags_atom, None);
+                    let flags_expr = self
+                        .ast_builder
+                        .expression_string_literal(span, flags_atom, None);
                     args.push(oxc_ast::ast::Argument::from(flags_expr));
                 }
-                
+
                 let regexp_expr = self.ast_builder.expression_new(
                     span,
                     regexp_ident,
@@ -466,19 +473,28 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
                     args,
                 );
 
-                let stmt = self
-                    .create_variable_declaration(&dest_var, Some(regexp_expr), VariableDeclarationKind::Let)?;
+                let stmt = self.create_variable_declaration(
+                    &dest_var,
+                    Some(regexp_expr),
+                    VariableDeclarationKind::Let,
+                )?;
 
                 Ok(InstructionResult::Statement(stmt))
             }
             Err(_) => {
                 // Fallback: create a comment indicating a RegExp would be created
-                let comment_text = format!("new RegExp(/* pattern {} */, /* flags {} */)", pattern_id, flags);
+                let comment_text = format!(
+                    "new RegExp(/* pattern {} */, /* flags {} */)",
+                    pattern_id, flags
+                );
                 let comment_atom = self.ast_builder.allocator.alloc_str(&comment_text);
                 let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-                let stmt = self
-                    .create_variable_declaration(&dest_var, Some(comment_expr), VariableDeclarationKind::Let)?;
+                let stmt = self.create_variable_declaration(
+                    &dest_var,
+                    Some(comment_expr),
+                    VariableDeclarationKind::Let,
+                )?;
 
                 Ok(InstructionResult::Statement(stmt))
             }
@@ -516,9 +532,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             right_expr,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(instanceof_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(instanceof_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -554,9 +572,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             obj_expr,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(in_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(in_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -594,12 +614,14 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
                 iterator_expr,
                 index_expr,
                 false,
-            )
+            ),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(member_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(member_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -616,7 +638,9 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
         let value_expr = self.ast_builder.expression_identifier(span, value_atom);
 
-        let undefined_expr = self.ast_builder.expression_identifier(span, self.ast_builder.allocator.alloc_str("undefined"));
+        let undefined_expr = self
+            .ast_builder
+            .expression_identifier(span, self.ast_builder.allocator.alloc_str("undefined"));
 
         // Create strict equality check
         let condition = self.ast_builder.expression_binary(
@@ -640,7 +664,9 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let throw_stmt = self.ast_builder.statement_throw(span, new_error_expr);
 
         // Create if statement
-        let if_stmt = self.ast_builder.statement_if(span, condition, throw_stmt, None);
+        let if_stmt = self
+            .ast_builder
+            .statement_if(span, condition, throw_stmt, None);
 
         Ok(InstructionResult::Statement(if_stmt))
     }
@@ -680,9 +706,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         Ok(InstructionResult::Statement(stmt))
     }
 
-    fn create_unreachable(
-        &mut self,
-    ) -> Result<InstructionResult<'a>, StatementConversionError> {
+    fn create_unreachable(&mut self) -> Result<InstructionResult<'a>, StatementConversionError> {
         let span = Span::default();
 
         // Create throw new Error("Unreachable code")
@@ -690,7 +714,9 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let error_expr = self.ast_builder.expression_identifier(span, error_atom);
 
         let message_atom = self.ast_builder.allocator.alloc_str("Unreachable code");
-        let message_expr = self.ast_builder.expression_string_literal(span, message_atom, None);
+        let message_expr = self
+            .ast_builder
+            .expression_string_literal(span, message_atom, None);
 
         let mut args = self.ast_builder.vec();
         args.push(oxc_ast::ast::Argument::from(message_expr));
@@ -750,9 +776,11 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let comment_atom = self.ast_builder.allocator.alloc_str(comment_text);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(comment_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(comment_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -785,12 +813,14 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Create switch statement discriminant
         let discriminant_atom = self.ast_builder.allocator.alloc_str(&discriminant_var);
-        let discriminant_expr = self.ast_builder.expression_identifier(span, discriminant_atom);
+        let discriminant_expr = self
+            .ast_builder
+            .expression_identifier(span, discriminant_atom);
 
         // For now, create a simple switch with placeholder cases
         // TODO: In a full implementation, we'd read the switch table and create proper cases
         let mut cases = self.ast_builder.vec();
-        
+
         // Create a few example cases based on min_value and size
         for i in 0..std::cmp::min(size, 3) as u32 {
             let case_value = min_value + i;
@@ -803,8 +833,10 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
 
             // Create empty case body for now
             let case_body = self.ast_builder.vec();
-            
-            let switch_case = self.ast_builder.switch_case(span, Some(case_expr), case_body);
+
+            let switch_case = self
+                .ast_builder
+                .switch_case(span, Some(case_expr), case_body);
             cases.push(switch_case);
         }
 
@@ -813,7 +845,9 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let default_case = self.ast_builder.switch_case(span, None, default_body);
         cases.push(default_case);
 
-        let switch_stmt = self.ast_builder.statement_switch(span, discriminant_expr, cases);
+        let switch_stmt = self
+            .ast_builder
+            .statement_switch(span, discriminant_expr, cases);
 
         Ok(InstructionResult::Statement(switch_stmt))
     }

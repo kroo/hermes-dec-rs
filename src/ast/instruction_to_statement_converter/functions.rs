@@ -3,7 +3,7 @@
 //! This module provides helper methods for creating function-related statements.
 //! These handle function calls, returns, and parameter loading operations.
 
-use super::{InstructionResult, StatementConversionError, InstructionToStatementConverter};
+use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
 use oxc_ast::ast::VariableDeclarationKind;
 use oxc_span::Span;
 
@@ -181,7 +181,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Read all variable names BEFORE creating destination variable to avoid conflicts
         let func_var = self.register_manager.get_variable_name_for_read(func_reg);
-        
+
         // Collect argument variable names
         let mut arg_vars = Vec::new();
         for i in 0..arg_count {
@@ -189,7 +189,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             let arg_var = self.register_manager.get_variable_name_for_read(arg_reg);
             arg_vars.push(arg_var);
         }
-        
+
         // Now create the destination variable (this updates register mappings)
         let dest_var = self
             .register_manager
@@ -215,8 +215,10 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             // Use .call() syntax: func.call(thisArg, arg1, arg2, ...)
             let call_atom = self.ast_builder.allocator.alloc_str("call");
             let call_name = self.ast_builder.identifier_name(span, call_atom);
-            let member_expr = self.ast_builder.alloc_static_member_expression(span, func_expr, call_name, false);
-            
+            let member_expr = self
+                .ast_builder
+                .alloc_static_member_expression(span, func_expr, call_name, false);
+
             let mut arguments = self.ast_builder.vec();
             // Add all arguments (first is 'this', rest are actual arguments)
             for arg_var in arg_vars {
@@ -224,7 +226,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
                 let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
                 arguments.push(oxc_ast::ast::Argument::from(arg_expr));
             }
-            
+
             self.ast_builder.expression_call(
                 span,
                 oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
@@ -234,9 +236,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             )
         };
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -250,7 +254,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         // Read all variable names BEFORE creating destination variable
         let func_var = self.register_manager.get_variable_name_for_read(func_reg);
         let arg1_var = self.register_manager.get_variable_name_for_read(arg1_reg);
-        
+
         // Now create the destination variable
         let dest_var = self
             .register_manager
@@ -265,8 +269,10 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         // Use .call() syntax: func.call(thisArg)
         let call_atom = self.ast_builder.allocator.alloc_str("call");
         let call_name = self.ast_builder.identifier_name(span, call_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(span, func_expr, call_name, false);
-        
+        let member_expr = self
+            .ast_builder
+            .alloc_static_member_expression(span, func_expr, call_name, false);
+
         let mut arguments = self.ast_builder.vec();
         // arg1 is the 'this' argument in Hermes calling convention
         let arg1_atom = self.ast_builder.allocator.alloc_str(&arg1_var);
@@ -281,9 +287,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -299,7 +307,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let func_var = self.register_manager.get_variable_name_for_read(func_reg);
         let arg1_var = self.register_manager.get_variable_name_for_read(arg1_reg);
         let arg2_var = self.register_manager.get_variable_name_for_read(arg2_reg);
-        
+
         // Now create the destination variable
         let dest_var = self
             .register_manager
@@ -314,14 +322,16 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         // Use .call() syntax: func.call(thisArg, arg1)
         let call_atom = self.ast_builder.allocator.alloc_str("call");
         let call_name = self.ast_builder.identifier_name(span, call_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(span, func_expr, call_name, false);
-        
+        let member_expr = self
+            .ast_builder
+            .alloc_static_member_expression(span, func_expr, call_name, false);
+
         let mut arguments = self.ast_builder.vec();
         // arg1 is 'this', arg2 is the first actual argument
         let arg1_atom = self.ast_builder.allocator.alloc_str(&arg1_var);
         let arg1_expr = self.ast_builder.expression_identifier(span, arg1_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
-        
+
         let arg2_atom = self.ast_builder.allocator.alloc_str(&arg2_var);
         let arg2_expr = self.ast_builder.expression_identifier(span, arg2_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
@@ -334,9 +344,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -354,7 +366,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let arg1_var = self.register_manager.get_variable_name_for_read(arg1_reg);
         let arg2_var = self.register_manager.get_variable_name_for_read(arg2_reg);
         let arg3_var = self.register_manager.get_variable_name_for_read(arg3_reg);
-        
+
         // Now create the destination variable
         let dest_var = self
             .register_manager
@@ -369,18 +381,20 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         // Use .call() syntax: func.call(thisArg, arg1, arg2)
         let call_atom = self.ast_builder.allocator.alloc_str("call");
         let call_name = self.ast_builder.identifier_name(span, call_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(span, func_expr, call_name, false);
-        
+        let member_expr = self
+            .ast_builder
+            .alloc_static_member_expression(span, func_expr, call_name, false);
+
         let mut arguments = self.ast_builder.vec();
         // arg1 is 'this', arg2 and arg3 are actual arguments
         let arg1_atom = self.ast_builder.allocator.alloc_str(&arg1_var);
         let arg1_expr = self.ast_builder.expression_identifier(span, arg1_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
-        
+
         let arg2_atom = self.ast_builder.allocator.alloc_str(&arg2_var);
         let arg2_expr = self.ast_builder.expression_identifier(span, arg2_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
-        
+
         let arg3_atom = self.ast_builder.allocator.alloc_str(&arg3_var);
         let arg3_expr = self.ast_builder.expression_identifier(span, arg3_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg3_expr));
@@ -393,9 +407,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -415,7 +431,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let arg2_var = self.register_manager.get_variable_name_for_read(arg2_reg);
         let arg3_var = self.register_manager.get_variable_name_for_read(arg3_reg);
         let arg4_var = self.register_manager.get_variable_name_for_read(arg4_reg);
-        
+
         // Now create the destination variable
         let dest_var = self
             .register_manager
@@ -430,22 +446,24 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         // Use .call() syntax: func.call(thisArg, arg1, arg2, arg3)
         let call_atom = self.ast_builder.allocator.alloc_str("call");
         let call_name = self.ast_builder.identifier_name(span, call_atom);
-        let member_expr = self.ast_builder.alloc_static_member_expression(span, func_expr, call_name, false);
-        
+        let member_expr = self
+            .ast_builder
+            .alloc_static_member_expression(span, func_expr, call_name, false);
+
         let mut arguments = self.ast_builder.vec();
         // arg1 is 'this', arg2, arg3, arg4 are actual arguments
         let arg1_atom = self.ast_builder.allocator.alloc_str(&arg1_var);
         let arg1_expr = self.ast_builder.expression_identifier(span, arg1_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
-        
+
         let arg2_atom = self.ast_builder.allocator.alloc_str(&arg2_var);
         let arg2_expr = self.ast_builder.expression_identifier(span, arg2_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
-        
+
         let arg3_atom = self.ast_builder.allocator.alloc_str(&arg3_var);
         let arg3_expr = self.ast_builder.expression_identifier(span, arg3_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg3_expr));
-        
+
         let arg4_atom = self.ast_builder.allocator.alloc_str(&arg4_var);
         let arg4_expr = self.ast_builder.expression_identifier(span, arg4_atom);
         arguments.push(oxc_ast::ast::Argument::from(arg4_expr));
@@ -458,9 +476,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -511,9 +531,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
         let param_expr = self.ast_builder.expression_identifier(span, param_atom);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(param_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(param_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -532,10 +554,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
 
         // Look up the actual function name from the HBC file
-        let func_name = self.expression_context
+        let func_name = self
+            .expression_context
             .lookup_function_name(func_idx as u32)
             .unwrap_or_else(|_| format!("function_{}", func_idx));
-        
+
         // Create function parameters (empty for now)
         let params = self.ast_builder.formal_parameters(
             span,
@@ -545,32 +568,38 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         );
 
         // Create function body with placeholder comment including parameter count
-        let param_info = self.expression_context
+        let param_info = self
+            .expression_context
             .lookup_function_param_count(func_idx as u32)
             .map(|count| format!(" (expects {} args)", count))
             .unwrap_or_else(|_| String::new());
-        
-        let body_comment = format!("/* TODO: Decompile function {} body{} */", func_idx, param_info);
+
+        let body_comment = format!(
+            "/* TODO: Decompile function {} body{} */",
+            func_idx, param_info
+        );
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
-        
+
         let mut body_stmts = self.ast_builder.vec();
         body_stmts.push(comment_stmt);
-        
-        let body = self.ast_builder.function_body(span, self.ast_builder.vec(), body_stmts);
+
+        let body = self
+            .ast_builder
+            .function_body(span, self.ast_builder.vec(), body_stmts);
 
         // Create function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
         let func_id = self.ast_builder.binding_identifier(span, func_name_atom);
-        
+
         let func_expr = self.ast_builder.expression_function(
             span,
             oxc_ast::ast::FunctionType::FunctionExpression,
             Some(func_id),
-            false, // is_async
-            false, // is_generator  
-            false, // is_type_script_syntax
+            false,                                            // is_async
+            false,                                            // is_generator
+            false,                                            // is_type_script_syntax
             None::<oxc_ast::ast::TSTypeParameterDeclaration>, // type_parameters
             None::<oxc_ast::ast::TSThisParameter>,            // this_param
             params,
@@ -578,9 +607,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             Some(body),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(func_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(func_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -599,10 +630,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
 
         // Look up the actual function name from the HBC file
-        let func_name = self.expression_context
+        let func_name = self
+            .expression_context
             .lookup_function_name(func_idx as u32)
             .unwrap_or_else(|_| format!("async_function_{}", func_idx));
-        
+
         // Create function parameters (empty for now)
         let params = self.ast_builder.formal_parameters(
             span,
@@ -612,32 +644,38 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         );
 
         // Create function body with placeholder comment including parameter count
-        let param_info = self.expression_context
+        let param_info = self
+            .expression_context
             .lookup_function_param_count(func_idx as u32)
             .map(|count| format!(" (expects {} args)", count))
             .unwrap_or_else(|_| String::new());
-        
-        let body_comment = format!("/* TODO: Decompile async function {} body{} */", func_idx, param_info);
+
+        let body_comment = format!(
+            "/* TODO: Decompile async function {} body{} */",
+            func_idx, param_info
+        );
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
-        
+
         let mut body_stmts = self.ast_builder.vec();
         body_stmts.push(comment_stmt);
-        
-        let body = self.ast_builder.function_body(span, self.ast_builder.vec(), body_stmts);
+
+        let body = self
+            .ast_builder
+            .function_body(span, self.ast_builder.vec(), body_stmts);
 
         // Create async function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
         let func_id = self.ast_builder.binding_identifier(span, func_name_atom);
-        
+
         let func_expr = self.ast_builder.expression_function(
             span,
             oxc_ast::ast::FunctionType::FunctionExpression,
             Some(func_id),
-            true,  // is_async
-            false, // is_generator  
-            false, // is_type_script_syntax
+            true,                                             // is_async
+            false,                                            // is_generator
+            false,                                            // is_type_script_syntax
             None::<oxc_ast::ast::TSTypeParameterDeclaration>, // type_parameters
             None::<oxc_ast::ast::TSThisParameter>,            // this_param
             params,
@@ -645,9 +683,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             Some(body),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(func_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(func_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -688,13 +728,13 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             // Object method like console.log or Math.abs
             let obj_atom = self.ast_builder.allocator.alloc_str(builtin_parts[0]);
             let obj_expr = self.ast_builder.expression_identifier(span, obj_atom);
-            
+
             let method_atom = self.ast_builder.allocator.alloc_str(builtin_parts[1]);
             let method_name = self.ast_builder.identifier_name(span, method_atom);
-            
-            let member_expr = self.ast_builder.alloc_static_member_expression(
-                span, obj_expr, method_name, false
-            );
+
+            let member_expr =
+                self.ast_builder
+                    .alloc_static_member_expression(span, obj_expr, method_name, false);
             oxc_ast::ast::Expression::StaticMemberExpression(member_expr)
         } else {
             // Simple function name
@@ -719,9 +759,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -742,9 +784,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Create constructor expression
         let constructor_atom = self.ast_builder.allocator.alloc_str(&constructor_var);
-        let constructor_expr = self.ast_builder.expression_identifier(span, constructor_atom);
+        let constructor_expr = self
+            .ast_builder
+            .expression_identifier(span, constructor_atom);
 
-        // Create arguments (simplified - using placeholder args) 
+        // Create arguments (simplified - using placeholder args)
         let mut arguments = self.ast_builder.vec();
         for i in 0..arg_count {
             let arg_name = format!("arg{}", i);
@@ -760,9 +804,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             arguments,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(new_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(new_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -787,7 +833,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         // Create code argument
         let code_atom = self.ast_builder.allocator.alloc_str(&code_var);
         let code_expr = self.ast_builder.expression_identifier(span, code_atom);
-        
+
         let mut arguments = self.ast_builder.vec();
         arguments.push(oxc_ast::ast::Argument::from(code_expr));
 
@@ -799,9 +845,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -820,10 +868,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
 
         // Look up the actual function name from the HBC file
-        let func_name = self.expression_context
+        let func_name = self
+            .expression_context
             .lookup_function_name(func_idx)
             .unwrap_or_else(|_| format!("function_{}", func_idx));
-        
+
         // Create function parameters (empty for now)
         let params = self.ast_builder.formal_parameters(
             span,
@@ -833,32 +882,38 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         );
 
         // Create function body with placeholder comment including parameter count
-        let param_info = self.expression_context
+        let param_info = self
+            .expression_context
             .lookup_function_param_count(func_idx)
             .map(|count| format!(" (expects {} args)", count))
             .unwrap_or_else(|_| String::new());
-        
-        let body_comment = format!("/* TODO: Decompile function {} body{} */", func_idx, param_info);
+
+        let body_comment = format!(
+            "/* TODO: Decompile function {} body{} */",
+            func_idx, param_info
+        );
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
-        
+
         let mut body_stmts = self.ast_builder.vec();
         body_stmts.push(comment_stmt);
-        
-        let body = self.ast_builder.function_body(span, self.ast_builder.vec(), body_stmts);
+
+        let body = self
+            .ast_builder
+            .function_body(span, self.ast_builder.vec(), body_stmts);
 
         // Create function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
         let func_id = self.ast_builder.binding_identifier(span, func_name_atom);
-        
+
         let func_expr = self.ast_builder.expression_function(
             span,
             oxc_ast::ast::FunctionType::FunctionExpression,
             Some(func_id),
-            false, // is_async
-            false, // is_generator  
-            false, // is_type_script_syntax
+            false,                                            // is_async
+            false,                                            // is_generator
+            false,                                            // is_type_script_syntax
             None::<oxc_ast::ast::TSTypeParameterDeclaration>, // type_parameters
             None::<oxc_ast::ast::TSThisParameter>,            // this_param
             params,
@@ -866,9 +921,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             Some(body),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(func_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(func_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -887,10 +944,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
 
         // Look up the actual function name from the HBC file
-        let func_name = self.expression_context
+        let func_name = self
+            .expression_context
             .lookup_function_name(func_idx)
             .unwrap_or_else(|_| format!("async_function_{}", func_idx));
-        
+
         // Create function parameters (empty for now)
         let params = self.ast_builder.formal_parameters(
             span,
@@ -900,32 +958,38 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         );
 
         // Create function body with placeholder comment including parameter count
-        let param_info = self.expression_context
+        let param_info = self
+            .expression_context
             .lookup_function_param_count(func_idx as u32)
             .map(|count| format!(" (expects {} args)", count))
             .unwrap_or_else(|_| String::new());
-        
-        let body_comment = format!("/* TODO: Decompile async function {} body{} */", func_idx, param_info);
+
+        let body_comment = format!(
+            "/* TODO: Decompile async function {} body{} */",
+            func_idx, param_info
+        );
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
-        
+
         let mut body_stmts = self.ast_builder.vec();
         body_stmts.push(comment_stmt);
-        
-        let body = self.ast_builder.function_body(span, self.ast_builder.vec(), body_stmts);
+
+        let body = self
+            .ast_builder
+            .function_body(span, self.ast_builder.vec(), body_stmts);
 
         // Create async function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
         let func_id = self.ast_builder.binding_identifier(span, func_name_atom);
-        
+
         let func_expr = self.ast_builder.expression_function(
             span,
             oxc_ast::ast::FunctionType::FunctionExpression,
             Some(func_id),
-            true,  // is_async
-            false, // is_generator  
-            false, // is_type_script_syntax
+            true,                                             // is_async
+            false,                                            // is_generator
+            false,                                            // is_type_script_syntax
             None::<oxc_ast::ast::TSTypeParameterDeclaration>, // type_parameters
             None::<oxc_ast::ast::TSThisParameter>,            // this_param
             params,
@@ -933,9 +997,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             Some(body),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(func_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(func_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -954,10 +1020,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
 
         // Look up the actual function name from the HBC file
-        let func_name = self.expression_context
+        let func_name = self
+            .expression_context
             .lookup_function_name(func_idx as u32)
             .unwrap_or_else(|_| format!("generator_{}", func_idx));
-        
+
         // Create function parameters (empty for now)
         let params = self.ast_builder.formal_parameters(
             span,
@@ -967,32 +1034,38 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         );
 
         // Create function body with placeholder comment including parameter count
-        let param_info = self.expression_context
+        let param_info = self
+            .expression_context
             .lookup_function_param_count(func_idx as u32)
             .map(|count| format!(" (expects {} args)", count))
             .unwrap_or_else(|_| String::new());
-        
-        let body_comment = format!("/* TODO: Decompile generator function {} body{} */", func_idx, param_info);
+
+        let body_comment = format!(
+            "/* TODO: Decompile generator function {} body{} */",
+            func_idx, param_info
+        );
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
-        
+
         let mut body_stmts = self.ast_builder.vec();
         body_stmts.push(comment_stmt);
-        
-        let body = self.ast_builder.function_body(span, self.ast_builder.vec(), body_stmts);
+
+        let body = self
+            .ast_builder
+            .function_body(span, self.ast_builder.vec(), body_stmts);
 
         // Create generator function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
         let func_id = self.ast_builder.binding_identifier(span, func_name_atom);
-        
+
         let func_expr = self.ast_builder.expression_function(
             span,
             oxc_ast::ast::FunctionType::FunctionExpression,
             Some(func_id),
-            false, // is_async
-            true,  // is_generator  
-            false, // is_type_script_syntax
+            false,                                            // is_async
+            true,                                             // is_generator
+            false,                                            // is_type_script_syntax
             None::<oxc_ast::ast::TSTypeParameterDeclaration>, // type_parameters
             None::<oxc_ast::ast::TSThisParameter>,            // this_param
             params,
@@ -1000,9 +1073,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             Some(body),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(func_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(func_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1021,10 +1096,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
 
         // Look up the actual function name from the HBC file
-        let func_name = self.expression_context
+        let func_name = self
+            .expression_context
             .lookup_function_name(func_idx)
             .unwrap_or_else(|_| format!("generator_{}", func_idx));
-        
+
         // Create function parameters (empty for now)
         let params = self.ast_builder.formal_parameters(
             span,
@@ -1034,32 +1110,38 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         );
 
         // Create function body with placeholder comment including parameter count
-        let param_info = self.expression_context
+        let param_info = self
+            .expression_context
             .lookup_function_param_count(func_idx as u32)
             .map(|count| format!(" (expects {} args)", count))
             .unwrap_or_else(|_| String::new());
-        
-        let body_comment = format!("/* TODO: Decompile generator function {} body{} */", func_idx, param_info);
+
+        let body_comment = format!(
+            "/* TODO: Decompile generator function {} body{} */",
+            func_idx, param_info
+        );
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
-        
+
         let mut body_stmts = self.ast_builder.vec();
         body_stmts.push(comment_stmt);
-        
-        let body = self.ast_builder.function_body(span, self.ast_builder.vec(), body_stmts);
+
+        let body = self
+            .ast_builder
+            .function_body(span, self.ast_builder.vec(), body_stmts);
 
         // Create generator function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
         let func_id = self.ast_builder.binding_identifier(span, func_name_atom);
-        
+
         let func_expr = self.ast_builder.expression_function(
             span,
             oxc_ast::ast::FunctionType::FunctionExpression,
             Some(func_id),
-            false, // is_async
-            true,  // is_generator  
-            false, // is_type_script_syntax
+            false,                                            // is_async
+            true,                                             // is_generator
+            false,                                            // is_type_script_syntax
             None::<oxc_ast::ast::TSTypeParameterDeclaration>, // type_parameters
             None::<oxc_ast::ast::TSThisParameter>,            // this_param
             params,
@@ -1067,9 +1149,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             Some(body),
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(func_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(func_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1092,20 +1176,17 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let length_atom = self.ast_builder.allocator.alloc_str("length");
         let length_name = self.ast_builder.identifier_name(span, length_atom);
 
-        let member_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            args_expr,
-            length_name,
-            false,
-        );
+        let member_expr =
+            self.ast_builder
+                .alloc_static_member_expression(span, args_expr, length_name, false);
 
-        let stmt = self
-            .create_variable_declaration(
-                &dest_var,
-                Some(oxc_ast::ast::Expression::StaticMemberExpression(member_expr)),
-                VariableDeclarationKind::Let,
-            )
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(oxc_ast::ast::Expression::StaticMemberExpression(
+                member_expr,
+            )),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1130,20 +1211,17 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let prop_atom = self.ast_builder.allocator.alloc_str(&prop_var);
         let prop_expr = self.ast_builder.expression_identifier(span, prop_atom);
 
-        let member_expr = self.ast_builder.alloc_computed_member_expression(
-            span,
-            args_expr,
-            prop_expr,
-            false,
-        );
+        let member_expr = self
+            .ast_builder
+            .alloc_computed_member_expression(span, args_expr, prop_expr, false);
 
-        let stmt = self
-            .create_variable_declaration(
-                &dest_var,
-                Some(oxc_ast::ast::Expression::ComputedMemberExpression(member_expr)),
-                VariableDeclarationKind::Let,
-            )
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(oxc_ast::ast::Expression::ComputedMemberExpression(
+                member_expr,
+            )),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1166,12 +1244,9 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let from_atom = self.ast_builder.allocator.alloc_str("from");
         let from_name = self.ast_builder.identifier_name(span, from_atom);
 
-        let method_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            array_expr,
-            from_name,
-            false,
-        );
+        let method_expr = self
+            .ast_builder
+            .alloc_static_member_expression(span, array_expr, from_name, false);
 
         // Create arguments argument
         let args_atom = self.ast_builder.allocator.alloc_str("arguments");
@@ -1188,9 +1263,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(call_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(call_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1211,11 +1288,12 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let comment_atom = self.ast_builder.allocator.alloc_str(&comment_text);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(comment_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(comment_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
-
 }

@@ -110,10 +110,14 @@ fn main() -> Result<()> {
             output: _,
             annotate_pc: _,
         } => cli::disasm::disasm(&input).map_err(|e| miette!("{}", e)),
-        Commands::Decompile { input, function, output, comments, .. } => {
-            cli::decompile::decompile(&input, function, output.as_ref().map(|v| &**v), &comments)
-                .map_err(|e| miette!("{}", e))
-        }
+        Commands::Decompile {
+            input,
+            function,
+            output,
+            comments,
+            ..
+        } => cli::decompile::decompile(&input, function, output.as_ref().map(|v| &**v), &comments)
+            .map_err(|e| miette!("{}", e)),
         Commands::Generate { force: _ } => {
             cli::generate::generate_instructions().map_err(|e| miette!("{}", e))
         }

@@ -241,7 +241,12 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_property_assignment_by_id(*operand_0, *operand_1, *operand_2, *operand_3 as u32),
+            } => self.create_property_assignment_by_id(
+                *operand_0,
+                *operand_1,
+                *operand_2,
+                *operand_3 as u32,
+            ),
 
             PutByVal {
                 operand_0,
@@ -256,9 +261,7 @@ impl<'a> InstructionToStatementConverter<'a> {
             Throw { operand_0, .. } => self.create_throw_statement(*operand_0),
 
             // === THROW OPERATIONS ===
-            ThrowIfUndefinedInst { operand_0, .. } => {
-                self.create_throw_if_undefined(*operand_0)
-            }
+            ThrowIfUndefinedInst { operand_0, .. } => self.create_throw_if_undefined(*operand_0),
 
             ThrowIfEmpty {
                 operand_0,
@@ -266,8 +269,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                 ..
             } => self.create_throw_if_empty(*operand_0, *operand_1),
 
-            ThrowIfHasRestrictedGlobalProperty { operand_0, .. } => self
-                .create_throw_if_has_restricted_global_property(*operand_0 as u8),
+            ThrowIfHasRestrictedGlobalProperty { operand_0, .. } => {
+                self.create_throw_if_has_restricted_global_property(*operand_0 as u8)
+            }
 
             // For-in loop enumeration
             GetPNameList {
@@ -353,7 +357,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.create_property_assignment_by_id(*operand_0, *operand_1, 0, *operand_2 as u32),
+            } => {
+                self.create_property_assignment_by_id(*operand_0, *operand_1, 0, *operand_2 as u32)
+            }
 
             PutOwnByVal {
                 operand_0,
@@ -368,7 +374,12 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_property_access_by_id(*operand_0, *operand_1, *operand_2, *operand_3 as u32),
+            } => self.create_property_access_by_id(
+                *operand_0,
+                *operand_1,
+                *operand_2,
+                *operand_3 as u32,
+            ),
 
             GetByVal {
                 operand_0,
@@ -439,11 +450,15 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_3,
                 operand_4,
                 ..
-            } => self.create_switch_imm(*operand_0, *operand_1, *operand_2 as u16, *operand_3, *operand_4 as u32),
+            } => self.create_switch_imm(
+                *operand_0,
+                *operand_1,
+                *operand_2 as u16,
+                *operand_3,
+                *operand_4 as u32,
+            ),
 
-            Unreachable { .. } => {
-                self.create_unreachable()
-            }
+            Unreachable { .. } => self.create_unreachable(),
 
             // Generator operations
             CreateGenerator {
@@ -456,9 +471,7 @@ impl<'a> InstructionToStatementConverter<'a> {
 
             SaveGeneratorLong { operand_0 } => self.create_save_generator(*operand_0 as u32),
 
-            StartGenerator { .. } => {
-                self.create_start_generator()
-            }
+            StartGenerator { .. } => self.create_start_generator(),
 
             ResumeGenerator {
                 operand_0,
@@ -701,7 +714,8 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_3,
                 operand_4,
                 ..
-            } => self.create_function_call_3(*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
+            } => self
+                .create_function_call_3(*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
 
             Call4 {
                 operand_0,
@@ -711,7 +725,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_4,
                 operand_5,
                 ..
-            } => self.create_function_call_4(*operand_0, *operand_1, *operand_2, *operand_3, *operand_4, *operand_5),
+            } => self.create_function_call_4(
+                *operand_0, *operand_1, *operand_2, *operand_3, *operand_4, *operand_5,
+            ),
 
             CallLong {
                 operand_0,
@@ -865,7 +881,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.create_store_np_to_environment_long(*operand_0, *operand_1 as u32, *operand_2),
+            } => {
+                self.create_store_np_to_environment_long(*operand_0, *operand_1 as u32, *operand_2)
+            }
 
             // === PROPERTY OPERATIONS ===
             GetByIdShort {
@@ -874,7 +892,12 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_property_access_by_id(*operand_0, *operand_1, *operand_2, *operand_3 as u32),
+            } => self.create_property_access_by_id(
+                *operand_0,
+                *operand_1,
+                *operand_2,
+                *operand_3 as u32,
+            ),
 
             GetByIdLong {
                 operand_0,
@@ -890,7 +913,8 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_property_assignment_by_id(*operand_0, *operand_1, *operand_2, *operand_3),
+            } => self
+                .create_property_assignment_by_id(*operand_0, *operand_1, *operand_2, *operand_3),
 
             TryGetById {
                 operand_0,
@@ -898,7 +922,12 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_property_access_by_id(*operand_0, *operand_1, *operand_2, *operand_3 as u32),
+            } => self.create_property_access_by_id(
+                *operand_0,
+                *operand_1,
+                *operand_2,
+                *operand_3 as u32,
+            ),
 
             DelById {
                 operand_0,
@@ -927,7 +956,12 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_try_property_access_by_id_long(*operand_0, *operand_1, *operand_2 as u32, *operand_3 as u8),
+            } => self.create_try_property_access_by_id_long(
+                *operand_0,
+                *operand_1,
+                *operand_2 as u32,
+                *operand_3 as u8,
+            ),
 
             TryPutById {
                 operand_0,
@@ -935,7 +969,12 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_try_property_assignment_by_id(*operand_0, *operand_1, *operand_2, *operand_3 as u8),
+            } => self.create_try_property_assignment_by_id(
+                *operand_0,
+                *operand_1,
+                *operand_2,
+                *operand_3 as u8,
+            ),
 
             TryPutByIdLong {
                 operand_0,
@@ -943,7 +982,12 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_try_property_assignment_by_id_long(*operand_0, *operand_1, *operand_2 as u32, *operand_3 as u8),
+            } => self.create_try_property_assignment_by_id_long(
+                *operand_0,
+                *operand_1,
+                *operand_2 as u32,
+                *operand_3 as u8,
+            ),
 
             PutNewOwnByIdLong {
                 operand_0,
@@ -994,7 +1038,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_3,
                 operand_4,
                 ..
-            } => self.create_put_own_getter_setter_by_val(*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
+            } => self.create_put_own_getter_setter_by_val(
+                *operand_0, *operand_1, *operand_2, *operand_3, *operand_4,
+            ),
 
             // === PARAMETER OPERATIONS ===
             LoadParamLong {
@@ -1003,9 +1049,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                 ..
             } => self.create_parameter_load(*operand_0, *operand_1 as u8),
 
-            GetArgumentsLength { operand_0, .. } => {
-                self.create_get_arguments_length(*operand_0)
-            }
+            GetArgumentsLength { operand_0, .. } => self.create_get_arguments_length(*operand_0),
 
             GetArgumentsPropByVal {
                 operand_0,
@@ -1013,9 +1057,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                 ..
             } => self.create_get_arguments_prop_by_val(*operand_0, *operand_1),
 
-            ReifyArguments { operand_0, .. } => {
-                self.create_reify_arguments(*operand_0)
-            }
+            ReifyArguments { operand_0, .. } => self.create_reify_arguments(*operand_0),
 
             // === OBJECT CREATION ===
             NewArrayWithBuffer {
@@ -1032,7 +1074,8 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_2,
                 operand_3,
                 ..
-            } => self.create_new_array_with_buffer_long(*operand_0, *operand_1, *operand_2, *operand_3),
+            } => self
+                .create_new_array_with_buffer_long(*operand_0, *operand_1, *operand_2, *operand_3),
 
             NewObjectWithBuffer {
                 operand_0,
@@ -1041,7 +1084,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_3,
                 operand_4,
                 ..
-            } => self.create_new_object_with_buffer(*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
+            } => self.create_new_object_with_buffer(
+                *operand_0, *operand_1, *operand_2, *operand_3, *operand_4,
+            ),
 
             NewObjectWithBufferLong {
                 operand_0,
@@ -1050,7 +1095,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_3,
                 operand_4,
                 ..
-            } => self.create_new_object_with_buffer_long(*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
+            } => self.create_new_object_with_buffer_long(
+                *operand_0, *operand_1, *operand_2, *operand_3, *operand_4,
+            ),
 
             NewObjectWithParent {
                 operand_0,
@@ -1140,7 +1187,8 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_3,
                 operand_4,
                 ..
-            } => self.create_get_next_pname(*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
+            } => self
+                .create_get_next_pname(*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
 
             // === GLOBAL OPERATIONS ===
             GetGlobalObject { operand_0, .. } => self.create_get_global_object(*operand_0),
@@ -1154,14 +1202,10 @@ impl<'a> InstructionToStatementConverter<'a> {
             } => self.create_get_builtin_closure(*operand_0, *operand_1),
 
             // === CATCH OPERATIONS ===
-            UnifiedInstruction::Catch { operand_0, .. } => {
-                self.create_catch(*operand_0)
-            }
+            UnifiedInstruction::Catch { operand_0, .. } => self.create_catch(*operand_0),
 
             // === GENERATOR OPERATIONS (additional) ===
-            UnifiedInstruction::CompleteGenerator { .. } => {
-                self.create_complete_generator()
-            }
+            UnifiedInstruction::CompleteGenerator { .. } => self.create_complete_generator(),
 
             // === ALL JUMP INSTRUCTIONS (provide jump condition info) ===
             JEqual {
@@ -1183,28 +1227,48 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "GreaterEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "GreaterEqual",
+                *operand_0 as i32,
+            ),
 
             JGreaterEqualLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "GreaterEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "GreaterEqual",
+                *operand_0 as i32,
+            ),
 
             JGreaterEqualN {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "GreaterEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "GreaterEqual",
+                *operand_0 as i32,
+            ),
 
             JGreaterEqualNLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "GreaterEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "GreaterEqual",
+                *operand_0 as i32,
+            ),
 
             JGreaterLong {
                 operand_0,
@@ -1302,56 +1366,84 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotGreater", *operand_0 as i32),
+            } => {
+                self.build_comparison_jump(*operand_1, *operand_2, "NotGreater", *operand_0 as i32)
+            }
 
             JNotGreaterEqual {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotGreaterEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "NotGreaterEqual",
+                *operand_0 as i32,
+            ),
 
             JNotGreaterEqualLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotGreaterEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "NotGreaterEqual",
+                *operand_0 as i32,
+            ),
 
             JNotGreaterEqualN {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotGreaterEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "NotGreaterEqual",
+                *operand_0 as i32,
+            ),
 
             JNotGreaterEqualNLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotGreaterEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "NotGreaterEqual",
+                *operand_0 as i32,
+            ),
 
             JNotGreaterLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotGreater", *operand_0 as i32),
+            } => {
+                self.build_comparison_jump(*operand_1, *operand_2, "NotGreater", *operand_0 as i32)
+            }
 
             JNotGreaterN {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotGreater", *operand_0 as i32),
+            } => {
+                self.build_comparison_jump(*operand_1, *operand_2, "NotGreater", *operand_0 as i32)
+            }
 
             JNotGreaterNLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotGreater", *operand_0 as i32),
+            } => {
+                self.build_comparison_jump(*operand_1, *operand_2, "NotGreater", *operand_0 as i32)
+            }
 
             JNotLess {
                 operand_0,
@@ -1365,28 +1457,48 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotLessEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "NotLessEqual",
+                *operand_0 as i32,
+            ),
 
             JNotLessEqualLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotLessEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "NotLessEqual",
+                *operand_0 as i32,
+            ),
 
             JNotLessEqualN {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotLessEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "NotLessEqual",
+                *operand_0 as i32,
+            ),
 
             JNotLessEqualNLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "NotLessEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "NotLessEqual",
+                *operand_0 as i32,
+            ),
 
             JNotLessLong {
                 operand_0,
@@ -1414,28 +1526,42 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "StrictEqual", *operand_0 as i32),
+            } => {
+                self.build_comparison_jump(*operand_1, *operand_2, "StrictEqual", *operand_0 as i32)
+            }
 
             JStrictEqualLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "StrictEqual", *operand_0 as i32),
+            } => {
+                self.build_comparison_jump(*operand_1, *operand_2, "StrictEqual", *operand_0 as i32)
+            }
 
             JStrictNotEqual {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "StrictNotEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "StrictNotEqual",
+                *operand_0 as i32,
+            ),
 
             JStrictNotEqualLong {
                 operand_0,
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_comparison_jump(*operand_1, *operand_2, "StrictNotEqual", *operand_0 as i32),
+            } => self.build_comparison_jump(
+                *operand_1,
+                *operand_2,
+                "StrictNotEqual",
+                *operand_0 as i32,
+            ),
 
             JmpLong { operand_0, .. } => self.build_unconditional_jump(*operand_0 as i32),
 
@@ -1468,9 +1594,7 @@ impl<'a> InstructionToStatementConverter<'a> {
 
             UnifiedInstruction::AsyncBreakCheck { .. } => self.create_async_break_check(),
 
-            DebuggerCheckBreak { .. } => {
-                self.create_debugger_check_break()
-            }
+            DebuggerCheckBreak { .. } => self.create_debugger_check_break(),
         }
     }
 
@@ -1483,7 +1607,10 @@ impl<'a> InstructionToStatementConverter<'a> {
         init_expression: Option<oxc_ast::ast::Expression<'a>>,
         kind: oxc_ast::ast::VariableDeclarationKind,
     ) -> Result<Statement<'a>, StatementConversionError> {
-        use oxc_ast::ast::{BindingIdentifier, BindingPattern, BindingPatternKind, VariableDeclarator, VariableDeclaration};
+        use oxc_ast::ast::{
+            BindingIdentifier, BindingPattern, BindingPatternKind, VariableDeclaration,
+            VariableDeclarator,
+        };
         use oxc_span::{Atom, Span};
         use std::cell::Cell;
 

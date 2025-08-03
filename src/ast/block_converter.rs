@@ -330,7 +330,9 @@ impl<'a> BlockToStatementConverter<'a> {
             UnifiedInstruction::CreateClosureLongIndex { operand_0, .. } => Some(*operand_0),
             UnifiedInstruction::CreateGenerator { operand_0, .. } => Some(*operand_0),
             UnifiedInstruction::CreateGeneratorClosure { operand_0, .. } => Some(*operand_0),
-            UnifiedInstruction::CreateGeneratorClosureLongIndex { operand_0, .. } => Some(*operand_0),
+            UnifiedInstruction::CreateGeneratorClosureLongIndex { operand_0, .. } => {
+                Some(*operand_0)
+            }
             UnifiedInstruction::CreateGeneratorLongIndex { operand_0, .. } => Some(*operand_0),
             UnifiedInstruction::CreateInnerEnvironment { operand_0, .. } => Some(*operand_0),
             UnifiedInstruction::CreateRegExp { operand_0, .. } => Some(*operand_0),
@@ -694,9 +696,17 @@ impl<'a> BlockToStatementConverter<'a> {
         let span = oxc_span::Span::default();
 
         // Format the instruction information
-        let instruction_info = if let Some(hbc_file) = self.instruction_converter.get_expression_context().hbc_file() {
+        let instruction_info = if let Some(hbc_file) = self
+            .instruction_converter
+            .get_expression_context()
+            .hbc_file()
+        {
             // Use the formatted instruction display
-            format!("/* PC {}: {} */", pc, instruction.format_instruction(hbc_file))
+            format!(
+                "/* PC {}: {} */",
+                pc,
+                instruction.format_instruction(hbc_file)
+            )
         } else {
             // Fallback to debug formatting if no HBC file access
             format!("/* PC {}: {:?} */", pc, instruction.instruction)

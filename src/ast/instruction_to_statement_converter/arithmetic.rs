@@ -93,9 +93,11 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_binary(span, left_expr, binary_op, right_expr);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(binary_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(binary_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -136,9 +138,11 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_unary(span, unary_op, operand_expr);
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(unary_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(unary_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -192,9 +196,11 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
             assignment_target,
         );
 
-        let stmt = self
-            .create_variable_declaration(&dest_var, Some(update_expr), VariableDeclarationKind::Let)
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(update_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -240,13 +246,11 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
             self.ast_builder
                 .expression_binary(span, left_expr, comparison_op, right_expr);
 
-        let stmt = self
-            .create_variable_declaration(
-                &dest_var,
-                Some(comparison_expr),
-                VariableDeclarationKind::Let,
-            )
-?;
+        let stmt = self.create_variable_declaration(
+            &dest_var,
+            Some(comparison_expr),
+            VariableDeclarationKind::Let,
+        )?;
 
         Ok(InstructionResult::Statement(stmt))
     }

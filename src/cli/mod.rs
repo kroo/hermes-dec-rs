@@ -74,7 +74,12 @@ impl Cli {
         let cli = Cli::parse();
 
         match cli.command {
-            Commands::Decompile { input, function, output, comments } => {
+            Commands::Decompile {
+                input,
+                function,
+                output,
+                comments,
+            } => {
                 decompile::decompile(&input, function, output.as_deref(), &comments)?;
             }
             Commands::Disasm { input } => {
