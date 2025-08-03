@@ -10,7 +10,7 @@ use super::{
     },
 };
 use crate::{
-    cfg::{block::Block, EdgeKind},
+    cfg::{block::Block, ssa::SSAAnalysis, EdgeKind},
     generated::unified_instructions::UnifiedInstruction,
     hbc::function_table::HbcFunctionInstruction,
 };
@@ -110,6 +110,10 @@ pub struct BlockToStatementConverter<'a> {
     stats: BlockConversionStats,
     /// Whether to include instruction-level comments
     include_instruction_comments: bool,
+    /// Optional SSA analysis for generating SSA comments
+    ssa_analysis: Option<SSAAnalysis>,
+    /// Whether to include SSA comments
+    include_ssa_comments: bool,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
@@ -127,6 +131,64 @@ impl<'a> BlockToStatementConverter<'a> {
             scope_manager: BlockScopeManager::new(),
             stats: BlockConversionStats::default(),
             include_instruction_comments,
+            ssa_analysis: None,
+            include_ssa_comments: false,
+        }
+    }
+
+    /// Create a new block-to-statement converter with SSA analysis
+    pub fn with_ssa_analysis(
+        ast_builder: &'a OxcAstBuilder<'a>,
+        expression_context: ExpressionContext<'a>,
+        include_instruction_comments: bool,
+        include_ssa_comments: bool,
+        ssa_analysis: SSAAnalysis,
+        cfg: &crate::cfg::Cfg,
+    ) -> Self {
+        let mut instruction_converter =
+            InstructionToStatementConverter::new(ast_builder, expression_context.clone());
+
+        // Generate variable mapping from SSA analysis
+        let mut variable_mapper = crate::ast::variable_mapper::VariableMapper::new();
+        if let Ok(variable_mapping) = variable_mapper.generate_mapping(&ssa_analysis, cfg) {
+            // Set the SSA-based variable mapping in the register manager
+            instruction_converter
+                .register_manager_mut()
+                .set_variable_mapping(variable_mapping);
+        }
+
+        Self {
+            instruction_converter,
+            scope_manager: BlockScopeManager::new(),
+            stats: BlockConversionStats::default(),
+            include_instruction_comments,
+            ssa_analysis: Some(ssa_analysis),
+            include_ssa_comments,
+        }
+    }
+
+    /// Create a new block-to-statement converter with fallback variable mapping
+    pub fn with_fallback_mapping(
+        ast_builder: &'a OxcAstBuilder<'a>,
+        expression_context: ExpressionContext<'a>,
+        include_instruction_comments: bool,
+        variable_mapping: crate::ast::variable_mapper::VariableMapping,
+    ) -> Self {
+        let mut instruction_converter =
+            InstructionToStatementConverter::new(ast_builder, expression_context.clone());
+
+        // Set the fallback variable mapping in the register manager
+        instruction_converter
+            .register_manager_mut()
+            .set_variable_mapping(variable_mapping);
+
+        Self {
+            instruction_converter,
+            scope_manager: BlockScopeManager::new(),
+            stats: BlockConversionStats::default(),
+            include_instruction_comments,
+            ssa_analysis: None,
+            include_ssa_comments: false,
         }
     }
 
@@ -203,6 +265,17 @@ impl<'a> BlockToStatementConverter<'a> {
             if self.include_instruction_comments {
                 let instruction_comment = self.create_instruction_comment(pc, instruction)?;
                 statements.push(instruction_comment);
+            }
+
+            // Add SSA comment if SSA analysis is available and SSA comments are enabled
+            if self.include_ssa_comments {
+                if let Some(ref ssa_analysis) = self.ssa_analysis {
+                    if let Some(ssa_comment) =
+                        self.create_ssa_comment(pc, _block_id, pc_offset, ssa_analysis)?
+                    {
+                        statements.push(ssa_comment);
+                    }
+                }
             }
 
             let instruction_statements = self.convert_instruction_to_statements(instruction, pc)?;
@@ -732,6 +805,93 @@ impl<'a> BlockToStatementConverter<'a> {
             .instruction_converter
             .ast_builder()
             .statement_expression(span, void_expr))
+    }
+
+    /// Create a comment statement with SSA analysis information
+    fn create_ssa_comment(
+        &self,
+        pc: u32,
+        block_id: NodeIndex,
+        instruction_idx: usize,
+        ssa_analysis: &SSAAnalysis,
+    ) -> Result<Option<Statement<'a>>, BlockConversionError> {
+        let span = oxc_span::Span::default();
+        let mut comment_parts = Vec::new();
+
+        // Find SSA definitions and uses at this PC
+        for def in &ssa_analysis.definitions {
+            if def.pc == pc && def.block_id == block_id {
+                if let Some(ssa_value) = ssa_analysis.ssa_values.get(def) {
+                    comment_parts.push(format!(
+                        "DEF: r{} → r{}_{}",
+                        def.register, ssa_value.register, ssa_value.version
+                    ));
+                }
+            }
+        }
+
+        for use_site in &ssa_analysis.uses {
+            if use_site.pc == pc && use_site.block_id == block_id {
+                if let Some(def_site) = ssa_analysis.use_def_chains.get(use_site) {
+                    if let Some(ssa_value) = ssa_analysis.ssa_values.get(def_site) {
+                        comment_parts.push(format!(
+                            "USE: r{} ← r{}_{}",
+                            use_site.register, ssa_value.register, ssa_value.version
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Show phi functions at block start (only for first instruction)
+        if instruction_idx == 0 {
+            if let Some(phis) = ssa_analysis.phi_functions.get(&block_id) {
+                for phi in phis {
+                    let mut phi_parts = Vec::new();
+                    for (pred_block, ssa_value) in &phi.operands {
+                        phi_parts.push(format!(
+                            "B{}: r{}_{}",
+                            pred_block.index(),
+                            ssa_value.register,
+                            ssa_value.version
+                        ));
+                    }
+                    comment_parts.push(format!(
+                        "PHI: r{}_{} = φ({})",
+                        phi.result.register,
+                        phi.result.version,
+                        phi_parts.join(", ")
+                    ));
+                }
+            }
+        }
+
+        // Only create comment if we have something to show
+        if comment_parts.is_empty() {
+            return Ok(None);
+        }
+
+        let ssa_info = format!("/* SSA: {} */", comment_parts.join(" | "));
+        let comment_atom = self
+            .instruction_converter
+            .ast_builder()
+            .allocator
+            .alloc_str(&ssa_info);
+        let comment_expr = self
+            .instruction_converter
+            .ast_builder()
+            .expression_string_literal(span, comment_atom, None);
+        let void_expr = self.instruction_converter.ast_builder().expression_unary(
+            span,
+            oxc_ast::ast::UnaryOperator::Void,
+            comment_expr,
+        );
+
+        Ok(Some(
+            self.instruction_converter
+                .ast_builder()
+                .statement_expression(span, void_expr),
+        ))
     }
 
     /// Create a comment statement for jump conditions

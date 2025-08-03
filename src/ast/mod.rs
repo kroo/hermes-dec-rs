@@ -10,6 +10,7 @@ pub mod expression_context;
 // pub mod instruction_converter;
 pub mod instruction_to_statement_converter;
 pub mod register_manager;
+pub mod variable_mapper;
 
 // Re-export the main types for public API
 pub use block_converter::{BlockConversionError, BlockConversionStats, BlockToStatementConverter};
@@ -22,3 +23,4 @@ pub use instruction_to_statement_converter::{
     StatementConversionError,
 };
 pub use register_manager::{RegisterLifetime, RegisterManager, RegisterStats};
+pub use variable_mapper::{VariableMapError, VariableMapper, VariableMapping, VariableScope};

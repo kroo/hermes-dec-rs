@@ -1,0 +1,34 @@
+// CFG analysis for simple_arithmetic
+// Generated from data/simple_arithmetic.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-7)\l  0: DeclareGlobalVar  \"test\"\l  1: CreateEnvironment r0\l  2: CreateClosure     r1, r0, Function<test>1\l  3: GetGlobalObject   r0\l  4: PutById           r0, r1, 1, \"test\"\l  5: LoadConstUndefined r0\l  6: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-2)\l  0: LoadConstUInt8    r0, 52\l  1: Ret               r0\l" ]
+    f1_n1 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n1 [label="Uncond"]
+  }
+
+}
