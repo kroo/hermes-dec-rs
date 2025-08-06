@@ -25,7 +25,10 @@ impl ConstructorDetector {
     ///
     /// Returns Some(ConstructorInfo) if the function appears to be a constructor,
     /// None otherwise.
-    pub fn analyze(instructions: &[UnifiedInstruction]) -> Option<ConstructorInfo> {
+    pub fn analyze(
+        instructions: &[UnifiedInstruction],
+        hbc_file: Option<&crate::hbc::HbcFile>,
+    ) -> Option<ConstructorInfo> {
         // Check if the function starts with LoadThisNS
         if instructions.is_empty() {
             return None;
@@ -61,13 +64,22 @@ impl ConstructorDetector {
                     operand_0, // object
                     operand_1, // value
                     operand_2, // property id
+                    operand_3, // string table index
                     ..
                 } => {
                     // Check if this is assigning to 'this'
                     if let Some(this_reg) = this_register {
                         if *operand_0 == this_reg {
-                            // This is a property assignment to 'this'
-                            property_names.push(format!("prop_{}", operand_2));
+                            // Look up the actual property name from the string table if available
+                            let property_name = if let Some(hbc) = hbc_file {
+                                hbc.strings
+                                    .get(*operand_3 as u32)
+                                    .unwrap_or_else(|_| format!("prop_{}", operand_2))
+                            } else {
+                                format!("prop_{}", operand_2)
+                            };
+
+                            property_names.push(property_name);
 
                             // Check if we're assigning a function
                             if closure_registers.contains(operand_1) {
@@ -125,7 +137,7 @@ mod tests {
             },
         ];
 
-        let result = ConstructorDetector::analyze(&instructions);
+        let result = ConstructorDetector::analyze(&instructions, None);
         assert!(result.is_some());
 
         let info = result.unwrap();
@@ -153,7 +165,7 @@ mod tests {
             UnifiedInstruction::Ret { operand_0: 0 },
         ];
 
-        let result = ConstructorDetector::analyze(&instructions);
+        let result = ConstructorDetector::analyze(&instructions, None);
         assert!(result.is_none());
     }
 

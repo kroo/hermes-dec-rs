@@ -45,11 +45,13 @@ impl FunctionClassifier {
         instructions: &[UnifiedInstruction],
         hbc_file: &HbcFile,
     ) -> FunctionType {
-        // First check if it's a constructor
-        if let Some(constructor_info) = analyze_constructor_pattern(instructions) {
+        // First check if it's a constructor using ConstructorDetector
+        if let Some(constructor_info) =
+            super::ConstructorDetector::analyze(instructions, Some(hbc_file))
+        {
             return FunctionType::Constructor {
-                property_count: constructor_info.0,
-                has_methods: constructor_info.1,
+                property_count: constructor_info.property_count,
+                has_methods: constructor_info.has_methods,
             };
         }
 
@@ -85,53 +87,6 @@ impl FunctionClassifier {
     }
 }
 
-/// Analyze instructions for constructor patterns
-fn analyze_constructor_pattern(instructions: &[UnifiedInstruction]) -> Option<(usize, bool)> {
-    let mut has_load_this = false;
-    let mut this_register: Option<u8> = None;
-    let mut property_count = 0;
-    let mut has_methods = false;
-    let mut closure_registers = std::collections::HashSet::new();
-
-    for instruction in instructions {
-        match instruction {
-            UnifiedInstruction::LoadThisNS { operand_0, .. } => {
-                has_load_this = true;
-                this_register = Some(*operand_0);
-            }
-
-            UnifiedInstruction::CreateClosure { operand_0, .. }
-            | UnifiedInstruction::CreateAsyncClosure { operand_0, .. }
-            | UnifiedInstruction::CreateGeneratorClosure { operand_0, .. } => {
-                closure_registers.insert(*operand_0);
-            }
-
-            UnifiedInstruction::PutById {
-                operand_0,
-                operand_1,
-                ..
-            } => {
-                if let Some(this_reg) = this_register {
-                    if *operand_0 == this_reg {
-                        property_count += 1;
-                        if closure_registers.contains(operand_1) {
-                            has_methods = true;
-                        }
-                    }
-                }
-            }
-
-            _ => {}
-        }
-    }
-
-    if has_load_this && property_count > 0 {
-        Some((property_count, has_methods))
-    } else {
-        None
-    }
-}
-
 /// Analyze how a function is used in its parent context
 fn analyze_parent_usage(function_index: u32, hbc_file: &HbcFile) -> Option<FunctionType> {
     // Find which function creates this closure
@@ -139,9 +94,14 @@ fn analyze_parent_usage(function_index: u32, hbc_file: &HbcFile) -> Option<Funct
         if let Ok(func) = hbc_file.functions.get(parent_idx, hbc_file) {
             let mut closure_register: Option<u8> = None;
             let mut found_creation = false;
+            let mut global_object_register: Option<u8> = None;
 
             for (i, instr) in func.instructions.iter().enumerate() {
                 match &instr.instruction {
+                    // Track GetGlobalObject instructions
+                    UnifiedInstruction::GetGlobalObject { operand_0, .. } => {
+                        global_object_register = Some(*operand_0);
+                    }
                     UnifiedInstruction::CreateClosure {
                         operand_0,
                         operand_2,
@@ -200,7 +160,8 @@ fn analyze_parent_usage(function_index: u32, hbc_file: &HbcFile) -> Option<Funct
                                     };
 
                                     // Check if target is global object (register from GetGlobalObject)
-                                    let is_global = parent_idx == 0 && *operand_0 == 1; // Common pattern
+                                    let is_global = global_object_register
+                                        .map_or(false, |global_reg| *operand_0 == global_reg);
 
                                     if !is_global {
                                         return Some(FunctionType::Method {
