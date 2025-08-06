@@ -1,0 +1,53 @@
+hbcdump> ; test_constructor_simple.js:2:1
+    DeclareGlobalVar  "p"
+; test_constructor_simple.js:2:1
+    DeclareGlobalVar  "Person"
+; test_constructor_simple.js:2:1
+    DeclareGlobalVar  "add"
+; test_constructor_simple.js:2:1
+    DeclareGlobalVar  "createPoint"
+; test_constructor_simple.js:2:1
+    CreateEnvironment r1
+; test_constructor_simple.js:2:1
+    CreateClosure     r2, r1, Function<Person>1
+; test_constructor_simple.js:2:1
+    GetGlobalObject   r0
+; test_constructor_simple.js:2:1
+    PutById           r0, r2, 1, "Person"
+; test_constructor_simple.js:2:1
+    CreateClosure     r2, r1, Function<add>3
+; test_constructor_simple.js:2:1
+    PutById           r0, r2, 2, "add"
+; test_constructor_simple.js:2:1
+    CreateClosure     r1, r1, Function<createPoint>4
+; test_constructor_simple.js:2:1
+    PutById           r0, r1, 3, "createPoint"
+; test_constructor_simple.js:24:13
+    GetByIdShort      r4, r0, 1, "Person"
+; test_constructor_simple.js:24:19
+    GetByIdShort      r1, r4, 2, "prototype"
+; test_constructor_simple.js:24:19
+    CreateThis        r2, r1, r4
+; test_constructor_simple.js:24:19
+    LoadConstString   r6, "Alice"
+; test_constructor_simple.js:24:19
+    LoadConstUInt8    r5, 30
+; test_constructor_simple.js:24:19
+    Mov               r7, r2
+; test_constructor_simple.js:24:19
+    Construct         r1, r4, 3
+; test_constructor_simple.js:24:19
+    SelectObject      r1, r2, r1
+; test_constructor_simple.js:24:7
+    PutById           r0, r1, 4, "p"
+; test_constructor_simple.js:25:1
+    GetByIdShort      r1, r0, 3, "p"
+; test_constructor_simple.js:25:8
+    GetByIdShort      r0, r1, 4, "greet"
+; test_constructor_simple.js:25:8
+    Call1             r0, r0, r1
+; test_constructor_simple.js:25:8
+    Ret               r0
+
+
+hbcdump> 

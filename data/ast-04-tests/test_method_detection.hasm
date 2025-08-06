@@ -1,0 +1,73 @@
+hbcdump> ; test_method_detection.js:4:1
+    DeclareGlobalVar  "obj"
+; test_method_detection.js:4:1
+    DeclareGlobalVar  "myObj"
+; test_method_detection.js:4:1
+    DeclareGlobalVar  "standalone"
+; test_method_detection.js:4:1
+    DeclareGlobalVar  "MyClass"
+; test_method_detection.js:4:1
+    CreateEnvironment r0
+; test_method_detection.js:4:1
+    CreateClosure     r2, r0, Function<standalone>1
+; test_method_detection.js:4:1
+    GetGlobalObject   r1
+; test_method_detection.js:4:1
+    PutById           r1, r2, 1, "standalone"
+; test_method_detection.js:4:1
+    CreateClosure     r2, r0, Function<MyClass>2
+; test_method_detection.js:4:1
+    PutById           r1, r2, 2, "MyClass"
+; test_method_detection.js:4:1
+    NewObject         r2
+; test_method_detection.js:4:1
+    CreateClosure     r3, r0, Function<method>3
+; test_method_detection.js:9:11
+    PutNewOwnByIdShort r2, r3, "method"
+; test_method_detection.js:9:11
+    LoadConstUInt8    r3, 100
+; test_method_detection.js:9:11
+    PutNewOwnByIdShort r2, r3, "value"
+; test_method_detection.js:9:9
+    PutById           r1, r2, 3, "obj"
+; test_method_detection.js:20:1
+    GetByIdShort      r2, r1, 1, "MyClass"
+; test_method_detection.js:20:8
+    GetByIdShort      r3, r2, 2, "prototype"
+; test_method_detection.js:20:8
+    CreateClosure     r2, r0, Function<>4
+; test_method_detection.js:20:31
+    PutById           r3, r2, 4, "getInstance"
+; test_method_detection.js:20:31
+    NewObject         r2
+; test_method_detection.js:25:11
+    PutById           r1, r2, 5, "myObj"
+; test_method_detection.js:26:1
+    GetByIdShort      r3, r1, 3, "myObj"
+; test_method_detection.js:26:1
+    CreateClosure     r2, r0, Function<>5
+; test_method_detection.js:26:19
+    PutById           r3, r2, 6, "doSomething"
+; test_method_detection.js:32:5
+    TryGetById        r4, r1, 4, "console"
+; test_method_detection.js:32:16
+    GetByIdShort      r3, r4, 5, "log"
+; test_method_detection.js:32:16
+    LoadConstString   r2, "IIFE"
+; test_method_detection.js:32:16
+    Call2             r2, r3, r4, r2
+; test_method_detection.js:36:1
+    TryGetById        r3, r1, 6, "setTimeout"
+; test_method_detection.js:36:1
+    LoadConstUndefined r2
+; test_method_detection.js:36:1
+    CreateClosure     r1, r0, Function<>6
+; test_method_detection.js:36:1
+    LoadConstInt      r0, 1000
+; test_method_detection.js:36:11
+    Call3             r0, r3, r2, r1, r0
+; test_method_detection.js:36:11
+    Ret               r0
+
+
+hbcdump> 

@@ -1,0 +1,4 @@
+test_constructor.js:11:1: error: invalid statement encountered.
+class Animal {
+^~~~~~~~~~~~~~
+Emitted 1 errors. exiting.
