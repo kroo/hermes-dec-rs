@@ -94,8 +94,94 @@ impl PhiFunction {
     }
 }
 
+/// Type of environment register
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EnvironmentType {
+    /// Function-level environment created by CreateEnvironment
+    FunctionScope,
+    /// Block-level environment created by CreateInnerEnvironment
+    BlockScope,
+    /// Environment obtained via GetEnvironment
+    ParentScope(u8), // level
+}
+
+/// Information about an environment variable
+#[derive(Debug, Clone)]
+pub struct EnvironmentVariable {
+    pub slot: u8,
+    pub first_store: Option<RegisterDef>,
+    pub stores: Vec<RegisterUse>,
+    pub loads: Vec<RegisterUse>,
+    pub suggested_name: Option<String>,
+}
+
+impl EnvironmentVariable {
+    pub fn new(slot: u8) -> Self {
+        Self {
+            slot,
+            first_store: None,
+            stores: Vec::new(),
+            loads: Vec::new(),
+            suggested_name: None,
+        }
+    }
+}
+
+/// Tracks environment operations within a function
+#[derive(Debug, Default, Clone)]
+pub struct EnvironmentInfo {
+    /// Map environment register to its type
+    pub environment_registers: HashMap<u8, EnvironmentType>,
+
+    /// The main function environment register (from CreateEnvironment)
+    pub function_env_register: Option<u8>,
+
+    /// Map (env_reg, slot) to variable info
+    pub environment_variables: HashMap<(u8, u8), EnvironmentVariable>,
+
+    /// Track which registers hold closure references
+    pub closure_registers: HashMap<u8, u32>, // reg -> function_index
+
+    /// Pending environment resolutions from GetEnvironment
+    pub pending_env_resolution: HashMap<u8, EnvironmentResolution>,
+}
+
+/// Resolution info for GetEnvironment results
+#[derive(Debug, Clone)]
+pub struct EnvironmentResolution {
+    pub source_function: u32,
+    pub original_env_register: u8,
+    pub access_level: u8,
+}
+
+/// Information about a captured variable access
+#[derive(Debug, Clone)]
+pub struct CapturedVarAccess {
+    pub local_register: u8,
+    pub source_function: u32,
+    pub source_slot: u8,
+    pub variable_name: String,
+    pub access_type: AccessType,
+}
+
+/// Type of variable access
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccessType {
+    Read,
+    Write,
+}
+
+/// Information about a closure variable declaration
+#[derive(Debug, Clone)]
+pub struct ClosureVarDecl {
+    pub env_register: u8,
+    pub slot: u8,
+    pub name: String,
+    pub first_assignment: Option<u8>, // register containing initial value
+}
+
 /// Complete SSA analysis results
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SSAAnalysis {
     pub function_id: u32,
     pub definitions: Vec<RegisterDef>,
@@ -107,6 +193,18 @@ pub struct SSAAnalysis {
     pub dominance_frontiers: HashMap<NodeIndex, HashSet<NodeIndex>>,
     pub phi_functions: HashMap<NodeIndex, Vec<PhiFunction>>,
     pub ssa_values: HashMap<RegisterDef, SSAValue>,
+
+    // NEW: Environment analysis
+    pub environment_info: EnvironmentInfo,
+
+    // NEW: Captured variable accesses
+    pub captured_variable_accesses: Vec<CapturedVarAccess>,
+
+    // NEW: Variables that need to be in scope for closures
+    pub required_closure_variables: HashSet<String>,
+
+    // NEW: Closure variable declarations
+    pub closure_variable_declarations: Vec<ClosureVarDecl>,
 }
 
 impl SSAAnalysis {
@@ -122,6 +220,10 @@ impl SSAAnalysis {
             dominance_frontiers: HashMap::new(),
             phi_functions: HashMap::new(),
             ssa_values: HashMap::new(),
+            environment_info: EnvironmentInfo::default(),
+            captured_variable_accesses: Vec::new(),
+            required_closure_variables: HashSet::new(),
+            closure_variable_declarations: Vec::new(),
         }
     }
 

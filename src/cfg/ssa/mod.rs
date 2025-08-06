@@ -1,5 +1,6 @@
 //! Static Single Assignment (SSA) form construction for the CFG
 
+pub mod environment;
 pub mod frontiers;
 pub mod liveness;
 pub mod phi_placement;
@@ -43,6 +44,9 @@ pub fn construct_ssa(cfg: &Cfg, function_id: u32) -> Result<SSAAnalysis, SSAErro
 
     // Step 5: Rename to SSA
     renaming::rename_to_ssa(cfg, &mut analysis)?;
+
+    // Step 6: Analyze environment operations
+    environment::analyze_environments(cfg, &mut analysis)?;
 
     Ok(analysis)
 }

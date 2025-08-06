@@ -50,11 +50,14 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
         right_reg: u8,
         op_name: &str,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Get source operand names using the "before" lookup to avoid self-references
+        let left_var = self.register_manager.get_source_variable_name(left_reg);
+        let right_var = self.register_manager.get_source_variable_name(right_reg);
+
+        // Now create the new variable for the destination
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let left_var = self.register_manager.get_variable_name(left_reg);
-        let right_var = self.register_manager.get_variable_name(right_reg);
 
         let span = Span::default();
 
@@ -112,7 +115,7 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let operand_var = self.register_manager.get_variable_name(operand_reg);
+        let operand_var = self.register_manager.get_source_variable_name(operand_reg);
 
         let span = Span::default();
 
@@ -157,7 +160,7 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let operand_var = self.register_manager.get_variable_name(operand_reg);
+        let operand_var = self.register_manager.get_source_variable_name(operand_reg);
 
         let span = Span::default();
 
@@ -216,8 +219,8 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let left_var = self.register_manager.get_variable_name(left_reg);
-        let right_var = self.register_manager.get_variable_name(right_reg);
+        let left_var = self.register_manager.get_source_variable_name(left_reg);
+        let right_var = self.register_manager.get_source_variable_name(right_reg);
 
         let span = Span::default();
 

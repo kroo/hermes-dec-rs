@@ -73,6 +73,9 @@ pub enum VariableMapError {
 pub struct VariableMapping {
     pub ssa_to_var: HashMap<SSAValue, String>,
     pub register_at_pc: HashMap<(u8, u32), SSAValue>,
+    /// Maps (register, pc) to SSA value BEFORE the instruction at that PC
+    /// Used for source operand lookups to avoid self-reference issues
+    pub register_before_pc: HashMap<(u8, u32), SSAValue>,
     pub function_scope_vars: HashSet<String>,
     pub block_scope_vars: HashMap<NodeIndex, HashSet<String>>,
     /// Fallback variable names for registers not covered by SSA
@@ -88,6 +91,7 @@ impl VariableMapping {
         Self {
             ssa_to_var: HashMap::new(),
             register_at_pc: HashMap::new(),
+            register_before_pc: HashMap::new(),
             function_scope_vars: HashSet::new(),
             block_scope_vars: HashMap::new(),
             fallback_register_names: HashMap::new(),
@@ -118,6 +122,21 @@ impl VariableMapping {
 
         // Fallback to simple register naming
         self.fallback_register_names.get(&register)
+    }
+
+    /// Get variable name for a source operand (before the instruction executes)
+    /// This prevents self-reference issues like `let x = y - x` when it should be `let x2 = y - x1`
+    pub fn get_source_variable_name(&self, register: u8, pc: u32) -> Option<&String> {
+        // Use the "before" lookup for source operands
+        if let Some(ssa_value) = self.register_before_pc.get(&(register, pc)) {
+            // Look up the coalesced variable name for this SSA value
+            if let Some(var_name) = self.ssa_to_var.get(ssa_value) {
+                return Some(var_name);
+            }
+        }
+
+        // Fallback to regular lookup if before state not available
+        self.get_variable_name_with_fallback(register, pc)
     }
 
     /// Generate a unique temporary variable name
@@ -265,9 +284,8 @@ impl VariableMapper {
                         }
                     } else {
                         // Subsequent assignments use letter suffixes
-                        let letter =
-                            std::char::from_u32('a' as u32 + (*assignment_num - 2)).unwrap_or('z');
-                        format!("var{}_{}", target_reg, letter)
+                        let suffix = self.version_to_letters(*assignment_num - 2);
+                        format!("var{}_{}", target_reg, suffix)
                     };
 
                     // Map this specific PC to this variable name
@@ -311,9 +329,8 @@ impl VariableMapper {
                                     format!("var{}", source_reg)
                                 }
                             } else {
-                                let letter = std::char::from_u32('a' as u32 + (current_count - 2))
-                                    .unwrap_or('z');
-                                format!("var{}_{}", source_reg, letter)
+                                let suffix = self.version_to_letters(current_count - 2);
+                                format!("var{}_{}", source_reg, suffix)
                             };
 
                             // Create a dummy SSA value for the current version
@@ -346,12 +363,18 @@ impl VariableMapper {
         // Try various heuristics for meaningful names:
 
         // 1. Function parameters (registers defined at instruction 0)
+        // TODO: This heuristic is incorrect - we should check if the instruction
+        // at def_site is a LoadParam, not just if it's at PC 0
+        // For now, disable this to avoid confusion where r1 is named "arg1"
+        // when it's not actually a parameter
+        /*
         if value.def_site.instruction_idx == 0 && value.def_site.pc == 0 {
             let param_name = format!("arg{}", value.register);
             if !self.reserved_names.contains(&param_name) {
                 return param_name;
             }
         }
+        */
 
         // 2. For now, use descriptive register-based names
         // TODO: Add heuristics for:
@@ -491,7 +514,8 @@ impl VariableMapper {
     fn generate_coalesced_name(&self, representative: &SSAValue, _ssa: &SSAAnalysis) -> String {
         // Use the representative as the basis for naming
         let base_name =
-            if representative.def_site.instruction_idx == 0 && representative.def_site.pc == 0 {
+            // TODO: Check if the instruction is LoadParam instead of assuming PC 0
+            if false && representative.def_site.instruction_idx == 0 && representative.def_site.pc == 0 {
                 // Function parameter
                 format!("arg{}", representative.register)
             } else {
@@ -501,10 +525,9 @@ impl VariableMapper {
                 if representative.version == 1 {
                     format!("var{}", representative.register)
                 } else {
-                    // Convert version number to letter: 2->a, 3->b, 4->c, etc.
-                    let letter = std::char::from_u32('a' as u32 + (representative.version - 2))
-                        .unwrap_or('z'); // fallback to 'z' for very high versions
-                    format!("var{}_{}", representative.register, letter)
+                    // Convert version number to letters: 2->a, 3->b, ..., 27->z, 28->aa, 29->ab, etc.
+                    let suffix = self.version_to_letters(representative.version - 2);
+                    format!("var{}_{}", representative.register, suffix)
                 }
             };
 
@@ -565,8 +588,15 @@ impl VariableMapper {
             for (inst_idx, _) in block.instructions().iter().enumerate() {
                 let pc = block.start_pc() + inst_idx as u32;
 
-                // Update for definitions at this instruction FIRST
-                // This ensures the definition is available at its own PC
+                // First, record the BEFORE state for this PC
+                // This is used for source operand lookups
+                for (register, ssa_value) in &current_versions {
+                    mapping
+                        .register_before_pc
+                        .insert((*register, pc), ssa_value.clone());
+                }
+
+                // Update for definitions at this instruction
                 for def in &ssa.definitions {
                     if def.block_id == block_id && def.instruction_idx == inst_idx {
                         if let Some(ssa_value) = ssa.ssa_values.get(def) {
@@ -575,7 +605,7 @@ impl VariableMapper {
                     }
                 }
 
-                // Record current versions for all registers at this PC
+                // Record current versions for all registers at this PC (AFTER state)
                 // This includes any definitions that happened at this instruction
                 for (register, ssa_value) in &current_versions {
                     mapping
@@ -645,10 +675,57 @@ impl VariableMapper {
             base_name
         }
     }
+
+    /// Convert a version number to a letter suffix (a, b, ..., z, aa, ab, ..., zz, aaa, ...)
+    fn version_to_letters(&self, version: u32) -> String {
+        let mut result = String::new();
+        let mut n = version as i32;
+
+        // We use a base-26 system where 0=a, 1=b, ..., 25=z
+        // But we want: 0=a, 25=z, 26=aa, 51=az, 52=ba, etc.
+        // This is similar to Excel column naming
+
+        loop {
+            result.push(((n % 26) as u8 + b'a') as char);
+            n = n / 26;
+            if n == 0 {
+                break;
+            }
+            n -= 1; // Adjust for 1-based indexing in multi-character sequences
+        }
+
+        result.chars().rev().collect()
+    }
 }
 
 #[derive(Debug)]
 pub enum VariableScope {
     Function,
     Block(NodeIndex),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_version_to_letters() {
+        let mapper = VariableMapper::new();
+
+        // Single letters
+        assert_eq!(mapper.version_to_letters(0), "a");
+        assert_eq!(mapper.version_to_letters(1), "b");
+        assert_eq!(mapper.version_to_letters(25), "z");
+
+        // Double letters
+        assert_eq!(mapper.version_to_letters(26), "aa");
+        assert_eq!(mapper.version_to_letters(27), "ab");
+        assert_eq!(mapper.version_to_letters(51), "az");
+        assert_eq!(mapper.version_to_letters(52), "ba");
+        assert_eq!(mapper.version_to_letters(701), "zz");
+
+        // Triple letters
+        assert_eq!(mapper.version_to_letters(702), "aaa");
+        assert_eq!(mapper.version_to_letters(703), "aab");
+    }
 }

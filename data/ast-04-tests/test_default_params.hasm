@@ -1,0 +1,89 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 597d3d898203d755ce2076bb02ce4ed46e12a656
+  Function count: 3
+  String count: 8
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..4] #1C35E808: Alice
+s1[ASCII, 5..11] #58FA9DBB: Hello, 
+s2[ASCII, 12..16] #629A2BFD: World
+s3[ASCII, 19..24] #1D013422: global
+s4[ASCII, 17..19] log
+s5[ASCII, 25..27] add
+s6[ASCII, 28..34] console
+s7[ASCII, 35..39] greet
+
+Array Buffer:
+
+Function<global>0(1 params, 15 registers, 0 symbols):
+  DeclareGlobalVar  "greet"
+  DeclareGlobalVar  "add"
+  CreateEnvironment r1
+  CreateClosure     r2, r1, Function<greet>1
+  GetGlobalObject   r0
+  PutById           r0, r2, 1, "greet"
+  CreateClosure     r1, r1, Function<add>2
+  PutById           r0, r1, 2, "add"
+  GetByIdShort      r1, r0, 1, "greet"
+  LoadConstUndefined r5
+  Call1             r1, r1, r5
+  GetByIdShort      r2, r0, 1, "greet"
+  LoadConstString   r1, "Alice"
+  Call2             r1, r2, r5, r1
+  TryGetById        r3, r0, 2, "console"
+  GetByIdShort      r2, r3, 3, "log"
+  GetByIdShort      r1, r0, 4, "add"
+  Call1             r1, r1, r5
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 2, "console"
+  GetByIdShort      r2, r3, 3, "log"
+  GetByIdShort      r1, r0, 4, "add"
+  LoadConstUInt8    r4, 5
+  Call2             r1, r1, r5, r4
+  Call2             r1, r2, r3, r1
+  TryGetById        r2, r0, 2, "console"
+  GetByIdShort      r1, r2, 3, "log"
+  GetByIdShort      r3, r0, 4, "add"
+  LoadConstUInt8    r0, 3
+  Call3             r0, r3, r5, r4, r0
+  Call2             r0, r1, r2, r0
+  Ret               r0
+
+Function<greet>1(1 params, 13 registers, 0 symbols):
+  LoadParam         r4, 1
+  LoadConstUndefined r0
+  JStrictNotEqual   L1, r4, r0
+  LoadConstString   r4, "World"
+L1:
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Hello, "
+  Add               r1, r1, r4
+  Call2             r1, r2, r3, r1
+  Ret               r0
+
+Function<add>2(1 params, 4 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadParam         r0, 2
+  LoadConstUndefined r2
+  JStrictNotEqual   L1, r1, r2
+  LoadConstZero     r1
+L1:
+  JStrictNotEqual   L2, r0, r2
+  LoadConstZero     r0
+L2:
+  Add               r0, r1, r0
+  Ret               r0
+

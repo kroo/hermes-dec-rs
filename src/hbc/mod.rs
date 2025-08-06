@@ -90,23 +90,23 @@ impl<'a> HbcFile<'a> {
         // ensure the offset is set to the end of the header
         offset = header_size;
 
-        println!("Header parsed successfully:");
-        println!("  Magic: 0x{:016X}", header.magic());
-        println!("  Version: {}", header.version());
-        println!("  Function count: {}", header.function_count());
-        println!("  String count: {}", header.string_count());
-        println!("  String storage size: {}", header.string_storage_size());
-        println!("  RegExp count: {}", header.reg_exp_count());
-        println!("  RegExp storage size: {}", header.reg_exp_storage_size());
-        println!("  CJS module count: {}", header.cjs_module_count());
-        println!(
-            "  CJS modules statically resolved: {}",
-            header.cjs_modules_statically_resolved()
-        );
-        println!("  Debug info offset: {}", header.debug_info_offset());
-        if let Some(count) = header.big_int_count() {
-            println!("  BigInt count: {}", count);
-        }
+        // println!("Header parsed successfully:");
+        // println!("  Magic: 0x{:016X}", header.magic());
+        // println!("  Version: {}", header.version());
+        // println!("  Function count: {}", header.function_count());
+        // println!("  String count: {}", header.string_count());
+        // println!("  String storage size: {}", header.string_storage_size());
+        // println!("  RegExp count: {}", header.reg_exp_count());
+        // println!("  RegExp storage size: {}", header.reg_exp_storage_size());
+        // println!("  CJS module count: {}", header.cjs_module_count());
+        // println!(
+        //     "  CJS modules statically resolved: {}",
+        //     header.cjs_modules_statically_resolved()
+        // );
+        // println!("  Debug info offset: {}", header.debug_info_offset());
+        // if let Some(count) = header.big_int_count() {
+        //     println!("  BigInt count: {}", count);
+        // }
 
         // Validate magic number
         if header.magic() != HBC_MAGIC {
@@ -185,7 +185,7 @@ impl<'a> HbcFile<'a> {
         };
 
         // Pre-parse all instructions to avoid repeated parsing during jump table construction
-        let parse_start = std::time::Instant::now();
+        // let parse_start = std::time::Instant::now();
         let parse_results: Result<Vec<_>, _> = (0..hbc_file.functions.count())
             .into_par_iter()
             .map(|function_index| {
@@ -201,16 +201,16 @@ impl<'a> HbcFile<'a> {
             })
             .collect();
         parse_results.map_err(|e| format!("Failed to pre-parse instructions: {}", e))?;
-        let parse_elapsed = parse_start.elapsed();
-        eprintln!(
-            "Pre-parsing completed in {:.2?} ({:.1} functions/second)",
-            parse_elapsed,
-            hbc_file.functions.count() as f64 / parse_elapsed.as_secs_f64()
-        );
+        // let parse_elapsed = parse_start.elapsed();
+        // eprintln!(
+        //     "Pre-parsing completed in {:.2?} ({:.1} functions/second)",
+        //     parse_elapsed,
+        //     hbc_file.functions.count() as f64 / parse_elapsed.as_secs_f64()
+        // );
 
         // Build jump table
         let function_count = hbc_file.functions.count();
-        let start_time = std::time::Instant::now();
+        // let start_time = std::time::Instant::now();
 
         // Build jump table data in parallel
         let jump_table_results: Result<Vec<_>, _> = (0..function_count)
@@ -260,15 +260,15 @@ impl<'a> HbcFile<'a> {
             );
         }
 
-        let elapsed = start_time.elapsed();
-        eprintln!(
-            "Jump table built successfully in {:.2?} ({:.1} functions/second)",
-            elapsed,
-            function_count as f64 / elapsed.as_secs_f64()
-        );
+        // let elapsed = start_time.elapsed();
+        // eprintln!(
+        //     "Jump table built successfully in {:.2?} ({:.1} functions/second)",
+        //     elapsed,
+        //     function_count as f64 / elapsed.as_secs_f64()
+        // );
 
         // Build switch tables
-        let switch_start_time = std::time::Instant::now();
+        // let switch_start_time = std::time::Instant::now();
 
         // Create a shared jump table cache for this parsing session
         let mut shared_jump_table_cache = crate::hbc::tables::switch_table::JumpTableCache::new();
@@ -357,14 +357,14 @@ impl<'a> HbcFile<'a> {
             .get_jump_table_cache_mut()
             .jump_tables = shared_jump_table_cache.jump_tables;
 
-        let switch_elapsed = switch_start_time.elapsed();
-        eprintln!(
-            "Switch tables built successfully in {:.2?} ({:.1} functions/second)",
-            switch_elapsed,
-            function_count as f64 / switch_elapsed.as_secs_f64()
-        );
+        // let switch_elapsed = switch_start_time.elapsed();
+        // eprintln!(
+        //     "Switch tables built successfully in {:.2?} ({:.1} functions/second)",
+        //     switch_elapsed,
+        //     function_count as f64 / switch_elapsed.as_secs_f64()
+        // );
 
-        println!("HbcFile parsed successfully");
+        // println!("HbcFile parsed successfully");
         Ok(hbc_file)
     }
 }
