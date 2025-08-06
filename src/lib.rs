@@ -3,6 +3,7 @@
 //! This library provides functionality to parse, analyze, and decompile Hermes HBC
 //! (Hermes Bytecode) files into readable JavaScript/TypeScript source code.
 
+pub mod analysis;
 pub mod ast;
 pub mod cfg;
 pub mod cli;

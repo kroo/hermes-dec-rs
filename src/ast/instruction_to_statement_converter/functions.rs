@@ -180,13 +180,13 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg_count: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Read all variable names BEFORE creating destination variable to avoid conflicts
-        let func_var = self.register_manager.get_variable_name_for_read(func_reg);
+        let func_var = self.register_manager.get_source_variable_name(func_reg);
 
         // Collect argument variable names
         let mut arg_vars = Vec::new();
         for i in 0..arg_count {
             let arg_reg = func_reg + 1 + i;
-            let arg_var = self.register_manager.get_variable_name_for_read(arg_reg);
+            let arg_var = self.register_manager.get_source_variable_name(arg_reg);
             arg_vars.push(arg_var);
         }
 
@@ -252,8 +252,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg1_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Read all variable names BEFORE creating destination variable
-        let func_var = self.register_manager.get_variable_name_for_read(func_reg);
-        let arg1_var = self.register_manager.get_variable_name_for_read(arg1_reg);
+        let func_var = self.register_manager.get_source_variable_name(func_reg);
+        let arg1_var = self.register_manager.get_source_variable_name(arg1_reg);
 
         // Now create the destination variable
         let dest_var = self
@@ -304,9 +304,9 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg2_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Read all variable names BEFORE creating destination variable
-        let func_var = self.register_manager.get_variable_name_for_read(func_reg);
-        let arg1_var = self.register_manager.get_variable_name_for_read(arg1_reg);
-        let arg2_var = self.register_manager.get_variable_name_for_read(arg2_reg);
+        let func_var = self.register_manager.get_source_variable_name(func_reg);
+        let arg1_var = self.register_manager.get_source_variable_name(arg1_reg);
+        let arg2_var = self.register_manager.get_source_variable_name(arg2_reg);
 
         // Now create the destination variable
         let dest_var = self
@@ -362,10 +362,10 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg3_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Read all variable names BEFORE creating destination variable
-        let func_var = self.register_manager.get_variable_name_for_read(func_reg);
-        let arg1_var = self.register_manager.get_variable_name_for_read(arg1_reg);
-        let arg2_var = self.register_manager.get_variable_name_for_read(arg2_reg);
-        let arg3_var = self.register_manager.get_variable_name_for_read(arg3_reg);
+        let func_var = self.register_manager.get_source_variable_name(func_reg);
+        let arg1_var = self.register_manager.get_source_variable_name(arg1_reg);
+        let arg2_var = self.register_manager.get_source_variable_name(arg2_reg);
+        let arg3_var = self.register_manager.get_source_variable_name(arg3_reg);
 
         // Now create the destination variable
         let dest_var = self
@@ -426,11 +426,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg4_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Read all variable names BEFORE creating destination variable
-        let func_var = self.register_manager.get_variable_name_for_read(func_reg);
-        let arg1_var = self.register_manager.get_variable_name_for_read(arg1_reg);
-        let arg2_var = self.register_manager.get_variable_name_for_read(arg2_reg);
-        let arg3_var = self.register_manager.get_variable_name_for_read(arg3_reg);
-        let arg4_var = self.register_manager.get_variable_name_for_read(arg4_reg);
+        let func_var = self.register_manager.get_source_variable_name(func_reg);
+        let arg1_var = self.register_manager.get_source_variable_name(arg1_reg);
+        let arg2_var = self.register_manager.get_source_variable_name(arg2_reg);
+        let arg3_var = self.register_manager.get_source_variable_name(arg3_reg);
+        let arg4_var = self.register_manager.get_source_variable_name(arg4_reg);
 
         // Now create the destination variable
         let dest_var = self
@@ -527,7 +527,13 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
 
         // Create parameter name based on index
-        let param_name = format!("param{}", param_index);
+        // Account for implicit 'this' parameter at index 0
+        let param_name = if param_index > 0 {
+            format!("arg{}", param_index - 1)
+        } else {
+            // This is the implicit 'this' parameter
+            "this".to_string()
+        };
         let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
         let param_expr = self.ast_builder.expression_identifier(span, param_atom);
 
@@ -559,26 +565,18 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             .lookup_function_name(func_idx as u32)
             .unwrap_or_else(|_| format!("function_{}", func_idx));
 
-        // Create function parameters (empty for now)
-        let params = self.ast_builder.formal_parameters(
-            span,
-            oxc_ast::ast::FormalParameterKind::FormalParameter,
-            self.ast_builder.vec(),
-            None::<oxc_ast::ast::BindingRestElement>,
-        );
-
-        // Create function body with placeholder comment including parameter count
-        let param_info = self
+        // Get parameter count and create parameters
+        let param_count = self
             .expression_context
             .lookup_function_param_count(func_idx as u32)
-            .map(|count| format!(" (expects {} args)", count))
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or(0);
 
-        let body_comment = format!(
-            "/* TODO: Decompile function {} body{} */",
-            func_idx, param_info
-        );
-        let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
+        let params = self.create_function_parameters(param_count, func_idx as u32);
+
+        // For now, create a placeholder body
+        // In a full implementation, we would recursively decompile the function body
+        let body_comment = "/* Nested function - body not yet decompiled */";
+        let comment_atom = self.ast_builder.allocator.alloc_str(body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
 
@@ -635,25 +633,24 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             .lookup_function_name(func_idx as u32)
             .unwrap_or_else(|_| format!("async_function_{}", func_idx));
 
-        // Create function parameters (empty for now)
-        let params = self.ast_builder.formal_parameters(
-            span,
-            oxc_ast::ast::FormalParameterKind::FormalParameter,
-            self.ast_builder.vec(),
-            None::<oxc_ast::ast::BindingRestElement>,
-        );
-
-        // Create function body with placeholder comment including parameter count
-        let param_info = self
+        // Get parameter count and create parameters
+        let param_count = self
             .expression_context
             .lookup_function_param_count(func_idx as u32)
-            .map(|count| format!(" (expects {} args)", count))
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or(0);
 
-        let body_comment = format!(
-            "/* TODO: Decompile async function {} body{} */",
-            func_idx, param_info
-        );
+        let params = self.create_function_parameters(param_count, func_idx as u32);
+
+        // Create function body with placeholder comment
+        // Subtract 1 from param_count to account for implicit 'this' parameter
+        let actual_param_count = if param_count > 0 { param_count - 1 } else { 0 };
+        let _param_info = if actual_param_count > 0 {
+            format!(" (expects {} args)", actual_param_count)
+        } else {
+            String::new()
+        };
+
+        let body_comment = "/* Nested async function - body not yet decompiled */";
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
@@ -881,17 +878,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             None::<oxc_ast::ast::BindingRestElement>,
         );
 
-        // Create function body with placeholder comment including parameter count
-        let param_info = self
-            .expression_context
-            .lookup_function_param_count(func_idx)
-            .map(|count| format!(" (expects {} args)", count))
-            .unwrap_or_else(|_| String::new());
-
-        let body_comment = format!(
-            "/* TODO: Decompile function {} body{} */",
-            func_idx, param_info
-        );
+        let body_comment = "/* Nested function - body not yet decompiled */";
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
@@ -949,25 +936,24 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             .lookup_function_name(func_idx)
             .unwrap_or_else(|_| format!("async_function_{}", func_idx));
 
-        // Create function parameters (empty for now)
-        let params = self.ast_builder.formal_parameters(
-            span,
-            oxc_ast::ast::FormalParameterKind::FormalParameter,
-            self.ast_builder.vec(),
-            None::<oxc_ast::ast::BindingRestElement>,
-        );
-
-        // Create function body with placeholder comment including parameter count
-        let param_info = self
+        // Get parameter count and create parameters
+        let param_count = self
             .expression_context
             .lookup_function_param_count(func_idx as u32)
-            .map(|count| format!(" (expects {} args)", count))
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or(0);
 
-        let body_comment = format!(
-            "/* TODO: Decompile async function {} body{} */",
-            func_idx, param_info
-        );
+        let params = self.create_function_parameters(param_count, func_idx as u32);
+
+        // Create function body with placeholder comment
+        // Subtract 1 from param_count to account for implicit 'this' parameter
+        let actual_param_count = if param_count > 0 { param_count - 1 } else { 0 };
+        let _param_info = if actual_param_count > 0 {
+            format!(" (expects {} args)", actual_param_count)
+        } else {
+            String::new()
+        };
+
+        let body_comment = "/* Nested async function - body not yet decompiled */";
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
@@ -1025,25 +1011,24 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             .lookup_function_name(func_idx as u32)
             .unwrap_or_else(|_| format!("generator_{}", func_idx));
 
-        // Create function parameters (empty for now)
-        let params = self.ast_builder.formal_parameters(
-            span,
-            oxc_ast::ast::FormalParameterKind::FormalParameter,
-            self.ast_builder.vec(),
-            None::<oxc_ast::ast::BindingRestElement>,
-        );
-
-        // Create function body with placeholder comment including parameter count
-        let param_info = self
+        // Get parameter count and create parameters
+        let param_count = self
             .expression_context
             .lookup_function_param_count(func_idx as u32)
-            .map(|count| format!(" (expects {} args)", count))
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or(0);
 
-        let body_comment = format!(
-            "/* TODO: Decompile generator function {} body{} */",
-            func_idx, param_info
-        );
+        let params = self.create_function_parameters(param_count, func_idx as u32);
+
+        // Create function body with placeholder comment
+        // Subtract 1 from param_count to account for implicit 'this' parameter
+        let actual_param_count = if param_count > 0 { param_count - 1 } else { 0 };
+        let _param_info = if actual_param_count > 0 {
+            format!(" (expects {} args)", actual_param_count)
+        } else {
+            String::new()
+        };
+
+        let body_comment = "/* Nested generator function - body not yet decompiled */";
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
@@ -1101,25 +1086,24 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             .lookup_function_name(func_idx)
             .unwrap_or_else(|_| format!("generator_{}", func_idx));
 
-        // Create function parameters (empty for now)
-        let params = self.ast_builder.formal_parameters(
-            span,
-            oxc_ast::ast::FormalParameterKind::FormalParameter,
-            self.ast_builder.vec(),
-            None::<oxc_ast::ast::BindingRestElement>,
-        );
-
-        // Create function body with placeholder comment including parameter count
-        let param_info = self
+        // Get parameter count and create parameters
+        let param_count = self
             .expression_context
             .lookup_function_param_count(func_idx as u32)
-            .map(|count| format!(" (expects {} args)", count))
-            .unwrap_or_else(|_| String::new());
+            .unwrap_or(0);
 
-        let body_comment = format!(
-            "/* TODO: Decompile generator function {} body{} */",
-            func_idx, param_info
-        );
+        let params = self.create_function_parameters(param_count, func_idx as u32);
+
+        // Create function body with placeholder comment
+        // Subtract 1 from param_count to account for implicit 'this' parameter
+        let actual_param_count = if param_count > 0 { param_count - 1 } else { 0 };
+        let _param_info = if actual_param_count > 0 {
+            format!(" (expects {} args)", actual_param_count)
+        } else {
+            String::new()
+        };
+
+        let body_comment = "/* Nested generator function - body not yet decompiled */";
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
