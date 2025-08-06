@@ -237,8 +237,10 @@ impl Decompiler {
                                 operand_1.to_string()
                             }
                             UnifiedInstruction::LoadConstDouble { operand_1, .. } => {
-                                // For now, just use a placeholder for doubles
-                                format!("/* double_{}*/0", operand_1)
+                                // Look up the actual double value from the array table
+                                // For now, we don't have direct access to the double array
+                                // TODO: Implement proper double value lookup
+                                format!("/* double[{}] */", operand_1)
                             }
                             UnifiedInstruction::LoadConstTrue { .. } => "true".to_string(),
                             UnifiedInstruction::LoadConstFalse { .. } => "false".to_string(),
@@ -246,7 +248,29 @@ impl Decompiler {
                             UnifiedInstruction::LoadConstUndefined { .. } => {
                                 "undefined".to_string()
                             }
-                            _ => "/* unknown */".to_string(),
+                            UnifiedInstruction::LoadConstEmpty { .. } => "/* empty */".to_string(),
+                            UnifiedInstruction::LoadConstBigInt { operand_1, .. } => {
+                                // Look up the actual bigint value from the bigint table
+                                hbc_file
+                                    .bigints
+                                    .get(*operand_1 as u32)
+                                    .map(|bi| format!("{}n", bi))
+                                    .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1))
+                            }
+                            UnifiedInstruction::LoadConstBigIntLongIndex { operand_1, .. } => {
+                                hbc_file
+                                    .bigints
+                                    .get(*operand_1)
+                                    .map(|bi| format!("{}n", bi))
+                                    .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1))
+                            }
+                            UnifiedInstruction::NewObject { .. } => "{}".to_string(),
+                            UnifiedInstruction::NewArray { .. } => "[]".to_string(),
+                            UnifiedInstruction::GetGlobalObject { .. } => "globalThis".to_string(),
+                            _ => format!(
+                                "/* unsupported default: {:?} */",
+                                std::mem::discriminant(&default_info.default_value_instruction)
+                            ),
                         };
                         format!("{} = {}", param_name, default_value)
                     } else {

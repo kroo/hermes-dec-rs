@@ -75,14 +75,18 @@ impl DefaultParameterAnalyzer {
                                 // The instruction after the jump is the default value
                                 let default_instruction = instructions[i + 1].clone();
 
-                                defaults.insert(
-                                    param_idx,
-                                    DefaultParameterInfo {
-                                        param_index: param_idx,
-                                        default_value_instruction: default_instruction,
-                                        default_value_pc: i + 1,
-                                    },
-                                );
+                                // Verify this looks like a value-loading instruction
+                                if is_value_loading_instruction(&default_instruction) {
+                                    defaults.insert(
+                                        param_idx,
+                                        DefaultParameterInfo {
+                                            param_index: param_idx,
+                                            default_value_instruction: default_instruction,
+                                            default_value_pc: i + 1,
+                                        },
+                                    );
+                                }
+                                // If not, we skip this pattern as it might be a different bytecode structure
                             }
                         }
                     }
@@ -120,6 +124,29 @@ impl DefaultParameterAnalyzer {
             _ => None,
         }
     }
+}
+
+/// Check if an instruction is likely to be loading a default value
+fn is_value_loading_instruction(instruction: &UnifiedInstruction) -> bool {
+    matches!(
+        instruction,
+        UnifiedInstruction::LoadConstString { .. }
+            | UnifiedInstruction::LoadConstStringLongIndex { .. }
+            | UnifiedInstruction::LoadConstUInt8 { .. }
+            | UnifiedInstruction::LoadConstInt { .. }
+            | UnifiedInstruction::LoadConstDouble { .. }
+            | UnifiedInstruction::LoadConstBigInt { .. }
+            | UnifiedInstruction::LoadConstBigIntLongIndex { .. }
+            | UnifiedInstruction::LoadConstEmpty { .. }
+            | UnifiedInstruction::LoadConstUndefined { .. }
+            | UnifiedInstruction::LoadConstNull { .. }
+            | UnifiedInstruction::LoadConstTrue { .. }
+            | UnifiedInstruction::LoadConstFalse { .. }
+            | UnifiedInstruction::LoadConstZero { .. }
+            | UnifiedInstruction::NewObject { .. }
+            | UnifiedInstruction::NewArray { .. }
+            | UnifiedInstruction::GetGlobalObject { .. }
+    )
 }
 
 #[cfg(test)]
