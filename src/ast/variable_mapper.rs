@@ -284,9 +284,8 @@ impl VariableMapper {
                         }
                     } else {
                         // Subsequent assignments use letter suffixes
-                        let letter =
-                            std::char::from_u32('a' as u32 + (*assignment_num - 2)).unwrap_or('z');
-                        format!("var{}_{}", target_reg, letter)
+                        let suffix = self.version_to_letters(*assignment_num - 2);
+                        format!("var{}_{}", target_reg, suffix)
                     };
 
                     // Map this specific PC to this variable name
@@ -330,9 +329,8 @@ impl VariableMapper {
                                     format!("var{}", source_reg)
                                 }
                             } else {
-                                let letter = std::char::from_u32('a' as u32 + (current_count - 2))
-                                    .unwrap_or('z');
-                                format!("var{}_{}", source_reg, letter)
+                                let suffix = self.version_to_letters(current_count - 2);
+                                format!("var{}_{}", source_reg, suffix)
                             };
 
                             // Create a dummy SSA value for the current version
@@ -527,10 +525,9 @@ impl VariableMapper {
                 if representative.version == 1 {
                     format!("var{}", representative.register)
                 } else {
-                    // Convert version number to letter: 2->a, 3->b, 4->c, etc.
-                    let letter = std::char::from_u32('a' as u32 + (representative.version - 2))
-                        .unwrap_or('z'); // fallback to 'z' for very high versions
-                    format!("var{}_{}", representative.register, letter)
+                    // Convert version number to letters: 2->a, 3->b, ..., 27->z, 28->aa, 29->ab, etc.
+                    let suffix = self.version_to_letters(representative.version - 2);
+                    format!("var{}_{}", representative.register, suffix)
                 }
             };
 
@@ -678,10 +675,57 @@ impl VariableMapper {
             base_name
         }
     }
+
+    /// Convert a version number to a letter suffix (a, b, ..., z, aa, ab, ..., zz, aaa, ...)
+    fn version_to_letters(&self, version: u32) -> String {
+        let mut result = String::new();
+        let mut n = version as i32;
+
+        // We use a base-26 system where 0=a, 1=b, ..., 25=z
+        // But we want: 0=a, 25=z, 26=aa, 51=az, 52=ba, etc.
+        // This is similar to Excel column naming
+
+        loop {
+            result.push(((n % 26) as u8 + b'a') as char);
+            n = n / 26;
+            if n == 0 {
+                break;
+            }
+            n -= 1; // Adjust for 1-based indexing in multi-character sequences
+        }
+
+        result.chars().rev().collect()
+    }
 }
 
 #[derive(Debug)]
 pub enum VariableScope {
     Function,
     Block(NodeIndex),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_version_to_letters() {
+        let mapper = VariableMapper::new();
+
+        // Single letters
+        assert_eq!(mapper.version_to_letters(0), "a");
+        assert_eq!(mapper.version_to_letters(1), "b");
+        assert_eq!(mapper.version_to_letters(25), "z");
+
+        // Double letters
+        assert_eq!(mapper.version_to_letters(26), "aa");
+        assert_eq!(mapper.version_to_letters(27), "ab");
+        assert_eq!(mapper.version_to_letters(51), "az");
+        assert_eq!(mapper.version_to_letters(52), "ba");
+        assert_eq!(mapper.version_to_letters(701), "zz");
+
+        // Triple letters
+        assert_eq!(mapper.version_to_letters(702), "aaa");
+        assert_eq!(mapper.version_to_letters(703), "aab");
+    }
 }
