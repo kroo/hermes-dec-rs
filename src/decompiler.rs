@@ -163,26 +163,36 @@ impl Decompiler {
         };
 
         // Analyze the function for patterns
-        let (default_params, function_type) = match hbc_file.functions.get(function_index, hbc_file)
-        {
-            Ok(func) => {
-                // Extract UnifiedInstruction from HbcFunctionInstruction
-                let unified_instructions: Vec<UnifiedInstruction> = func
-                    .instructions
-                    .iter()
-                    .map(|instr| instr.instruction.clone())
-                    .collect();
+        let (default_params, function_type) =
+            match hbc_file.functions.get(function_index, hbc_file) {
+                Ok(func) => {
+                    // Extract UnifiedInstruction from HbcFunctionInstruction
+                    let unified_instructions: Vec<UnifiedInstruction> = func
+                        .instructions
+                        .iter()
+                        .map(|instr| instr.instruction.clone())
+                        .collect();
 
-                let defaults = DefaultParameterAnalyzer::analyze(&unified_instructions);
-                let func_type =
-                    FunctionClassifier::classify(function_index, &unified_instructions, hbc_file);
-                (defaults, func_type)
-            }
-            Err(_) => {
-                // No function found, return empty results
-                (std::collections::HashMap::new(), FunctionType::Standalone)
-            }
-        };
+                    let defaults = DefaultParameterAnalyzer::analyze(&unified_instructions);
+
+                    // Get global analysis - it should always be available at this point
+                    let global_analysis = self.global_analysis.as_ref().expect(
+                        "Global analysis should be available during function classification",
+                    );
+
+                    let func_type = FunctionClassifier::classify(
+                        function_index,
+                        &unified_instructions,
+                        hbc_file,
+                        global_analysis,
+                    );
+                    (defaults, func_type)
+                }
+                Err(_) => {
+                    // No function found, return empty results
+                    (std::collections::HashMap::new(), FunctionType::Standalone)
+                }
+            };
 
         // Subtract 1 to account for implicit 'this' parameter
         let metadata_param_count = if param_count > 0 { param_count - 1 } else { 0 };

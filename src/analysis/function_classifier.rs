@@ -44,6 +44,7 @@ impl FunctionClassifier {
         function_index: u32,
         instructions: &[UnifiedInstruction],
         hbc_file: &HbcFile,
+        global_analysis: &crate::analysis::GlobalAnalysisResult,
     ) -> FunctionType {
         // First check if it's a constructor using ConstructorDetector
         if let Some(constructor_info) =
@@ -56,7 +57,9 @@ impl FunctionClassifier {
         }
 
         // Check how this function is used in its parent function
-        if let Some(parent_usage) = analyze_parent_usage(function_index, hbc_file) {
+        if let Some(parent_usage) =
+            analyze_parent_usage(function_index, hbc_file, &global_analysis.analyzer)
+        {
             return parent_usage;
         }
 
@@ -88,107 +91,110 @@ impl FunctionClassifier {
 }
 
 /// Analyze how a function is used in its parent context
-fn analyze_parent_usage(function_index: u32, hbc_file: &HbcFile) -> Option<FunctionType> {
-    // Find which function creates this closure
-    for parent_idx in 0..hbc_file.functions.count() {
-        if let Ok(func) = hbc_file.functions.get(parent_idx, hbc_file) {
-            let mut closure_register: Option<u8> = None;
-            let mut found_creation = false;
-            let mut global_object_register: Option<u8> = None;
+fn analyze_parent_usage(
+    function_index: u32,
+    hbc_file: &HbcFile,
+    global_analyzer: &crate::analysis::GlobalSSAAnalyzer,
+) -> Option<FunctionType> {
+    // Check if this function has a parent
+    let parent_idx = global_analyzer.get_parent_function(function_index)?;
 
-            for (i, instr) in func.instructions.iter().enumerate() {
-                match &instr.instruction {
-                    // Track GetGlobalObject instructions
-                    UnifiedInstruction::GetGlobalObject { operand_0, .. } => {
-                        global_object_register = Some(*operand_0);
-                    }
-                    UnifiedInstruction::CreateClosure {
-                        operand_0,
-                        operand_2,
-                        ..
-                    }
-                    | UnifiedInstruction::CreateAsyncClosure {
-                        operand_0,
-                        operand_2,
-                        ..
-                    }
-                    | UnifiedInstruction::CreateGeneratorClosure {
-                        operand_0,
-                        operand_2,
-                        ..
-                    } => {
-                        if *operand_2 as u32 == function_index {
-                            closure_register = Some(*operand_0);
-                            found_creation = true;
-                        }
-                    }
-                    _ => {}
-                }
+    // Get the parent function
+    let func = hbc_file.functions.get(parent_idx, hbc_file).ok()?;
 
-                // If we found the creation, look at the next few instructions
-                if found_creation && closure_register.is_some() {
-                    let reg = closure_register.unwrap();
+    let mut closure_register: Option<u8> = None;
+    let mut found_creation = false;
+    let mut global_object_register: Option<u8> = None;
 
-                    // Look ahead for usage
-                    for j in i..i.saturating_add(5).min(func.instructions.len()) {
-                        match &func.instructions[j].instruction {
-                            // Method assignment patterns
-                            UnifiedInstruction::PutNewOwnByIdShort { operand_1, .. }
-                            | UnifiedInstruction::PutNewOwnById { operand_1, .. } => {
-                                if *operand_1 == reg {
-                                    return Some(FunctionType::Method {
-                                        is_prototype_method: false,
-                                    });
-                                }
-                            }
-
-                            UnifiedInstruction::PutById {
-                                operand_0,
-                                operand_1,
-                                operand_3,
-                                ..
-                            } => {
-                                if *operand_1 == reg {
-                                    // Check if assigning to prototype
-                                    let is_prototype = if let Ok(prop_name) =
-                                        hbc_file.strings.get(*operand_3 as u32)
-                                    {
-                                        prop_name.contains("prototype")
-                                            || prop_name == "getInstance"
-                                    } else {
-                                        false
-                                    };
-
-                                    // Check if target is global object (register from GetGlobalObject)
-                                    let is_global = global_object_register
-                                        .map_or(false, |global_reg| *operand_0 == global_reg);
-
-                                    if !is_global {
-                                        return Some(FunctionType::Method {
-                                            is_prototype_method: is_prototype,
-                                        });
-                                    }
-                                }
-                            }
-
-                            // Callback pattern - passed as argument
-                            UnifiedInstruction::Call2 { operand_3, .. }
-                            | UnifiedInstruction::Call3 { operand_3, .. }
-                            | UnifiedInstruction::Call4 { operand_3, .. } => {
-                                if *operand_3 == reg {
-                                    return Some(FunctionType::Anonymous {
-                                        context: AnonymousContext::Callback,
-                                    });
-                                }
-                            }
-
-                            _ => {}
-                        }
-                    }
-
-                    break;
+    for (i, instr) in func.instructions.iter().enumerate() {
+        match &instr.instruction {
+            // Track GetGlobalObject instructions
+            UnifiedInstruction::GetGlobalObject { operand_0, .. } => {
+                global_object_register = Some(*operand_0);
+            }
+            UnifiedInstruction::CreateClosure {
+                operand_0,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::CreateAsyncClosure {
+                operand_0,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::CreateGeneratorClosure {
+                operand_0,
+                operand_2,
+                ..
+            } => {
+                if *operand_2 as u32 == function_index {
+                    closure_register = Some(*operand_0);
+                    found_creation = true;
                 }
             }
+            _ => {}
+        }
+
+        // If we found the creation, look at the next few instructions
+        if found_creation && closure_register.is_some() {
+            let reg = closure_register.unwrap();
+
+            // Look ahead for usage
+            for j in i..i.saturating_add(5).min(func.instructions.len()) {
+                match &func.instructions[j].instruction {
+                    // Method assignment patterns
+                    UnifiedInstruction::PutNewOwnByIdShort { operand_1, .. }
+                    | UnifiedInstruction::PutNewOwnById { operand_1, .. } => {
+                        if *operand_1 == reg {
+                            return Some(FunctionType::Method {
+                                is_prototype_method: false,
+                            });
+                        }
+                    }
+
+                    UnifiedInstruction::PutById {
+                        operand_0,
+                        operand_1,
+                        operand_3,
+                        ..
+                    } => {
+                        if *operand_1 == reg {
+                            // Check if assigning to prototype
+                            let is_prototype =
+                                if let Ok(prop_name) = hbc_file.strings.get(*operand_3 as u32) {
+                                    prop_name.contains("prototype") || prop_name == "getInstance"
+                                } else {
+                                    false
+                                };
+
+                            // Check if target is global object (register from GetGlobalObject)
+                            let is_global = global_object_register
+                                .map_or(false, |global_reg| *operand_0 == global_reg);
+
+                            if !is_global {
+                                return Some(FunctionType::Method {
+                                    is_prototype_method: is_prototype,
+                                });
+                            }
+                        }
+                    }
+
+                    // Callback pattern - passed as argument
+                    UnifiedInstruction::Call2 { operand_3, .. }
+                    | UnifiedInstruction::Call3 { operand_3, .. }
+                    | UnifiedInstruction::Call4 { operand_3, .. } => {
+                        if *operand_3 == reg {
+                            return Some(FunctionType::Anonymous {
+                                context: AnonymousContext::Callback,
+                            });
+                        }
+                    }
+
+                    _ => {}
+                }
+            }
+
+            break;
         }
     }
 

@@ -362,6 +362,11 @@ impl GlobalSSAAnalyzer {
         self.function_parents.contains_key(&func_idx)
     }
 
+    /// Get the parent function of a given function
+    pub fn get_parent_function(&self, func_idx: u32) -> Option<u32> {
+        self.function_parents.get(&func_idx).copied()
+    }
+
     /// Get the environment variables defined in a function
     pub fn get_function_environment_variables(&self, func_idx: u32) -> Vec<(u8, String)> {
         let mut vars = Vec::new();
