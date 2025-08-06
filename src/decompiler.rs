@@ -229,6 +229,14 @@ impl Decompiler {
                                     .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
                                     .unwrap_or_else(|_| "\"default\"".to_string())
                             }
+                            UnifiedInstruction::LoadConstStringLongIndex { operand_1, .. } => {
+                                // Look up the actual string from the string table (long index version)
+                                hbc_file
+                                    .strings
+                                    .get(*operand_1)
+                                    .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
+                                    .unwrap_or_else(|_| "\"default\"".to_string())
+                            }
                             UnifiedInstruction::LoadConstZero { .. } => "0".to_string(),
                             UnifiedInstruction::LoadConstUInt8 { operand_1, .. } => {
                                 operand_1.to_string()
@@ -237,10 +245,8 @@ impl Decompiler {
                                 operand_1.to_string()
                             }
                             UnifiedInstruction::LoadConstDouble { operand_1, .. } => {
-                                // Look up the actual double value from the array table
-                                // For now, we don't have direct access to the double array
-                                // TODO: Implement proper double value lookup
-                                format!("/* double[{}] */", operand_1)
+                                // operand_1 is the actual double value
+                                format!("{}", operand_1)
                             }
                             UnifiedInstruction::LoadConstTrue { .. } => "true".to_string(),
                             UnifiedInstruction::LoadConstFalse { .. } => "false".to_string(),
@@ -266,6 +272,8 @@ impl Decompiler {
                             }
                             UnifiedInstruction::NewObject { .. } => "{}".to_string(),
                             UnifiedInstruction::NewArray { .. } => "[]".to_string(),
+                            UnifiedInstruction::NewArrayWithBuffer { .. } => "[]".to_string(),
+                            UnifiedInstruction::NewArrayWithBufferLong { .. } => "[]".to_string(),
                             UnifiedInstruction::GetGlobalObject { .. } => "globalThis".to_string(),
                             _ => format!(
                                 "/* unsupported default: {:?} */",
