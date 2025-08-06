@@ -73,6 +73,9 @@ pub enum VariableMapError {
 pub struct VariableMapping {
     pub ssa_to_var: HashMap<SSAValue, String>,
     pub register_at_pc: HashMap<(u8, u32), SSAValue>,
+    /// Maps (register, pc) to SSA value BEFORE the instruction at that PC
+    /// Used for source operand lookups to avoid self-reference issues
+    pub register_before_pc: HashMap<(u8, u32), SSAValue>,
     pub function_scope_vars: HashSet<String>,
     pub block_scope_vars: HashMap<NodeIndex, HashSet<String>>,
     /// Fallback variable names for registers not covered by SSA
@@ -88,6 +91,7 @@ impl VariableMapping {
         Self {
             ssa_to_var: HashMap::new(),
             register_at_pc: HashMap::new(),
+            register_before_pc: HashMap::new(),
             function_scope_vars: HashSet::new(),
             block_scope_vars: HashMap::new(),
             fallback_register_names: HashMap::new(),
@@ -118,6 +122,21 @@ impl VariableMapping {
 
         // Fallback to simple register naming
         self.fallback_register_names.get(&register)
+    }
+
+    /// Get variable name for a source operand (before the instruction executes)
+    /// This prevents self-reference issues like `let x = y - x` when it should be `let x2 = y - x1`
+    pub fn get_source_variable_name(&self, register: u8, pc: u32) -> Option<&String> {
+        // Use the "before" lookup for source operands
+        if let Some(ssa_value) = self.register_before_pc.get(&(register, pc)) {
+            // Look up the coalesced variable name for this SSA value
+            if let Some(var_name) = self.ssa_to_var.get(ssa_value) {
+                return Some(var_name);
+            }
+        }
+
+        // Fallback to regular lookup if before state not available
+        self.get_variable_name_with_fallback(register, pc)
     }
 
     /// Generate a unique temporary variable name
@@ -346,12 +365,18 @@ impl VariableMapper {
         // Try various heuristics for meaningful names:
 
         // 1. Function parameters (registers defined at instruction 0)
+        // TODO: This heuristic is incorrect - we should check if the instruction
+        // at def_site is a LoadParam, not just if it's at PC 0
+        // For now, disable this to avoid confusion where r1 is named "arg1"
+        // when it's not actually a parameter
+        /*
         if value.def_site.instruction_idx == 0 && value.def_site.pc == 0 {
             let param_name = format!("arg{}", value.register);
             if !self.reserved_names.contains(&param_name) {
                 return param_name;
             }
         }
+        */
 
         // 2. For now, use descriptive register-based names
         // TODO: Add heuristics for:
@@ -491,7 +516,8 @@ impl VariableMapper {
     fn generate_coalesced_name(&self, representative: &SSAValue, _ssa: &SSAAnalysis) -> String {
         // Use the representative as the basis for naming
         let base_name =
-            if representative.def_site.instruction_idx == 0 && representative.def_site.pc == 0 {
+            // TODO: Check if the instruction is LoadParam instead of assuming PC 0
+            if false && representative.def_site.instruction_idx == 0 && representative.def_site.pc == 0 {
                 // Function parameter
                 format!("arg{}", representative.register)
             } else {
@@ -565,8 +591,15 @@ impl VariableMapper {
             for (inst_idx, _) in block.instructions().iter().enumerate() {
                 let pc = block.start_pc() + inst_idx as u32;
 
-                // Update for definitions at this instruction FIRST
-                // This ensures the definition is available at its own PC
+                // First, record the BEFORE state for this PC
+                // This is used for source operand lookups
+                for (register, ssa_value) in &current_versions {
+                    mapping
+                        .register_before_pc
+                        .insert((*register, pc), ssa_value.clone());
+                }
+
+                // Update for definitions at this instruction
                 for def in &ssa.definitions {
                     if def.block_id == block_id && def.instruction_idx == inst_idx {
                         if let Some(ssa_value) = ssa.ssa_values.get(def) {
@@ -575,7 +608,7 @@ impl VariableMapper {
                     }
                 }
 
-                // Record current versions for all registers at this PC
+                // Record current versions for all registers at this PC (AFTER state)
                 // This includes any definitions that happened at this instruction
                 for (register, ssa_value) in &current_versions {
                     mapping

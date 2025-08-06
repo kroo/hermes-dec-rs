@@ -8,8 +8,9 @@ use super::{
     expression_context::{ExpressionContext, ExpressionContextError},
     register_manager::RegisterManager,
 };
-use crate::generated::unified_instructions::UnifiedInstruction;
+use crate::{analysis::GlobalAnalysisResult, generated::unified_instructions::UnifiedInstruction};
 use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
+use std::sync::Arc;
 
 mod arithmetic;
 mod constants;
@@ -89,6 +90,8 @@ pub struct InstructionToStatementConverter<'a> {
     expression_context: ExpressionContext<'a>,
     /// Register manager for variable naming and lifetime tracking
     register_manager: RegisterManager,
+    /// Optional global analyzer for cross-function variable resolution
+    global_analyzer: Option<Arc<GlobalAnalysisResult>>,
 }
 
 impl<'a> InstructionToStatementConverter<'a> {
@@ -101,6 +104,7 @@ impl<'a> InstructionToStatementConverter<'a> {
             ast_builder,
             expression_context,
             register_manager: RegisterManager::new(),
+            global_analyzer: None,
         }
     }
 
@@ -118,6 +122,11 @@ impl<'a> InstructionToStatementConverter<'a> {
     /// Get reference to expression context
     pub fn get_expression_context(&self) -> &ExpressionContext<'a> {
         &self.expression_context
+    }
+
+    /// Set the global analyzer for cross-function variable resolution
+    pub fn set_global_analyzer(&mut self, analyzer: Option<Arc<GlobalAnalysisResult>>) {
+        self.global_analyzer = analyzer;
     }
 
     /// Convert a unified instruction to a JavaScript statement or jump condition
@@ -1670,5 +1679,62 @@ impl<'a> InstructionToStatementConverter<'a> {
     /// Get access to the AST builder
     pub fn ast_builder(&self) -> &'a OxcAstBuilder<'a> {
         self.ast_builder
+    }
+
+    /// Helper function to create formal parameters for a function
+    pub fn create_function_parameters(
+        &mut self,
+        param_count: u32,
+        _func_idx: u32,
+    ) -> oxc_ast::ast::FormalParameters<'a> {
+        let span = oxc_span::Span::default();
+        let mut params = self.ast_builder.vec();
+
+        // In Hermes bytecode, the first parameter is always the implicit 'this' value
+        // We skip it to match the original JavaScript function signature
+        // So if bytecode says 3 params, the actual function has 2 user-defined params
+        let actual_param_count = if param_count > 0 { param_count - 1 } else { 0 };
+
+        for i in 0..actual_param_count {
+            // Parameters are named starting from arg0, arg1, etc.
+            // TODO: Analyze function body to determine better parameter names based on usage patterns
+            let param_name = format!("arg{}", i);
+            let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
+
+            // Create binding identifier for the parameter
+            let binding_identifier = oxc_ast::ast::BindingIdentifier {
+                span,
+                name: oxc_span::Atom::from(param_atom),
+                symbol_id: std::cell::Cell::new(None),
+            };
+
+            // Create binding pattern
+            let binding_pattern = oxc_ast::ast::BindingPattern {
+                kind: oxc_ast::ast::BindingPatternKind::BindingIdentifier(
+                    self.ast_builder.alloc(binding_identifier),
+                ),
+                type_annotation: None,
+                optional: false,
+            };
+
+            // Create formal parameter
+            let formal_param = oxc_ast::ast::FormalParameter {
+                span,
+                decorators: self.ast_builder.vec(),
+                pattern: binding_pattern,
+                accessibility: None,
+                readonly: false,
+                r#override: false,
+            };
+
+            params.push(formal_param);
+        }
+
+        self.ast_builder.formal_parameters(
+            span,
+            oxc_ast::ast::FormalParameterKind::FormalParameter,
+            params,
+            None::<oxc_ast::ast::BindingRestElement>,
+        )
     }
 }

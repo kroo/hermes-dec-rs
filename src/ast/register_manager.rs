@@ -59,6 +59,18 @@ impl RegisterManager {
         format!("var{}", register)
     }
 
+    /// Get variable name for a source operand (before current instruction)
+    /// This prevents self-reference issues in operations like `r1 = r2 - r1`
+    pub fn get_source_variable_name(&mut self, register: u8) -> String {
+        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            if let Some(var_name) = mapping.get_source_variable_name(register, pc) {
+                return var_name.clone();
+            }
+        }
+        // Fallback to simple naming for backward compatibility
+        format!("var{}", register)
+    }
+
     /// Get the current variable name for a register if it exists (for reading)
     /// Returns None if the register has never been assigned to
     pub fn try_get_variable_name(&self, register: u8) -> Option<String> {

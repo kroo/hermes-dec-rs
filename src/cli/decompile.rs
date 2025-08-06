@@ -32,7 +32,7 @@ pub fn decompile(
     };
 
     // Create decompiler
-    let decompiler = Decompiler::new()?;
+    let mut decompiler = Decompiler::new()?;
 
     // Decompile the specific function
     let output = match decompiler.decompile_function_with_options(

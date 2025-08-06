@@ -10,6 +10,7 @@ use super::{
     },
 };
 use crate::{
+    analysis::GlobalAnalysisResult,
     cfg::{block::Block, ssa::SSAAnalysis, EdgeKind},
     generated::unified_instructions::UnifiedInstruction,
     hbc::function_table::HbcFunctionInstruction,
@@ -18,6 +19,7 @@ use oxc_allocator::Vec as ArenaVec;
 use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
 use petgraph::{graph::NodeIndex, visit::EdgeRef, Graph};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// Error types for block-to-statement conversion
 #[derive(Debug, thiserror::Error)]
@@ -114,6 +116,8 @@ pub struct BlockToStatementConverter<'a> {
     ssa_analysis: Option<SSAAnalysis>,
     /// Whether to include SSA comments
     include_ssa_comments: bool,
+    /// Optional global analysis for cross-function variable resolution
+    _global_analysis: Option<Arc<GlobalAnalysisResult>>,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
@@ -133,6 +137,7 @@ impl<'a> BlockToStatementConverter<'a> {
             include_instruction_comments,
             ssa_analysis: None,
             include_ssa_comments: false,
+            _global_analysis: None,
         }
     }
 
@@ -164,6 +169,43 @@ impl<'a> BlockToStatementConverter<'a> {
             include_instruction_comments,
             ssa_analysis: Some(ssa_analysis),
             include_ssa_comments,
+            _global_analysis: None,
+        }
+    }
+
+    /// Create a new block-to-statement converter with SSA and global analysis
+    pub fn with_ssa_and_global_analysis(
+        ast_builder: &'a OxcAstBuilder<'a>,
+        expression_context: ExpressionContext<'a>,
+        include_instruction_comments: bool,
+        include_ssa_comments: bool,
+        ssa_analysis: SSAAnalysis,
+        cfg: &crate::cfg::Cfg,
+        _global_analysis: Arc<GlobalAnalysisResult>,
+    ) -> Self {
+        let mut instruction_converter =
+            InstructionToStatementConverter::new(ast_builder, expression_context.clone());
+
+        // Generate variable mapping from SSA analysis
+        let mut variable_mapper = crate::ast::variable_mapper::VariableMapper::new();
+        if let Ok(variable_mapping) = variable_mapper.generate_mapping(&ssa_analysis, cfg) {
+            // Set the SSA-based variable mapping in the register manager
+            instruction_converter
+                .register_manager_mut()
+                .set_variable_mapping(variable_mapping);
+        }
+
+        // Pass global analyzer to instruction converter for environment variable resolution
+        instruction_converter.set_global_analyzer(Some(_global_analysis.clone()));
+
+        Self {
+            instruction_converter,
+            scope_manager: BlockScopeManager::new(),
+            stats: BlockConversionStats::default(),
+            include_instruction_comments,
+            ssa_analysis: Some(ssa_analysis),
+            include_ssa_comments,
+            _global_analysis: Some(_global_analysis),
         }
     }
 
@@ -189,6 +231,7 @@ impl<'a> BlockToStatementConverter<'a> {
             include_instruction_comments,
             ssa_analysis: None,
             include_ssa_comments: false,
+            _global_analysis: None,
         }
     }
 

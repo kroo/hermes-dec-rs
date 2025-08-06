@@ -48,7 +48,7 @@ pub struct GlobalSSAAnalyzer {
     function_parents: HashMap<u32, u32>,
 
     /// Map function index to the environment it captures
-    function_captured_environments: HashMap<u32, CapturedEnvironment>,
+    _function_captured_environments: HashMap<u32, CapturedEnvironment>,
 
     /// Map function index to its environment register
     function_environments: HashMap<u32, u8>,
@@ -69,7 +69,7 @@ impl GlobalSSAAnalyzer {
             function_analyses: HashMap::new(),
             function_relationships: Vec::new(),
             function_parents: HashMap::new(),
-            function_captured_environments: HashMap::new(),
+            _function_captured_environments: HashMap::new(),
             function_environments: HashMap::new(),
             variable_names: HashMap::new(),
         }
@@ -221,7 +221,7 @@ impl GlobalSSAAnalyzer {
     }
 
     /// Extract closure relationships from a function's SSA analysis
-    fn extract_closure_relationships(&mut self, parent_func: u32, ssa: &SSAAnalysis) {
+    fn _extract_closure_relationships(&mut self, parent_func: u32, ssa: &SSAAnalysis) {
         for (&dest_reg, &child_func) in &ssa.environment_info.closure_registers {
             // Find the environment register that was passed to this closure
             // This requires looking at the instruction that created the closure
@@ -235,7 +235,7 @@ impl GlobalSSAAnalyzer {
                 closure_type: ClosureType::Regular, // TODO: Detect actual type
             });
 
-            self.function_captured_environments.insert(
+            self._function_captured_environments.insert(
                 child_func,
                 CapturedEnvironment {
                     parent_function: parent_func,
