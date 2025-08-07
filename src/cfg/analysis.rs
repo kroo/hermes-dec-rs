@@ -273,13 +273,11 @@ pub fn find_switch_regions(
     }
 
     // Step 3: Find sparse switch patterns (series of equality comparisons)
-    #[path = "sparse_switch_analysis.rs"]
-    mod sparse_switch_analysis;
-
-    let sparse_candidates = sparse_switch_analysis::find_sparse_switch_patterns(graph, post_doms);
+    let sparse_candidates =
+        super::sparse_switch_analysis::find_sparse_switch_patterns(graph, post_doms);
 
     for candidate in sparse_candidates {
-        let region = sparse_switch_analysis::sparse_candidate_to_switch_region(&candidate);
+        let region = super::sparse_switch_analysis::sparse_candidate_to_switch_region(&candidate);
         let region_idx = regions.len();
 
         // Add region to list

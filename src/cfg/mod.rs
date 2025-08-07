@@ -6,6 +6,7 @@ pub mod analysis;
 pub mod block;
 pub mod builder;
 pub mod regions;
+pub mod sparse_switch_analysis;
 pub mod ssa;
 pub mod visualization;
 

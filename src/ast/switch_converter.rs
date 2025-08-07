@@ -168,15 +168,11 @@ impl<'a> SwitchConverter<'a> {
         // For sparse switches, we need to get the variable being compared from the sparse switch analysis
         // The sparse switch detection has already determined which register is the variable
 
-        // Load the sparse switch analysis module inline
-        #[path = "../cfg/sparse_switch_analysis.rs"]
-        mod sparse_switch_analysis;
-
         // Re-run the sparse switch detection to get the compared register
         // This is a bit inefficient but ensures we have the correct register
         let dispatch_block = &cfg.graph()[region.dispatch];
         if let Some((compared_register, _)) =
-            sparse_switch_analysis::extract_comparison_info(dispatch_block)
+            crate::cfg::sparse_switch_analysis::extract_comparison_info(dispatch_block)
         {
             // Get the PC of the first instruction (where the comparison happens)
             let pc = dispatch_block.start_pc();
