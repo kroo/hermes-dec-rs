@@ -39,6 +39,16 @@ impl<'a> CfgBuilder<'a> {
         }
     }
 
+    /// Get the HBC file reference
+    pub fn hbc_file(&self) -> &'a HbcFile<'a> {
+        self.hbc_file
+    }
+
+    /// Get the function index
+    pub fn function_index(&self) -> u32 {
+        self.function_index
+    }
+
     /// Build CFG for the function (loads instructions from the HBC file)
     pub fn build(&mut self) -> DiGraph<Block, EdgeKind> {
         self.block_starts.clear();

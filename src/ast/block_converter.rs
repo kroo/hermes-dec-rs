@@ -250,6 +250,8 @@ impl<'a> BlockToStatementConverter<'a> {
 
         // Check if CFG has conditional analysis
         let conditional_analysis = cfg.analyze_conditional_chains();
+        // Check if CFG has switch analysis
+        let switch_analysis = cfg.analyze_switch_regions();
         let mut processed_blocks: HashSet<NodeIndex> = HashSet::new();
 
         for (order_idx, block_id) in block_order.iter().enumerate() {
@@ -265,6 +267,34 @@ impl<'a> BlockToStatementConverter<'a> {
                 continue;
             }
 
+            // Check if this block is the start of a switch region BEFORE checking conditionals
+            // This ensures sparse switches are detected before being converted to if-else chains
+            if let Some(ref analysis) = switch_analysis {
+                if let Some(region) = self.find_switch_starting_at(*block_id, analysis) {
+                    // Convert the entire switch region
+                    // Mark all blocks in the switch as processed
+                    let all_switch_blocks =
+                        crate::ast::switch_converter::get_all_switch_blocks(region, cfg);
+                    processed_blocks.extend(&all_switch_blocks);
+                    // Create the switch converter
+                    let mut switch_converter = crate::ast::switch_converter::SwitchConverter::new(
+                        self.instruction_converter.ast_builder(),
+                    );
+                    // Convert the switch to statements
+                    match switch_converter.convert_switch_region(region, cfg, self) {
+                        Ok(switch_statements) => {
+                            all_statements.extend(switch_statements);
+                            continue;
+                        }
+                        Err(e) => {
+                            // Fall back to basic block conversion if switch conversion fails
+                            if self.include_instruction_comments {
+                                eprintln!("Warning: Failed to convert switch region starting at block {}: {}", block_id.index(), e);
+                            }
+                        }
+                    }
+                }
+            }
             // Check if this block is the start of a conditional chain
             if let Some(ref analysis) = conditional_analysis {
                 if let Some(chain) = self.find_chain_starting_at(*block_id, analysis) {
@@ -337,6 +367,21 @@ impl<'a> BlockToStatementConverter<'a> {
             // Check if this is the first condition block in the chain
             if !chain.branches.is_empty() && chain.branches[0].condition_block == block_id {
                 return Some(chain);
+            }
+        }
+        None
+    }
+
+    /// Find a switch region that starts at the given block
+    fn find_switch_starting_at<'b>(
+        &self,
+        block_id: NodeIndex,
+        analysis: &'b crate::cfg::analysis::SwitchAnalysis,
+    ) -> Option<&'b crate::cfg::analysis::SwitchRegion> {
+        // Check if this block is the dispatch block of any switch region
+        for region in &analysis.regions {
+            if region.dispatch == block_id {
+                return Some(region);
             }
         }
         None

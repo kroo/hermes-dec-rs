@@ -79,6 +79,16 @@ impl<'a> Cfg<'a> {
         &mut self.builder
     }
 
+    /// Get the HBC file reference
+    pub fn hbc_file(&self) -> &'a HbcFile<'a> {
+        self.builder.hbc_file()
+    }
+
+    /// Get the function index
+    pub fn function_index(&self) -> u32 {
+        self.builder.function_index()
+    }
+
     /// Analyze dominators for the CFG
     pub fn analyze_dominators(&self) -> Option<Dominators<NodeIndex>> {
         self.builder.analyze_dominators(&self.graph)
