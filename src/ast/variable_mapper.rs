@@ -140,6 +140,12 @@ impl VariableMapping {
         // Instead, we need to find the value from a previous PC.
 
         // Try to find the most recent definition before this PC
+        // Performance note: This is currently O(n) where n is the number of PC values to check.
+        // In practice, this is bounded by the function size and only searches backwards until
+        // a definition is found. For most cases, the register_before_pc lookup above will
+        // handle it, and this is only a fallback for edge cases.
+        //
+        // Future optimization: Use BTreeMap for register_at_pc to enable efficient range queries.
         for check_pc in (0..pc).rev() {
             if let Some(ssa_value) = self.register_at_pc.get(&(register, check_pc)) {
                 if let Some(var_name) = self.ssa_to_var.get(ssa_value) {

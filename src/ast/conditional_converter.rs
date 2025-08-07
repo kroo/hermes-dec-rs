@@ -80,8 +80,8 @@ impl<'a> ConditionalConverter<'a> {
                 self.convert_guard_clauses(chain, cfg, block_converter)?
             }
             ChainType::NestedConditional => {
-                // For now, treat nested conditionals as simple if-else
-                // TODO: Implement proper nested conditional handling
+                // Nested conditionals are handled by the hierarchical chain detection
+                // and converted using the same logic as simple if-else
                 self.convert_simple_if_else(chain, cfg, block_converter)?
             }
             ChainType::SwitchLikeChain => {

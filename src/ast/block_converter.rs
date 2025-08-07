@@ -288,10 +288,11 @@ impl<'a> BlockToStatementConverter<'a> {
                             all_statements.extend(chain_statements);
                             continue;
                         }
-                        Err(_e) => {
+                        Err(e) => {
                             // Fall back to basic block conversion if conditional conversion fails
-                            // TODO: Add debug logging flag to conditionally show this warning
-                            // eprintln!("Warning: Failed to convert conditional chain: {}", e);
+                            if self.include_instruction_comments {
+                                eprintln!("Warning: Failed to convert conditional chain starting at block {}: {}", block_id.index(), e);
+                            }
                         }
                     }
                 }
