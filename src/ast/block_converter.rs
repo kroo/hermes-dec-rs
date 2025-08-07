@@ -239,7 +239,7 @@ impl<'a> BlockToStatementConverter<'a> {
     /// This method handles proper block ordering and labeling
     pub fn convert_blocks_from_cfg(
         &mut self,
-        cfg: &crate::cfg::Cfg,
+        cfg: &'a crate::cfg::Cfg<'a>,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
         let mut all_statements =
             ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
@@ -248,12 +248,54 @@ impl<'a> BlockToStatementConverter<'a> {
         let block_order = cfg.structured_execution_order();
         let blocks_needing_labels = cfg.blocks_needing_labels();
 
+        // Check if CFG has conditional analysis
+        let conditional_analysis = cfg.analyze_conditional_chains();
+        let mut processed_blocks: HashSet<NodeIndex> = HashSet::new();
+
         for (order_idx, block_id) in block_order.iter().enumerate() {
+            // Skip if this block was already processed as part of a conditional chain
+            if processed_blocks.contains(block_id) {
+                continue;
+            }
+
             let block = &cfg.graph()[*block_id];
 
             // Skip exit blocks
             if block.is_exit() {
                 continue;
+            }
+
+            // Check if this block is the start of a conditional chain
+            if let Some(ref analysis) = conditional_analysis {
+                if let Some(chain) = self.find_chain_starting_at(*block_id, analysis) {
+                    // Convert the entire conditional chain
+                    // Mark ALL blocks in the chain (including nested) as processed
+                    let all_chain_blocks =
+                        crate::ast::conditional_converter::ConditionalConverter::get_all_chain_blocks(
+                            chain,
+                        );
+                    processed_blocks.extend(&all_chain_blocks);
+
+                    // Create the conditional converter
+                    let mut conditional_converter =
+                        crate::ast::conditional_converter::ConditionalConverter::new(
+                            self.instruction_converter.ast_builder(),
+                        );
+
+                    // Convert the chain to statements (condition setup + if statement)
+                    match conditional_converter.convert_chain(chain, cfg, self) {
+                        Ok(chain_statements) => {
+                            all_statements.extend(chain_statements);
+                            continue;
+                        }
+                        Err(e) => {
+                            // Fall back to basic block conversion if conditional conversion fails
+                            if self.include_instruction_comments {
+                                eprintln!("Warning: Failed to convert conditional chain starting at block {}: {}", block_id.index(), e);
+                            }
+                        }
+                    }
+                }
             }
 
             // Add block information comment
@@ -282,6 +324,35 @@ impl<'a> BlockToStatementConverter<'a> {
         }
 
         Ok(all_statements)
+    }
+
+    /// Find a conditional chain that starts at the given block
+    fn find_chain_starting_at<'b>(
+        &self,
+        block_id: NodeIndex,
+        analysis: &'b crate::cfg::analysis::ConditionalAnalysis,
+    ) -> Option<&'b crate::cfg::analysis::ConditionalChain> {
+        // Check if this block is the entry point of any conditional chain
+        for chain in &analysis.chains {
+            // Check if this is the first condition block in the chain
+            if !chain.branches.is_empty() && chain.branches[0].condition_block == block_id {
+                return Some(chain);
+            }
+        }
+        None
+    }
+
+    /// Convert a basic block by index (public method for conditional converter)
+    pub fn convert_basic_block(
+        &mut self,
+        _block_idx: NodeIndex,
+    ) -> Result<ArenaVec<'a, Statement<'a>>, String> {
+        // This is a simplified version that doesn't have access to the full CFG
+        // For now, return empty statements
+        // TODO: Implement proper block conversion without full CFG context
+        Ok(ArenaVec::new_in(
+            self.instruction_converter.ast_builder().allocator,
+        ))
     }
 
     /// Convert a basic block into a sequence of JavaScript statements
@@ -655,6 +726,14 @@ impl<'a> BlockToStatementConverter<'a> {
         self.stats = BlockConversionStats::default();
     }
 
+    /// Get variable name for a register at a specific PC (for conditional expressions)
+    pub fn get_variable_name_for_condition(&mut self, register: u8, pc: u32) -> String {
+        self.instruction_converter.set_current_pc(pc);
+        self.instruction_converter
+            .register_manager_mut()
+            .get_source_variable_name(register)
+    }
+
     /// Get access to the underlying instruction converter
     pub fn instruction_converter(&self) -> &InstructionToStatementConverter<'a> {
         &self.instruction_converter
@@ -671,11 +750,6 @@ impl<'a> BlockToStatementConverter<'a> {
     }
 
     // ===== Private Helper Methods =====
-
-    /// Get property name from the string table using property index
-    // Dead methods removed: get_property_name, create_property_assignment_statement,
-    // create_computed_property_assignment_statement, create_identifier_expression
-    // These are now handled by InstructionToStatementConverter
 
     /// Create a label statement for a block
     fn create_block_label(

@@ -349,12 +349,6 @@ impl<'a> Cfg<'a> {
         ))
     }
 
-    /// Legacy analyze if/else regions (deprecated - use analyze_conditional_chains)
-    pub fn analyze_if_else_regions(&self) -> Option<analysis::IfElseAnalysis> {
-        let post_doms = self.analyze_post_dominators()?;
-        Some(analysis::find_if_else_regions(&self.graph, &post_doms))
-    }
-
     /// Analyze switch regions in the CFG
     pub fn analyze_switch_regions(&self) -> Option<analysis::SwitchAnalysis> {
         let post_doms = self.analyze_post_dominators()?;

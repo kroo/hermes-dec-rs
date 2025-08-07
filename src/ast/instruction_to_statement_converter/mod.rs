@@ -119,9 +119,19 @@ impl<'a> InstructionToStatementConverter<'a> {
         &mut self.register_manager
     }
 
+    /// Get reference to AST builder
+    pub fn ast_builder(&self) -> &'a OxcAstBuilder<'a> {
+        self.ast_builder
+    }
+
     /// Get reference to expression context
     pub fn get_expression_context(&self) -> &ExpressionContext<'a> {
         &self.expression_context
+    }
+
+    /// Get mutable reference to expression context
+    pub fn expression_context_mut(&mut self) -> &mut ExpressionContext<'a> {
+        &mut self.expression_context
     }
 
     /// Set the global analyzer for cross-function variable resolution
@@ -1674,11 +1684,6 @@ impl<'a> InstructionToStatementConverter<'a> {
     ) -> Statement<'a> {
         let span = oxc_span::Span::default();
         self.ast_builder.statement_return(span, expression)
-    }
-
-    /// Get access to the AST builder
-    pub fn ast_builder(&self) -> &'a OxcAstBuilder<'a> {
-        self.ast_builder
     }
 
     /// Helper function to create formal parameters for a function

@@ -3059,63 +3059,67 @@ fn test_if_else_canonical_diamond() {
     ];
 
     let jumps = vec![
-        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
-        ("JmpTrue", 0, 3, Some(0)), // A → C (False)
-        ("Jmp", 2, 5, None),        // B → D
-        ("Jmp", 4, 5, None),        // C → D
+        ("JmpFalse", 0, 3, Some(0)), // A: if false, jump to C (PC 3)
+        ("Jmp", 2, 5, None),         // B → D
+        ("Jmp", 4, 5, None),         // C → D
     ];
 
     let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    let if_else_regions = cfg
-        .analyze_if_else_regions()
-        .expect("If/else analysis should succeed");
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional analysis should succeed");
 
     // Should find exactly one if/else region
     assert_eq!(
-        if_else_regions.regions.len(),
+        conditional_analysis.chains.len(),
         1,
         "Should find exactly one if/else region"
     );
 
-    let region = &if_else_regions.regions[0];
+    let chain = &conditional_analysis.chains[0];
 
     // Get expected node indices based on the actual CFG structure
     let node_a = cfg.builder().get_block_at_pc(0).unwrap(); // Conditional source
     let node_b = cfg.builder().get_block_at_pc(1).unwrap(); // PC 1-3 (B instruction + jump)
     let node_c = cfg.builder().get_block_at_pc(3).unwrap(); // PC 3-5 (C instruction + jump)
-    let _node_d = cfg.builder().get_block_at_pc(5).unwrap(); // PC 5-7 (D instruction + return)
+    let node_d = cfg.builder().get_block_at_pc(5).unwrap(); // PC 5-7 (D instruction + return)
 
-    // From debug output, we see the actual mapping:
-    // True edge goes to NodeIndex(2) which is PC 3-5 (node_c)
-    // False edge goes to NodeIndex(1) which is PC 1-3 (node_b)
-    // This means our jump setup has True→C and False→B
+    // With JmpFalse at PC 0:
+    // True edge (fall through) goes to PC 1 (node_b)
+    // False edge (jump) goes to PC 3 (node_c)
 
-    // Verify if/else region structure (acceptance criteria)
+    // Verify conditional chain structure (acceptance criteria)
     assert_eq!(
-        region.conditional_source, node_a,
+        chain.branches.len(),
+        2,
+        "Should have 2 branches (if and else)"
+    );
+
+    let if_branch = &chain.branches[0];
+    assert_eq!(
+        if_branch.condition_block, node_a,
         "Conditional source should be A"
     );
     assert_eq!(
-        region.then_head, node_c,
-        "Then head should be C (True edge target)"
-    );
-    assert_eq!(
-        region.else_head, node_b,
-        "Else head should be B (False edge target)"
-    );
-    assert_eq!(
-        region.join_block,
-        cfg.builder().exit_node().unwrap(),
-        "Join block should be EXIT"
+        if_branch.branch_entry, node_b,
+        "If branch should enter at B (True edge target)"
     );
 
-    // Verify node-to-region mapping
+    let else_branch = &chain.branches[1];
+    assert_eq!(
+        else_branch.branch_entry, node_c,
+        "Else branch should enter at C (False edge target)"
+    );
+
+    assert_eq!(chain.join_block, node_d, "Join block should be D (PC 5)");
+
+    // Verify node-to-chain mapping
     assert!(
-        if_else_regions
-            .node_to_regions
+        conditional_analysis
+            .node_to_chains
             .get(&node_a)
             .unwrap()
             .contains(&0),
@@ -3145,34 +3149,33 @@ fn test_if_else_early_return() {
     ];
 
     let jumps = vec![
-        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
-        ("JmpTrue", 0, 2, Some(0)), // A → C (False)
+        ("JmpFalse", 0, 2, Some(0)), // A: if false, jump to C (PC 2)
     ];
 
     let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    let if_else_regions = cfg
-        .analyze_if_else_regions()
-        .expect("If/else analysis should succeed");
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional analysis should succeed");
 
     // Should find one if/else region with EXIT as join
     assert_eq!(
-        if_else_regions.regions.len(),
+        conditional_analysis.chains.len(),
         1,
         "Should find one if/else region"
     );
 
-    let region = &if_else_regions.regions[0];
+    let chain = &conditional_analysis.chains[0];
     let node_a = cfg.builder().get_block_at_pc(0).unwrap();
     let node_b = cfg.builder().get_block_at_pc(1).unwrap();
     let node_c = cfg.builder().get_block_at_pc(2).unwrap();
 
-    assert_eq!(region.conditional_source, node_a);
-    assert_eq!(region.then_head, node_c); // node_c is the then branch (PC 2)
-    assert_eq!(region.else_head, node_b); // node_b is the else branch (PC 1)
-                                          // Join block should be EXIT node (post-dominator analysis should find this)
+    assert_eq!(chain.branches[0].condition_block, node_a);
+    assert_eq!(chain.branches[0].branch_entry, node_b); // node_b is the then branch (PC 1, fall through)
+    assert_eq!(chain.branches[1].branch_entry, node_c); // node_c is the else branch (PC 2, jump target)
+                                                        // Join block should be EXIT node (post-dominator analysis should find this)
 }
 
 /// Test nested if/else structures
@@ -3211,42 +3214,49 @@ fn test_if_else_nested_structures() {
     ];
 
     let jumps = vec![
-        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
-        ("JmpTrue", 0, 6, Some(0)), // A → E (False)
-        ("JmpTrue", 1, 2, Some(1)), // B → C (True)
-        ("JmpTrue", 1, 4, Some(0)), // B → D (False)
-        ("Jmp", 3, 8, None),        // C → F
-        ("Jmp", 5, 8, None),        // D → F (inner join)
-        ("Jmp", 7, 8, None),        // E → F
+        ("JmpFalse", 0, 6, Some(0)), // A: if false, jump to E (PC 6)
+        ("JmpFalse", 1, 4, Some(0)), // B: if false, jump to D (PC 4)
+        ("Jmp", 3, 8, None),         // C → F
+        ("Jmp", 5, 8, None),         // D → F (inner join)
+        ("Jmp", 7, 8, None),         // E → F
     ];
 
     let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    let if_else_regions = cfg
-        .analyze_if_else_regions()
-        .expect("If/else analysis should succeed");
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional analysis should succeed");
 
-    // Should find two if/else regions (outer and inner)
+    // Should find one top-level chain (outer) with nested chain (inner)
     assert_eq!(
-        if_else_regions.regions.len(),
-        2,
-        "Should find two if/else regions (nested)"
+        conditional_analysis.chains.len(),
+        1,
+        "Should find one top-level chain"
     );
 
-    // Verify both regions are properly detected
-    let outer_region = if_else_regions
-        .regions
-        .iter()
-        .find(|r| r.conditional_source == cfg.builder().get_block_at_pc(0).unwrap());
-    let inner_region = if_else_regions
-        .regions
-        .iter()
-        .find(|r| r.conditional_source == cfg.builder().get_block_at_pc(1).unwrap());
+    // Verify outer chain is properly detected
+    let outer_chain = &conditional_analysis.chains[0];
+    assert_eq!(
+        outer_chain.branches[0].condition_block,
+        cfg.builder().get_block_at_pc(0).unwrap(),
+        "Outer chain should start at PC 0"
+    );
 
-    assert!(outer_region.is_some(), "Should find outer if/else region");
-    assert!(inner_region.is_some(), "Should find inner if/else region");
+    // Verify the inner chain is nested within the outer chain
+    assert_eq!(
+        outer_chain.nested_chains.len(),
+        1,
+        "Outer chain should have one nested chain"
+    );
+
+    let inner_chain = &outer_chain.nested_chains[0];
+    assert_eq!(
+        inner_chain.branches[0].condition_block,
+        cfg.builder().get_block_at_pc(1).unwrap(),
+        "Inner chain should start at PC 1"
+    );
 }
 
 /// Test complex conditional chains
@@ -3285,28 +3295,34 @@ fn test_if_else_complex_chains() {
     ];
 
     let jumps = vec![
-        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
-        ("JmpTrue", 0, 6, Some(0)), // A → E (False)
-        ("JmpTrue", 1, 2, Some(1)), // B → C (True)
-        ("JmpTrue", 1, 4, Some(0)), // B → D (False)
-        ("Jmp", 3, 8, None),        // C → merge
-        ("Jmp", 5, 8, None),        // D → merge
-        ("Jmp", 7, 8, None),        // E → merge
+        ("JmpFalse", 0, 6, Some(0)), // A: if false, jump to E (PC 6)
+        ("JmpFalse", 1, 4, Some(0)), // B: if false, jump to D (PC 4)
+        ("Jmp", 3, 8, None),         // C → merge
+        ("Jmp", 5, 8, None),         // D → merge
+        ("Jmp", 7, 8, None),         // E → merge
     ];
 
     let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    let if_else_regions = cfg
-        .analyze_if_else_regions()
-        .expect("If/else analysis should succeed");
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional analysis should succeed");
 
-    // Should find two separate if/else regions
+    // Should find one top-level chain with nested chain
     assert_eq!(
-        if_else_regions.regions.len(),
-        2,
-        "Should find two if/else regions in complex chain"
+        conditional_analysis.chains.len(),
+        1,
+        "Should find one top-level chain in complex pattern"
+    );
+
+    // Verify the nested chain exists
+    let outer_chain = &conditional_analysis.chains[0];
+    assert_eq!(
+        outer_chain.nested_chains.len(),
+        1,
+        "Should have one nested chain within the outer chain"
     );
 }
 
@@ -3334,13 +3350,13 @@ fn test_if_else_false_positive_avoidance() {
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    let if_else_regions = cfg
-        .analyze_if_else_regions()
-        .expect("If/else analysis should succeed");
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional analysis should succeed");
 
     // Should find NO if/else regions (no True+False edge pairs)
     assert_eq!(
-        if_else_regions.regions.len(),
+        conditional_analysis.chains.len(),
         0,
         "Should find no if/else regions (no True+False edges)"
     );
@@ -3394,9 +3410,9 @@ fn test_if_else_performance() {
 
     // Performance test
     let start = std::time::Instant::now();
-    let if_else_regions = cfg
-        .analyze_if_else_regions()
-        .expect("If/else analysis should succeed on larger CFG");
+    let conditional_analysis = cfg
+        .analyze_conditional_chains()
+        .expect("Conditional analysis should succeed on larger CFG");
     let duration = start.elapsed();
 
     // Should complete quickly and find 5 if/else regions
@@ -3407,7 +3423,7 @@ fn test_if_else_performance() {
     );
 
     assert_eq!(
-        if_else_regions.regions.len(),
+        conditional_analysis.chains.len(),
         5,
         "Should find 5 if/else regions in performance test"
     );
@@ -3524,15 +3540,12 @@ fn test_conditional_chain_else_if_sequence() {
     ];
 
     let jumps = vec![
-        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
-        ("JmpTrue", 0, 3, Some(0)), // A → A2 (False)
-        ("JmpTrue", 3, 4, Some(1)), // A2 → C (True)
-        ("JmpTrue", 3, 6, Some(0)), // A2 → A3 (False)
-        ("JmpTrue", 6, 7, Some(1)), // A3 → D (True)
-        ("JmpTrue", 6, 9, Some(0)), // A3 → E (False)
-        ("Jmp", 2, 10, None),       // B → EXIT
-        ("Jmp", 5, 10, None),       // C → EXIT
-        ("Jmp", 8, 10, None),       // D → EXIT
+        ("JmpFalse", 0, 3, Some(0)), // A: if false, jump to A2 (PC 3)
+        ("JmpFalse", 3, 6, Some(0)), // A2: if false, jump to A3 (PC 6)
+        ("JmpFalse", 6, 9, Some(0)), // A3: if false, jump to E (PC 9)
+        ("Jmp", 2, 10, None),        // B → EXIT
+        ("Jmp", 5, 10, None),        // C → EXIT
+        ("Jmp", 8, 10, None),        // D → EXIT
     ];
 
     let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
@@ -3601,12 +3614,10 @@ fn test_conditional_chain_nested_patterns() {
     ];
 
     let jumps = vec![
-        ("JmpTrue", 0, 1, Some(1)), // A → B (True)
-        ("JmpTrue", 0, 6, Some(0)), // A → E (False)
-        ("JmpTrue", 1, 2, Some(1)), // B → C (True)
-        ("JmpTrue", 1, 4, Some(0)), // B → D (False)
-        ("Jmp", 3, 7, None),        // C → EXIT
-        ("Jmp", 5, 7, None),        // D → EXIT
+        ("JmpFalse", 0, 6, Some(0)), // A: if false, jump to E (PC 6)
+        ("JmpFalse", 1, 4, Some(0)), // B: if false, jump to D (PC 4)
+        ("Jmp", 3, 7, None),         // C → EXIT
+        ("Jmp", 5, 7, None),         // D → EXIT
     ];
 
     let hbc_file = make_test_hbc_file_with_jumps(instructions, jumps);
@@ -3617,20 +3628,25 @@ fn test_conditional_chain_nested_patterns() {
         .analyze_conditional_chains()
         .expect("Conditional chain analysis should succeed");
 
-    // Should find two conditional chains (outer and nested)
+    // Should find one top-level chain with nested chain
     assert_eq!(
         conditional_analysis.chains.len(),
-        2,
-        "Should find two conditional chains (outer and nested)"
+        1,
+        "Should find one top-level conditional chain"
     );
 
-    // Check that we have both simple if/else patterns
-    let simple_chains: Vec<_> = conditional_analysis
-        .chains
-        .iter()
-        .filter(|c| c.chain_type == ChainType::SimpleIfElse)
-        .collect();
-    assert_eq!(simple_chains.len(), 2);
+    // Check the outer chain
+    let outer_chain = &conditional_analysis.chains[0];
+    assert_eq!(outer_chain.chain_type, ChainType::SimpleIfElse);
+    assert_eq!(
+        outer_chain.nested_chains.len(),
+        1,
+        "Should have one nested chain"
+    );
+
+    // Check the nested chain
+    let nested_chain = &outer_chain.nested_chains[0];
+    assert_eq!(nested_chain.chain_type, ChainType::SimpleIfElse);
 
     // Check statistics
     let stats = &conditional_analysis.chain_statistics;
@@ -3788,17 +3804,12 @@ fn test_conditional_chain_backward_compatibility() {
     let mut cfg = Cfg::new(&hbc_file, 0);
     cfg.build();
 
-    // Test both old and new APIs work
-    let if_else_regions = cfg
-        .analyze_if_else_regions()
-        .expect("Legacy if/else analysis should work");
-
+    // Test conditional chain analysis
     let conditional_analysis = cfg
         .analyze_conditional_chains()
-        .expect("New conditional chain analysis should work");
+        .expect("Conditional chain analysis should work");
 
-    // Both should find the same pattern
-    assert_eq!(if_else_regions.regions.len(), 1);
+    // Should find the simple if-else pattern
     assert_eq!(conditional_analysis.chains.len(), 1);
 
     // New analysis should provide richer information
