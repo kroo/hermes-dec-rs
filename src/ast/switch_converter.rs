@@ -73,6 +73,68 @@ impl<'a> SwitchConverter<'a> {
         // Determine the type of switch
         let switch_type = self.detect_switch_type(region, cfg)?;
 
+        // First, process any setup instructions in the dispatch block
+        // (e.g., LoadParam instructions that come before the switch)
+        let dispatch_block = &cfg.graph()[region.dispatch];
+
+        // Find where the switch/comparison starts
+        let switch_start_idx = match switch_type {
+            SwitchType::Dense => {
+                // Find the SwitchImm instruction
+                dispatch_block
+                    .instructions()
+                    .iter()
+                    .position(|instr| {
+                        matches!(instr.instruction, UnifiedInstruction::SwitchImm { .. })
+                    })
+                    .ok_or(SwitchConversionError::MissingSwitchInstruction)?
+            }
+            SwitchType::Sparse => {
+                // Find the first comparison instruction
+                dispatch_block
+                    .instructions()
+                    .iter()
+                    .position(|instr| {
+                        matches!(
+                            instr.instruction,
+                            UnifiedInstruction::JStrictEqual { .. }
+                                | UnifiedInstruction::JStrictEqualLong { .. }
+                        )
+                    })
+                    .ok_or(SwitchConversionError::MissingSwitchInstruction)?
+            }
+        };
+
+        // Convert all instructions before the switch/comparison
+        if switch_start_idx > 0 {
+            let setup_instructions = &dispatch_block.instructions()[..switch_start_idx];
+            for instr in setup_instructions {
+                // Set the current PC for this instruction
+                let pc = dispatch_block.start_pc() + instr.instruction_index as u32;
+                block_converter
+                    .instruction_converter_mut()
+                    .set_current_pc(pc);
+
+                // Convert the instruction
+                if let Ok(result) = block_converter
+                    .instruction_converter_mut()
+                    .convert_instruction(&instr.instruction)
+                {
+                    match result {
+                        crate::ast::InstructionResult::Statement(stmt) => {
+                            statements.push(stmt);
+                        }
+                        crate::ast::InstructionResult::JumpCondition(_) => {
+                            // Skip jump instructions in setup
+                        }
+                        crate::ast::InstructionResult::None => {
+                            // No statement generated
+                        }
+                    }
+                }
+            }
+        }
+
         // Build the switch expression
         let discriminant = match switch_type {
             SwitchType::Dense => {
