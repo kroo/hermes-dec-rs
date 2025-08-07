@@ -725,6 +725,14 @@ impl<'a> BlockToStatementConverter<'a> {
         self.stats = BlockConversionStats::default();
     }
 
+    /// Get variable name for a register at a specific PC (for conditional expressions)
+    pub fn get_variable_name_for_condition(&mut self, register: u8, pc: u32) -> String {
+        self.instruction_converter.set_current_pc(pc);
+        self.instruction_converter
+            .register_manager_mut()
+            .get_source_variable_name(register)
+    }
+
     /// Get access to the underlying instruction converter
     pub fn instruction_converter(&self) -> &InstructionToStatementConverter<'a> {
         &self.instruction_converter

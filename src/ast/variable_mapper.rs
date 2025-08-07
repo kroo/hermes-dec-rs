@@ -135,8 +135,21 @@ impl VariableMapping {
             }
         }
 
-        // Fallback to regular lookup if before state not available
-        self.get_variable_name_with_fallback(register, pc)
+        // IMPORTANT: For source operands, we should NOT use register_at_pc for the current PC
+        // because that might contain the AFTER value if this instruction defines the register.
+        // Instead, we need to find the value from a previous PC.
+
+        // Try to find the most recent definition before this PC
+        for check_pc in (0..pc).rev() {
+            if let Some(ssa_value) = self.register_at_pc.get(&(register, check_pc)) {
+                if let Some(var_name) = self.ssa_to_var.get(ssa_value) {
+                    return Some(var_name);
+                }
+            }
+        }
+
+        // Last resort: check if there's a fallback name
+        self.fallback_register_names.get(&register)
     }
 
     /// Generate a unique temporary variable name
@@ -585,7 +598,7 @@ impl VariableMapper {
             }
 
             // Process instructions
-            for (inst_idx, _) in block.instructions().iter().enumerate() {
+            for (inst_idx, _instruction) in block.instructions().iter().enumerate() {
                 let pc = block.start_pc() + inst_idx as u32;
 
                 // First, record the BEFORE state for this PC
@@ -601,16 +614,25 @@ impl VariableMapper {
                     if def.block_id == block_id && def.instruction_idx == inst_idx {
                         if let Some(ssa_value) = ssa.ssa_values.get(def) {
                             current_versions.insert(def.register, ssa_value.clone());
+
+                            // IMPORTANT: Record the AFTER state immediately for this register
+                            // at this PC. This ensures that when we look up the destination
+                            // register, we get the new SSA value.
+                            mapping
+                                .register_at_pc
+                                .insert((def.register, pc), ssa_value.clone());
                         }
                     }
                 }
 
-                // Record current versions for all registers at this PC (AFTER state)
-                // This includes any definitions that happened at this instruction
+                // Record current versions for OTHER registers at this PC (AFTER state)
+                // Skip registers that were just defined - they're already recorded above
                 for (register, ssa_value) in &current_versions {
-                    mapping
-                        .register_at_pc
-                        .insert((*register, pc), ssa_value.clone());
+                    if !mapping.register_at_pc.contains_key(&(*register, pc)) {
+                        mapping
+                            .register_at_pc
+                            .insert((*register, pc), ssa_value.clone());
+                    }
                 }
             }
         }

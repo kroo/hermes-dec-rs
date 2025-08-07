@@ -109,7 +109,7 @@ impl<'a> ConditionalConverter<'a> {
         let first_branch = &chain.branches[0];
 
         // Build the condition expression
-        let test = self.build_condition_expression(&first_branch, cfg)?;
+        let test = self.build_condition_expression(&first_branch, cfg, block_converter)?;
 
         // Get blocks to convert, excluding those that belong to nested chains
         let branch_idx = 0; // First branch is always index 0
@@ -226,7 +226,7 @@ impl<'a> ConditionalConverter<'a> {
         // Process branches in reverse order
         for (i, branch) in conditional_branches.iter().enumerate().rev() {
             // Build the condition expression
-            let test = self.build_condition_expression(branch, cfg)?;
+            let test = self.build_condition_expression(branch, cfg, block_converter)?;
 
             // Get the actual branch index in the original chain
             // We're iterating through conditional_branches, so just use the index directly
@@ -360,6 +360,7 @@ impl<'a> ConditionalConverter<'a> {
         &mut self,
         branch: &ConditionalBranch,
         cfg: &Cfg<'a>,
+        block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
         let condition_block = &cfg.graph()[branch.condition_block];
 
@@ -368,6 +369,9 @@ impl<'a> ConditionalConverter<'a> {
             .instructions()
             .last()
             .ok_or("Condition block has no instructions")?;
+
+        // Calculate the PC of the last instruction
+        let pc = condition_block.start_pc() + (condition_block.instructions().len() - 1) as u32;
 
         // Get the edge from condition block to branch entry to determine polarity
         let edges: Vec<_> = cfg
@@ -388,7 +392,8 @@ impl<'a> ConditionalConverter<'a> {
         };
 
         // Build the base condition expression
-        let base_expr = self.build_condition_from_instruction(&last_instr.instruction)?;
+        let base_expr =
+            self.build_condition_from_instruction(&last_instr.instruction, pc, block_converter)?;
 
         // Apply negation if needed
         if needs_negation {
@@ -406,18 +411,21 @@ impl<'a> ConditionalConverter<'a> {
     fn build_condition_from_instruction(
         &mut self,
         instruction: &UnifiedInstruction,
+        pc: u32,
+        block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
         match instruction {
             // Simple boolean jumps
             UnifiedInstruction::JmpTrue { operand_0, .. } => {
-                self.create_register_expression(*operand_0 as u8)
+                self.create_register_expression(*operand_0 as u8, pc, block_converter)
             }
             UnifiedInstruction::JmpTrueLong { operand_0, .. } => {
-                self.create_register_expression(*operand_0 as u8)
+                self.create_register_expression(*operand_0 as u8, pc, block_converter)
             }
 
             UnifiedInstruction::JmpFalse { operand_0, .. } => {
-                let expr = self.create_register_expression(*operand_0 as u8)?;
+                let expr =
+                    self.create_register_expression(*operand_0 as u8, pc, block_converter)?;
                 Ok(self.ast_builder.expression_unary(
                     Span::default(),
                     UnaryOperator::LogicalNot,
@@ -425,7 +433,8 @@ impl<'a> ConditionalConverter<'a> {
                 ))
             }
             UnifiedInstruction::JmpFalseLong { operand_0, .. } => {
-                let expr = self.create_register_expression(*operand_0 as u8)?;
+                let expr =
+                    self.create_register_expression(*operand_0 as u8, pc, block_converter)?;
                 Ok(self.ast_builder.expression_unary(
                     Span::default(),
                     UnaryOperator::LogicalNot,
@@ -443,7 +452,13 @@ impl<'a> ConditionalConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_binary_comparison(*operand_1, *operand_2, BinaryOperator::Equality),
+            } => self.build_binary_comparison(
+                *operand_1,
+                *operand_2,
+                BinaryOperator::Equality,
+                pc,
+                block_converter,
+            ),
 
             UnifiedInstruction::JNotEqual {
                 operand_1,
@@ -454,7 +469,13 @@ impl<'a> ConditionalConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_binary_comparison(*operand_1, *operand_2, BinaryOperator::Inequality),
+            } => self.build_binary_comparison(
+                *operand_1,
+                *operand_2,
+                BinaryOperator::Inequality,
+                pc,
+                block_converter,
+            ),
 
             UnifiedInstruction::JStrictEqual {
                 operand_1,
@@ -465,9 +486,13 @@ impl<'a> ConditionalConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => {
-                self.build_binary_comparison(*operand_1, *operand_2, BinaryOperator::StrictEquality)
-            }
+            } => self.build_binary_comparison(
+                *operand_1,
+                *operand_2,
+                BinaryOperator::StrictEquality,
+                pc,
+                block_converter,
+            ),
 
             UnifiedInstruction::JStrictNotEqual {
                 operand_1,
@@ -482,6 +507,8 @@ impl<'a> ConditionalConverter<'a> {
                 *operand_1,
                 *operand_2,
                 BinaryOperator::StrictInequality,
+                pc,
+                block_converter,
             ),
 
             UnifiedInstruction::JLess {
@@ -493,7 +520,13 @@ impl<'a> ConditionalConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_binary_comparison(*operand_1, *operand_2, BinaryOperator::LessThan),
+            } => self.build_binary_comparison(
+                *operand_1,
+                *operand_2,
+                BinaryOperator::LessThan,
+                pc,
+                block_converter,
+            ),
 
             UnifiedInstruction::JLessEqual {
                 operand_1,
@@ -504,9 +537,13 @@ impl<'a> ConditionalConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => {
-                self.build_binary_comparison(*operand_1, *operand_2, BinaryOperator::LessEqualThan)
-            }
+            } => self.build_binary_comparison(
+                *operand_1,
+                *operand_2,
+                BinaryOperator::LessEqualThan,
+                pc,
+                block_converter,
+            ),
 
             UnifiedInstruction::JGreater {
                 operand_1,
@@ -517,7 +554,13 @@ impl<'a> ConditionalConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.build_binary_comparison(*operand_1, *operand_2, BinaryOperator::GreaterThan),
+            } => self.build_binary_comparison(
+                *operand_1,
+                *operand_2,
+                BinaryOperator::GreaterThan,
+                pc,
+                block_converter,
+            ),
 
             UnifiedInstruction::JGreaterEqual {
                 operand_1,
@@ -532,6 +575,8 @@ impl<'a> ConditionalConverter<'a> {
                 *operand_1,
                 *operand_2,
                 BinaryOperator::GreaterEqualThan,
+                pc,
+                block_converter,
             ),
 
             // NotGreater is equivalent to LessEqual
@@ -544,9 +589,13 @@ impl<'a> ConditionalConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => {
-                self.build_binary_comparison(*operand_1, *operand_2, BinaryOperator::LessEqualThan)
-            }
+            } => self.build_binary_comparison(
+                *operand_1,
+                *operand_2,
+                BinaryOperator::LessEqualThan,
+                pc,
+                block_converter,
+            ),
 
             // NotLess is equivalent to GreaterEqual
             UnifiedInstruction::JNotLess {
@@ -562,12 +611,14 @@ impl<'a> ConditionalConverter<'a> {
                 *operand_1,
                 *operand_2,
                 BinaryOperator::GreaterEqualThan,
+                pc,
+                block_converter,
             ),
 
             // Undefined/null checks
             UnifiedInstruction::JmpUndefined { operand_1, .. }
             | UnifiedInstruction::JmpUndefinedLong { operand_1, .. } => {
-                let expr = self.create_register_expression(*operand_1)?;
+                let expr = self.create_register_expression(*operand_1, pc, block_converter)?;
                 let undefined = self
                     .ast_builder
                     .expression_identifier(Span::default(), "undefined");
@@ -592,9 +643,11 @@ impl<'a> ConditionalConverter<'a> {
         left_reg: u8,
         right_reg: u8,
         operator: BinaryOperator,
+        pc: u32,
+        block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
-        let left = self.create_register_expression(left_reg)?;
-        let right = self.create_register_expression(right_reg)?;
+        let left = self.create_register_expression(left_reg, pc, block_converter)?;
+        let right = self.create_register_expression(right_reg, pc, block_converter)?;
 
         Ok(self
             .ast_builder
@@ -736,17 +789,17 @@ impl<'a> ConditionalConverter<'a> {
         }
     }
 
-    /// Create an expression for a register using a simple naming scheme
+    /// Create an expression for a register using SSA-aware naming from block converter
     /// This is called after condition setup blocks have been processed,
     /// so we use the same naming convention as the block converter
-    fn create_register_expression(&mut self, register: u8) -> Result<Expression<'a>, String> {
-        // For now, use a simple var{N} naming scheme that matches what the block converter uses
-        // TODO: Integrate with proper variable mapping system
-        let var_name = if register == 0 {
-            "var0".to_string()
-        } else {
-            format!("var{}", register)
-        };
+    fn create_register_expression(
+        &mut self,
+        register: u8,
+        pc: u32,
+        block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
+    ) -> Result<Expression<'a>, String> {
+        // Get the SSA-aware variable name from the block converter
+        let var_name = block_converter.get_variable_name_for_condition(register, pc);
 
         Ok(self
             .ast_builder
