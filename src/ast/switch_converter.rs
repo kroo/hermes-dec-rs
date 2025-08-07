@@ -108,7 +108,26 @@ impl<'a> SwitchConverter<'a> {
         // Convert all instructions before the switch/comparison
         if switch_start_idx > 0 {
             let setup_instructions = &dispatch_block.instructions()[..switch_start_idx];
-            for instr in setup_instructions {
+            for (i, instr) in setup_instructions.iter().enumerate() {
+                // For sparse switches, skip constant loads that are immediately followed by comparisons
+                if matches!(switch_type, SwitchType::Sparse) {
+                    // Check if this is a constant load
+                    let is_const_load = matches!(
+                        instr.instruction,
+                        UnifiedInstruction::LoadConstInt { .. }
+                            | UnifiedInstruction::LoadConstUInt8 { .. }
+                            | UnifiedInstruction::LoadConstZero { .. }
+                    );
+
+                    // Check if the next instruction is the comparison
+                    let next_is_comparison = i + 1 == switch_start_idx;
+
+                    if is_const_load && next_is_comparison {
+                        // Skip this constant load as it's part of the comparison
+                        continue;
+                    }
+                }
+
                 // Set the current PC for this instruction
                 let pc = dispatch_block.start_pc() + instr.instruction_index as u32;
                 block_converter
