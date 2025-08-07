@@ -44,10 +44,10 @@ digraph {
 
     edge [fontname="Arial"];
 
-    f2_n0 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 0 (PC 0-8)\l  0: LoadParam         r5, 1\l  1: GetByIdShort      r1, r5, 1, \"length\"\l  2: LoadConstZero     r0\l  3: Less              r1, r0, r1\l  4: LoadConstUInt8    r4, 50\l  5: LoadConstZero     r3\l  6: LoadConstZero     r2\l  7: JmpFalse          L1, r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f2_n0 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 0 (PC 0-8)\l  0: LoadParam         r5, 1\l  1: GetByIdShort      r1, r5, 1, \"length\"\l  2: LoadConstZero     r0\l  3: Less              r1, r0, r1\l  4: LoadConstUInt8    r4, 50\l  5: LoadConstZero     r3\l  6: LoadConstZero     r2\l  7: JmpFalse          L1, r1\l[CONDITIONAL: IF-ELSE]\l"]
     f2_n1 [style=filled, fillcolor="lightblue", penwidth=3, color=red, label="Block 1 (PC 8-13) [L2]\l  0: GetByVal          r1, r5, r2\l  1: Add               r7, r3, r1\l  2: Mov               r1, r2\l  3: Mov               r0, r7\l  4: JGreater          L1, r0, r4\l[LOOP HEADER: While Loop]\l"]
     f2_n2 [style=filled, fillcolor="lightblue", label="Block 2 (PC 13-18)\l  0: Inc               r2, r1\l  1: GetByIdShort      r1, r5, 1, \"length\"\l  2: Mov               r3, r7\l  3: Mov               r0, r3\l  4: JLess             L2, r2, r1\l[LOOP BODY: While Loop]\l"]
-    f2_n3 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 3 (PC 18-19) [L1]\l  0: Ret               r0\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f2_n3 [label="Block 3 (PC 18-19) [L1]\l  0: Ret               r0\l"]
     f2_n4 [style=filled, fillcolor=lightgray, label="EXIT"]
 
     f2_n0 -> f2_n3 [label="False Branch", color=red]
@@ -59,8 +59,8 @@ digraph {
     f2_n3 -> f2_n4 [label="Unconditional", color=black]
 
     // Analysis Legend
-    // Conditional: ELSE-IF CHAIN
     // Loop: While Loop
+    // Conditional: IF-ELSE
   }
 
   subgraph cluster_function_3 {
@@ -70,11 +70,11 @@ digraph {
 
     edge [fontname="Arial"];
 
-    f3_n0 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstString   r0, \"a\"\l  2: JStrictEqual      L1, r0, r1\l[CONDITIONAL: IF-ELSE]\l"]
-    f3_n1 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 1 (PC 3-5)\l  0: LoadConstString   r0, \"b\"\l  1: JStrictEqual      L2, r0, r1\l[CONDITIONAL: IF-ELSE]\l"]
-    f3_n2 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 2 (PC 5-7)\l  0: LoadConstZero     r0\l  1: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
-    f3_n3 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 3 (PC 7-9) [L2]\l  0: LoadConstUInt8    r0, 2\l  1: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
-    f3_n4 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 4 (PC 9-11) [L1]\l  0: LoadConstUInt8    r0, 1\l  1: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f3_n0 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstString   r0, \"a\"\l  2: JStrictEqual      L1, r0, r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n1 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 1 (PC 3-5)\l  0: LoadConstString   r0, \"b\"\l  1: JStrictEqual      L2, r0, r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n2 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 2 (PC 5-7)\l  0: LoadConstZero     r0\l  1: Ret               r0\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n3 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 3 (PC 7-9) [L2]\l  0: LoadConstUInt8    r0, 2\l  1: Ret               r0\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f3_n4 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 4 (PC 9-11) [L1]\l  0: LoadConstUInt8    r0, 1\l  1: Ret               r0\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
     f3_n5 [style=filled, fillcolor=lightgray, label="EXIT"]
 
     f3_n0 -> f3_n4 [label="True Branch", color=green]
@@ -86,7 +86,7 @@ digraph {
     f3_n4 -> f3_n5 [label="Unconditional", color=black]
 
     // Analysis Legend
-    // Conditional: IF-ELSE
+    // Conditional: ELSE-IF CHAIN
   }
 
   subgraph cluster_function_4 {
@@ -98,7 +98,7 @@ digraph {
 
     f4_n0 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 0 (PC 0-6)\l  0: LoadParam         r3, 1\l  1: LoadConstZero     r2\l  2: Greater           r4, r3, r2\l  3: LoadConstUInt8    r1, 1\l  4: Mov               r0, r1\l  5: JmpFalse          L1, r4\l[CONDITIONAL: IF-ELSE]\l"]
     f4_n1 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 1 (PC 6-10) [L2]\l  0: Mul               r1, r1, r3\l  1: Dec               r3, r3\l  2: Mov               r0, r1\l  3: JGreater          L2, r3, r2\l[CONDITIONAL: IF-ELSE]\l"]
-    f4_n2 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 2 (PC 10-11) [L1]\l  0: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f4_n2 [label="Block 2 (PC 10-11) [L1]\l  0: Ret               r0\l"]
     f4_n3 [style=filled, fillcolor=lightgray, label="EXIT"]
 
     f4_n0 -> f4_n2 [label="False Branch", color=red]
@@ -165,21 +165,23 @@ digraph {
     edge [fontname="Arial"];
 
     f8_n0 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l[CONDITIONAL: IF-ELSE]\l"]
-    f8_n1 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 1 (PC 3-10)\l  0: GetEnvironment    r1, 2\l  1: LoadFromEnvironment r3, r1, 0\l  2: LoadConstUndefined r2\l  3: LoadConstUInt8    r1, 100\l  4: Call2             r1, r3, r2, r1\l  5: SaveGenerator     [4]\l  6: Ret               r1\l[CONDITIONAL: IF-ELSE]\l"]
-    f8_n2 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 2 (PC 10-12)\l  0: ResumeGenerator   r1, r2\l  1: JmpTrue           L2, r2\l[CONDITIONAL: IF-ELSE]\l"]
-    f8_n3 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 3 (PC 12-15)\l  0: LoadConstString   r2, \"done\"\l  1: CompleteGenerator \l  2: Ret               r2\l[CONDITIONAL: IF-ELSE]\l"]
-    f8_n4 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 4 (PC 15-17) [L2]\l  0: CompleteGenerator \l  1: Ret               r1\l[CONDITIONAL: IF-ELSE]\l"]
-    f8_n5 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 5 (PC 17-19) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
-    f8_n6 [style=filled, fillcolor=lightgray, label="EXIT"]
+    f8_n1 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 1 (PC 3-9)\l  0: GetEnvironment    r1, 2\l  1: LoadFromEnvironment r3, r1, 0\l  2: LoadConstUndefined r2\l  3: LoadConstUInt8    r1, 100\l  4: Call2             r1, r3, r2, r1\l  5: SaveGenerator     [4]\l[CONDITIONAL: IF-ELSE]\l"]
+    f8_n2 [label="Block 2 (PC 9-10)\l  0: Ret               r1\l"]
+    f8_n3 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 3 (PC 10-12)\l  0: ResumeGenerator   r1, r2\l  1: JmpTrue           L2, r2\l[CONDITIONAL: IF-ELSE]\l"]
+    f8_n4 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 4 (PC 12-15)\l  0: LoadConstString   r2, \"done\"\l  1: CompleteGenerator \l  2: Ret               r2\l[CONDITIONAL: IF-ELSE]\l"]
+    f8_n5 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 5 (PC 15-17) [L2]\l  0: CompleteGenerator \l  1: Ret               r1\l[CONDITIONAL: IF-ELSE]\l"]
+    f8_n6 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 6 (PC 17-19) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f8_n7 [style=filled, fillcolor=lightgray, label="EXIT"]
 
-    f8_n0 -> f8_n5 [label="True Branch", color=green]
+    f8_n0 -> f8_n6 [label="True Branch", color=green]
     f8_n0 -> f8_n1 [label="False Branch", color=red]
-    f8_n1 -> f8_n6 [label="Unconditional", color=black]
-    f8_n2 -> f8_n4 [label="True Branch", color=green]
-    f8_n2 -> f8_n3 [label="False Branch", color=red]
-    f8_n3 -> f8_n6 [label="Unconditional", color=black]
-    f8_n4 -> f8_n6 [label="Unconditional", color=black]
-    f8_n5 -> f8_n6 [label="Unconditional", color=black]
+    f8_n1 -> f8_n2 [label="Generator Fallthrough", color=lightblue]
+    f8_n2 -> f8_n7 [label="Unconditional", color=black]
+    f8_n3 -> f8_n5 [label="True Branch", color=green]
+    f8_n3 -> f8_n4 [label="False Branch", color=red]
+    f8_n4 -> f8_n7 [label="Unconditional", color=black]
+    f8_n5 -> f8_n7 [label="Unconditional", color=black]
+    f8_n6 -> f8_n7 [label="Unconditional", color=black]
 
     // Analysis Legend
     // Conditional: IF-ELSE
@@ -257,31 +259,34 @@ digraph {
 
     edge [fontname="Arial"];
 
-    f14_n0 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
-    f14_n1 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 1 (PC 3-8)\l  0: GetEnvironment    r4, 1\l  1: LoadFromEnvironment r1, r4, 0\l  2: LoadConstZero     r3\l  3: Less              r1, r3, r1\l  4: JmpFalse          L2, r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
-    f14_n2 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 2 (PC 8-11) [L4]\l  0: Mov               r2, r3\l  1: SaveGenerator     [4]\l  2: Ret               r2\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
-    f14_n3 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 3 (PC 11-13)\l  0: ResumeGenerator   r1, r5\l  1: JmpTrue           L3, r5\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
-    f14_n4 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 4 (PC 13-16)\l  0: Inc               r3, r2\l  1: LoadFromEnvironment r2, r4, 0\l  2: JLess             L4, r3, r2\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
-    f14_n5 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 5 (PC 16-19) [L2]\l  0: LoadConstUndefined r2\l  1: CompleteGenerator \l  2: Ret               r2\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
-    f14_n6 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 6 (PC 19-21) [L3]\l  0: CompleteGenerator \l  1: Ret               r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
-    f14_n7 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 7 (PC 21-23) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
-    f14_n8 [style=filled, fillcolor=lightgray, label="EXIT"]
+    f14_n0 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l[CONDITIONAL: IF-ELSE]\l"]
+    f14_n1 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 1 (PC 3-8)\l  0: GetEnvironment    r4, 1\l  1: LoadFromEnvironment r1, r4, 0\l  2: LoadConstZero     r3\l  3: Less              r1, r3, r1\l  4: JmpFalse          L2, r1\l[CONDITIONAL: IF-ELSE]\l"]
+    f14_n2 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 2 (PC 8-10) [L4]\l  0: Mov               r2, r3\l  1: SaveGenerator     [4]\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f14_n3 [label="Block 3 (PC 10-11)\l  0: Ret               r2\l"]
+    f14_n4 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 4 (PC 11-13)\l  0: ResumeGenerator   r1, r5\l  1: JmpTrue           L3, r5\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f14_n5 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 5 (PC 13-16)\l  0: Inc               r3, r2\l  1: LoadFromEnvironment r2, r4, 0\l  2: JLess             L4, r3, r2\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f14_n6 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 6 (PC 16-19) [L2]\l  0: LoadConstUndefined r2\l  1: CompleteGenerator \l  2: Ret               r2\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f14_n7 [style=filled, fillcolor="lightcoral", shape=diamond, penwidth=2, color=red, style=dashed, label="Block 7 (PC 19-21) [L3]\l  0: CompleteGenerator \l  1: Ret               r1\l[CONDITIONAL: ELSE-IF CHAIN]\l"]
+    f14_n8 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 8 (PC 21-23) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
+    f14_n9 [style=filled, fillcolor=lightgray, label="EXIT"]
 
-    f14_n0 -> f14_n7 [label="True Branch", color=green]
+    f14_n0 -> f14_n8 [label="True Branch", color=green]
     f14_n0 -> f14_n1 [label="False Branch", color=red]
-    f14_n1 -> f14_n5 [label="False Branch", color=red]
+    f14_n1 -> f14_n6 [label="False Branch", color=red]
     f14_n1 -> f14_n2 [label="True Branch", color=green]
-    f14_n2 -> f14_n8 [label="Unconditional", color=black]
-    f14_n3 -> f14_n6 [label="True Branch", color=green]
-    f14_n3 -> f14_n4 [label="False Branch", color=red]
-    f14_n4 -> f14_n2 [label="True Branch", color=green]
+    f14_n2 -> f14_n3 [label="Generator Fallthrough", color=lightblue]
+    f14_n3 -> f14_n9 [label="Unconditional", color=black]
+    f14_n4 -> f14_n7 [label="True Branch", color=green]
     f14_n4 -> f14_n5 [label="False Branch", color=red]
-    f14_n5 -> f14_n8 [label="Unconditional", color=black]
-    f14_n6 -> f14_n8 [label="Unconditional", color=black]
-    f14_n7 -> f14_n8 [label="Unconditional", color=black]
+    f14_n5 -> f14_n2 [label="True Branch", color=green]
+    f14_n5 -> f14_n6 [label="False Branch", color=red]
+    f14_n6 -> f14_n9 [label="Unconditional", color=black]
+    f14_n7 -> f14_n9 [label="Unconditional", color=black]
+    f14_n8 -> f14_n9 [label="Unconditional", color=black]
 
     // Analysis Legend
     // Conditional: ELSE-IF CHAIN
+    // Conditional: IF-ELSE
   }
 
   subgraph cluster_function_15 {

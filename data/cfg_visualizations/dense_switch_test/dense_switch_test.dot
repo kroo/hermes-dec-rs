@@ -103,11 +103,11 @@ digraph {
 
     edge [fontname="Arial"];
 
-    f2_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstInt      r0, 4294967291\l  2: JStrictEqualLong  L1, r0, r1\l" ]
-    f2_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstInt      r0, 4294967292\l  1: JStrictEqualLong  L2, r0, r1\l" ]
-    f2_n2 [ label = "Block 2 (PC 5-7)\l  0: LoadConstInt      r0, 4294967293\l  1: JStrictEqualLong  L3, r0, r1\l" ]
-    f2_n3 [ label = "Block 3 (PC 7-9)\l  0: LoadConstInt      r0, 4294967294\l  1: JStrictEqualLong  L4, r0, r1\l" ]
-    f2_n4 [ label = "Block 4 (PC 9-11)\l  0: LoadConstInt      r0, 4294967295\l  1: JStrictEqualLong  L5, r0, r1\l" ]
+    f2_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstInt      r0, -5\l  2: JStrictEqualLong  L1, r0, r1\l" ]
+    f2_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstInt      r0, -4\l  1: JStrictEqualLong  L2, r0, r1\l" ]
+    f2_n2 [ label = "Block 2 (PC 5-7)\l  0: LoadConstInt      r0, -3\l  1: JStrictEqualLong  L3, r0, r1\l" ]
+    f2_n3 [ label = "Block 3 (PC 7-9)\l  0: LoadConstInt      r0, -2\l  1: JStrictEqualLong  L4, r0, r1\l" ]
+    f2_n4 [ label = "Block 4 (PC 9-11)\l  0: LoadConstInt      r0, -1\l  1: JStrictEqualLong  L5, r0, r1\l" ]
     f2_n5 [ label = "Block 5 (PC 11-13)\l  0: LoadConstZero     r0\l  1: JStrictEqualLong  L6, r0, r1\l" ]
     f2_n6 [ label = "Block 6 (PC 13-15)\l  0: LoadConstUInt8    r0, 1\l  1: JStrictEqualLong  L7, r0, r1\l" ]
     f2_n7 [ label = "Block 7 (PC 15-17)\l  0: LoadConstUInt8    r0, 2\l  1: JStrictEqual      L8, r0, r1\l" ]

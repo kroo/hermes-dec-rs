@@ -28,7 +28,7 @@ digraph {
     f0_n15 [style=filled, fillcolor="lightblue", label="Block 15 (PC 243-244) [L6]\l  0: JmpLong           L7\l[LOOP BODY: While Loop]\l"]
     f0_n16 [label="Block 16 (PC 244-247) [L11]\l  0: Catch             r1\l  1: IteratorClose     r2, 1\l  2: Throw             r1\l"]
     f0_n17 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, label="Block 17 (PC 247-248) [L1]\l  0: Ret               r0\l[CONDITIONAL: IF-ELSE]\l"]
-    f0_n18 [style=filled, fillcolor=lightgray, label="EXIT"]
+    f0_n18 [style=filled, fillcolor="lightpink", shape=box, penwidth=2, color=black, style=filled, fillcolor=lightgray, label="EXIT[CONDITIONAL: IF-ELSE]\l"]
 
     f0_n0 -> f0_n1 [label="Fall Through", color=orange]
     f0_n1 -> f0_n17 [label="True Branch", color=green]

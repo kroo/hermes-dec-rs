@@ -229,13 +229,27 @@ impl<'a> ConditionalConverter<'a> {
             let test = self.build_condition_expression(branch, cfg)?;
 
             // Get the actual branch index in the original chain
-            let actual_branch_idx = conditional_branches.len() - 1 - i;
+            // We're iterating through conditional_branches, so just use the index directly
+            let actual_branch_idx = i;
 
             // Get blocks to convert, excluding those that belong to nested chains
             let mut blocks_to_convert = branch.branch_blocks.clone();
 
             // Find nested chains for this branch
             let nested_chains_opt = self.find_nested_chains_for_branch(chain, actual_branch_idx);
+
+            // Check if the branch entry itself starts a nested chain
+            let branch_entry_is_nested_chain_start = nested_chains_opt
+                .as_ref()
+                .map(|chains| {
+                    chains.iter().any(|nc| {
+                        nc.branches
+                            .first()
+                            .map(|b| b.condition_block == branch.branch_entry)
+                            .unwrap_or(false)
+                    })
+                })
+                .unwrap_or(false);
 
             // Exclude blocks that belong to nested chains
             if let Some(ref nested_chains) = nested_chains_opt {
@@ -262,6 +276,17 @@ impl<'a> ConditionalConverter<'a> {
                 }
             }
 
+            // Special case: if the branch entry itself is a nested chain start and we have no other statements,
+            // skip creating an empty block - the nested chain will be rendered as part of the parent chain
+            if branch_entry_is_nested_chain_start
+                && blocks_to_convert.is_empty()
+                && consequent_statements.is_empty()
+            {
+                // Skip this branch - it will be handled by the parent else-if chain structure
+                continue;
+            }
+
+            // Create the consequent
             let consequent = self.create_block_statement(consequent_statements);
 
             // Determine the alternate
