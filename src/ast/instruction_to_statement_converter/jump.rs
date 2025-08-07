@@ -73,6 +73,10 @@ impl<'a> JumpHelpers<'a> for InstructionToStatementConverter<'a> {
             "NotEqual" => oxc_ast::ast::BinaryOperator::Inequality,
             "StrictEqual" => oxc_ast::ast::BinaryOperator::StrictEquality,
             "StrictNotEqual" => oxc_ast::ast::BinaryOperator::StrictInequality,
+            // NotGreater is equivalent to LessEqual (!(a > b) === a <= b)
+            "NotGreater" => oxc_ast::ast::BinaryOperator::LessEqualThan,
+            // NotLess is equivalent to GreaterEqual (!(a < b) === a >= b)
+            "NotLess" => oxc_ast::ast::BinaryOperator::GreaterEqualThan,
             _ => {
                 return Err(StatementConversionError::UnsupportedInstruction(format!(
                     "Unknown comparison operator: {}",

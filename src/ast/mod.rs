@@ -6,6 +6,8 @@
 //! - BlockToStatementConverter: Converts CFG basic blocks into JavaScript statement sequences
 
 pub mod block_converter;
+pub mod conditional_converter;
+pub mod control_flow;
 pub mod expression_context;
 // pub mod instruction_converter;
 pub mod instruction_to_statement_converter;
@@ -14,6 +16,7 @@ pub mod variable_mapper;
 
 // Re-export the main types for public API
 pub use block_converter::{BlockConversionError, BlockConversionStats, BlockToStatementConverter};
+pub use conditional_converter::ConditionalConverter;
 pub use expression_context::{ExpressionContext, ExpressionContextError};
 // pub use instruction_converter::{
 //     ConversionError, ConversionStats, InstructionToExpressionConverter,
