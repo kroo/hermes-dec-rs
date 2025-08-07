@@ -250,53 +250,6 @@ impl<'a> BlockToStatementConverter<'a> {
 
         // Check if CFG has conditional analysis
         let conditional_analysis = cfg.analyze_conditional_chains();
-
-        // Debug: Print conditional analysis results
-        if let Some(ref analysis) = conditional_analysis {
-            eprintln!("DEBUG: Found {} conditional chains", analysis.chains.len());
-
-            fn print_chain_recursive(
-                chain: &crate::cfg::analysis::ConditionalChain,
-                indent: usize,
-            ) {
-                let indent_str = "  ".repeat(indent);
-                eprintln!(
-                    "{}Chain {}: {:?} with {} branches, {} nested chains",
-                    indent_str,
-                    chain.chain_id,
-                    chain.chain_type,
-                    chain.branches.len(),
-                    chain.nested_chains.len()
-                );
-                for (j, branch) in chain.branches.iter().enumerate() {
-                    eprintln!(
-                        "{}  Branch {}: {:?} - condition_block: {}, branch_entry: {}, blocks: {:?}",
-                        indent_str,
-                        j,
-                        branch.branch_type,
-                        branch.condition_block.index(),
-                        branch.branch_entry.index(),
-                        branch
-                            .branch_blocks
-                            .iter()
-                            .map(|n| n.index())
-                            .collect::<Vec<_>>()
-                    );
-                }
-                eprintln!("{}  Join block: {}", indent_str, chain.join_block.index());
-
-                // Print nested chains
-                for nested in &chain.nested_chains {
-                    print_chain_recursive(nested, indent + 1);
-                }
-            }
-
-            for chain in &analysis.chains {
-                print_chain_recursive(chain, 1);
-            }
-        } else {
-            eprintln!("DEBUG: No conditional analysis available");
-        }
         let mut processed_blocks: HashSet<NodeIndex> = HashSet::new();
 
         for (order_idx, block_id) in block_order.iter().enumerate() {
@@ -335,9 +288,10 @@ impl<'a> BlockToStatementConverter<'a> {
                             all_statements.extend(chain_statements);
                             continue;
                         }
-                        Err(e) => {
+                        Err(_e) => {
                             // Fall back to basic block conversion if conditional conversion fails
-                            eprintln!("Warning: Failed to convert conditional chain: {}", e);
+                            // TODO: Add debug logging flag to conditionally show this warning
+                            // eprintln!("Warning: Failed to convert conditional chain: {}", e);
                         }
                     }
                 }

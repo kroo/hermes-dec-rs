@@ -93,6 +93,15 @@ enum Commands {
         #[arg(long)]
         analysis: Option<PathBuf>,
     },
+
+    /// Analyze control flow structures (conditionals, loops, etc.)
+    AnalyzeCfg {
+        /// Input HBC file
+        input: PathBuf,
+        /// Function index to analyze
+        #[arg(short, long)]
+        function: usize,
+    },
 }
 
 fn main() -> Result<()> {
@@ -135,5 +144,8 @@ fn main() -> Result<()> {
             analysis.as_ref().map(|v| &**v),
         )
         .map_err(|e| miette!("{}", e)),
+        Commands::AnalyzeCfg { input, function } => {
+            cli::analyze_cfg::analyze_cfg(&input, function).map_err(|e| miette!("{}", e))
+        }
     }
 }

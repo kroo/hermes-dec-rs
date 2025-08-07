@@ -414,20 +414,17 @@ impl<'a> ConditionalDetector<'a> {
     ) -> Option<NodeIndex> {
         // Method 1: Check for immediate convergence
         if let Some(join) = self.find_immediate_convergence(true_branch, false_branch) {
-            eprintln!("Found immediate convergence at {}", join.index());
             return Some(join);
         }
         
         // Method 2: Find the immediate post-dominator
         // This is better than general reachability for nested conditionals
         if let Some(join) = self.find_immediate_post_dominator(true_branch, false_branch) {
-            eprintln!("Found immediate post-dominator at {}", join.index());
             return Some(join);
         }
         
         // Method 3: Use reachability analysis to find convergence
         if let Some(join) = self.find_reachability_convergence(true_branch, false_branch) {
-            eprintln!("Found reachability convergence at {}", join.index());
             // Verify it's not the exit block unless it's the only option
             if self.graph.edges(join).count() > 0 {
                 return Some(join);
@@ -435,11 +432,7 @@ impl<'a> ConditionalDetector<'a> {
         }
         
         // Method 4: Fall back to lowest common post-dominator
-        let pdom_join = find_lowest_common_post_dominator(self.post_doms, true_branch, false_branch);
-        if let Some(join) = pdom_join {
-            eprintln!("Using post-dominator join at {}", join.index());
-        }
-        pdom_join
+        find_lowest_common_post_dominator(self.post_doms, true_branch, false_branch)
     }
     
     /// Find the immediate post-dominator of two branches

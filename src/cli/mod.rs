@@ -5,6 +5,7 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+pub mod analyze_cfg;
 pub mod cfg;
 pub mod decompile;
 pub mod disasm;
@@ -67,6 +68,14 @@ pub enum Commands {
         #[arg(long)]
         analysis: Option<std::path::PathBuf>,
     },
+    /// Analyze control flow structures (conditionals, loops, etc.)
+    AnalyzeCfg {
+        /// Input HBC file
+        input: std::path::PathBuf,
+        /// Function index to analyze
+        #[arg(short, long)]
+        function: usize,
+    },
 }
 
 impl Cli {
@@ -109,6 +118,9 @@ impl Cli {
                     loops.as_deref(),
                     analysis.as_deref(),
                 )?;
+            }
+            Commands::AnalyzeCfg { input, function } => {
+                analyze_cfg::analyze_cfg(&input, function)?;
             }
         }
 
