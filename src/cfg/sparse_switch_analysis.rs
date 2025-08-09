@@ -41,18 +41,27 @@ pub struct ComparisonBlock {
 pub fn find_sparse_switch_patterns(
     graph: &DiGraph<Block, EdgeKind>,
     post_doms: &PostDominatorAnalysis,
+    globally_processed: &mut HashSet<NodeIndex>,
 ) -> Vec<SparseSwitchCandidate> {
     let mut candidates = Vec::new();
     let mut processed = HashSet::new();
 
     // Look for chains of equality comparisons
     for node in graph.node_indices() {
-        if processed.contains(&node) {
+        if processed.contains(&node) || globally_processed.contains(&node) {
             continue;
         }
 
         if let Some(candidate) = detect_sparse_switch_chain(graph, post_doms, node, &mut processed)
         {
+            // Mark only comparison blocks as globally processed
+            // Don't mark target blocks (case heads) as they might contain inner switches
+            for comp in &candidate.comparison_blocks {
+                globally_processed.insert(comp.block_index);
+                // Don't mark comp.target_block - it might contain an inner switch
+            }
+            // Don't mark default block either - it might contain an inner switch
+            
             candidates.push(candidate);
         }
     }
@@ -70,7 +79,11 @@ fn detect_sparse_switch_chain(
     let block = &graph[start_node];
 
     // Check if this block contains a JStrictEqual comparison
-    let comparison_info = extract_comparison_info(block)?;
+    let comp_info = extract_comparison_info(block, graph, start_node);
+    if comp_info.is_none() {
+        return None;
+    }
+    let (compared_register, _first_value, _is_not_equal) = comp_info.unwrap();
 
     // This must be a conditional block with true/false branches
     let (_true_target, _false_target) = get_conditional_targets(graph, start_node)?;
@@ -78,21 +91,20 @@ fn detect_sparse_switch_chain(
     // Initialize tracking
     let mut comparison_blocks = Vec::new();
     let mut current_node = start_node;
-    let compared_register = comparison_info.0;
     let mut seen_values = HashSet::new();
 
     // Follow the chain of comparisons
     loop {
         let block = &graph[current_node];
-        let comp_info = extract_comparison_info(block)?;
+        let (reg, value, is_not_equal) = extract_comparison_info(block, graph, current_node)?;
 
         // Must be comparing the same register
-        if comp_info.0 != compared_register {
+        if reg != compared_register {
             break;
         }
 
         // Check for duplicate values
-        if !seen_values.insert(comp_info.1) {
+        if !seen_values.insert(value) {
             break;
         }
 
@@ -100,36 +112,45 @@ fn detect_sparse_switch_chain(
 
         let (true_target, false_target) = get_conditional_targets(graph, current_node)?;
 
+        // For JStrictNotEqual, the branches are inverted
+        let (case_target, next_target) = if is_not_equal {
+            // JStrictNotEqual: false branch goes to case, true branch continues
+            (false_target, true_target)
+        } else {
+            // JStrictEqual: true branch goes to case, false branch continues
+            (true_target, false_target)
+        };
+
         comparison_blocks.push(ComparisonBlock {
             block_index: current_node,
-            compared_value: comp_info.1,
-            target_block: true_target,
-            next_comparison: Some(false_target),
+            compared_value: value,
+            target_block: case_target,
+            next_comparison: Some(next_target),
         });
 
-        // Check if the false target is another comparison
-        let false_block = &graph[false_target];
-        if let Some(next_comp) = extract_comparison_info(false_block) {
-            if next_comp.0 == compared_register {
-                current_node = false_target;
+        // Check if the next target is another comparison
+        let next_block = &graph[next_target];
+        if let Some((next_reg, _, _)) = extract_comparison_info(next_block, graph, next_target) {
+            if next_reg == compared_register {
+                current_node = next_target;
                 continue;
             }
         }
 
         // We've reached the end of the comparison chain
-        // The false target is the default case
-        let default_block = Some(false_target);
+        // The next target is the default case
+        let default_block = Some(next_target);
 
         // Find the join point - where all cases converge
-        let mut all_targets = vec![false_target];
+        let mut all_targets = vec![next_target];
         for comp in &comparison_blocks {
             all_targets.push(comp.target_block);
         }
 
         let join_block = find_common_post_dominator(post_doms, &all_targets)?;
 
-        // We need at least 3 comparisons to consider it a switch pattern
-        if comparison_blocks.len() >= 3 {
+        // We need at least 2 comparisons to consider it a switch pattern
+        if comparison_blocks.len() >= 2 {
             return Some(SparseSwitchCandidate {
                 compared_register,
                 comparison_blocks,
@@ -145,8 +166,13 @@ fn detect_sparse_switch_chain(
 }
 
 /// Extract comparison information from a block
-pub fn extract_comparison_info(block: &Block) -> Option<(u8, i32)> {
-    // Look for JStrictEqual with a constant value
+/// Returns (register, value, is_not_equal)
+pub fn extract_comparison_info(
+    block: &Block,
+    graph: &DiGraph<Block, EdgeKind>,
+    node: NodeIndex,
+) -> Option<(u8, i32, bool)> {
+    // Look for JStrictEqual or JStrictNotEqual with a constant value
     for (idx, instr) in block.instructions().iter().enumerate() {
         match &instr.instruction {
             UnifiedInstruction::JStrictEqual {
@@ -159,14 +185,40 @@ pub fn extract_comparison_info(block: &Block) -> Option<(u8, i32)> {
                 operand_2,
                 ..
             } => {
+                // First check if either operand has a constant load in this block
+                if let Some(const_val) = find_constant_load_before(block, idx, *operand_2, graph, node) {
+                    return Some((*operand_1, const_val, false));
+                }
+                if let Some(const_val) = find_constant_load_before(block, idx, *operand_1, graph, node) {
+                    return Some((*operand_2, const_val, false));
+                }
+                
+                // If not, check if this looks like a switch pattern where one register
+                // is being compared against different values across blocks
+                // For now, we'll assume operand_1 is the constant and operand_2 is the variable
+                // This is a heuristic that might need refinement
+                
+                // Try to extract the constant value from the register
+                // This requires looking at the overall pattern
+                // For now, return None to indicate we need a different approach
+            }
+            UnifiedInstruction::JStrictNotEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JStrictNotEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            } => {
                 // Check if we're comparing against a constant
-                // This requires looking at the previous instruction to see if it loaded a constant
-                if let Some(const_val) = find_constant_load_before(block, idx, *operand_2) {
-                    return Some((*operand_1, const_val));
+                if let Some(const_val) = find_constant_load_before(block, idx, *operand_2, graph, node) {
+                    return Some((*operand_1, const_val, true));
                 }
                 // Try the other operand
-                if let Some(const_val) = find_constant_load_before(block, idx, *operand_1) {
-                    return Some((*operand_2, const_val));
+                if let Some(const_val) = find_constant_load_before(block, idx, *operand_1, graph, node) {
+                    return Some((*operand_2, const_val, true));
                 }
             }
             _ => {}
@@ -176,8 +228,14 @@ pub fn extract_comparison_info(block: &Block) -> Option<(u8, i32)> {
 }
 
 /// Find a constant load instruction before the given index
-fn find_constant_load_before(block: &Block, before_index: usize, register: u8) -> Option<i32> {
-    // Look backwards for a constant load into the specified register
+fn find_constant_load_before(
+    block: &Block,
+    before_index: usize,
+    register: u8,
+    graph: &DiGraph<Block, EdgeKind>,
+    node: NodeIndex,
+) -> Option<i32> {
+    // First, look backwards in the current block for a constant load into the specified register
     for i in (0..before_index).rev() {
         let instr = &block.instructions()[i];
         match &instr.instruction {
@@ -198,7 +256,53 @@ fn find_constant_load_before(block: &Block, before_index: usize, register: u8) -
             }
             // If the register is reassigned, stop looking
             _ if is_register_assigned(&instr.instruction, register) => {
-                break;
+                return None; // Register was reassigned, value is lost
+            }
+            _ => {}
+        }
+    }
+    
+    // If not found in current block and we haven't checked from the beginning,
+    // check predecessor blocks (only if there's a single predecessor)
+    if before_index > 0 {
+        use petgraph::Direction;
+        let predecessors: Vec<_> = graph.edges_directed(node, Direction::Incoming).collect();
+        
+        if predecessors.len() == 1 {
+            let pred_node = predecessors[0].source();
+            let pred_block = &graph[pred_node];
+            
+            // Check the entire predecessor block
+            return find_constant_load_in_block(pred_block, register);
+        }
+    }
+    
+    None
+}
+
+/// Find a constant load in an entire block (searching backwards)
+fn find_constant_load_in_block(block: &Block, register: u8) -> Option<i32> {
+    // Search backwards through the entire block
+    for instr in block.instructions().iter().rev() {
+        match &instr.instruction {
+            UnifiedInstruction::LoadConstInt {
+                operand_0,
+                operand_1,
+            } if *operand_0 == register => {
+                return Some(*operand_1);
+            }
+            UnifiedInstruction::LoadConstUInt8 {
+                operand_0,
+                operand_1,
+            } if *operand_0 == register => {
+                return Some(*operand_1 as i32);
+            }
+            UnifiedInstruction::LoadConstZero { operand_0 } if *operand_0 == register => {
+                return Some(0);
+            }
+            // If the register is reassigned, stop looking
+            _ if is_register_assigned(&instr.instruction, register) => {
+                return None;
             }
             _ => {}
         }

@@ -118,6 +118,8 @@ pub struct BlockToStatementConverter<'a> {
     include_ssa_comments: bool,
     /// Optional global analysis for cross-function variable resolution
     _global_analysis: Option<Arc<GlobalAnalysisResult>>,
+    /// Track which instructions have been rendered by their absolute offset
+    rendered_instructions: HashSet<u32>,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
@@ -138,6 +140,7 @@ impl<'a> BlockToStatementConverter<'a> {
             ssa_analysis: None,
             include_ssa_comments: false,
             _global_analysis: None,
+            rendered_instructions: HashSet::new(),
         }
     }
 
@@ -170,6 +173,7 @@ impl<'a> BlockToStatementConverter<'a> {
             ssa_analysis: Some(ssa_analysis),
             include_ssa_comments,
             _global_analysis: None,
+            rendered_instructions: HashSet::new(),
         }
     }
 
@@ -206,6 +210,7 @@ impl<'a> BlockToStatementConverter<'a> {
             ssa_analysis: Some(ssa_analysis),
             include_ssa_comments,
             _global_analysis: Some(_global_analysis),
+            rendered_instructions: HashSet::new(),
         }
     }
 
@@ -232,6 +237,7 @@ impl<'a> BlockToStatementConverter<'a> {
             ssa_analysis: None,
             include_ssa_comments: false,
             _global_analysis: None,
+            rendered_instructions: HashSet::new(),
         }
     }
 
@@ -272,10 +278,11 @@ impl<'a> BlockToStatementConverter<'a> {
             if let Some(ref analysis) = switch_analysis {
                 if let Some(region) = self.find_switch_starting_at(*block_id, analysis) {
                     // Convert the entire switch region
-                    // Mark all blocks in the switch as processed
-                    let all_switch_blocks =
-                        crate::ast::switch_converter::get_all_switch_blocks(region, cfg);
-                    processed_blocks.extend(&all_switch_blocks);
+                    // Initially mark only switch infrastructure blocks as processed
+                    // to allow nested control flow detection in case bodies
+                    let switch_infrastructure =
+                        crate::ast::switch_converter::get_switch_infrastructure_blocks(region, cfg);
+                    processed_blocks.extend(&switch_infrastructure);
                     // Create the switch converter
                     let mut switch_converter = crate::ast::switch_converter::SwitchConverter::new(
                         self.instruction_converter.ast_builder(),
@@ -284,6 +291,35 @@ impl<'a> BlockToStatementConverter<'a> {
                     match switch_converter.convert_switch_region(region, cfg, self) {
                         Ok(switch_statements) => {
                             all_statements.extend(switch_statements);
+                            
+                            // After conversion, mark ALL blocks that were part of the switch
+                            // including case bodies to prevent duplicate processing
+                            let all_switch_blocks =
+                                crate::ast::switch_converter::get_all_switch_blocks_with_bodies(region, cfg);
+                            processed_blocks.extend(&all_switch_blocks);
+                            
+                            // Also mark the join block as processed since the switch converter handles it
+                            processed_blocks.insert(region.join_block);
+                            
+                            // After converting a switch, we need to ensure the join block is processed
+                            // if it hasn't been already (it contains code after the switch)
+                            if !processed_blocks.contains(&region.join_block) {
+                                // Find the position of the join block in the block order
+                                if let Some(join_pos) = block_order.iter().position(|&b| b == region.join_block) {
+                                    // If the join block comes after our current position, it will be processed naturally
+                                    if join_pos <= order_idx {
+                                        // Join block was before or at current position, need to process it now
+                                        let join_block = &cfg.graph()[region.join_block];
+                                        let join_stmts = self.convert_block(
+                                            join_block,
+                                            region.join_block,
+                                            cfg.graph(),
+                                        )?;
+                                        all_statements.extend(join_stmts);
+                                        processed_blocks.insert(region.join_block);
+                                    }
+                                }
+                            }
                             continue;
                         }
                         Err(e) => {
@@ -351,13 +387,76 @@ impl<'a> BlockToStatementConverter<'a> {
             for stmt in block_statements {
                 all_statements.push(stmt);
             }
+            
+            // Mark this block as processed
+            processed_blocks.insert(*block_id);
         }
 
+        // Verify all blocks and instructions were rendered
+        self.verify_all_rendered(cfg, &processed_blocks)?;
+        
         Ok(all_statements)
+    }
+    
+    /// Verify that all blocks and instructions were rendered exactly once
+    fn verify_all_rendered(
+        &self,
+        cfg: &'a crate::cfg::Cfg<'a>,
+        processed_blocks: &HashSet<NodeIndex>,
+    ) -> Result<(), BlockConversionError> {
+        // Check all blocks (except EXIT blocks)
+        for node in cfg.graph().node_indices() {
+            let block = &cfg.graph()[node];
+            
+            // Skip EXIT blocks
+            if block.is_exit() {
+                continue;
+            }
+            
+            // Check if block was processed
+            if !processed_blocks.contains(&node) {
+                return Err(BlockConversionError::InvalidBlock(format!(
+                    "Block {} (PC {}-{}) was not processed during decompilation",
+                    node.index(),
+                    block.start_pc(),
+                    block.end_pc()
+                )));
+            }
+            
+            // Check all instructions in the block
+            for (idx, instruction) in block.instructions().iter().enumerate() {
+                if !self.rendered_instructions.contains(&instruction.offset) {
+                    // Terminal jumps are often skipped as they're implicit in control flow
+                    let is_terminal_jump = idx == block.instructions().len() - 1 && matches!(
+                        &instruction.instruction,
+                        UnifiedInstruction::Jmp { .. } |
+                        UnifiedInstruction::JmpLong { .. } |
+                        UnifiedInstruction::JmpTrue { .. } |
+                        UnifiedInstruction::JmpFalse { .. } |
+                        UnifiedInstruction::JStrictEqual { .. } |
+                        UnifiedInstruction::JStrictEqualLong { .. } |
+                        UnifiedInstruction::JStrictNotEqual { .. } |
+                        UnifiedInstruction::JStrictNotEqualLong { .. }
+                    );
+                    
+                    if !is_terminal_jump {
+                        return Err(BlockConversionError::InvalidBlock(format!(
+                            "Instruction at PC {} (index {} in block {}) was not rendered: {:?}",
+                            instruction.offset,
+                            idx,
+                            node.index(),
+                            instruction.instruction
+                        )));
+                    }
+                }
+            }
+        }
+        
+        Ok(())
     }
 
     /// Find a conditional chain that starts at the given block
-    fn find_chain_starting_at<'b>(
+    pub fn find_chain_starting_at<'b>(
         &self,
         block_id: NodeIndex,
         analysis: &'b crate::cfg::analysis::ConditionalAnalysis,
@@ -373,7 +472,7 @@ impl<'a> BlockToStatementConverter<'a> {
     }
 
     /// Find a switch region that starts at the given block
-    fn find_switch_starting_at<'b>(
+    pub fn find_switch_starting_at<'b>(
         &self,
         block_id: NodeIndex,
         analysis: &'b crate::cfg::analysis::SwitchAnalysis,
@@ -400,6 +499,16 @@ impl<'a> BlockToStatementConverter<'a> {
         ))
     }
 
+    /// Check if an instruction has been rendered
+    pub fn is_instruction_rendered(&self, instruction: &HbcFunctionInstruction) -> bool {
+        self.rendered_instructions.contains(&instruction.offset)
+    }
+
+    /// Mark an instruction as rendered
+    pub fn mark_instruction_rendered(&mut self, instruction: &HbcFunctionInstruction) {
+        self.rendered_instructions.insert(instruction.offset);
+    }
+
     /// Convert a basic block into a sequence of JavaScript statements
     pub fn convert_block(
         &mut self,
@@ -417,7 +526,12 @@ impl<'a> BlockToStatementConverter<'a> {
         let mut statements = ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
 
         for (pc_offset, instruction) in block.instructions().iter().enumerate() {
-            let pc = block.start_pc() + pc_offset as u32;
+            // Skip if this instruction has already been rendered
+            if self.is_instruction_rendered(instruction) {
+                continue;
+            }
+
+            let pc = instruction.offset; // Use the absolute offset from the instruction
             // Process instruction
 
             // Add instruction comment if enabled
@@ -441,6 +555,9 @@ impl<'a> BlockToStatementConverter<'a> {
             for stmt in instruction_statements {
                 statements.push(stmt);
             }
+
+            // Mark this instruction as rendered
+            self.mark_instruction_rendered(instruction);
         }
 
         // Post-process for optimizations
@@ -777,6 +894,16 @@ impl<'a> BlockToStatementConverter<'a> {
         self.instruction_converter
             .register_manager_mut()
             .get_source_variable_name(register)
+    }
+    
+    /// Check if instruction comments are enabled
+    pub fn include_instruction_comments(&self) -> bool {
+        self.include_instruction_comments
+    }
+    
+    /// Check if SSA comments are enabled
+    pub fn include_ssa_comments(&self) -> bool {
+        self.include_ssa_comments
     }
 
     /// Get access to the underlying instruction converter

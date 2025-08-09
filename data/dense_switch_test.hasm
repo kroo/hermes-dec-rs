@@ -1,8 +1,8 @@
 Bytecode File Information:
-  Bytecode version number: 90
-  Source hash: 473da7adb50a014739fe743daa715cde6ffff72b
-  Function count: 3
-  String count: 31
+  Bytecode version number: 96
+  Source hash: 55bfaae6b2eebc6a91c43c3db13aea74b0128364
+  Function count: 7
+  String count: 57
   BigInt count: 0
   String Kind Entry count: 2
   RegExp count: 0
@@ -15,55 +15,119 @@ Bytecode File Information:
     cjsModulesStaticallyResolved: 0
 
 Global String Table:
-s0[ASCII, 0..6] #29DC03AC: fifteen
-s1[ASCII, 6..19] #F2708BE8: negative three
-s2[ASCII, 15..19] three
-s3[ASCII, 19..24] eleven
-s4[ASCII, 24..35] negative one
-s5[ASCII, 33..35] one
-s6[ASCII, 34..46] negative five
-s7[ASCII, 43..46] five
-s8[ASCII, 46..50] eight
-s9[ASCII, 46..53] eighteen
-s10[ASCII, 53..65] negative four
-s11[ASCII, 62..65] four
-s12[ASCII, 62..69] fourteen
-s13[ASCII, 69..80] negative two
-s14[ASCII, 78..80] two
-s15[ASCII, 80..84] other
-s16[ASCII, 85..90] global
-s17[ASCII, 104..111] thirteen
-s18[ASCII, 112..116] seven
-s19[ASCII, 112..120] seventeen
-s20[ASCII, 120..123] nine
-s21[ASCII, 120..127] nineteen
-s22[ASCII, 128..130] six
-s23[ASCII, 128..134] sixteen
-s24[ASCII, 149..151] ten
-s25[ASCII, 152..157] twelve
-s26[ASCII, 158..163] twenty
-s27[ASCII, 164..170] unknown
-s28[ASCII, 171..174] zero
-s29[ASCII, 90..104] largeSwitchTest
-s30[ASCII, 135..149] denseSwitchTest
+s0[ASCII, 0..-1] #C966DC8A: 
+s1[ASCII, 0..8] #F2708BE8: default-1
+s2[ASCII, 8..10] #29DC03AC: 1-1
+s3[ASCII, 10..12] #A4661605: 1-0
+s4[ASCII, 12..14] #8CC871FE: 0-0
+s5[ASCII, 14..16] #EF03A676: 0-1
+s6[ASCII, 16..18] 1-2
+s7[ASCII, 19..27] default-0
+s8[ASCII, 27..29] 0-2
+s9[ASCII, 30..36] 0-other
+s10[ASCII, 32..36] other
+s11[ASCII, 37..43] 1-other
+s12[ASCII, 44..56] default-other
+s13[ASCII, 57..64] double: 
+s14[ASCII, 65..71] fifteen
+s15[ASCII, 71..84] negative three
+s16[ASCII, 80..84] three
+s17[ASCII, 84..89] eleven
+s18[ASCII, 89..100] negative one
+s19[ASCII, 98..100] one
+s20[ASCII, 99..111] negative five
+s21[ASCII, 108..111] five
+s22[ASCII, 111..115] eight
+s23[ASCII, 111..118] eighteen
+s24[ASCII, 118..130] negative four
+s25[ASCII, 127..130] four
+s26[ASCII, 127..134] fourteen
+s27[ASCII, 134..145] negative two
+s28[ASCII, 143..145] two
+s29[ASCII, 143..154] two or three
+s30[ASCII, 155..160] global
+s31[ASCII, 160..163] low 
+s32[ASCII, 164..168] seven
+s33[ASCII, 164..172] seventeen
+s34[ASCII, 172..175] nine
+s35[ASCII, 172..179] nineteen
+s36[ASCII, 190..193] high
+s37[ASCII, 194..207] immediate zero
+s38[ASCII, 204..207] zero
+s39[ASCII, 207..213] outer-2
+s40[ASCII, 214..217] mid 
+s41[ASCII, 218..223] quad: 
+s42[ASCII, 224..226] six
+s43[ASCII, 224..230] sixteen
+s44[ASCII, 231..239] special: 
+s45[ASCII, 254..256] ten
+s46[ASCII, 271..278] thirteen
+s47[ASCII, 279..284] twelve
+s48[ASCII, 285..290] twenty
+s49[ASCII, 291..297] unknown
+s50[ASCII, 298..304] value: 
+s51[ASCII, 179..190] nestedSwitch
+s52[ASCII, 240..254] denseSwitchTest
+s53[ASCII, 257..271] largeSwitchTest
+s54[ASCII, 305..320] mixedBreakReturn
+s55[ASCII, 321..335] switchWithBreak
+s56[ASCII, 336..356] switchWithFallthrough
 
 Array Buffer:
 
-Function<global>0(1 params, 12 registers, 0 symbols):
+Function<global>0(1 params, 15 registers, 0 symbols):
   DeclareGlobalVar  "denseSwitchTest"
   DeclareGlobalVar  "largeSwitchTest"
+  DeclareGlobalVar  "switchWithBreak"
+  DeclareGlobalVar  "switchWithFallthrough"
+  DeclareGlobalVar  "nestedSwitch"
+  DeclareGlobalVar  "mixedBreakReturn"
   CreateEnvironment r1
   CreateClosure     r2, r1, Function<denseSwitchTest>1
   GetGlobalObject   r0
   PutById           r0, r2, 1, "denseSwitchTest"
-  CreateClosure     r1, r1, Function<largeSwitchTest>2
-  PutById           r0, r1, 2, "largeSwitchTest"
+  CreateClosure     r2, r1, Function<largeSwitchTest>2
+  PutById           r0, r2, 2, "largeSwitchTest"
+  CreateClosure     r2, r1, Function<switchWithBreak>3
+  PutById           r0, r2, 3, "switchWithBreak"
+  CreateClosure     r2, r1, Function<switchWithFallthrough>4
+  PutById           r0, r2, 4, "switchWithFallthrough"
+  CreateClosure     r2, r1, Function<nestedSwitch>5
+  PutById           r0, r2, 5, "nestedSwitch"
+  CreateClosure     r1, r1, Function<mixedBreakReturn>6
+  PutById           r0, r1, 6, "mixedBreakReturn"
   GetByIdShort      r3, r0, 1, "denseSwitchTest"
   LoadConstUndefined r2
   LoadConstUInt8    r1, 15
   Call2             r1, r3, r2, r1
-  GetByIdShort      r1, r0, 2, "largeSwitchTest"
-  LoadConstUInt8    r0, 7
+  GetByIdShort      r3, r0, 2, "largeSwitchTest"
+  LoadConstUInt8    r1, 7
+  Call2             r1, r3, r2, r1
+  GetByIdShort      r1, r0, 3, "switchWithBreak"
+  LoadConstUInt8    r5, 3
+  Call2             r1, r1, r2, r5
+  GetByIdShort      r1, r0, 4, "switchWithFallthrough"
+  LoadConstZero     r4
+  Call2             r1, r1, r2, r4
+  GetByIdShort      r1, r0, 4, "switchWithFallthrough"
+  Call2             r1, r1, r2, r5
+  GetByIdShort      r3, r0, 4, "switchWithFallthrough"
+  LoadConstUInt8    r1, 6
+  Call2             r1, r3, r2, r1
+  GetByIdShort      r1, r0, 5, "nestedSwitch"
+  LoadConstUInt8    r3, 1
+  Call3             r1, r1, r2, r4, r3
+  GetByIdShort      r1, r0, 5, "nestedSwitch"
+  Call3             r1, r1, r2, r3, r5
+  GetByIdShort      r1, r0, 5, "nestedSwitch"
+  Call3             r1, r1, r2, r5, r4
+  GetByIdShort      r1, r0, 6, "mixedBreakReturn"
+  Call2             r1, r1, r2, r3
+  GetByIdShort      r3, r0, 6, "mixedBreakReturn"
+  LoadConstUInt8    r1, 2
+  Call2             r1, r3, r2, r1
+  GetByIdShort      r1, r0, 6, "mixedBreakReturn"
+  LoadConstUInt8    r0, 4
   Call2             r0, r1, r2, r0
   Ret               r0
 
@@ -198,5 +262,162 @@ L2:
   Ret               r0
 L1:
   LoadConstString   r0, "negative five"
+  Ret               r0
+
+Function<switchWithBreak>3(2 params, 3 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadConstString   r0, "zero"
+  LoadConstZero     r1
+  JStrictEqual      L1, r1, r2
+  LoadConstUInt8    r1, 1
+  JStrictEqual      L2, r1, r2
+  LoadConstUInt8    r1, 2
+  JStrictEqual      L3, r1, r2
+  LoadConstUInt8    r1, 3
+  JStrictEqual      L4, r1, r2
+  LoadConstUInt8    r1, 4
+  JStrictEqual      L5, r1, r2
+  LoadConstUInt8    r1, 5
+  JStrictEqual      L6, r1, r2
+  LoadConstString   r0, "other"
+  Jmp               L1
+L6:
+  LoadConstString   r0, "five"
+  Jmp               L1
+L5:
+  LoadConstString   r0, "four"
+  Jmp               L1
+L4:
+  LoadConstString   r0, "three"
+  Jmp               L1
+L3:
+  LoadConstString   r0, "two"
+  Jmp               L1
+L2:
+  LoadConstString   r0, "one"
+L1:
+  Ret               r0
+
+Function<switchWithFallthrough>4(2 params, 5 registers, 0 symbols):
+  LoadParam         r3, 1
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r3
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L1, r0, r3
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L1, r0, r3
+  LoadConstString   r1, ""
+  LoadConstUInt8    r0, 3
+  Mov               r2, r1
+  JStrictEqual      L2, r0, r3
+  LoadConstUInt8    r0, 4
+  Mov               r2, r1
+  JStrictEqual      L2, r0, r3
+  LoadConstString   r4, "high"
+  LoadConstUInt8    r1, 5
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstUInt8    r1, 6
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstUInt8    r1, 7
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstString   r0, "unknown"
+  Jmp               L3
+L1:
+  LoadConstString   r2, "low "
+L2:
+  LoadConstString   r1, "mid "
+  Add               r0, r2, r1
+L3:
+  Ret               r0
+
+Function<nestedSwitch>5(3 params, 5 registers, 0 symbols):
+  LoadParam         r4, 1
+  LoadParam         r1, 2
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r4
+  LoadConstUInt8    r2, 1
+  JStrictEqual      L2, r2, r4
+  LoadConstUInt8    r3, 2
+  JStrictEqual      L3, r3, r4
+  JStrictEqual      L4, r0, r1
+  JStrictEqual      L5, r2, r1
+  LoadConstString   r3, "default-other"
+  Ret               r3
+L5:
+  LoadConstString   r3, "default-1"
+  Ret               r3
+L4:
+  LoadConstString   r3, "default-0"
+  Ret               r3
+L3:
+  LoadConstString   r3, "outer-2"
+  Ret               r3
+L2:
+  JStrictEqual      L6, r0, r1
+  JStrictEqual      L7, r2, r1
+  LoadConstUInt8    r2, 2
+  JStrictEqual      L8, r2, r1
+  LoadConstString   r2, "1-other"
+  Ret               r2
+L8:
+  LoadConstString   r2, "1-2"
+  Ret               r2
+L7:
+  LoadConstString   r2, "1-1"
+  Ret               r2
+L6:
+  LoadConstString   r2, "1-0"
+  Ret               r2
+L1:
+  JStrictEqual      L9, r0, r1
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L10, r0, r1
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L11, r0, r1
+  LoadConstString   r0, "0-other"
+  Ret               r0
+L11:
+  LoadConstString   r0, "0-2"
+  Ret               r0
+L10:
+  LoadConstString   r0, "0-1"
+  Ret               r0
+L9:
+  LoadConstString   r0, "0-0"
+  Ret               r0
+
+Function<mixedBreakReturn>6(2 params, 4 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r1
+  LoadConstString   r0, "special: "
+  LoadConstUInt8    r2, 1
+  JStrictEqual      L2, r2, r1
+  LoadConstUInt8    r2, 2
+  JStrictEqual      L3, r2, r1
+  LoadConstString   r3, "value: "
+  LoadConstUInt8    r2, 3
+  JStrictEqual      L4, r2, r1
+  LoadConstUInt8    r2, 4
+  JStrictEqual      L5, r2, r1
+  LoadConstString   r2, "unknown"
+  Ret               r2
+L5:
+  LoadConstString   r0, "quad: "
+  Jmp               L2
+L3:
+  LoadConstString   r3, "double: "
+L4:
+  LoadConstString   r2, "two or three"
+  Add               r2, r3, r2
+  Ret               r2
+L2:
+  Add               r0, r0, r1
+  Ret               r0
+L1:
+  LoadConstString   r0, "immediate zero"
   Ret               r0
 

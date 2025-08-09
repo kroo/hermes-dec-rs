@@ -255,6 +255,7 @@ pub fn find_switch_regions(
 ) -> SwitchAnalysis {
     let mut regions = Vec::new();
     let mut node_to_regions = HashMap::new();
+    let mut globally_processed_nodes = HashSet::new();
 
     // Step 1: Find all dense switch dispatch blocks (SwitchImm instructions)
     let switch_dispatches = find_switch_dispatch_blocks(graph);
@@ -272,10 +273,25 @@ pub fn find_switch_regions(
         }
     }
 
-    // Step 3: Find sparse switch patterns (series of equality comparisons)
-    let sparse_candidates =
-        super::sparse_switch_analysis::find_sparse_switch_patterns(graph, post_doms);
+    // Step 3: Find fallthrough switch patterns first (more specific pattern)
+    let fallthrough_candidates =
+        super::fallthrough_switch_analysis::find_fallthrough_switch_patterns(graph, post_doms, &mut globally_processed_nodes);
 
+    for candidate in fallthrough_candidates {
+        let region =
+            super::fallthrough_switch_analysis::fallthrough_candidate_to_switch_region(&candidate);
+        let region_idx = regions.len();
+
+        // Add region to list
+        regions.push(region.clone());
+
+        // Build node-to-region mapping
+        add_nodes_to_switch_region_mapping(&mut node_to_regions, &region, region_idx);
+    }
+
+    // Step 4: Find sparse switch patterns (series of equality comparisons)
+    let sparse_candidates =
+        super::sparse_switch_analysis::find_sparse_switch_patterns(graph, post_doms, &mut globally_processed_nodes);
     for candidate in sparse_candidates {
         let region = super::sparse_switch_analysis::sparse_candidate_to_switch_region(&candidate);
         let region_idx = regions.len();
