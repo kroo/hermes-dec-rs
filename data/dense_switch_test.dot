@@ -12,7 +12,7 @@ digraph {
 
     edge [fontname="Arial"];
 
-    f0_n0 [ label = "Block 0 (PC 0-16)\l  0: DeclareGlobalVar  \"denseSwitchTest\"\l  1: DeclareGlobalVar  \"largeSwitchTest\"\l  2: CreateEnvironment r1\l  3: CreateClosure     r2, r1, Function<denseSwitchTest>1\l  4: GetGlobalObject   r0\l  5: PutById           r0, r2, 1, \"denseSwitchTest\"\l  6: CreateClosure     r1, r1, Function<largeSwitchTest>2\l  7: PutById           r0, r1, 2, \"largeSwitchTest\"\l  8: GetByIdShort      r3, r0, 1, \"denseSwitchTest\"\l  9: LoadConstUndefined r2\l  10: LoadConstUInt8    r1, 15\l  11: Call2             r1, r3, r2, r1\l  12: GetByIdShort      r1, r0, 2, \"largeSwitchTest\"\l  13: LoadConstUInt8    r0, 7\l  14: Call2             r0, r1, r2, r0\l  15: Ret               r0\l" ]
+    f0_n0 [ label = "Block 0 (PC 0-54)\l  0: DeclareGlobalVar  \"denseSwitchTest\"\l  1: DeclareGlobalVar  \"largeSwitchTest\"\l  2: DeclareGlobalVar  \"switchWithBreak\"\l  3: DeclareGlobalVar  \"switchWithFallthrough\"\l  4: DeclareGlobalVar  \"nestedSwitch\"\l  5: DeclareGlobalVar  \"mixedBreakReturn\"\l  6: CreateEnvironment r1\l  7: CreateClosure     r2, r1, Function<denseSwitchTest>1\l  8: GetGlobalObject   r0\l  9: PutById           r0, r2, 1, \"denseSwitchTest\"\l  10: CreateClosure     r2, r1, Function<largeSwitchTest>2\l  11: PutById           r0, r2, 2, \"largeSwitchTest\"\l  12: CreateClosure     r2, r1, Function<switchWithBreak>3\l  13: PutById           r0, r2, 3, \"switchWithBreak\"\l  14: CreateClosure     r2, r1, Function<switchWithFallthrough>4\l  15: PutById           r0, r2, 4, \"switchWithFallthrough\"\l  16: CreateClosure     r2, r1, Function<nestedSwitch>5\l  17: PutById           r0, r2, 5, \"nestedSwitch\"\l  18: CreateClosure     r1, r1, Function<mixedBreakReturn>6\l  19: PutById           r0, r1, 6, \"mixedBreakReturn\"\l  20: GetByIdShort      r3, r0, 1, \"denseSwitchTest\"\l  21: LoadConstUndefined r2\l  22: LoadConstUInt8    r1, 15\l  23: Call2             r1, r3, r2, r1\l  24: GetByIdShort      r3, r0, 2, \"largeSwitchTest\"\l  25: LoadConstUInt8    r1, 7\l  26: Call2             r1, r3, r2, r1\l  27: GetByIdShort      r1, r0, 3, \"switchWithBreak\"\l  28: LoadConstUInt8    r5, 3\l  29: Call2             r1, r1, r2, r5\l  30: GetByIdShort      r1, r0, 4, \"switchWithFallthrough\"\l  31: LoadConstZero     r4\l  32: Call2             r1, r1, r2, r4\l  33: GetByIdShort      r1, r0, 4, \"switchWithFallthrough\"\l  34: Call2             r1, r1, r2, r5\l  35: GetByIdShort      r3, r0, 4, \"switchWithFallthrough\"\l  36: LoadConstUInt8    r1, 6\l  37: Call2             r1, r3, r2, r1\l  38: GetByIdShort      r1, r0, 5, \"nestedSwitch\"\l  39: LoadConstUInt8    r3, 1\l  40: Call3             r1, r1, r2, r4, r3\l  41: GetByIdShort      r1, r0, 5, \"nestedSwitch\"\l  42: Call3             r1, r1, r2, r3, r5\l  43: GetByIdShort      r1, r0, 5, \"nestedSwitch\"\l  44: Call3             r1, r1, r2, r5, r4\l  45: GetByIdShort      r1, r0, 6, \"mixedBreakReturn\"\l  46: Call2             r1, r1, r2, r3\l  47: GetByIdShort      r3, r0, 6, \"mixedBreakReturn\"\l  48: LoadConstUInt8    r1, 2\l  49: Call2             r1, r3, r2, r1\l  50: GetByIdShort      r1, r0, 6, \"mixedBreakReturn\"\l  51: LoadConstUInt8    r0, 4\l  52: Call2             r0, r1, r2, r0\l  53: Ret               r0\l" ]
     f0_n1 [ label = "EXIT" ]
 
     f0_n0 -> f0_n1 [label="Uncond"]
@@ -187,6 +187,198 @@ digraph {
     f2_n30 -> f2_n33 [label="Uncond"]
     f2_n31 -> f2_n33 [label="Uncond"]
     f2_n32 -> f2_n33 [label="Uncond"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r2, 1\l  1: LoadConstString   r0, \"zero\"\l  2: LoadConstZero     r1\l  3: JStrictEqual      L1, r1, r2\l" ]
+    f3_n1 [ label = "Block 1 (PC 4-6)\l  0: LoadConstUInt8    r1, 1\l  1: JStrictEqual      L2, r1, r2\l" ]
+    f3_n2 [ label = "Block 2 (PC 6-8)\l  0: LoadConstUInt8    r1, 2\l  1: JStrictEqual      L3, r1, r2\l" ]
+    f3_n3 [ label = "Block 3 (PC 8-10)\l  0: LoadConstUInt8    r1, 3\l  1: JStrictEqual      L4, r1, r2\l" ]
+    f3_n4 [ label = "Block 4 (PC 10-12)\l  0: LoadConstUInt8    r1, 4\l  1: JStrictEqual      L5, r1, r2\l" ]
+    f3_n5 [ label = "Block 5 (PC 12-14)\l  0: LoadConstUInt8    r1, 5\l  1: JStrictEqual      L6, r1, r2\l" ]
+    f3_n6 [ label = "Block 6 (PC 14-16)\l  0: LoadConstString   r0, \"other\"\l  1: Jmp               L1\l" ]
+    f3_n7 [ label = "Block 7 (PC 16-18) [L6]\l  0: LoadConstString   r0, \"five\"\l  1: Jmp               L1\l" ]
+    f3_n8 [ label = "Block 8 (PC 18-20) [L5]\l  0: LoadConstString   r0, \"four\"\l  1: Jmp               L1\l" ]
+    f3_n9 [ label = "Block 9 (PC 20-22) [L4]\l  0: LoadConstString   r0, \"three\"\l  1: Jmp               L1\l" ]
+    f3_n10 [ label = "Block 10 (PC 22-24) [L3]\l  0: LoadConstString   r0, \"two\"\l  1: Jmp               L1\l" ]
+    f3_n11 [ label = "Block 11 (PC 24-25) [L2]\l  0: LoadConstString   r0, \"one\"\l" ]
+    f3_n12 [ label = "Block 12 (PC 25-26) [L1]\l  0: Ret               r0\l" ]
+    f3_n13 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n12 [label="True"]
+    f3_n0 -> f3_n1 [label="False"]
+    f3_n1 -> f3_n11 [label="True"]
+    f3_n1 -> f3_n2 [label="False"]
+    f3_n2 -> f3_n10 [label="True"]
+    f3_n2 -> f3_n3 [label="False"]
+    f3_n3 -> f3_n9 [label="True"]
+    f3_n3 -> f3_n4 [label="False"]
+    f3_n4 -> f3_n8 [label="True"]
+    f3_n4 -> f3_n5 [label="False"]
+    f3_n5 -> f3_n7 [label="True"]
+    f3_n5 -> f3_n6 [label="False"]
+    f3_n6 -> f3_n12 [label="Uncond"]
+    f3_n7 -> f3_n12 [label="Uncond"]
+    f3_n8 -> f3_n12 [label="Uncond"]
+    f3_n9 -> f3_n12 [label="Uncond"]
+    f3_n10 -> f3_n12 [label="Uncond"]
+    f3_n11 -> f3_n12 [label="Fall"]
+    f3_n12 -> f3_n13 [label="Uncond"]
+  }
+
+  subgraph cluster_function_4 {
+    label = "Function 4";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f4_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r3, 1\l  1: LoadConstZero     r0\l  2: JStrictEqual      L1, r0, r3\l" ]
+    f4_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstUInt8    r0, 1\l  1: JStrictEqual      L1, r0, r3\l" ]
+    f4_n2 [ label = "Block 2 (PC 5-7)\l  0: LoadConstUInt8    r0, 2\l  1: JStrictEqual      L1, r0, r3\l" ]
+    f4_n3 [ label = "Block 3 (PC 7-11)\l  0: LoadConstString   r1, \"\"\l  1: LoadConstUInt8    r0, 3\l  2: Mov               r2, r1\l  3: JStrictEqual      L2, r0, r3\l" ]
+    f4_n4 [ label = "Block 4 (PC 11-14)\l  0: LoadConstUInt8    r0, 4\l  1: Mov               r2, r1\l  2: JStrictEqual      L2, r0, r3\l" ]
+    f4_n5 [ label = "Block 5 (PC 14-18)\l  0: LoadConstString   r4, \"high\"\l  1: LoadConstUInt8    r1, 5\l  2: Mov               r0, r4\l  3: JStrictEqual      L3, r1, r3\l" ]
+    f4_n6 [ label = "Block 6 (PC 18-21)\l  0: LoadConstUInt8    r1, 6\l  1: Mov               r0, r4\l  2: JStrictEqual      L3, r1, r3\l" ]
+    f4_n7 [ label = "Block 7 (PC 21-24)\l  0: LoadConstUInt8    r1, 7\l  1: Mov               r0, r4\l  2: JStrictEqual      L3, r1, r3\l" ]
+    f4_n8 [ label = "Block 8 (PC 24-26)\l  0: LoadConstString   r0, \"unknown\"\l  1: Jmp               L3\l" ]
+    f4_n9 [ label = "Block 9 (PC 26-27) [L1]\l  0: LoadConstString   r2, \"low \"\l" ]
+    f4_n10 [ label = "Block 10 (PC 27-29) [L2]\l  0: LoadConstString   r1, \"mid \"\l  1: Add               r0, r2, r1\l" ]
+    f4_n11 [ label = "Block 11 (PC 29-30) [L3]\l  0: Ret               r0\l" ]
+    f4_n12 [ label = "EXIT" ]
+
+    f4_n0 -> f4_n9 [label="True"]
+    f4_n0 -> f4_n1 [label="False"]
+    f4_n1 -> f4_n9 [label="True"]
+    f4_n1 -> f4_n2 [label="False"]
+    f4_n2 -> f4_n9 [label="True"]
+    f4_n2 -> f4_n3 [label="False"]
+    f4_n3 -> f4_n10 [label="True"]
+    f4_n3 -> f4_n4 [label="False"]
+    f4_n4 -> f4_n10 [label="True"]
+    f4_n4 -> f4_n5 [label="False"]
+    f4_n5 -> f4_n11 [label="True"]
+    f4_n5 -> f4_n6 [label="False"]
+    f4_n6 -> f4_n11 [label="True"]
+    f4_n6 -> f4_n7 [label="False"]
+    f4_n7 -> f4_n11 [label="True"]
+    f4_n7 -> f4_n8 [label="False"]
+    f4_n8 -> f4_n11 [label="Uncond"]
+    f4_n9 -> f4_n10 [label="Fall"]
+    f4_n10 -> f4_n11 [label="Fall"]
+    f4_n11 -> f4_n12 [label="Uncond"]
+  }
+
+  subgraph cluster_function_5 {
+    label = "Function 5";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f5_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r4, 1\l  1: LoadParam         r1, 2\l  2: LoadConstZero     r0\l  3: JStrictEqual      L1, r0, r4\l" ]
+    f5_n1 [ label = "Block 1 (PC 4-6)\l  0: LoadConstUInt8    r2, 1\l  1: JStrictEqual      L2, r2, r4\l" ]
+    f5_n2 [ label = "Block 2 (PC 6-8)\l  0: LoadConstUInt8    r3, 2\l  1: JStrictEqual      L3, r3, r4\l" ]
+    f5_n3 [ label = "Block 3 (PC 8-9)\l  0: JStrictEqual      L4, r0, r1\l" ]
+    f5_n4 [ label = "Block 4 (PC 9-10)\l  0: JStrictEqual      L5, r2, r1\l" ]
+    f5_n5 [ label = "Block 5 (PC 10-12)\l  0: LoadConstString   r3, \"default-other\"\l  1: Ret               r3\l" ]
+    f5_n6 [ label = "Block 6 (PC 12-14) [L5]\l  0: LoadConstString   r3, \"default-1\"\l  1: Ret               r3\l" ]
+    f5_n7 [ label = "Block 7 (PC 14-16) [L4]\l  0: LoadConstString   r3, \"default-0\"\l  1: Ret               r3\l" ]
+    f5_n8 [ label = "Block 8 (PC 16-18) [L3]\l  0: LoadConstString   r3, \"outer-2\"\l  1: Ret               r3\l" ]
+    f5_n9 [ label = "Block 9 (PC 18-19) [L2]\l  0: JStrictEqual      L6, r0, r1\l" ]
+    f5_n10 [ label = "Block 10 (PC 19-20)\l  0: JStrictEqual      L7, r2, r1\l" ]
+    f5_n11 [ label = "Block 11 (PC 20-22)\l  0: LoadConstUInt8    r2, 2\l  1: JStrictEqual      L8, r2, r1\l" ]
+    f5_n12 [ label = "Block 12 (PC 22-24)\l  0: LoadConstString   r2, \"1-other\"\l  1: Ret               r2\l" ]
+    f5_n13 [ label = "Block 13 (PC 24-26) [L8]\l  0: LoadConstString   r2, \"1-2\"\l  1: Ret               r2\l" ]
+    f5_n14 [ label = "Block 14 (PC 26-28) [L7]\l  0: LoadConstString   r2, \"1-1\"\l  1: Ret               r2\l" ]
+    f5_n15 [ label = "Block 15 (PC 28-30) [L6]\l  0: LoadConstString   r2, \"1-0\"\l  1: Ret               r2\l" ]
+    f5_n16 [ label = "Block 16 (PC 30-31) [L1]\l  0: JStrictEqual      L9, r0, r1\l" ]
+    f5_n17 [ label = "Block 17 (PC 31-33)\l  0: LoadConstUInt8    r0, 1\l  1: JStrictEqual      L10, r0, r1\l" ]
+    f5_n18 [ label = "Block 18 (PC 33-35)\l  0: LoadConstUInt8    r0, 2\l  1: JStrictEqual      L11, r0, r1\l" ]
+    f5_n19 [ label = "Block 19 (PC 35-37)\l  0: LoadConstString   r0, \"0-other\"\l  1: Ret               r0\l" ]
+    f5_n20 [ label = "Block 20 (PC 37-39) [L11]\l  0: LoadConstString   r0, \"0-2\"\l  1: Ret               r0\l" ]
+    f5_n21 [ label = "Block 21 (PC 39-41) [L10]\l  0: LoadConstString   r0, \"0-1\"\l  1: Ret               r0\l" ]
+    f5_n22 [ label = "Block 22 (PC 41-43) [L9]\l  0: LoadConstString   r0, \"0-0\"\l  1: Ret               r0\l" ]
+    f5_n23 [ label = "EXIT" ]
+
+    f5_n0 -> f5_n16 [label="True"]
+    f5_n0 -> f5_n1 [label="False"]
+    f5_n1 -> f5_n9 [label="True"]
+    f5_n1 -> f5_n2 [label="False"]
+    f5_n2 -> f5_n8 [label="True"]
+    f5_n2 -> f5_n3 [label="False"]
+    f5_n3 -> f5_n7 [label="True"]
+    f5_n3 -> f5_n4 [label="False"]
+    f5_n4 -> f5_n6 [label="True"]
+    f5_n4 -> f5_n5 [label="False"]
+    f5_n5 -> f5_n23 [label="Uncond"]
+    f5_n6 -> f5_n23 [label="Uncond"]
+    f5_n7 -> f5_n23 [label="Uncond"]
+    f5_n8 -> f5_n23 [label="Uncond"]
+    f5_n9 -> f5_n15 [label="True"]
+    f5_n9 -> f5_n10 [label="False"]
+    f5_n10 -> f5_n14 [label="True"]
+    f5_n10 -> f5_n11 [label="False"]
+    f5_n11 -> f5_n13 [label="True"]
+    f5_n11 -> f5_n12 [label="False"]
+    f5_n12 -> f5_n23 [label="Uncond"]
+    f5_n13 -> f5_n23 [label="Uncond"]
+    f5_n14 -> f5_n23 [label="Uncond"]
+    f5_n15 -> f5_n23 [label="Uncond"]
+    f5_n16 -> f5_n22 [label="True"]
+    f5_n16 -> f5_n17 [label="False"]
+    f5_n17 -> f5_n21 [label="True"]
+    f5_n17 -> f5_n18 [label="False"]
+    f5_n18 -> f5_n20 [label="True"]
+    f5_n18 -> f5_n19 [label="False"]
+    f5_n19 -> f5_n23 [label="Uncond"]
+    f5_n20 -> f5_n23 [label="Uncond"]
+    f5_n21 -> f5_n23 [label="Uncond"]
+    f5_n22 -> f5_n23 [label="Uncond"]
+  }
+
+  subgraph cluster_function_6 {
+    label = "Function 6";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f6_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstZero     r0\l  2: JStrictEqual      L1, r0, r1\l" ]
+    f6_n1 [ label = "Block 1 (PC 3-6)\l  0: LoadConstString   r0, \"special: \"\l  1: LoadConstUInt8    r2, 1\l  2: JStrictEqual      L2, r2, r1\l" ]
+    f6_n2 [ label = "Block 2 (PC 6-8)\l  0: LoadConstUInt8    r2, 2\l  1: JStrictEqual      L3, r2, r1\l" ]
+    f6_n3 [ label = "Block 3 (PC 8-11)\l  0: LoadConstString   r3, \"value: \"\l  1: LoadConstUInt8    r2, 3\l  2: JStrictEqual      L4, r2, r1\l" ]
+    f6_n4 [ label = "Block 4 (PC 11-13)\l  0: LoadConstUInt8    r2, 4\l  1: JStrictEqual      L5, r2, r1\l" ]
+    f6_n5 [ label = "Block 5 (PC 13-15)\l  0: LoadConstString   r2, \"unknown\"\l  1: Ret               r2\l" ]
+    f6_n6 [ label = "Block 6 (PC 15-17) [L5]\l  0: LoadConstString   r0, \"quad: \"\l  1: Jmp               L2\l" ]
+    f6_n7 [ label = "Block 7 (PC 17-18) [L3]\l  0: LoadConstString   r3, \"double: \"\l" ]
+    f6_n8 [ label = "Block 8 (PC 18-21) [L4]\l  0: LoadConstString   r2, \"two or three\"\l  1: Add               r2, r3, r2\l  2: Ret               r2\l" ]
+    f6_n9 [ label = "Block 9 (PC 21-23) [L2]\l  0: Add               r0, r0, r1\l  1: Ret               r0\l" ]
+    f6_n10 [ label = "Block 10 (PC 23-25) [L1]\l  0: LoadConstString   r0, \"immediate zero\"\l  1: Ret               r0\l" ]
+    f6_n11 [ label = "EXIT" ]
+
+    f6_n0 -> f6_n10 [label="True"]
+    f6_n0 -> f6_n1 [label="False"]
+    f6_n1 -> f6_n9 [label="True"]
+    f6_n1 -> f6_n2 [label="False"]
+    f6_n2 -> f6_n7 [label="True"]
+    f6_n2 -> f6_n3 [label="False"]
+    f6_n3 -> f6_n8 [label="True"]
+    f6_n3 -> f6_n4 [label="False"]
+    f6_n4 -> f6_n6 [label="True"]
+    f6_n4 -> f6_n5 [label="False"]
+    f6_n5 -> f6_n11 [label="Uncond"]
+    f6_n6 -> f6_n9 [label="Uncond"]
+    f6_n7 -> f6_n8 [label="Fall"]
+    f6_n8 -> f6_n11 [label="Uncond"]
+    f6_n9 -> f6_n11 [label="Uncond"]
+    f6_n10 -> f6_n11 [label="Uncond"]
   }
 
 }

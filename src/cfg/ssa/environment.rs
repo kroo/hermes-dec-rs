@@ -10,7 +10,9 @@ use super::types::*;
 use crate::{
     cfg::{Block, Cfg},
     generated::unified_instructions::UnifiedInstruction,
+    hbc::InstructionIndex,
 };
+
 use petgraph::graph::NodeIndex;
 
 /// Analyze environment operations in the CFG
@@ -32,9 +34,7 @@ fn analyze_block_environments(
     block: &Block,
     analysis: &mut SSAAnalysis,
 ) -> Result<(), super::SSAError> {
-    for (inst_idx, hbc_instruction) in block.instructions().iter().enumerate() {
-        let pc = block.start_pc() + inst_idx as u32;
-
+    for (inst_idx_in_block, hbc_instruction) in block.instructions().iter().enumerate() {
         match &hbc_instruction.instruction {
             UnifiedInstruction::CreateEnvironment { operand_0 } => {
                 handle_create_environment(*operand_0, analysis);
@@ -59,7 +59,13 @@ fn analyze_block_environments(
                 operand_1,
                 ..
             } => {
-                handle_get_environment(*operand_0, *operand_1, block_id, inst_idx, analysis);
+                handle_get_environment(
+                    *operand_0,
+                    *operand_1,
+                    block_id,
+                    inst_idx_in_block,
+                    analysis,
+                );
             }
 
             UnifiedInstruction::StoreToEnvironment {
@@ -75,7 +81,12 @@ fn analyze_block_environments(
                 ..
             } => {
                 handle_store_to_environment(
-                    *operand_0, *operand_1, *operand_2, block_id, inst_idx, pc, analysis,
+                    *operand_0,
+                    *operand_1,
+                    *operand_2,
+                    block_id,
+                    hbc_instruction.instruction_index,
+                    analysis,
                 );
             }
 
@@ -96,8 +107,7 @@ fn analyze_block_environments(
                     *operand_1 as u8,
                     *operand_2,
                     block_id,
-                    inst_idx,
-                    pc,
+                    hbc_instruction.instruction_index,
                     analysis,
                 );
             }
@@ -109,7 +119,12 @@ fn analyze_block_environments(
                 ..
             } => {
                 handle_load_from_environment(
-                    *operand_0, *operand_1, *operand_2, block_id, inst_idx, pc, analysis,
+                    *operand_0,
+                    *operand_1,
+                    *operand_2,
+                    block_id,
+                    InstructionIndex::from(inst_idx_in_block),
+                    analysis,
                 );
             }
 
@@ -124,8 +139,7 @@ fn analyze_block_environments(
                     *operand_1,
                     *operand_2 as u8,
                     block_id,
-                    inst_idx,
-                    pc,
+                    hbc_instruction.instruction_index,
                     analysis,
                 );
             }
@@ -243,8 +257,7 @@ fn handle_store_to_environment(
     slot: u8,
     value_reg: u8,
     block_id: NodeIndex,
-    inst_idx: usize,
-    pc: u32,
+    inst_idx: InstructionIndex,
     analysis: &mut SSAAnalysis,
 ) {
     let key = (env_reg, slot);
@@ -258,7 +271,7 @@ fn handle_store_to_environment(
 
     // If this is the first store, record it as a definition
     if var_info.first_store.is_none() {
-        var_info.first_store = Some(RegisterDef::new(value_reg, block_id, inst_idx, pc));
+        var_info.first_store = Some(RegisterDef::new(value_reg, block_id, inst_idx));
 
         // Add to closure variable declarations
         analysis.closure_variable_declarations.push(ClosureVarDecl {
@@ -272,7 +285,7 @@ fn handle_store_to_environment(
     // Record this store
     var_info
         .stores
-        .push(RegisterUse::new(value_reg, block_id, inst_idx, pc));
+        .push(RegisterUse::new(value_reg, block_id, inst_idx));
 }
 
 /// Handle LoadFromEnvironment instruction
@@ -281,8 +294,7 @@ fn handle_load_from_environment(
     env_reg: u8,
     slot: u8,
     block_id: NodeIndex,
-    inst_idx: usize,
-    pc: u32,
+    inst_idx: InstructionIndex,
     analysis: &mut SSAAnalysis,
 ) {
     let key = (env_reg, slot);
@@ -297,7 +309,7 @@ fn handle_load_from_environment(
     // Record this load
     var_info
         .loads
-        .push(RegisterUse::new(dest_reg, block_id, inst_idx, pc));
+        .push(RegisterUse::new(dest_reg, block_id, inst_idx));
 
     // Check if this is accessing a parent environment
     if let Some(resolution) = analysis
@@ -407,9 +419,9 @@ mod tests {
     fn _create_test_instruction(instruction: UnifiedInstruction) -> HbcFunctionInstruction {
         HbcFunctionInstruction {
             instruction,
-            offset: 0,
+            offset: crate::hbc::InstructionOffset(0),
             function_index: 0,
-            instruction_index: 0,
+            instruction_index: crate::hbc::InstructionIndex::zero(),
         }
     }
 
@@ -431,7 +443,7 @@ mod tests {
         let block_id = NodeIndex::new(0);
 
         // First store creates a variable
-        handle_store_to_environment(1, 0, 5, block_id, 0, 10, &mut analysis);
+        handle_store_to_environment(1, 0, 5, block_id, InstructionIndex::new(0), &mut analysis);
 
         let key = (1u8, 0u8);
         assert!(analysis

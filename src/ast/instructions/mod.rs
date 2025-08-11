@@ -4,10 +4,11 @@
 //! individual Hermes bytecode instructions into JavaScript statements using a 1:1 mapping.
 //! This is the first phase of decompilation - direct translation without optimization.
 
-use super::{
-    expression_context::{ExpressionContext, ExpressionContextError},
-    register_manager::RegisterManager,
+use crate::ast::{
+    context::{ExpressionContext, ExpressionContextError},
+    variables::RegisterManager,
 };
+use crate::hbc::InstructionIndex;
 use crate::{analysis::GlobalAnalysisResult, generated::unified_instructions::UnifiedInstruction};
 use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
 use std::sync::Arc;
@@ -110,8 +111,9 @@ impl<'a> InstructionToStatementConverter<'a> {
 
     /// Set the current program counter for context-aware operations
     pub fn set_current_pc(&mut self, pc: u32) {
-        self.expression_context.set_current_pc(pc);
-        self.register_manager.set_current_pc(pc);
+        let idx = InstructionIndex(pc as usize);
+        self.expression_context.set_current_pc(idx);
+        self.register_manager.set_current_pc(idx);
     }
 
     /// Get mutable reference to register manager
@@ -1675,6 +1677,49 @@ impl<'a> InstructionToStatementConverter<'a> {
         Ok(Statement::VariableDeclaration(
             self.ast_builder.alloc(var_decl),
         ))
+    }
+
+    /// Create a variable declaration or assignment based on whether the variable was already declared
+    pub fn create_variable_declaration_or_assignment(
+        &mut self,
+        variable_name: &str,
+        init_expression: Option<oxc_ast::ast::Expression<'a>>,
+    ) -> Result<Statement<'a>, StatementConversionError> {
+        // Check if this is the first definition of the variable
+        let is_first_definition = self.register_manager.is_first_definition(variable_name);
+        
+        if is_first_definition {
+            // Check if variable should be const
+            let declaration_kind = if self.register_manager.should_be_const(variable_name) {
+                oxc_ast::ast::VariableDeclarationKind::Const
+            } else {
+                oxc_ast::ast::VariableDeclarationKind::Let
+            };
+            // Create declaration: let/const variable_name = init_expression
+            self.create_variable_declaration(variable_name, init_expression, declaration_kind)
+        } else {
+            // Create assignment: variable_name = init_expression
+            if let Some(init_expr) = init_expression {
+                let span = oxc_span::Span::default();
+                let var_atom = self.ast_builder.allocator.alloc_str(variable_name);
+                let assign_expr = self.ast_builder.expression_assignment(
+                    span,
+                    oxc_ast::ast::AssignmentOperator::Assign,
+                    oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
+                        self.ast_builder.alloc(oxc_ast::ast::IdentifierReference {
+                            span,
+                            name: oxc_span::Atom::from(var_atom),
+                            reference_id: std::cell::Cell::new(None),
+                        }),
+                    ),
+                    init_expr,
+                );
+                Ok(self.ast_builder.statement_expression(span, assign_expr))
+            } else {
+                // No init expression, return empty statement
+                Ok(self.ast_builder.statement_empty(oxc_span::Span::default()))
+            }
+        }
     }
 
     /// Create a return statement: `return expression;`

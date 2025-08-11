@@ -1,15 +1,27 @@
-//! Shared infrastructure for control flow AST generation
+//! Control flow handling and conversion
 //!
-//! This module provides common functionality for converting CFG control flow
-//! structures (loops, switches, try-catch) into JavaScript AST nodes.
+//! This module provides utilities for handling control flow structures during AST generation,
+//! including converters for blocks, conditionals, switches, and loops.
 
+// Infrastructure modules
 pub mod block_sequencer;
 pub mod control_flow_builder;
 pub mod region_analyzer;
 
+// Control flow converters
+pub mod block_converter;
+pub mod conditional_converter;
+pub mod switch_converter;
+
+// Re-export infrastructure types
 pub use block_sequencer::BlockSequencer;
 pub use control_flow_builder::ControlFlowBuilder;
 pub use region_analyzer::RegionAnalyzer;
+
+// Re-export converter types
+pub use block_converter::{BlockConversionError, BlockConversionStats, BlockToStatementConverter};
+pub use conditional_converter::ConditionalConverter;
+pub use switch_converter::{SwitchConversionError, SwitchConverter};
 
 /// Information about a control flow region in the CFG
 #[derive(Debug, Clone)]

@@ -11,6 +11,7 @@ use hermes_dec_rs::hbc::tables::{
 };
 use hermes_dec_rs::hbc::HbcFile;
 use hermes_dec_rs::hbc::HbcHeader;
+use hermes_dec_rs::hbc::{InstructionIndex, InstructionOffset};
 use petgraph::graph::DiGraph;
 use petgraph::visit::EdgeRef;
 use std::fs;
@@ -176,7 +177,7 @@ fn calculate_relative_offset(
     let to_offset = instructions[to_index].offset;
 
     // The relative offset is the difference between target and source offsets
-    (to_offset as i32) - (from_offset as i32)
+    (to_offset.value() as i32) - (from_offset.value() as i32)
 }
 
 /// Create a jump instruction that targets a specific instruction index
@@ -316,9 +317,9 @@ fn make_test_instructions(
         .map(|(index, instruction)| {
             let instruction_size = instruction.size();
             let result = HbcFunctionInstruction {
-                offset,
+                offset: InstructionOffset::new(offset),
                 function_index: 0,
-                instruction_index: index as u32,
+                instruction_index: InstructionIndex::new(index),
                 instruction,
             };
             offset += instruction_size as u32;
@@ -337,18 +338,18 @@ fn test_cfg_creation() {
 
 #[test]
 fn test_block_creation() {
-    let block = Block::new(0x1000, vec![]);
-    assert_eq!(block.start_pc, 0x1000);
-    assert_eq!(block.end_pc, 0x1000);
+    let block = Block::new(InstructionIndex::new(0x1000), vec![]);
+    assert_eq!(block.start_pc, InstructionIndex::new(0x1000));
+    assert_eq!(block.end_pc, InstructionIndex::new(0x1000));
     assert!(block.instructions.is_empty());
 }
 
 #[test]
 #[ignore]
 fn test_block_contains_pc() {
-    let block = Block::new(0x1000, vec![]);
-    assert!(block.contains_pc(0x1000));
-    assert!(!block.contains_pc(0x1001));
+    let block = Block::new(InstructionIndex::new(0x1000), vec![]);
+    assert!(block.contains_pc(InstructionIndex::new(0x1000)));
+    assert!(!block.contains_pc(InstructionIndex::new(0x1001)));
 }
 
 #[test]
@@ -380,7 +381,7 @@ fn test_cfg_building_with_single_instruction() {
         .find(|&node| !cfg.graph()[node].is_exit())
         .unwrap();
     let block = &cfg.graph()[regular_block];
-    assert_eq!(block.start_pc, 0);
+    assert_eq!(block.start_pc, InstructionIndex::new(0));
     assert_eq!(block.instruction_count(), 1);
 }
 
@@ -404,9 +405,9 @@ fn test_pc_lookup_three_blocks() {
     let mut graph: DiGraph<Block, EdgeKind> = DiGraph::new();
 
     let instructions = hbc_file.functions.get_instructions(0).unwrap();
-    let n0 = builder.add_block(&mut graph, Block::new(0, vec![instructions[0].clone()]));
-    let n1 = builder.add_block(&mut graph, Block::new(1, vec![instructions[1].clone()]));
-    let n2 = builder.add_block(&mut graph, Block::new(2, vec![instructions[2].clone()]));
+    let n0 = builder.add_block(&mut graph, Block::new(InstructionIndex::new(0), vec![instructions[0].clone()]));
+    let n1 = builder.add_block(&mut graph, Block::new(InstructionIndex::new(1), vec![instructions[1].clone()]));
+    let n2 = builder.add_block(&mut graph, Block::new(InstructionIndex::new(2), vec![instructions[2].clone()]));
 
     assert_eq!(builder.get_block_at_pc(0), Some(n0));
     assert_eq!(builder.get_block_at_pc(1), Some(n1));
@@ -415,7 +416,7 @@ fn test_pc_lookup_three_blocks() {
     for pc in 0..3 {
         let node = builder.get_block_at_pc(pc).unwrap();
         let block = &graph[node];
-        assert!(block.contains_pc(pc));
+        assert!(block.contains_pc(InstructionIndex::new(pc as usize)));
     }
 }
 
@@ -648,7 +649,7 @@ fn test_jump_table_helper_functions() {
     assert!(jump_table.get_label_by_inst_index(0, 2).is_some());
 
     // Instruction 1 should be a jump instruction
-    assert!(jump_table.get_label_by_jump_op_index(0, 1).is_some());
+    assert!(jump_table.get_label_by_jump_op_index(0, InstructionIndex::new(1)).is_some());
 
     // Should have exactly one label and one jump
     assert_eq!(jump_table.get_label_count(0), 1);
@@ -687,7 +688,7 @@ fn test_make_test_hbc_file_with_jumps() {
     assert!(jump_table.get_label_by_inst_index(0, 2).is_some());
 
     // Instruction 1 should be a jump instruction
-    assert!(jump_table.get_label_by_jump_op_index(0, 1).is_some());
+    assert!(jump_table.get_label_by_jump_op_index(0, InstructionIndex::new(1)).is_some());
 
     // Should have exactly one label and one jump
     assert_eq!(jump_table.get_label_count(0), 1);
@@ -764,11 +765,11 @@ fn test_pc_lookup_overlapping_blocks() {
     let instructions = hbc_file.functions.get_instructions(0).unwrap();
     let n_a = builder.add_block(
         &mut graph,
-        Block::new(0, vec![instructions[0].clone(), instructions[1].clone()]),
+        Block::new(InstructionIndex::new(0), vec![instructions[0].clone(), instructions[1].clone()]),
     );
     let n_b = builder.add_block(
         &mut graph,
-        Block::new(1, vec![instructions[2].clone(), instructions[3].clone()]),
+        Block::new(InstructionIndex::new(1), vec![instructions[2].clone(), instructions[3].clone()]),
     );
 
     assert_eq!(builder.get_block_at_pc(0), Some(n_a));
@@ -862,26 +863,26 @@ fn test_leader_after_return_throw() {
     // Verify each block has the expected instructions
     for &block_node in &non_exit_blocks {
         let block = &cfg.graph()[block_node];
-        match block.start_pc() {
+        match block.start_pc().value() {
             0 => {
                 // First block: LoadConstUInt8 + Ret (Return included in preceding block)
                 assert_eq!(block.instruction_count(), 2);
-                assert_eq!(block.start_pc(), 0);
-                assert_eq!(block.end_pc(), 2);
+                assert_eq!(block.start_pc(), InstructionIndex::new(0));
+                assert_eq!(block.end_pc(), InstructionIndex::new(2));
                 assert!(block.is_terminating());
             }
             2 => {
                 // Second block: LoadConstUInt8 + Throw (Throw included in preceding block)
                 assert_eq!(block.instruction_count(), 2);
-                assert_eq!(block.start_pc(), 2);
-                assert_eq!(block.end_pc(), 4);
+                assert_eq!(block.start_pc(), InstructionIndex::new(2));
+                assert_eq!(block.end_pc(), InstructionIndex::new(4));
                 assert!(block.is_terminating());
             }
             4 => {
                 // Third block: Unreachable code after throw
                 assert_eq!(block.instruction_count(), 1);
-                assert_eq!(block.start_pc(), 4);
-                assert_eq!(block.end_pc(), 5);
+                assert_eq!(block.start_pc(), InstructionIndex::new(4));
+                assert_eq!(block.end_pc(), InstructionIndex::new(5));
                 assert!(!block.is_terminating());
             }
             _ => panic!("Unexpected block start_pc: {}", block.start_pc()),
@@ -937,8 +938,8 @@ fn test_leader_after_return_throw_as_last_instruction() {
     // First block should contain LoadConstUInt8 + Ret
     let first_block = &cfg.graph()[non_exit_blocks[0]];
     assert_eq!(first_block.instruction_count(), 2);
-    assert_eq!(first_block.start_pc(), 0);
-    assert_eq!(first_block.end_pc(), 2);
+    assert_eq!(first_block.start_pc(), InstructionIndex::new(0));
+    assert_eq!(first_block.end_pc(), InstructionIndex::new(2));
     assert!(first_block.is_terminating()); // Ends with Return
 }
 
@@ -961,18 +962,18 @@ fn test_cfg_with_switch_table() {
     // Create test instructions with a switch instruction
     let instructions = vec![
         HbcFunctionInstruction {
-            offset: 0,
+            offset: InstructionOffset::new(0),
             function_index: 0,
-            instruction_index: 0,
+            instruction_index: InstructionIndex::new(0),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 0,
                 operand_1: 0,
             },
         },
         HbcFunctionInstruction {
-            offset: 4,
+            offset: InstructionOffset::new(4),
             function_index: 0,
-            instruction_index: 1,
+            instruction_index: InstructionIndex::new(1),
             instruction: UnifiedInstruction::SwitchImm {
                 operand_0: 0,
                 operand_1: 0,
@@ -982,108 +983,108 @@ fn test_cfg_with_switch_table() {
             },
         },
         HbcFunctionInstruction {
-            offset: 8,
+            offset: InstructionOffset::new(8),
             function_index: 0,
-            instruction_index: 2,
+            instruction_index: InstructionIndex::new(2),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 1,
                 operand_1: 1,
             },
         },
         HbcFunctionInstruction {
-            offset: 12,
+            offset: InstructionOffset::new(12),
             function_index: 0,
-            instruction_index: 3,
+            instruction_index: InstructionIndex::new(3),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 2,
                 operand_1: 2,
             },
         },
         HbcFunctionInstruction {
-            offset: 16,
+            offset: InstructionOffset::new(16),
             function_index: 0,
-            instruction_index: 4,
+            instruction_index: InstructionIndex::new(4),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 3,
                 operand_1: 3,
             },
         },
         HbcFunctionInstruction {
-            offset: 20,
+            offset: InstructionOffset::new(20),
             function_index: 0,
-            instruction_index: 5,
+            instruction_index: InstructionIndex::new(5),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 4,
                 operand_1: 4,
             },
         }, // Default case
         HbcFunctionInstruction {
-            offset: 24,
+            offset: InstructionOffset::new(24),
             function_index: 0,
-            instruction_index: 6,
+            instruction_index: InstructionIndex::new(6),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 5,
                 operand_1: 5,
             },
         },
         HbcFunctionInstruction {
-            offset: 28,
+            offset: InstructionOffset::new(28),
             function_index: 0,
-            instruction_index: 7,
+            instruction_index: InstructionIndex::new(7),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 6,
                 operand_1: 6,
             },
         },
         HbcFunctionInstruction {
-            offset: 32,
+            offset: InstructionOffset::new(32),
             function_index: 0,
-            instruction_index: 8,
+            instruction_index: InstructionIndex::new(8),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 7,
                 operand_1: 7,
             },
         },
         HbcFunctionInstruction {
-            offset: 36,
+            offset: InstructionOffset::new(36),
             function_index: 0,
-            instruction_index: 9,
+            instruction_index: InstructionIndex::new(9),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 8,
                 operand_1: 8,
             },
         },
         HbcFunctionInstruction {
-            offset: 40,
+            offset: InstructionOffset::new(40),
             function_index: 0,
-            instruction_index: 10,
+            instruction_index: InstructionIndex::new(10),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 9,
                 operand_1: 9,
             },
         }, // Case 0
         HbcFunctionInstruction {
-            offset: 44,
+            offset: InstructionOffset::new(44),
             function_index: 0,
-            instruction_index: 11,
+            instruction_index: InstructionIndex::new(11),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 10,
                 operand_1: 10,
             },
         }, // Case 1
         HbcFunctionInstruction {
-            offset: 48,
+            offset: InstructionOffset::new(48),
             function_index: 0,
-            instruction_index: 12,
+            instruction_index: InstructionIndex::new(12),
             instruction: UnifiedInstruction::LoadConstString {
                 operand_0: 11,
                 operand_1: 11,
             },
         }, // Case 2
         HbcFunctionInstruction {
-            offset: 52,
+            offset: InstructionOffset::new(52),
             function_index: 0,
-            instruction_index: 13,
+            instruction_index: InstructionIndex::new(13),
             instruction: UnifiedInstruction::Ret { operand_0: 0 },
         },
     ];
@@ -1123,7 +1124,7 @@ fn test_cfg_with_switch_table() {
 
         // Check if this edge comes from the switch instruction block
         let source_block = &graph[source];
-        if source_block.start_pc() == 0 && source_block.end_pc() == 2 {
+        if source_block.start_pc().value() == 0 && source_block.end_pc().value() == 2 {
             match edge_weight {
                 EdgeKind::Switch(_) => switch_edges += 1,
                 EdgeKind::Default => default_edges += 1,

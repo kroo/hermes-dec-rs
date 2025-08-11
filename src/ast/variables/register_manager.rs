@@ -3,7 +3,8 @@
 //! This module provides a pure lookup service for variable names during AST generation.
 //! All naming logic has been moved to the VariableMapper for clean separation of concerns.
 
-use crate::ast::variable_mapper::VariableMapping;
+use super::variable_mapper::VariableMapping;
+use crate::hbc::InstructionIndex;
 use std::collections::HashMap;
 
 /// Register lifetime information for optimization
@@ -23,7 +24,7 @@ pub struct RegisterManager {
     /// Pre-computed variable mapping from VariableMapper
     variable_mapping: Option<VariableMapping>,
     /// Current program counter for lookup
-    current_pc: Option<u32>,
+    current_pc: Option<InstructionIndex>,
     /// Track register lifetime for optimization/statistics
     register_lifetimes: HashMap<u8, RegisterLifetime>,
 }
@@ -43,8 +44,18 @@ impl RegisterManager {
     }
 
     /// Update the current program counter for variable lookup
-    pub fn set_current_pc(&mut self, pc: u32) {
+    pub fn set_current_pc(&mut self, pc: InstructionIndex) {
         self.current_pc = Some(pc);
+    }
+
+    /// Get reference to the variable mapping
+    pub fn variable_mapping(&self) -> Option<&VariableMapping> {
+        self.variable_mapping.as_ref()
+    }
+
+    /// Get the current PC
+    pub fn current_pc(&self) -> Option<InstructionIndex> {
+        self.current_pc
     }
 
     /// Get the current variable name for a register (for reading)
@@ -126,6 +137,26 @@ impl RegisterManager {
                 is_local: false,
             },
         );
+    }
+
+    /// Check if the current PC is the first definition of a variable
+    pub fn is_first_definition(&self, variable_name: &str) -> bool {
+        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            if let Some(first_def_pc) = mapping.first_definitions.get(variable_name) {
+                return *first_def_pc == pc;
+            }
+        }
+        // If we don't have mapping info, assume it's the first definition
+        // to ensure we generate valid JavaScript
+        true
+    }
+
+    /// Check if a variable should be declared as const
+    pub fn should_be_const(&self, variable_name: &str) -> bool {
+        if let Some(mapping) = &self.variable_mapping {
+            return mapping.should_be_const(variable_name);
+        }
+        false
     }
 
     /// Track register usage at a specific PC for lifetime analysis

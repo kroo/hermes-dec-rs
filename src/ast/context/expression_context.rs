@@ -4,6 +4,7 @@
 //! including access to HBC file tables and current processing state.
 
 use crate::hbc::HbcFile;
+use crate::hbc::InstructionIndex;
 
 /// Context for expression generation
 ///
@@ -13,8 +14,8 @@ use crate::hbc::HbcFile;
 pub struct ExpressionContext<'a> {
     /// Current basic block being processed
     pub current_block: Option<u32>,
-    /// Current program counter
-    pub current_pc: u32,
+    /// Current instruction index within the block
+    pub current_pc: InstructionIndex,
     /// Reference to HBC file for table lookups
     pub hbc_file: Option<&'a HbcFile<'a>>,
     /// Function index being processed (for context)
@@ -26,7 +27,7 @@ impl<'a> ExpressionContext<'a> {
     pub fn new() -> Self {
         Self {
             current_block: None,
-            current_pc: 0,
+            current_pc: InstructionIndex::zero(),
             hbc_file: None,
             function_index: None,
         }
@@ -36,14 +37,18 @@ impl<'a> ExpressionContext<'a> {
     pub fn with_hbc_file(hbc_file: &'a HbcFile<'a>) -> Self {
         Self {
             current_block: None,
-            current_pc: 0,
+            current_pc: InstructionIndex::zero(),
             hbc_file: Some(hbc_file),
             function_index: None,
         }
     }
 
     /// Create a new expression context with full initialization
-    pub fn with_context(hbc_file: &'a HbcFile<'a>, function_index: u32, initial_pc: u32) -> Self {
+    pub fn with_context(
+        hbc_file: &'a HbcFile<'a>,
+        function_index: u32,
+        initial_pc: InstructionIndex,
+    ) -> Self {
         Self {
             current_block: None,
             current_pc: initial_pc,
@@ -58,7 +63,7 @@ impl<'a> ExpressionContext<'a> {
     }
 
     /// Set the current program counter
-    pub fn set_pc(&mut self, pc: u32) {
+    pub fn set_pc(&mut self, pc: InstructionIndex) {
         self.current_pc = pc;
     }
 
@@ -78,12 +83,12 @@ impl<'a> ExpressionContext<'a> {
     }
 
     /// Get the current program counter
-    pub fn current_pc(&self) -> u32 {
+    pub fn current_pc(&self) -> InstructionIndex {
         self.current_pc
     }
 
     /// Set the current program counter
-    pub fn set_current_pc(&mut self, pc: u32) {
+    pub fn set_current_pc(&mut self, pc: InstructionIndex) {
         self.current_pc = pc;
     }
 
@@ -167,7 +172,7 @@ impl<'a> ExpressionContext<'a> {
     pub fn create_child_context(&self) -> Self {
         Self {
             current_block: None,
-            current_pc: 0,
+            current_pc: InstructionIndex::zero(),
             hbc_file: self.hbc_file,
             function_index: self.function_index,
         }
@@ -176,7 +181,7 @@ impl<'a> ExpressionContext<'a> {
     /// Reset context state while preserving HBC file reference
     pub fn reset(&mut self) {
         self.current_block = None;
-        self.current_pc = 0;
+        self.current_pc = InstructionIndex::zero();
         // Keep hbc_file and function_index
     }
 
@@ -379,7 +384,7 @@ mod tests {
     fn test_expression_context_creation() {
         let ctx = ExpressionContext::new();
         assert_eq!(ctx.current_block(), None);
-        assert_eq!(ctx.current_pc(), 0);
+        assert_eq!(ctx.current_pc(), InstructionIndex::zero());
         assert_eq!(ctx.function_index(), None);
         assert!(!ctx.has_hbc_file());
     }
@@ -393,8 +398,8 @@ mod tests {
         assert_eq!(ctx.current_block(), Some(42));
 
         // Test setting PC
-        ctx.set_pc(100);
-        assert_eq!(ctx.current_pc(), 100);
+        ctx.set_pc(InstructionIndex::new(100));
+        assert_eq!(ctx.current_pc(), InstructionIndex::new(100));
 
         // Test setting function index
         ctx.set_function_index(5);
@@ -406,13 +411,13 @@ mod tests {
         let mut ctx = ExpressionContext::new();
 
         ctx.set_block(42);
-        ctx.set_pc(100);
+        ctx.set_pc(InstructionIndex::new(100));
         ctx.set_function_index(5);
 
         ctx.reset();
 
         assert_eq!(ctx.current_block(), None);
-        assert_eq!(ctx.current_pc(), 0);
+        assert_eq!(ctx.current_pc(), InstructionIndex::zero());
         // function_index should be preserved
         assert_eq!(ctx.function_index(), Some(5));
     }
@@ -426,7 +431,7 @@ mod tests {
 
         // Child should start fresh but preserve function context
         assert_eq!(child_ctx.current_block(), None);
-        assert_eq!(child_ctx.current_pc(), 0);
+        assert_eq!(child_ctx.current_pc(), InstructionIndex::zero());
         assert_eq!(child_ctx.function_index(), Some(10));
         assert_eq!(child_ctx.has_hbc_file(), parent_ctx.has_hbc_file());
     }

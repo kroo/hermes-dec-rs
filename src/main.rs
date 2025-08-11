@@ -101,6 +101,9 @@ enum Commands {
         /// Function index to analyze
         #[arg(short, long)]
         function: usize,
+        /// Show verbose analysis (dominance frontiers, liveness)
+        #[arg(short, long)]
+        verbose: bool,
     },
 }
 
@@ -144,8 +147,8 @@ fn main() -> Result<()> {
             analysis.as_ref().map(|v| &**v),
         )
         .map_err(|e| miette!("{}", e)),
-        Commands::AnalyzeCfg { input, function } => {
-            cli::analyze_cfg::analyze_cfg(&input, function).map_err(|e| miette!("{}", e))
+        Commands::AnalyzeCfg { input, function, verbose } => {
+            cli::analyze_cfg::analyze_cfg(&input, function, verbose).map_err(|e| miette!("{}", e))
         }
     }
 }

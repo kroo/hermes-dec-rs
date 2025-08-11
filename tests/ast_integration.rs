@@ -9,22 +9,42 @@ use hermes_dec_rs::{
     cfg::{Block, EdgeKind},
     generated::unified_instructions::UnifiedInstruction,
     hbc::function_table::HbcFunctionInstruction,
+    hbc::InstructionIndex,
+    hbc::InstructionOffset,
 };
 use oxc_allocator::Allocator;
 use oxc_ast::AstBuilder as OxcAstBuilder;
 use petgraph::Graph;
 
-fn create_test_instruction(instruction: UnifiedInstruction) -> HbcFunctionInstruction {
+fn create_test_instruction_with_index(instruction: UnifiedInstruction, index: usize) -> HbcFunctionInstruction {
     HbcFunctionInstruction {
         instruction,
-        offset: 0,
+        offset: InstructionOffset::new(index as u32),
         function_index: 0,
-        instruction_index: 0,
+        instruction_index: InstructionIndex::new(index),
+    }
+}
+
+// Keep the old function for backward compatibility with a default index counter
+static mut INSTRUCTION_COUNTER: usize = 0;
+
+fn create_test_instruction(instruction: UnifiedInstruction) -> HbcFunctionInstruction {
+    unsafe {
+        let idx = INSTRUCTION_COUNTER;
+        INSTRUCTION_COUNTER += 1;
+        create_test_instruction_with_index(instruction, idx)
+    }
+}
+
+fn reset_instruction_counter() {
+    unsafe {
+        INSTRUCTION_COUNTER = 0;
     }
 }
 
 #[test]
 fn test_end_to_end_simple_function() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -41,7 +61,7 @@ fn test_end_to_end_simple_function() {
         }),
     ];
 
-    let block = Block::new(0, instructions);
+    let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
@@ -66,6 +86,7 @@ fn test_end_to_end_simple_function() {
 
 #[test]
 fn test_end_to_end_arithmetic_chain() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -91,7 +112,7 @@ fn test_end_to_end_arithmetic_chain() {
         }),
     ];
 
-    let block = Block::new(0, instructions);
+    let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
@@ -112,6 +133,7 @@ fn test_end_to_end_arithmetic_chain() {
 
 #[test]
 fn test_end_to_end_function_call() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -133,7 +155,7 @@ fn test_end_to_end_function_call() {
         }),
     ];
 
-    let block = Block::new(0, instructions);
+    let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
@@ -161,6 +183,7 @@ fn test_end_to_end_function_call() {
 
 #[test]
 fn test_end_to_end_member_access() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -183,7 +206,7 @@ fn test_end_to_end_member_access() {
         }),
     ];
 
-    let block = Block::new(0, instructions);
+    let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
@@ -204,6 +227,7 @@ fn test_end_to_end_member_access() {
 
 #[test]
 fn test_end_to_end_variable_assignment_sequence() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -228,7 +252,7 @@ fn test_end_to_end_variable_assignment_sequence() {
         }),
     ];
 
-    let block = Block::new(0, instructions);
+    let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
@@ -252,6 +276,7 @@ fn test_end_to_end_variable_assignment_sequence() {
 
 #[test]
 fn test_end_to_end_side_effect_statements() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -276,7 +301,7 @@ fn test_end_to_end_side_effect_statements() {
         }),
     ];
 
-    let block = Block::new(0, instructions);
+    let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
@@ -296,6 +321,7 @@ fn test_end_to_end_side_effect_statements() {
 
 #[test]
 fn test_end_to_end_throw_statement() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -312,7 +338,7 @@ fn test_end_to_end_throw_statement() {
         }),
     ];
 
-    let block = Block::new(0, instructions);
+    let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
@@ -337,6 +363,7 @@ fn test_end_to_end_throw_statement() {
 
 #[test]
 fn test_multiple_blocks_conversion() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -358,8 +385,8 @@ fn test_multiple_blocks_conversion() {
         create_test_instruction(UnifiedInstruction::Ret { operand_0: 2 }),
     ];
 
-    let block1 = Block::new(0, block1_instructions);
-    let block2 = Block::new(1, block2_instructions);
+    let block1 = Block::new(InstructionIndex::new(0), block1_instructions);
+    let block2 = Block::new(InstructionIndex::new(1), block2_instructions);
 
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block1_id = cfg.add_node(block1.clone());
@@ -394,6 +421,7 @@ fn test_multiple_blocks_conversion() {
 
 #[test]
 fn test_converter_reset_and_reuse() {
+    reset_instruction_counter();
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
@@ -403,7 +431,7 @@ fn test_converter_reset_and_reuse() {
     let instructions1 = vec![create_test_instruction(UnifiedInstruction::LoadConstTrue {
         operand_0: 1,
     })];
-    let block1 = Block::new(0, instructions1);
+    let block1 = Block::new(InstructionIndex::new(0), instructions1);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block1_id = cfg.add_node(block1.clone());
 
@@ -423,7 +451,7 @@ fn test_converter_reset_and_reuse() {
     let instructions2 = vec![create_test_instruction(
         UnifiedInstruction::LoadConstFalse { operand_0: 2 },
     )];
-    let block2 = Block::new(1, instructions2);
+    let block2 = Block::new(InstructionIndex::new(1), instructions2);
     let block2_id = cfg.add_node(block2.clone());
 
     let result2 = converter.convert_block(&block2, block2_id, &cfg);
@@ -436,6 +464,7 @@ fn test_converter_reset_and_reuse() {
 
 #[test]
 fn test_performance_targets() {
+    reset_instruction_counter();
     use std::time::Instant;
 
     let allocator = Allocator::default();
@@ -540,7 +569,7 @@ fn test_performance_targets() {
         create_test_instruction(UnifiedInstruction::Ret { operand_0: 19 }),
     ];
 
-    let block = Block::new(0, instructions);
+    let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 

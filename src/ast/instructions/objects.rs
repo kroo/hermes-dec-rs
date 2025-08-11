@@ -4,9 +4,8 @@
 //! These handle property access, property assignment, object creation, and deletion operations.
 
 use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
-use crate::ast::expression_context::ExpressionContext;
+use crate::ast::context::ExpressionContext;
 use crate::hbc::serialized_literal_parser::SLPValue;
-use oxc_ast::ast::VariableDeclarationKind;
 use oxc_span::Span;
 
 /// Convert a key-value pair to an object property
@@ -562,12 +561,9 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             self.ast_builder
                 .alloc_static_member_expression(span, obj_expr, property_name, false);
 
-        let stmt = self.create_variable_declaration(
+        let stmt = self.create_variable_declaration_or_assignment(
             &dest_var,
-            Some(oxc_ast::ast::Expression::StaticMemberExpression(
-                member_expr,
-            )),
-            VariableDeclarationKind::Let,
+            Some(oxc_ast::ast::Expression::StaticMemberExpression(member_expr)),
         )?;
 
         Ok(InstructionResult::Statement(stmt))
@@ -599,12 +595,9 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .alloc_computed_member_expression(span, obj_expr, key_expr, false);
 
-        let stmt = self.create_variable_declaration(
+        let stmt = self.create_variable_declaration_or_assignment(
             &dest_var,
-            Some(oxc_ast::ast::Expression::ComputedMemberExpression(
-                member_expr,
-            )),
-            VariableDeclarationKind::Let,
+            Some(oxc_ast::ast::Expression::ComputedMemberExpression(member_expr)),
         )?;
 
         Ok(InstructionResult::Statement(stmt))
@@ -623,11 +616,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_object(span, self.ast_builder.vec());
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(obj_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(obj_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -666,11 +655,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             arguments,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(new_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(new_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -714,11 +699,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -758,11 +739,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(delete_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(delete_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -801,11 +778,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_ast::ast::Expression::ComputedMemberExpression(member_expr),
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(delete_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(delete_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -872,11 +845,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let array_expr = self.ast_builder.expression_array(span, elements);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(array_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(array_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -943,11 +912,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let array_expr = self.ast_builder.expression_array(span, elements);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(array_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(array_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1003,11 +968,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let object_expr = self.ast_builder.expression_object(span, properties);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(object_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(object_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1063,11 +1024,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let object_expr = self.ast_builder.expression_object(span, properties);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(object_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(object_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -1111,11 +1068,7 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }

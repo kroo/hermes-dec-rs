@@ -4,7 +4,7 @@
 //! These handle debug operations, async operations, and other miscellaneous instructions.
 
 use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
-use oxc_ast::ast::VariableDeclarationKind;
+
 use oxc_span::Span;
 
 /// Trait providing miscellaneous operation helper methods
@@ -218,11 +218,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             src_expr,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(binary_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(binary_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -245,11 +241,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
         let this_expr = self.ast_builder.expression_this(span);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(this_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(this_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -306,11 +298,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -335,11 +323,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_meta_property(span, new_name, target_name);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(meta_prop),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(meta_prop))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -356,11 +340,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
         let this_expr = self.ast_builder.expression_this(span);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(this_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(this_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -408,11 +388,8 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_conditional(span, condition, test_expr2, alt_expr);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(conditional_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt =
+            self.create_variable_declaration_or_assignment(&dest_var, Some(conditional_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -473,11 +450,8 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
                     args,
                 );
 
-                let stmt = self.create_variable_declaration(
-                    &dest_var,
-                    Some(regexp_expr),
-                    VariableDeclarationKind::Let,
-                )?;
+                let stmt =
+                    self.create_variable_declaration_or_assignment(&dest_var, Some(regexp_expr))?;
 
                 Ok(InstructionResult::Statement(stmt))
             }
@@ -490,11 +464,8 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
                 let comment_atom = self.ast_builder.allocator.alloc_str(&comment_text);
                 let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-                let stmt = self.create_variable_declaration(
-                    &dest_var,
-                    Some(comment_expr),
-                    VariableDeclarationKind::Let,
-                )?;
+                let stmt =
+                    self.create_variable_declaration_or_assignment(&dest_var, Some(comment_expr))?;
 
                 Ok(InstructionResult::Statement(stmt))
             }
@@ -532,11 +503,8 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             right_expr,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(instanceof_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt =
+            self.create_variable_declaration_or_assignment(&dest_var, Some(instanceof_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -572,11 +540,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             obj_expr,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(in_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(in_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -617,11 +581,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             ),
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(member_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(member_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -776,11 +736,7 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let comment_atom = self.ast_builder.allocator.alloc_str(comment_text);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(comment_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(comment_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }

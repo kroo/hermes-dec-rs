@@ -1,31 +1,39 @@
 //! Abstract Syntax Tree (AST) module
 //!
 //! This module provides instruction-to-expression and block-to-statement conversion
-//! for Hermes bytecode decompilation. The core functionality includes:
-//! - InstructionToExpressionConverter: Transforms individual instructions into OXC AST expressions
-//! - BlockToStatementConverter: Converts CFG basic blocks into JavaScript statement sequences
+//! for Hermes bytecode decompilation. The module is organized into sub-modules by functionality:
+//!
+//! - `builders/`: High-level AST construction utilities
+//! - `comments/`: Comment management and attachment system
+//! - `context/`: Conversion context and state management
+//! - `control_flow/`: Control flow pattern detection and conversion
+//! - `instructions/`: Low-level instruction-to-AST conversion
+//! - `variables/`: Variable and register management
 
-pub mod block_converter;
-pub mod conditional_converter;
+pub mod builders;
+pub mod comments;
+pub mod context;
 pub mod control_flow;
-pub mod expression_context;
-// pub mod instruction_converter;
-pub mod instruction_to_statement_converter;
-pub mod register_manager;
-pub mod switch_converter;
-pub mod variable_mapper;
+pub mod instructions;
+pub mod variables;
 
 // Re-export the main types for public API
-pub use block_converter::{BlockConversionError, BlockConversionStats, BlockToStatementConverter};
-pub use conditional_converter::ConditionalConverter;
-pub use expression_context::{ExpressionContext, ExpressionContextError};
-pub use switch_converter::{SwitchConversionError, SwitchConverter};
-// pub use instruction_converter::{
-//     ConversionError, ConversionStats, InstructionToExpressionConverter,
-// };
-pub use instruction_to_statement_converter::{
+pub use crate::hbc::{InstructionIndex, InstructionOffset};
+pub use builders::{build_function_program, generate_code_with_comments, FunctionBuilder};
+pub use comments::{
+    AddressCommentManager, CommentAnchorManager, CommentKind, CommentPosition, NodeId,
+    PendingComment, PositionAssigner,
+};
+pub use context::{ExpressionContext, ExpressionContextError};
+pub use control_flow::{
+    BlockConversionError, BlockConversionStats, BlockToStatementConverter, ConditionalConverter,
+    SwitchConversionError, SwitchConverter,
+};
+pub use instructions::{
     InstructionResult, InstructionToStatementConverter, JumpCondition, JumpType,
     StatementConversionError,
 };
-pub use register_manager::{RegisterLifetime, RegisterManager, RegisterStats};
-pub use variable_mapper::{VariableMapError, VariableMapper, VariableMapping, VariableScope};
+pub use variables::{
+    RegisterLifetime, RegisterManager, RegisterStats, VariableMapError, VariableMapper,
+    VariableMapping,
+};

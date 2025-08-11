@@ -3,21 +3,22 @@
 //! This module provides the BlockToStatementConverter that transforms CFG basic blocks
 //! into sequences of JavaScript statements, building on instruction-to-expression conversion.
 
-use super::{
-    expression_context::ExpressionContext,
-    instruction_to_statement_converter::{
-        InstructionResult, InstructionToStatementConverter, JumpCondition, StatementConversionError,
+use crate::ast::{
+    comments::AddressCommentManager,
+    context::ExpressionContext,
+    instructions::{
+        InstructionResult, InstructionToStatementConverter, StatementConversionError,
     },
 };
 use crate::{
     analysis::GlobalAnalysisResult,
     cfg::{block::Block, ssa::SSAAnalysis, EdgeKind},
     generated::unified_instructions::UnifiedInstruction,
-    hbc::function_table::HbcFunctionInstruction,
+    hbc::{function_table::HbcFunctionInstruction, InstructionIndex},
 };
 use oxc_allocator::Vec as ArenaVec;
 use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
-use petgraph::{graph::NodeIndex, visit::EdgeRef, Graph};
+use petgraph::{graph::NodeIndex, Graph};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -119,7 +120,9 @@ pub struct BlockToStatementConverter<'a> {
     /// Optional global analysis for cross-function variable resolution
     _global_analysis: Option<Arc<GlobalAnalysisResult>>,
     /// Track which instructions have been rendered by their absolute offset
-    rendered_instructions: HashSet<u32>,
+    rendered_instructions: HashSet<InstructionIndex>,
+    /// Address-based comment manager for collecting comments
+    comment_manager: Option<AddressCommentManager>,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
@@ -141,6 +144,11 @@ impl<'a> BlockToStatementConverter<'a> {
             include_ssa_comments: false,
             _global_analysis: None,
             rendered_instructions: HashSet::new(),
+            comment_manager: if include_instruction_comments {
+                Some(AddressCommentManager::new())
+            } else {
+                None
+            },
         }
     }
 
@@ -157,7 +165,7 @@ impl<'a> BlockToStatementConverter<'a> {
             InstructionToStatementConverter::new(ast_builder, expression_context.clone());
 
         // Generate variable mapping from SSA analysis
-        let mut variable_mapper = crate::ast::variable_mapper::VariableMapper::new();
+        let mut variable_mapper = crate::ast::variables::VariableMapper::new();
         if let Ok(variable_mapping) = variable_mapper.generate_mapping(&ssa_analysis, cfg) {
             // Set the SSA-based variable mapping in the register manager
             instruction_converter
@@ -174,6 +182,11 @@ impl<'a> BlockToStatementConverter<'a> {
             include_ssa_comments,
             _global_analysis: None,
             rendered_instructions: HashSet::new(),
+            comment_manager: if include_instruction_comments || include_ssa_comments {
+                Some(AddressCommentManager::new())
+            } else {
+                None
+            },
         }
     }
 
@@ -191,7 +204,7 @@ impl<'a> BlockToStatementConverter<'a> {
             InstructionToStatementConverter::new(ast_builder, expression_context.clone());
 
         // Generate variable mapping from SSA analysis
-        let mut variable_mapper = crate::ast::variable_mapper::VariableMapper::new();
+        let mut variable_mapper = crate::ast::variables::VariableMapper::new();
         if let Ok(variable_mapping) = variable_mapper.generate_mapping(&ssa_analysis, cfg) {
             // Set the SSA-based variable mapping in the register manager
             instruction_converter
@@ -211,6 +224,11 @@ impl<'a> BlockToStatementConverter<'a> {
             include_ssa_comments,
             _global_analysis: Some(_global_analysis),
             rendered_instructions: HashSet::new(),
+            comment_manager: if include_instruction_comments || include_ssa_comments {
+                Some(AddressCommentManager::new())
+            } else {
+                None
+            },
         }
     }
 
@@ -219,7 +237,7 @@ impl<'a> BlockToStatementConverter<'a> {
         ast_builder: &'a OxcAstBuilder<'a>,
         expression_context: ExpressionContext<'a>,
         include_instruction_comments: bool,
-        variable_mapping: crate::ast::variable_mapper::VariableMapping,
+        variable_mapping: crate::ast::variables::VariableMapping,
     ) -> Self {
         let mut instruction_converter =
             InstructionToStatementConverter::new(ast_builder, expression_context.clone());
@@ -238,6 +256,11 @@ impl<'a> BlockToStatementConverter<'a> {
             include_ssa_comments: false,
             _global_analysis: None,
             rendered_instructions: HashSet::new(),
+            comment_manager: if include_instruction_comments {
+                Some(AddressCommentManager::new())
+            } else {
+                None
+            },
         }
     }
 
@@ -260,7 +283,7 @@ impl<'a> BlockToStatementConverter<'a> {
         let switch_analysis = cfg.analyze_switch_regions();
         let mut processed_blocks: HashSet<NodeIndex> = HashSet::new();
 
-        for (order_idx, block_id) in block_order.iter().enumerate() {
+        for (_order_idx, block_id) in block_order.iter().enumerate() {
             // Skip if this block was already processed as part of a conditional chain
             if processed_blocks.contains(block_id) {
                 continue;
@@ -281,49 +304,46 @@ impl<'a> BlockToStatementConverter<'a> {
                     // Initially mark only switch infrastructure blocks as processed
                     // to allow nested control flow detection in case bodies
                     let switch_infrastructure =
-                        crate::ast::switch_converter::get_switch_infrastructure_blocks(region, cfg);
+                        super::switch_converter::get_switch_infrastructure_blocks(region, cfg);
                     processed_blocks.extend(&switch_infrastructure);
                     // Create the switch converter
-                    let mut switch_converter = crate::ast::switch_converter::SwitchConverter::new(
+                    let mut switch_converter = super::switch_converter::SwitchConverter::new(
                         self.instruction_converter.ast_builder(),
                     );
                     // Convert the switch to statements
                     match switch_converter.convert_switch_region(region, cfg, self) {
                         Ok(switch_statements) => {
                             all_statements.extend(switch_statements);
-                            
+
                             // After conversion, mark ALL blocks that were part of the switch
                             // including case bodies to prevent duplicate processing
                             let all_switch_blocks =
-                                crate::ast::switch_converter::get_all_switch_blocks_with_bodies(region, cfg);
+                                super::switch_converter::get_all_switch_blocks_with_bodies(
+                                    region, cfg,
+                                );
                             processed_blocks.extend(&all_switch_blocks);
-                            
-                            // Also mark the join block as processed since the switch converter handles it
-                            processed_blocks.insert(region.join_block);
-                            
+
                             // After converting a switch, we need to ensure the join block is processed
                             // if it hasn't been already (it contains code after the switch)
                             if !processed_blocks.contains(&region.join_block) {
-                                // Find the position of the join block in the block order
-                                if let Some(join_pos) = block_order.iter().position(|&b| b == region.join_block) {
-                                    // If the join block comes after our current position, it will be processed naturally
-                                    if join_pos <= order_idx {
-                                        // Join block was before or at current position, need to process it now
-                                        let join_block = &cfg.graph()[region.join_block];
-                                        let join_stmts = self.convert_block(
-                                            join_block,
-                                            region.join_block,
-                                            cfg.graph(),
-                                        )?;
-                                        all_statements.extend(join_stmts);
-                                        processed_blocks.insert(region.join_block);
-                                    }
+                                // The join block might be an exit block, so we need to process it manually
+                                let join_block = &cfg.graph()[region.join_block];
+
+                                // Check if join block has any instructions that need to be converted
+                                if !join_block.instructions().is_empty() {
+                                    let join_stmts = self.convert_block(
+                                        join_block,
+                                        region.join_block,
+                                        cfg.graph(),
+                                    )?;
+                                    all_statements.extend(join_stmts);
+                                    processed_blocks.insert(region.join_block);
                                 }
                             }
                             continue;
                         }
                         Err(e) => {
-                            // Fall back to basic block conversion if switch conversion fails
+                            // Error - fall back to basic block conversion
                             if self.include_instruction_comments {
                                 eprintln!("Warning: Failed to convert switch region starting at block {}: {}", block_id.index(), e);
                             }
@@ -337,14 +357,17 @@ impl<'a> BlockToStatementConverter<'a> {
                     // Convert the entire conditional chain
                     // Mark ALL blocks in the chain (including nested) as processed
                     let all_chain_blocks =
-                        crate::ast::conditional_converter::ConditionalConverter::get_all_chain_blocks(
+                        super::conditional_converter::ConditionalConverter::get_all_chain_blocks(
                             chain,
                         );
                     processed_blocks.extend(&all_chain_blocks);
 
+                    // Store the join block to process it separately after the chain
+                    let join_block = chain.join_block;
+
                     // Create the conditional converter
                     let mut conditional_converter =
-                        crate::ast::conditional_converter::ConditionalConverter::new(
+                        super::conditional_converter::ConditionalConverter::new(
                             self.instruction_converter.ast_builder(),
                         );
 
@@ -352,6 +375,12 @@ impl<'a> BlockToStatementConverter<'a> {
                     match conditional_converter.convert_chain(chain, cfg, self) {
                         Ok(chain_statements) => {
                             all_statements.extend(chain_statements);
+                            
+                            // After converting a conditional chain, we need to ensure the join block is processed
+                            // The conditional converter marks it as processed but doesn't actually convert it
+                            // Remove it from the processed set so it can be converted in the normal flow
+                            processed_blocks.remove(&join_block);
+                            
                             continue;
                         }
                         Err(e) => {
@@ -361,18 +390,6 @@ impl<'a> BlockToStatementConverter<'a> {
                             }
                         }
                     }
-                }
-            }
-
-            // Add block information comment
-            let block_comment = self.create_block_info_comment(*block_id, block, cfg)?;
-            all_statements.push(block_comment);
-
-            // Add incoming edge information comments
-            if order_idx > 0 {
-                let edge_comments = self.create_incoming_edge_comments(*block_id, cfg)?;
-                for comment in edge_comments {
-                    all_statements.push(comment);
                 }
             }
 
@@ -387,17 +404,17 @@ impl<'a> BlockToStatementConverter<'a> {
             for stmt in block_statements {
                 all_statements.push(stmt);
             }
-            
+
             // Mark this block as processed
             processed_blocks.insert(*block_id);
         }
 
         // Verify all blocks and instructions were rendered
         self.verify_all_rendered(cfg, &processed_blocks)?;
-        
+
         Ok(all_statements)
     }
-    
+
     /// Verify that all blocks and instructions were rendered exactly once
     fn verify_all_rendered(
         &self,
@@ -407,12 +424,12 @@ impl<'a> BlockToStatementConverter<'a> {
         // Check all blocks (except EXIT blocks)
         for node in cfg.graph().node_indices() {
             let block = &cfg.graph()[node];
-            
+
             // Skip EXIT blocks
             if block.is_exit() {
                 continue;
             }
-            
+
             // Check if block was processed
             if !processed_blocks.contains(&node) {
                 return Err(BlockConversionError::InvalidBlock(format!(
@@ -422,27 +439,31 @@ impl<'a> BlockToStatementConverter<'a> {
                     block.end_pc()
                 )));
             }
-            
+
             // Check all instructions in the block
             for (idx, instruction) in block.instructions().iter().enumerate() {
-                if !self.rendered_instructions.contains(&instruction.offset) {
+                if !self
+                    .rendered_instructions
+                    .contains(&instruction.instruction_index)
+                {
                     // Terminal jumps are often skipped as they're implicit in control flow
-                    let is_terminal_jump = idx == block.instructions().len() - 1 && matches!(
-                        &instruction.instruction,
-                        UnifiedInstruction::Jmp { .. } |
-                        UnifiedInstruction::JmpLong { .. } |
-                        UnifiedInstruction::JmpTrue { .. } |
-                        UnifiedInstruction::JmpFalse { .. } |
-                        UnifiedInstruction::JStrictEqual { .. } |
-                        UnifiedInstruction::JStrictEqualLong { .. } |
-                        UnifiedInstruction::JStrictNotEqual { .. } |
-                        UnifiedInstruction::JStrictNotEqualLong { .. }
-                    );
-                    
+                    let is_terminal_jump = idx == block.instructions().len() - 1
+                        && matches!(
+                            &instruction.instruction,
+                            UnifiedInstruction::Jmp { .. }
+                                | UnifiedInstruction::JmpLong { .. }
+                                | UnifiedInstruction::JmpTrue { .. }
+                                | UnifiedInstruction::JmpFalse { .. }
+                                | UnifiedInstruction::JStrictEqual { .. }
+                                | UnifiedInstruction::JStrictEqualLong { .. }
+                                | UnifiedInstruction::JStrictNotEqual { .. }
+                                | UnifiedInstruction::JStrictNotEqualLong { .. }
+                        );
+
                     if !is_terminal_jump {
                         return Err(BlockConversionError::InvalidBlock(format!(
                             "Instruction at PC {} (index {} in block {}) was not rendered: {:?}",
-                            instruction.offset,
+                            instruction.offset.value(),
                             idx,
                             node.index(),
                             instruction.instruction
@@ -451,7 +472,7 @@ impl<'a> BlockToStatementConverter<'a> {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -501,21 +522,45 @@ impl<'a> BlockToStatementConverter<'a> {
 
     /// Check if an instruction has been rendered
     pub fn is_instruction_rendered(&self, instruction: &HbcFunctionInstruction) -> bool {
-        self.rendered_instructions.contains(&instruction.offset)
+        self.rendered_instructions
+            .contains(&instruction.instruction_index)
     }
 
     /// Mark an instruction as rendered
     pub fn mark_instruction_rendered(&mut self, instruction: &HbcFunctionInstruction) {
-        self.rendered_instructions.insert(instruction.offset);
+        self.rendered_instructions
+            .insert(instruction.instruction_index);
     }
 
     /// Convert a basic block into a sequence of JavaScript statements
     pub fn convert_block(
         &mut self,
         block: &Block,
-        _block_id: NodeIndex,
+        block_id: NodeIndex,
         _cfg: &Graph<Block, EdgeKind>,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
+        self.convert_block_with_options(block, block_id, _cfg, None::<fn(&HbcFunctionInstruction, bool) -> bool>, false)
+    }
+
+    /// Convert a basic block into a sequence of JavaScript statements with options
+    /// 
+    /// # Arguments
+    /// * `block` - The block to convert
+    /// * `block_id` - The block's node index in the CFG
+    /// * `_cfg` - The control flow graph
+    /// * `instruction_filter` - Optional filter to skip certain instructions (e.g., terminal jumps)
+    /// * `skip_phi_declarations` - Whether to skip phi variable declarations
+    pub fn convert_block_with_options<F>(
+        &mut self,
+        block: &Block,
+        block_id: NodeIndex,
+        _cfg: &Graph<Block, EdgeKind>,
+        instruction_filter: Option<F>,
+        skip_phi_declarations: bool,
+    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> 
+    where
+        F: Fn(&HbcFunctionInstruction, bool) -> bool,
+    {
         // Reset scope for new block
         self.scope_manager.reset();
 
@@ -525,33 +570,102 @@ impl<'a> BlockToStatementConverter<'a> {
         // Convert instructions to statements
         let mut statements = ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
 
-        for (pc_offset, instruction) in block.instructions().iter().enumerate() {
+        // Check if this block needs any phi variable declarations
+        if !skip_phi_declarations {
+            let phi_declarations = self
+                .ssa_analysis
+                .as_ref()
+                .and_then(|ssa| ssa.phi_variable_declarations.get(&block_id))
+                .cloned();
+
+            if let Some(phi_declarations) = phi_declarations {
+                for phi_decl in &phi_declarations {
+                    // Create a variable declaration for this phi register
+                    let var_decl = self.create_phi_variable_declaration(phi_decl)?;
+                    statements.push(var_decl);
+                }
+            }
+        }
+
+        let instruction_count = block.instructions().len();
+        for (instruction_index, instruction) in block.instructions().iter().enumerate() {
             // Skip if this instruction has already been rendered
             if self.is_instruction_rendered(instruction) {
                 continue;
             }
 
-            let pc = instruction.offset; // Use the absolute offset from the instruction
-            // Process instruction
-
-            // Add instruction comment if enabled
-            if self.include_instruction_comments {
-                let instruction_comment = self.create_instruction_comment(pc, instruction)?;
-                statements.push(instruction_comment);
+            // Apply instruction filter if provided
+            if let Some(ref filter) = instruction_filter {
+                let is_last = instruction_index == instruction_count - 1;
+                if !filter(instruction, is_last) {
+                    continue;
+                }
             }
 
-            // Add SSA comment if SSA analysis is available and SSA comments are enabled
-            if self.include_ssa_comments {
-                if let Some(ref ssa_analysis) = self.ssa_analysis {
-                    if let Some(ssa_comment) =
-                        self.create_ssa_comment(pc, _block_id, pc_offset, ssa_analysis)?
-                    {
-                        statements.push(ssa_comment);
+            let instruction_offset = instruction.offset; // Use the absolute offset from the instruction
+                                                         // Process instruction
+
+            // Convert the instruction to statements first
+            let instruction_statements =
+                self.convert_instruction_to_statements(instruction, instruction.instruction_index)?;
+
+            // Add comments to the first statement if we have a comment manager
+            if self.comment_manager.is_some() && !instruction_statements.is_empty() {
+                // Get the SSA info first (if needed) to avoid borrowing conflicts
+                let ssa_info = if self.include_ssa_comments {
+                    if let Some(ref ssa_analysis) = self.ssa_analysis {
+                        let info = self.format_ssa_info(
+                            block_id,
+                            InstructionIndex::from(instruction_index),
+                            ssa_analysis,
+                        );
+                        info
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Now borrow the comment manager mutably and attach comments to the first statement
+                if let Some(ref mut comment_manager) = self.comment_manager {
+                    if let Some(first_stmt) = instruction_statements.first() {
+                        // Add instruction comment if enabled
+                        if self.include_instruction_comments {
+                            let instruction_info = if let Some(hbc_file) = self
+                                .instruction_converter
+                                .get_expression_context()
+                                .hbc_file()
+                            {
+                                format!(
+                                    "PC {}: {}",
+                                    instruction_offset,
+                                    instruction.format_instruction(hbc_file)
+                                )
+                            } else {
+                                format!("PC {}: {:?}", instruction_offset, instruction.instruction)
+                            };
+                            comment_manager.add_comment(
+                                first_stmt,
+                                instruction_info,
+                                crate::ast::comments::CommentKind::Line,
+                                crate::ast::comments::CommentPosition::Leading,
+                            );
+                        }
+
+                        // Add SSA comment if we have one
+                        if let Some(ssa_info) = ssa_info {
+                            comment_manager.add_comment(
+                                first_stmt,
+                                ssa_info,
+                                crate::ast::comments::CommentKind::Line,
+                                crate::ast::comments::CommentPosition::Leading,
+                            );
+                        }
                     }
                 }
             }
 
-            let instruction_statements = self.convert_instruction_to_statements(instruction, pc)?;
             for stmt in instruction_statements {
                 statements.push(stmt);
             }
@@ -575,12 +689,12 @@ impl<'a> BlockToStatementConverter<'a> {
     fn convert_instruction_to_statements(
         &mut self,
         instruction: &HbcFunctionInstruction,
-        pc: u32,
+        pc: InstructionIndex,
     ) -> Result<Vec<Statement<'a>>, BlockConversionError> {
         let mut statements = Vec::new();
 
         // Set current PC in the instruction converter
-        self.instruction_converter.set_current_pc(pc);
+        self.instruction_converter.set_current_pc(pc.0 as u32);
 
         // Use the new InstructionToStatementConverter for direct 1:1 instruction mapping
         match self
@@ -595,12 +709,9 @@ impl<'a> BlockToStatementConverter<'a> {
                 }
                 statements.push(stmt);
             }
-            InstructionResult::JumpCondition(jump_info) => {
+            InstructionResult::JumpCondition(_jump_info) => {
                 // Jump instructions don't generate statements directly
                 // They provide condition info for the block converter to handle control flow
-                // For now, we'll create a comment about the jump
-                let jump_comment = self.create_jump_comment(&jump_info)?;
-                statements.push(jump_comment);
             }
             InstructionResult::None => {
                 // Instruction like nops that don't produce output
@@ -616,7 +727,7 @@ impl<'a> BlockToStatementConverter<'a> {
                 // Track the environment register but don't generate visible JavaScript
                 self.instruction_converter
                     .register_manager_mut()
-                    .track_usage(*operand_0, pc);
+                    .track_usage(*operand_0, pc.into());
                 // Mark this register as representing an environment
                 let env_var_name = format!("__env_{}", operand_0);
                 self.instruction_converter
@@ -889,21 +1000,30 @@ impl<'a> BlockToStatementConverter<'a> {
     }
 
     /// Get variable name for a register at a specific PC (for conditional expressions)
-    pub fn get_variable_name_for_condition(&mut self, register: u8, pc: u32) -> String {
-        self.instruction_converter.set_current_pc(pc);
+    pub fn get_variable_name_for_condition(
+        &mut self,
+        register: u8,
+        pc: InstructionIndex,
+    ) -> String {
+        self.instruction_converter.set_current_pc(pc.0 as u32);
         self.instruction_converter
             .register_manager_mut()
             .get_source_variable_name(register)
     }
-    
+
     /// Check if instruction comments are enabled
     pub fn include_instruction_comments(&self) -> bool {
         self.include_instruction_comments
     }
-    
+
     /// Check if SSA comments are enabled
     pub fn include_ssa_comments(&self) -> bool {
         self.include_ssa_comments
+    }
+
+    /// Get a reference to the SSA analysis
+    pub fn ssa_analysis(&self) -> Option<&SSAAnalysis> {
+        self.ssa_analysis.as_ref()
     }
 
     /// Get access to the underlying instruction converter
@@ -919,6 +1039,67 @@ impl<'a> BlockToStatementConverter<'a> {
     /// Get access to the scope manager
     pub fn scope_manager(&self) -> &BlockScopeManager {
         &self.scope_manager
+    }
+
+    /// Set the comment manager (useful when building from external context)
+    pub fn set_comment_manager(&mut self, comment_manager: AddressCommentManager) {
+        self.comment_manager = Some(comment_manager);
+    }
+
+    /// Take the comment manager (transfers ownership)
+    pub fn take_comment_manager(&mut self) -> Option<AddressCommentManager> {
+        self.comment_manager.take()
+    }
+
+    /// Get mutable access to the comment manager
+    pub fn comment_manager_mut(&mut self) -> Option<&mut AddressCommentManager> {
+        self.comment_manager.as_mut()
+    }
+
+    /// Check if we have a comment manager (for future address-based comments)
+    pub fn has_comment_manager(&self) -> bool {
+        self.comment_manager.is_some()
+    }
+
+    /// Format SSA information for a comment
+    pub fn format_ssa_info(
+        &self,
+        block_id: NodeIndex,
+        instruction_index: InstructionIndex,
+        ssa_analysis: &SSAAnalysis,
+    ) -> Option<String> {
+        let mut comment_parts = Vec::new();
+
+        // Find SSA definitions and uses at this instruction index
+        for def in &ssa_analysis.definitions {
+            if def.instruction_idx == instruction_index && def.block_id == block_id {
+                if let Some(ssa_value) = ssa_analysis.ssa_values.get(def) {
+                    comment_parts.push(format!(
+                        "DEF: r{} → r{}_{}",
+                        def.register, ssa_value.register, ssa_value.version
+                    ));
+                }
+            }
+        }
+
+        for use_site in &ssa_analysis.uses {
+            if use_site.instruction_idx == instruction_index && use_site.block_id == block_id {
+                if let Some(def_site) = ssa_analysis.use_def_chains.get(use_site) {
+                    if let Some(ssa_value) = ssa_analysis.ssa_values.get(def_site) {
+                        comment_parts.push(format!(
+                            "USE: r{} → r{}_{}",
+                            use_site.register, ssa_value.register, ssa_value.version
+                        ));
+                    }
+                }
+            }
+        }
+
+        if comment_parts.is_empty() {
+            None
+        } else {
+            Some(comment_parts.join(", "))
+        }
     }
 
     // ===== Private Helper Methods =====
@@ -955,673 +1136,34 @@ impl<'a> BlockToStatementConverter<'a> {
             .statement_labeled(span, label_id, empty_stmt))
     }
 
-    /// Create a comment statement with block information
-    fn create_block_info_comment(
-        &self,
-        block_id: NodeIndex,
-        block: &Block,
-        _cfg: &crate::cfg::Cfg,
+    /// Create a variable declaration for a phi function
+    fn create_phi_variable_declaration(
+        &mut self,
+        phi_decl: &crate::cfg::ssa::PhiRegisterDeclaration,
     ) -> Result<Statement<'a>, BlockConversionError> {
-        let span = oxc_span::Span::default();
-
-        // Gather block information
-        let block_info = format!(
-            "/* Block {}: PC {}..{}, {} instructions */",
-            block_id.index(),
-            block.start_pc(),
-            block.end_pc(),
-            block.instructions().len()
-        );
-
-        // Create as a string literal expression statement that will be rendered as a comment
-        let comment_atom = self
-            .instruction_converter
-            .ast_builder()
-            .allocator
-            .alloc_str(&block_info);
-        let comment_expr = self
-            .instruction_converter
-            .ast_builder()
-            .expression_string_literal(span, comment_atom, None);
-
-        // Mark this as a comment by wrapping it in a special way
-        // We'll use void to indicate this should be rendered as a comment
-        let void_expr = self.instruction_converter.ast_builder().expression_unary(
-            span,
-            oxc_ast::ast::UnaryOperator::Void,
-            comment_expr,
-        );
-
-        Ok(self
-            .instruction_converter
-            .ast_builder()
-            .statement_expression(span, void_expr))
-    }
-
-    /// Create comment statements for incoming edges to a block
-    fn create_incoming_edge_comments(
-        &self,
-        block_id: NodeIndex,
-        cfg: &crate::cfg::Cfg,
-    ) -> Result<Vec<Statement<'a>>, BlockConversionError> {
-        let mut comments = Vec::new();
-        let span = oxc_span::Span::default();
-
-        // Get incoming edges
-        let incoming_edges: Vec<_> = cfg
-            .graph()
-            .edges_directed(block_id, petgraph::Direction::Incoming)
-            .collect();
-
-        if !incoming_edges.is_empty() {
-            for edge in incoming_edges {
-                let edge_info = format!(
-                    "/* Edge from Block {} -> Block {} ({:?}) */",
-                    edge.source().index(),
-                    edge.target().index(),
-                    edge.weight()
-                );
-
-                let comment_atom = self
-                    .instruction_converter
-                    .ast_builder()
-                    .allocator
-                    .alloc_str(&edge_info);
-                let comment_expr = self
-                    .instruction_converter
-                    .ast_builder()
-                    .expression_string_literal(span, comment_atom, None);
-
-                let void_expr = self.instruction_converter.ast_builder().expression_unary(
-                    span,
-                    oxc_ast::ast::UnaryOperator::Void,
-                    comment_expr,
-                );
-
-                comments.push(
-                    self.instruction_converter
-                        .ast_builder()
-                        .statement_expression(span, void_expr),
-                );
-            }
-        }
-
-        Ok(comments)
-    }
-
-    /// Create a comment statement for an individual instruction
-    fn create_instruction_comment(
-        &self,
-        pc: u32,
-        instruction: &HbcFunctionInstruction,
-    ) -> Result<Statement<'a>, BlockConversionError> {
-        let span = oxc_span::Span::default();
-
-        // Format the instruction information
-        let instruction_info = if let Some(hbc_file) = self
-            .instruction_converter
-            .get_expression_context()
-            .hbc_file()
-        {
-            // Use the formatted instruction display
-            format!(
-                "/* PC {}: {} */",
-                pc,
-                instruction.format_instruction(hbc_file)
-            )
+        // Get the variable name from the SSA value through the variable mapper
+        // The phi_decl.ssa_value should already be mapped to the correct coalesced variable name
+        let var_name = if let Some(mapping) = self.instruction_converter.register_manager_mut().variable_mapping() {
+            // Look up the variable name for this SSA value
+            // This should give us the coalesced name that all versions of this variable use
+            mapping.ssa_to_var.get(&phi_decl.ssa_value)
+                .cloned()
+                .unwrap_or_else(|| {
+                    format!("var{}", phi_decl.register)
+                })
         } else {
-            // Fallback to debug formatting if no HBC file access
-            format!("/* PC {}: {:?} */", pc, instruction.instruction)
+            // No variable mapping available, use default naming
+            format!("var{}", phi_decl.register)
         };
 
-        let comment_atom = self
-            .instruction_converter
-            .ast_builder()
-            .allocator
-            .alloc_str(&instruction_info);
-        let comment_expr = self
-            .instruction_converter
-            .ast_builder()
-            .expression_string_literal(span, comment_atom, None);
-
-        let void_expr = self.instruction_converter.ast_builder().expression_unary(
-            span,
-            oxc_ast::ast::UnaryOperator::Void,
-            comment_expr,
-        );
-
-        Ok(self
-            .instruction_converter
-            .ast_builder()
-            .statement_expression(span, void_expr))
-    }
-
-    /// Create a comment statement with SSA analysis information
-    fn create_ssa_comment(
-        &self,
-        pc: u32,
-        block_id: NodeIndex,
-        instruction_idx: usize,
-        ssa_analysis: &SSAAnalysis,
-    ) -> Result<Option<Statement<'a>>, BlockConversionError> {
-        let span = oxc_span::Span::default();
-        let mut comment_parts = Vec::new();
-
-        // Find SSA definitions and uses at this PC
-        for def in &ssa_analysis.definitions {
-            if def.pc == pc && def.block_id == block_id {
-                if let Some(ssa_value) = ssa_analysis.ssa_values.get(def) {
-                    comment_parts.push(format!(
-                        "DEF: r{} → r{}_{}",
-                        def.register, ssa_value.register, ssa_value.version
-                    ));
-                }
-            }
-        }
-
-        for use_site in &ssa_analysis.uses {
-            if use_site.pc == pc && use_site.block_id == block_id {
-                if let Some(def_site) = ssa_analysis.use_def_chains.get(use_site) {
-                    if let Some(ssa_value) = ssa_analysis.ssa_values.get(def_site) {
-                        comment_parts.push(format!(
-                            "USE: r{} ← r{}_{}",
-                            use_site.register, ssa_value.register, ssa_value.version
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Show phi functions at block start (only for first instruction)
-        if instruction_idx == 0 {
-            if let Some(phis) = ssa_analysis.phi_functions.get(&block_id) {
-                for phi in phis {
-                    let mut phi_parts = Vec::new();
-                    for (pred_block, ssa_value) in &phi.operands {
-                        phi_parts.push(format!(
-                            "B{}: r{}_{}",
-                            pred_block.index(),
-                            ssa_value.register,
-                            ssa_value.version
-                        ));
-                    }
-                    comment_parts.push(format!(
-                        "PHI: r{}_{} = φ({})",
-                        phi.result.register,
-                        phi.result.version,
-                        phi_parts.join(", ")
-                    ));
-                }
-            }
-        }
-
-        // Only create comment if we have something to show
-        if comment_parts.is_empty() {
-            return Ok(None);
-        }
-
-        let ssa_info = format!("/* SSA: {} */", comment_parts.join(" | "));
-        let comment_atom = self
-            .instruction_converter
-            .ast_builder()
-            .allocator
-            .alloc_str(&ssa_info);
-        let comment_expr = self
-            .instruction_converter
-            .ast_builder()
-            .expression_string_literal(span, comment_atom, None);
-        let void_expr = self.instruction_converter.ast_builder().expression_unary(
-            span,
-            oxc_ast::ast::UnaryOperator::Void,
-            comment_expr,
-        );
-
-        Ok(Some(
-            self.instruction_converter
-                .ast_builder()
-                .statement_expression(span, void_expr),
-        ))
-    }
-
-    /// Create a comment statement for jump conditions
-    fn create_jump_comment(
-        &self,
-        jump_info: &JumpCondition,
-    ) -> Result<Statement<'a>, BlockConversionError> {
-        let span = oxc_span::Span::default();
-
-        let target_label = if let Some(hbc_file) = self
-            .instruction_converter
-            .get_expression_context()
-            .hbc_file()
-        {
-            if let Some(function_id) = self
-                .instruction_converter()
-                .get_expression_context()
-                .function_index()
-            {
-                let jump_op_index = self
-                    .instruction_converter()
-                    .get_expression_context()
-                    .current_pc();
-
-                if let Some(target_label) = hbc_file
-                    .jump_table
-                    .get_label_by_jump_op_index(function_id, jump_op_index)
-                {
-                    Some(target_label)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // Format the jump information
-        let jump_info_str = if let Some(_condition_expr) = &jump_info.condition_expression {
-            format!(
-                "/* Jump: {:?} condition with expression to offset {} */",
-                jump_info.jump_type,
-                target_label.unwrap_or(&format!("{:?}", jump_info.target_offset))
+        // Create a declaration without initialization
+        // We use 'let' because phi variables are typically reassigned
+        self.instruction_converter
+            .create_variable_declaration(
+                &var_name,
+                None,
+                oxc_ast::ast::VariableDeclarationKind::Let,
             )
-        } else {
-            format!(
-                "/* Jump: {:?} to offset {} */",
-                jump_info.jump_type,
-                target_label.unwrap_or(&format!("{:?}", jump_info.target_offset))
-            )
-        };
-
-        let comment_atom = self
-            .instruction_converter
-            .ast_builder()
-            .allocator
-            .alloc_str(&jump_info_str);
-        let comment_expr = self
-            .instruction_converter
-            .ast_builder()
-            .expression_string_literal(span, comment_atom, None);
-
-        let void_expr = self.instruction_converter.ast_builder().expression_unary(
-            span,
-            oxc_ast::ast::UnaryOperator::Void,
-            comment_expr,
-        );
-
-        Ok(self
-            .instruction_converter
-            .ast_builder()
-            .statement_expression(span, void_expr))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        ast::ExpressionContext, cfg::Block, generated::unified_instructions::UnifiedInstruction,
-        hbc::function_table::HbcFunctionInstruction,
-    };
-    use oxc_allocator::Allocator;
-    use petgraph::Graph;
-
-    fn create_test_instruction(instruction: UnifiedInstruction) -> HbcFunctionInstruction {
-        HbcFunctionInstruction {
-            instruction,
-            offset: 0,
-            function_index: 0,
-            instruction_index: 0,
-        }
-    }
-
-    #[test]
-    fn test_block_converter_creation() {
-        let allocator = Allocator::default();
-        let ast_builder = OxcAstBuilder::new(&allocator);
-        let context = ExpressionContext::new();
-
-        let converter = BlockToStatementConverter::new(&ast_builder, context, false);
-
-        // Verify initial state
-        let stats = converter.get_stats();
-        assert_eq!(stats.blocks_processed, 0);
-        assert_eq!(stats.instructions_converted, 0);
-        assert_eq!(stats.statements_generated, 0);
-    }
-
-    #[test]
-    fn test_target_register_extraction() {
-        let allocator = Allocator::default();
-        let ast_builder = OxcAstBuilder::new(&allocator);
-        let context = ExpressionContext::new();
-        let converter = BlockToStatementConverter::new(&ast_builder, context, false);
-
-        // Test various instruction types
-        assert_eq!(
-            converter.get_target_register(&UnifiedInstruction::Add {
-                operand_0: 5,
-                operand_1: 1,
-                operand_2: 2
-            }),
-            Some(5)
-        );
-
-        assert_eq!(
-            converter.get_target_register(&UnifiedInstruction::LoadConstTrue { operand_0: 3 }),
-            Some(3)
-        );
-
-        assert_eq!(
-            converter.get_target_register(&UnifiedInstruction::Mov {
-                operand_0: 10,
-                operand_1: 5
-            }),
-            Some(10)
-        );
-
-        // Instructions without target registers
-        assert_eq!(
-            converter.get_target_register(&UnifiedInstruction::Ret { operand_0: 1 }),
-            None
-        );
-
-        assert_eq!(
-            converter.get_target_register(&UnifiedInstruction::PutByVal {
-                operand_0: 1,
-                operand_1: 2,
-                operand_2: 3
-            }),
-            None
-        );
-    }
-
-    #[test]
-    fn test_convert_simple_block() {
-        let allocator = Allocator::default();
-        let ast_builder = OxcAstBuilder::new(&allocator);
-        let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
-
-        // Create a simple block with load constant instruction
-        let instructions = vec![create_test_instruction(UnifiedInstruction::LoadConstTrue {
-            operand_0: 1,
-        })];
-
-        let block = Block::new(0, instructions);
-
-        // Create empty graph for the test
-        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
-        let block_id = cfg.add_node(block.clone());
-
-        // Convert the block
-        let result = converter.convert_block(&block, block_id, &cfg);
-        assert!(result.is_ok(), "Block conversion should succeed");
-
-        let statements = result.unwrap();
-        assert_eq!(statements.len(), 1, "Should generate one statement");
-
-        // Verify statistics
-        let stats = converter.get_stats();
-        assert_eq!(stats.blocks_processed, 1);
-        assert_eq!(stats.instructions_converted, 1);
-        assert_eq!(stats.statements_generated, 1);
-    }
-
-    #[test]
-    fn test_convert_arithmetic_block() {
-        let allocator = Allocator::default();
-        let ast_builder = OxcAstBuilder::new(&allocator);
-        let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
-
-        // Create a block with arithmetic instructions
-        let instructions = vec![
-            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
-                operand_0: 1,
-                operand_1: 42,
-            }),
-            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
-                operand_0: 2,
-                operand_1: 10,
-            }),
-            create_test_instruction(UnifiedInstruction::Add {
-                operand_0: 3,
-                operand_1: 1,
-                operand_2: 2,
-            }),
-        ];
-
-        let block = Block::new(0, instructions);
-
-        // Create empty graph for the test
-        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
-        let block_id = cfg.add_node(block.clone());
-
-        // Convert the block
-        let result = converter.convert_block(&block, block_id, &cfg);
-        assert!(result.is_ok(), "Block conversion should succeed");
-
-        let statements = result.unwrap();
-        assert_eq!(statements.len(), 3, "Should generate three statements");
-
-        // Verify statistics
-        let stats = converter.get_stats();
-        assert_eq!(stats.blocks_processed, 1);
-        assert_eq!(stats.instructions_converted, 3);
-        assert_eq!(stats.statements_generated, 3);
-    }
-
-    #[test]
-    fn test_convert_return_block() {
-        let allocator = Allocator::default();
-        let ast_builder = OxcAstBuilder::new(&allocator);
-        let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
-
-        // Create a block with return instruction
-        let instructions = vec![
-            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
-                operand_0: 1,
-                operand_1: 42,
-            }),
-            create_test_instruction(UnifiedInstruction::Ret { operand_0: 1 }),
-        ];
-
-        let block = Block::new(0, instructions);
-
-        // Create empty graph for the test
-        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
-        let block_id = cfg.add_node(block.clone());
-
-        // Convert the block
-        let result = converter.convert_block(&block, block_id, &cfg);
-        if let Err(e) = &result {
-            println!("Error: {:?}", e);
-        }
-        assert!(
-            result.is_ok(),
-            "Block conversion should succeed: {:?}",
-            result.as_ref().err()
-        );
-
-        let statements = result.unwrap();
-        assert_eq!(statements.len(), 2, "Should generate two statements");
-
-        // Check that the last statement is a return statement
-        if let Some(last_stmt) = statements.last() {
-            assert!(
-                matches!(last_stmt, oxc_ast::ast::Statement::ReturnStatement(_)),
-                "Last statement should be a return statement"
-            );
-        }
-    }
-
-    #[test]
-    fn test_convert_assignment_sequence() {
-        let allocator = Allocator::default();
-        let ast_builder = OxcAstBuilder::new(&allocator);
-        let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
-
-        // Create a block with move operations (assignments)
-        let instructions = vec![
-            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
-                operand_0: 1,
-                operand_1: 5,
-            }),
-            create_test_instruction(UnifiedInstruction::Mov {
-                operand_0: 2,
-                operand_1: 1,
-            }),
-            create_test_instruction(UnifiedInstruction::Mov {
-                operand_0: 3,
-                operand_1: 2,
-            }),
-        ];
-
-        let block = Block::new(0, instructions);
-
-        // Create empty graph for the test
-        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
-        let block_id = cfg.add_node(block.clone());
-
-        // Convert the block
-        let result = converter.convert_block(&block, block_id, &cfg);
-        assert!(result.is_ok(), "Block conversion should succeed");
-
-        let statements = result.unwrap();
-        assert_eq!(statements.len(), 3, "Should generate three statements");
-
-        // First should be a variable declaration, rest should be assignments
-        // (Note: exact behavior depends on scope manager logic)
-        let stats = converter.get_stats();
-        assert!(
-            stats.variables_declared > 0,
-            "Should have declared some variables"
-        );
-    }
-
-    #[test]
-    fn test_side_effect_instructions() {
-        let allocator = Allocator::default();
-        let ast_builder = OxcAstBuilder::new(&allocator);
-        let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
-
-        // Create a block with call instruction (has side effects)
-        let instructions = vec![create_test_instruction(UnifiedInstruction::Call {
-            operand_0: 3, // result register
-            operand_1: 1, // function register
-            operand_2: 0, // arg count
-        })];
-
-        let block = Block::new(0, instructions);
-
-        // Create empty graph for the test
-        let mut cfg: Graph<Block, EdgeKind> = Graph::new();
-        let block_id = cfg.add_node(block.clone());
-
-        // Convert the block
-        let result = converter.convert_block(&block, block_id, &cfg);
-        assert!(result.is_ok(), "Block conversion should succeed");
-
-        let statements = result.unwrap();
-        assert_eq!(statements.len(), 1, "Should generate one statement");
-
-        // Should generate a statement for the call
-        let stats = converter.get_stats();
-        assert_eq!(stats.statements_generated, 1);
-    }
-
-    #[test]
-    fn test_scope_manager_basic_functionality() {
-        let mut scope_manager = BlockScopeManager::new();
-
-        // Test declaration tracking
-        assert!(!scope_manager.is_declared(5));
-        scope_manager.mark_declared(5);
-        assert!(scope_manager.is_declared(5));
-
-        // Test declaration requirements
-        assert!(!scope_manager.requires_declaration(10));
-        scope_manager.mark_requires_declaration(10);
-        assert!(scope_manager.requires_declaration(10));
-
-        // Test block locals
-        scope_manager.set_block_local(1, "var1".to_string());
-        assert_eq!(scope_manager.get_block_local(1), Some(&"var1".to_string()));
-        assert_eq!(scope_manager.get_block_local(2), None);
-    }
-
-    #[test]
-    fn test_scope_manager_reset() {
-        let mut scope_manager = BlockScopeManager::new();
-
-        scope_manager.mark_declared(5);
-        scope_manager.mark_requires_declaration(10);
-        scope_manager.set_block_local(1, "var1".to_string());
-
-        scope_manager.reset();
-
-        assert!(!scope_manager.is_declared(5));
-        assert!(!scope_manager.requires_declaration(10));
-        assert_eq!(scope_manager.get_block_local(1), None);
-    }
-
-    #[test]
-    fn test_conversion_stats_tracking() {
-        let mut stats = BlockConversionStats::default();
-
-        assert_eq!(stats.blocks_processed, 0);
-        assert_eq!(stats.instructions_converted, 0);
-        assert_eq!(stats.statements_generated, 0);
-
-        // Stats should be updateable
-        stats.blocks_processed += 1;
-        stats.instructions_converted += 5;
-        stats.statements_generated += 5;
-
-        assert_eq!(stats.blocks_processed, 1);
-        assert_eq!(stats.instructions_converted, 5);
-        assert_eq!(stats.statements_generated, 5);
-    }
-
-    #[test]
-    fn test_block_variable_analysis() {
-        let allocator = Allocator::default();
-        let ast_builder = OxcAstBuilder::new(&allocator);
-        let context = ExpressionContext::new();
-        let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
-
-        // Create a block with various target registers
-        let instructions = vec![
-            create_test_instruction(UnifiedInstruction::LoadConstUInt8 {
-                operand_0: 1,
-                operand_1: 42,
-            }),
-            create_test_instruction(UnifiedInstruction::Add {
-                operand_0: 2,
-                operand_1: 1,
-                operand_2: 1,
-            }),
-            create_test_instruction(UnifiedInstruction::Mov {
-                operand_0: 3,
-                operand_1: 2,
-            }),
-        ];
-
-        let block = Block::new(0, instructions);
-
-        // Test variable analysis
-        let result = converter.analyze_block_variables(&block);
-        assert!(result.is_ok(), "Variable analysis should succeed");
-
-        // Check that target registers are marked for declaration
-        assert!(converter.scope_manager.requires_declaration(1));
-        assert!(converter.scope_manager.requires_declaration(2));
-        assert!(converter.scope_manager.requires_declaration(3));
+            .map_err(BlockConversionError::StatementConversion)
     }
 }

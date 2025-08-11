@@ -29,22 +29,34 @@ pub fn compute_dominance_frontiers(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Res
             // This is a join node, compute dominance frontier
             for pred in predecessors {
                 let mut runner = pred;
+                
+                // Get immediate dominator of the join node
+                let block_idom = dominators.immediate_dominator(block_id);
 
-                // Walk up the dominator tree until we reach the immediate dominator of block_id
-                if let Some(block_idom) = dominators.immediate_dominator(block_id) {
-                    while !dominates(&dominators, block_idom, runner) {
-                        analysis
-                            .dominance_frontiers
-                            .get_mut(&runner)
-                            .unwrap()
-                            .insert(block_id);
-
-                        if let Some(idom) = dominators.immediate_dominator(runner) {
-                            runner = idom;
-                        } else {
-                            break; // Reached the root
-                        }
+                // Walk up dominator tree from predecessor
+                while let Some(runner_idom) = dominators.immediate_dominator(runner) {
+                    // Stop when runner dominates block_id
+                    if Some(runner) == block_idom || runner == block_id {
+                        break;
                     }
+                    
+                    // Add block_id to runner's dominance frontier
+                    analysis
+                        .dominance_frontiers
+                        .get_mut(&runner)
+                        .unwrap()
+                        .insert(block_id);
+                    
+                    runner = runner_idom;
+                }
+                
+                // Handle the case where we've reached the entry node
+                if runner == cfg.entry_node().unwrap() && Some(runner) != block_idom {
+                    analysis
+                        .dominance_frontiers
+                        .get_mut(&runner)
+                        .unwrap()
+                        .insert(block_id);
                 }
             }
         }
@@ -64,6 +76,11 @@ pub fn dominates(
     dominator: NodeIndex,
     node: NodeIndex,
 ) -> bool {
+    // A node dominates itself
+    if dominator == node {
+        return true;
+    }
+    
     let mut current = node;
     while let Some(immediate_dom) = dominators.immediate_dominator(current) {
         if immediate_dom == dominator {

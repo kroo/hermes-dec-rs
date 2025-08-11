@@ -1,3 +1,4 @@
+use crate::hbc::InstructionIndex;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
@@ -6,17 +7,15 @@ use std::collections::{HashMap, HashSet};
 pub struct RegisterDef {
     pub register: u8,
     pub block_id: NodeIndex,
-    pub instruction_idx: usize,
-    pub pc: u32,
+    pub instruction_idx: InstructionIndex,
 }
 
 impl RegisterDef {
-    pub fn new(register: u8, block_id: NodeIndex, instruction_idx: usize, pc: u32) -> Self {
+    pub fn new(register: u8, block_id: NodeIndex, instruction_idx: InstructionIndex) -> Self {
         Self {
             register,
             block_id,
             instruction_idx,
-            pc,
         }
     }
 }
@@ -26,17 +25,15 @@ impl RegisterDef {
 pub struct RegisterUse {
     pub register: u8,
     pub block_id: NodeIndex,
-    pub instruction_idx: usize,
-    pub pc: u32,
+    pub instruction_idx: InstructionIndex,
 }
 
 impl RegisterUse {
-    pub fn new(register: u8, block_id: NodeIndex, instruction_idx: usize, pc: u32) -> Self {
+    pub fn new(register: u8, block_id: NodeIndex, instruction_idx: InstructionIndex) -> Self {
         Self {
             register,
             block_id,
             instruction_idx,
-            pc,
         }
     }
 }
@@ -91,6 +88,20 @@ impl PhiFunction {
     /// Get the number of operands in this phi function
     pub fn operand_count(&self) -> usize {
         self.operands.len()
+    }
+
+    /// Format the phi function as a string (e.g. "ɸ @ BlockId#2(r0_1, r0_2)")
+    pub fn format_phi_function(&self) -> String {
+        let mut operands = Vec::new();
+        for value in self.operands.values() {
+            operands.push(value.name());
+        }
+        format!(
+            "ɸ @ BlockId#{:?}({}) -> {}",
+            self.block_id,
+            operands.join(", "),
+            self.result.name()
+        )
     }
 }
 
@@ -205,6 +216,22 @@ pub struct SSAAnalysis {
 
     // NEW: Closure variable declarations
     pub closure_variable_declarations: Vec<ClosureVarDecl>,
+    
+    // NEW: Variable analysis (coalescing, scopes, lookups)
+    pub variable_analysis: Option<super::variable_analysis::VariableAnalysis>,
+    
+    // NEW: Phi variable declarations needed at specific blocks
+    pub phi_variable_declarations: HashMap<NodeIndex, Vec<PhiRegisterDeclaration>>,
+}
+
+/// Information about a register that needs declaration for a phi function
+#[derive(Debug, Clone)]
+pub struct PhiRegisterDeclaration {
+    pub register: u8,
+    pub phi_block: NodeIndex,
+    pub declaration_block: NodeIndex,
+    /// The SSA value that represents this declaration (for variable mapping)
+    pub ssa_value: SSAValue,
 }
 
 impl SSAAnalysis {
@@ -224,17 +251,23 @@ impl SSAAnalysis {
             captured_variable_accesses: Vec::new(),
             required_closure_variables: HashSet::new(),
             closure_variable_declarations: Vec::new(),
+            variable_analysis: None,
+            phi_variable_declarations: HashMap::new(),
         }
     }
 
     /// Get the SSA value for a register at a specific program point
-    pub fn get_value_at(&self, register: u8, pc: u32) -> Option<&SSAValue> {
+    pub fn get_value_at(
+        &self,
+        register: u8,
+        instruction_idx: InstructionIndex,
+    ) -> Option<&SSAValue> {
         // Find the definition that reaches this program point
         // For now, find the most recent definition before or at this PC
         self.definitions
             .iter()
-            .filter(|def| def.register == register && def.pc <= pc)
-            .max_by_key(|def| def.pc)
+            .filter(|def| def.register == register && def.instruction_idx <= instruction_idx)
+            .max_by_key(|def| def.instruction_idx)
             .and_then(|def| self.ssa_values.get(def))
     }
 
@@ -328,25 +361,23 @@ mod tests {
 
     #[test]
     fn test_register_def_creation() {
-        let def = RegisterDef::new(5, NodeIndex::new(0), 2, 100);
+        let def = RegisterDef::new(5, NodeIndex::new(0), InstructionIndex::new(2));
         assert_eq!(def.register, 5);
         assert_eq!(def.block_id, NodeIndex::new(0));
-        assert_eq!(def.instruction_idx, 2);
-        assert_eq!(def.pc, 100);
+        assert_eq!(def.instruction_idx, InstructionIndex::new(2));
     }
 
     #[test]
     fn test_register_use_creation() {
-        let use_site = RegisterUse::new(3, NodeIndex::new(1), 1, 50);
+        let use_site = RegisterUse::new(3, NodeIndex::new(1), InstructionIndex::new(1));
         assert_eq!(use_site.register, 3);
         assert_eq!(use_site.block_id, NodeIndex::new(1));
-        assert_eq!(use_site.instruction_idx, 1);
-        assert_eq!(use_site.pc, 50);
+        assert_eq!(use_site.instruction_idx, InstructionIndex::new(1));
     }
 
     #[test]
     fn test_ssa_value_creation() {
-        let def = RegisterDef::new(2, NodeIndex::new(0), 0, 10);
+        let def = RegisterDef::new(2, NodeIndex::new(0), InstructionIndex::new(2));
         let value = SSAValue::new(2, 1, def);
         assert_eq!(value.register, 2);
         assert_eq!(value.version, 1);
@@ -355,7 +386,7 @@ mod tests {
 
     #[test]
     fn test_phi_function_creation() {
-        let def = RegisterDef::new(1, NodeIndex::new(2), 0, 20);
+        let def = RegisterDef::new(1, NodeIndex::new(2), InstructionIndex::new(0));
         let result = SSAValue::new(1, 3, def);
         let mut phi = PhiFunction::new(1, NodeIndex::new(2), result);
 
@@ -363,12 +394,12 @@ mod tests {
         assert_eq!(phi.block_id, NodeIndex::new(2));
         assert_eq!(phi.operand_count(), 0);
 
-        let def1 = RegisterDef::new(1, NodeIndex::new(0), 1, 5);
+        let def1 = RegisterDef::new(1, NodeIndex::new(0), InstructionIndex::new(1));
         let value1 = SSAValue::new(1, 1, def1);
         phi.add_operand(NodeIndex::new(0), value1);
         assert_eq!(phi.operand_count(), 1);
 
-        let def2 = RegisterDef::new(1, NodeIndex::new(1), 2, 15);
+        let def2 = RegisterDef::new(1, NodeIndex::new(1), InstructionIndex::new(2));
         let value2 = SSAValue::new(1, 2, def2);
         phi.add_operand(NodeIndex::new(1), value2);
         assert_eq!(phi.operand_count(), 2);
@@ -388,23 +419,33 @@ mod tests {
         let mut analysis = SSAAnalysis::new(0);
 
         // Add some definitions
-        analysis
-            .definitions
-            .push(RegisterDef::new(1, NodeIndex::new(0), 0, 10));
-        analysis
-            .definitions
-            .push(RegisterDef::new(1, NodeIndex::new(1), 1, 20));
-        analysis
-            .definitions
-            .push(RegisterDef::new(2, NodeIndex::new(0), 2, 30));
+        analysis.definitions.push(RegisterDef::new(
+            1,
+            NodeIndex::new(0),
+            InstructionIndex::new(0),
+        ));
+        analysis.definitions.push(RegisterDef::new(
+            1,
+            NodeIndex::new(1),
+            InstructionIndex::new(1),
+        ));
+        analysis.definitions.push(RegisterDef::new(
+            2,
+            NodeIndex::new(0),
+            InstructionIndex::new(2),
+        ));
 
         // Add some uses
-        analysis
-            .uses
-            .push(RegisterUse::new(1, NodeIndex::new(1), 0, 15));
-        analysis
-            .uses
-            .push(RegisterUse::new(2, NodeIndex::new(1), 1, 25));
+        analysis.uses.push(RegisterUse::new(
+            1,
+            NodeIndex::new(1),
+            InstructionIndex::new(0),
+        ));
+        analysis.uses.push(RegisterUse::new(
+            2,
+            NodeIndex::new(1),
+            InstructionIndex::new(1),
+        ));
 
         // Test queries
         assert_eq!(analysis.get_register_definitions(1).len(), 2);
@@ -435,21 +476,31 @@ mod tests {
         let mut analysis = SSAAnalysis::new(0);
 
         // Add some data
-        analysis
-            .definitions
-            .push(RegisterDef::new(1, NodeIndex::new(0), 0, 10));
-        analysis
-            .definitions
-            .push(RegisterDef::new(2, NodeIndex::new(0), 1, 20));
-        analysis
-            .uses
-            .push(RegisterUse::new(1, NodeIndex::new(1), 0, 30));
-        analysis
-            .uses
-            .push(RegisterUse::new(1, NodeIndex::new(1), 1, 40));
-        analysis
-            .uses
-            .push(RegisterUse::new(2, NodeIndex::new(1), 2, 50));
+        analysis.definitions.push(RegisterDef::new(
+            1,
+            NodeIndex::new(0),
+            InstructionIndex::new(0),
+        ));
+        analysis.definitions.push(RegisterDef::new(
+            2,
+            NodeIndex::new(0),
+            InstructionIndex::new(1),
+        ));
+        analysis.uses.push(RegisterUse::new(
+            1,
+            NodeIndex::new(1),
+            InstructionIndex::new(0),
+        ));
+        analysis.uses.push(RegisterUse::new(
+            1,
+            NodeIndex::new(1),
+            InstructionIndex::new(1),
+        ));
+        analysis.uses.push(RegisterUse::new(
+            2,
+            NodeIndex::new(1),
+            InstructionIndex::new(2),
+        ));
 
         let stats = analysis.get_stats();
         assert_eq!(stats.total_definitions, 2);

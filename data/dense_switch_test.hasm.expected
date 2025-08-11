@@ -15,587 +15,409 @@ Bytecode File Information:
     cjsModulesStaticallyResolved: 0
 
 Global String Table:
-s0[ASCII, 0..-1]: 
-s1[ASCII, 0..8]: default-1
-s2[ASCII, 8..10]: 1-1
-s3[ASCII, 10..12]: 1-0
-s4[ASCII, 12..14]: 0-0
-s5[ASCII, 14..16]: 0-1
-s6[ASCII, 16..18]: 1-2
-s7[ASCII, 19..27]: default-0
-s8[ASCII, 27..29]: 0-2
-s9[ASCII, 30..36]: 0-other
-s10[ASCII, 32..36]: other
-s11[ASCII, 37..43]: 1-other
-s12[ASCII, 44..56]: default-other
-s13[ASCII, 57..64]: double: 
-s14[ASCII, 65..71]: fifteen
-s15[ASCII, 71..84]: negative three
-s16[ASCII, 80..84]: three
-s17[ASCII, 84..89]: eleven
-s18[ASCII, 89..100]: negative one
-s19[ASCII, 98..100]: one
-s20[ASCII, 99..111]: negative five
-s21[ASCII, 108..111]: five
-s22[ASCII, 111..115]: eight
-s23[ASCII, 111..118]: eighteen
-s24[ASCII, 118..130]: negative four
-s25[ASCII, 127..130]: four
-s26[ASCII, 127..134]: fourteen
-s27[ASCII, 134..145]: negative two
-s28[ASCII, 143..145]: two
-s29[ASCII, 143..154]: two or three
-s30[ASCII, 155..160]: global
-s31[ASCII, 160..163]: low 
-s32[ASCII, 164..168]: seven
-s33[ASCII, 164..172]: seventeen
-s34[ASCII, 172..175]: nine
-s35[ASCII, 172..179]: nineteen
-s36[ASCII, 190..193]: high
-s37[ASCII, 194..207]: immediate zero
-s38[ASCII, 204..207]: zero
-s39[ASCII, 207..213]: outer-2
-s40[ASCII, 214..217]: mid 
-s41[ASCII, 218..223]: quad: 
-s42[ASCII, 224..226]: six
-s43[ASCII, 224..230]: sixteen
-s44[ASCII, 231..239]: special: 
-s45[ASCII, 254..256]: ten
-s46[ASCII, 271..278]: thirteen
-s47[ASCII, 279..284]: twelve
-s48[ASCII, 285..290]: twenty
-s49[ASCII, 291..297]: unknown
-s50[ASCII, 298..304]: value: 
-i51[ASCII, 179..190] #C966DC8A: nestedSwitch
-i52[ASCII, 240..254] #F2708BE8: denseSwitchTest
-i53[ASCII, 257..271] #29DC03AC: largeSwitchTest
-i54[ASCII, 305..320] #A4661605: mixedBreakReturn
-i55[ASCII, 321..335] #8CC871FE: switchWithBreak
-i56[ASCII, 336..356] #EF03A676: switchWithFallthrough
+s0[ASCII, 0..-1] #C966DC8A: 
+s1[ASCII, 0..8] #F2708BE8: default-1
+s2[ASCII, 8..10] #29DC03AC: 1-1
+s3[ASCII, 10..12] #A4661605: 1-0
+s4[ASCII, 12..14] #8CC871FE: 0-0
+s5[ASCII, 14..16] #EF03A676: 0-1
+s6[ASCII, 16..18] 1-2
+s7[ASCII, 19..27] default-0
+s8[ASCII, 27..29] 0-2
+s9[ASCII, 30..36] 0-other
+s10[ASCII, 32..36] other
+s11[ASCII, 37..43] 1-other
+s12[ASCII, 44..56] default-other
+s13[ASCII, 57..64] double: 
+s14[ASCII, 65..71] fifteen
+s15[ASCII, 71..84] negative three
+s16[ASCII, 80..84] three
+s17[ASCII, 84..89] eleven
+s18[ASCII, 89..100] negative one
+s19[ASCII, 98..100] one
+s20[ASCII, 99..111] negative five
+s21[ASCII, 108..111] five
+s22[ASCII, 111..115] eight
+s23[ASCII, 111..118] eighteen
+s24[ASCII, 118..130] negative four
+s25[ASCII, 127..130] four
+s26[ASCII, 127..134] fourteen
+s27[ASCII, 134..145] negative two
+s28[ASCII, 143..145] two
+s29[ASCII, 143..154] two or three
+s30[ASCII, 155..160] global
+s31[ASCII, 160..163] low 
+s32[ASCII, 164..168] seven
+s33[ASCII, 164..172] seventeen
+s34[ASCII, 172..175] nine
+s35[ASCII, 172..179] nineteen
+s36[ASCII, 190..193] high
+s37[ASCII, 194..207] immediate zero
+s38[ASCII, 204..207] zero
+s39[ASCII, 207..213] outer-2
+s40[ASCII, 214..217] mid 
+s41[ASCII, 218..223] quad: 
+s42[ASCII, 224..226] six
+s43[ASCII, 224..230] sixteen
+s44[ASCII, 231..239] special: 
+s45[ASCII, 254..256] ten
+s46[ASCII, 271..278] thirteen
+s47[ASCII, 279..284] twelve
+s48[ASCII, 285..290] twenty
+s49[ASCII, 291..297] unknown
+s50[ASCII, 298..304] value: 
+s51[ASCII, 179..190] nestedSwitch
+s52[ASCII, 240..254] denseSwitchTest
+s53[ASCII, 257..271] largeSwitchTest
+s54[ASCII, 305..320] mixedBreakReturn
+s55[ASCII, 321..335] switchWithBreak
+s56[ASCII, 336..356] switchWithFallthrough
+
+Array Buffer:
 
 Function<global>0(1 params, 15 registers, 0 symbols):
-Offset in debug table: source 0x0000, scope 0x0000, textified callees 0x0000
-; dense_switch_test.js:1:1
-    DeclareGlobalVar  "denseSwitchTest"
-; dense_switch_test.js:1:1
-    DeclareGlobalVar  "largeSwitchTest"
-; dense_switch_test.js:1:1
-    DeclareGlobalVar  "switchWithBreak"
-; dense_switch_test.js:1:1
-    DeclareGlobalVar  "switchWithFallthr"...
-; dense_switch_test.js:1:1
-    DeclareGlobalVar  "nestedSwitch"
-; dense_switch_test.js:1:1
-    DeclareGlobalVar  "mixedBreakReturn"
-; dense_switch_test.js:1:1
-    CreateEnvironment r1
-; dense_switch_test.js:1:1
-    CreateClosure     r2, r1, Function<denseSwitchTest>1
-; dense_switch_test.js:1:1
-    GetGlobalObject   r0
-; dense_switch_test.js:1:1
-    PutById           r0, r2, 1, "denseSwitchTest"
-; dense_switch_test.js:1:1
-    CreateClosure     r2, r1, Function<largeSwitchTest>2
-; dense_switch_test.js:1:1
-    PutById           r0, r2, 2, "largeSwitchTest"
-; dense_switch_test.js:1:1
-    CreateClosure     r2, r1, Function<switchWithBreak>3
-; dense_switch_test.js:1:1
-    PutById           r0, r2, 3, "switchWithBreak"
-; dense_switch_test.js:1:1
-    CreateClosure     r2, r1, Function<switchWithFallthrough>4
-; dense_switch_test.js:1:1
-    PutById           r0, r2, 4, "switchWithFallthr"...
-; dense_switch_test.js:1:1
-    CreateClosure     r2, r1, Function<nestedSwitch>5
-; dense_switch_test.js:1:1
-    PutById           r0, r2, 5, "nestedSwitch"
-; dense_switch_test.js:1:1
-    CreateClosure     r1, r1, Function<mixedBreakReturn>6
-; dense_switch_test.js:1:1
-    PutById           r0, r1, 6, "mixedBreakReturn"
-; dense_switch_test.js:156:1
-    GetByIdShort      r3, r0, 1, "denseSwitchTest"
-; dense_switch_test.js:156:1
-    LoadConstUndefined r2
-; dense_switch_test.js:156:1
-    LoadConstUInt8    r1, 15
-; dense_switch_test.js:156:16
-    Call2             r1, r3, r2, r1
-; dense_switch_test.js:157:1
-    GetByIdShort      r3, r0, 2, "largeSwitchTest"
-; dense_switch_test.js:157:1
-    LoadConstUInt8    r1, 7
-; dense_switch_test.js:157:16
-    Call2             r1, r3, r2, r1
-; dense_switch_test.js:158:1
-    GetByIdShort      r1, r0, 3, "switchWithBreak"
-; dense_switch_test.js:158:1
-    LoadConstUInt8    r5, 3
-; dense_switch_test.js:158:16
-    Call2             r1, r1, r2, r5
-; dense_switch_test.js:159:1
-    GetByIdShort      r1, r0, 4, "switchWithFallthr"...
-; dense_switch_test.js:159:1
-    LoadConstZero     r4
-; dense_switch_test.js:159:22
-    Call2             r1, r1, r2, r4
-; dense_switch_test.js:160:1
-    GetByIdShort      r1, r0, 4, "switchWithFallthr"...
-; dense_switch_test.js:160:22
-    Call2             r1, r1, r2, r5
-; dense_switch_test.js:161:1
-    GetByIdShort      r3, r0, 4, "switchWithFallthr"...
-; dense_switch_test.js:161:1
-    LoadConstUInt8    r1, 6
-; dense_switch_test.js:161:22
-    Call2             r1, r3, r2, r1
-; dense_switch_test.js:162:1
-    GetByIdShort      r1, r0, 5, "nestedSwitch"
-; dense_switch_test.js:162:1
-    LoadConstUInt8    r3, 1
-; dense_switch_test.js:162:13
-    Call3             r1, r1, r2, r4, r3
-; dense_switch_test.js:163:1
-    GetByIdShort      r1, r0, 5, "nestedSwitch"
-; dense_switch_test.js:163:13
-    Call3             r1, r1, r2, r3, r5
-; dense_switch_test.js:164:1
-    GetByIdShort      r1, r0, 5, "nestedSwitch"
-; dense_switch_test.js:164:13
-    Call3             r1, r1, r2, r5, r4
-; dense_switch_test.js:165:1
-    GetByIdShort      r1, r0, 6, "mixedBreakReturn"
-; dense_switch_test.js:165:17
-    Call2             r1, r1, r2, r3
-; dense_switch_test.js:166:1
-    GetByIdShort      r3, r0, 6, "mixedBreakReturn"
-; dense_switch_test.js:166:1
-    LoadConstUInt8    r1, 2
-; dense_switch_test.js:166:17
-    Call2             r1, r3, r2, r1
-; dense_switch_test.js:167:1
-    GetByIdShort      r1, r0, 6, "mixedBreakReturn"
-; dense_switch_test.js:167:1
-    LoadConstUInt8    r0, 4
-; dense_switch_test.js:167:17
-    Call2             r0, r1, r2, r0
-; dense_switch_test.js:167:17
-    Ret               r0
+  DeclareGlobalVar  "denseSwitchTest"
+  DeclareGlobalVar  "largeSwitchTest"
+  DeclareGlobalVar  "switchWithBreak"
+  DeclareGlobalVar  "switchWithFallthrough"
+  DeclareGlobalVar  "nestedSwitch"
+  DeclareGlobalVar  "mixedBreakReturn"
+  CreateEnvironment r1
+  CreateClosure     r2, r1, Function<denseSwitchTest>1
+  GetGlobalObject   r0
+  PutById           r0, r2, 1, "denseSwitchTest"
+  CreateClosure     r2, r1, Function<largeSwitchTest>2
+  PutById           r0, r2, 2, "largeSwitchTest"
+  CreateClosure     r2, r1, Function<switchWithBreak>3
+  PutById           r0, r2, 3, "switchWithBreak"
+  CreateClosure     r2, r1, Function<switchWithFallthrough>4
+  PutById           r0, r2, 4, "switchWithFallthrough"
+  CreateClosure     r2, r1, Function<nestedSwitch>5
+  PutById           r0, r2, 5, "nestedSwitch"
+  CreateClosure     r1, r1, Function<mixedBreakReturn>6
+  PutById           r0, r1, 6, "mixedBreakReturn"
+  GetByIdShort      r3, r0, 1, "denseSwitchTest"
+  LoadConstUndefined r2
+  LoadConstUInt8    r1, 15
+  Call2             r1, r3, r2, r1
+  GetByIdShort      r3, r0, 2, "largeSwitchTest"
+  LoadConstUInt8    r1, 7
+  Call2             r1, r3, r2, r1
+  GetByIdShort      r1, r0, 3, "switchWithBreak"
+  LoadConstUInt8    r5, 3
+  Call2             r1, r1, r2, r5
+  GetByIdShort      r1, r0, 4, "switchWithFallthrough"
+  LoadConstZero     r4
+  Call2             r1, r1, r2, r4
+  GetByIdShort      r1, r0, 4, "switchWithFallthrough"
+  Call2             r1, r1, r2, r5
+  GetByIdShort      r3, r0, 4, "switchWithFallthrough"
+  LoadConstUInt8    r1, 6
+  Call2             r1, r3, r2, r1
+  GetByIdShort      r1, r0, 5, "nestedSwitch"
+  LoadConstUInt8    r3, 1
+  Call3             r1, r1, r2, r4, r3
+  GetByIdShort      r1, r0, 5, "nestedSwitch"
+  Call3             r1, r1, r2, r3, r5
+  GetByIdShort      r1, r0, 5, "nestedSwitch"
+  Call3             r1, r1, r2, r5, r4
+  GetByIdShort      r1, r0, 6, "mixedBreakReturn"
+  Call2             r1, r1, r2, r3
+  GetByIdShort      r3, r0, 6, "mixedBreakReturn"
+  LoadConstUInt8    r1, 2
+  Call2             r1, r3, r2, r1
+  GetByIdShort      r1, r0, 6, "mixedBreakReturn"
+  LoadConstUInt8    r0, 4
+  Call2             r0, r1, r2, r0
+  Ret               r0
 
 Function<denseSwitchTest>1(2 params, 1 registers, 0 symbols):
-    LoadParam         r0, 1
-    SwitchImm         r0, 150, L22, 0, 20
-L21:
-    LoadConstString   r0, "twenty"
-    Ret               r0
-L20:
-    LoadConstString   r0, "nineteen"
-    Ret               r0
-L19:
-    LoadConstString   r0, "eighteen"
-    Ret               r0
-L18:
-    LoadConstString   r0, "seventeen"
-    Ret               r0
-L17:
-    LoadConstString   r0, "sixteen"
-    Ret               r0
-L16:
-    LoadConstString   r0, "fifteen"
-    Ret               r0
-L15:
-    LoadConstString   r0, "fourteen"
-    Ret               r0
-L14:
-    LoadConstString   r0, "thirteen"
-    Ret               r0
-L13:
-    LoadConstString   r0, "twelve"
-    Ret               r0
-L12:
-    LoadConstString   r0, "eleven"
-    Ret               r0
-L11:
-    LoadConstString   r0, "ten"
-    Ret               r0
-L10:
-    LoadConstString   r0, "nine"
-    Ret               r0
-L9:
-    LoadConstString   r0, "eight"
-    Ret               r0
-L8:
-    LoadConstString   r0, "seven"
-    Ret               r0
-L7:
-    LoadConstString   r0, "six"
-    Ret               r0
-L6:
-    LoadConstString   r0, "five"
-    Ret               r0
-L5:
-    LoadConstString   r0, "four"
-    Ret               r0
-L4:
-    LoadConstString   r0, "three"
-    Ret               r0
-L3:
-    LoadConstString   r0, "two"
-    Ret               r0
-L2:
-    LoadConstString   r0, "one"
-    Ret               r0
-L1:
-    LoadConstString   r0, "zero"
-    Ret               r0
-L22:
-    LoadConstString   r0, "other"
-    Ret               r0
-
- Jump Tables: 
-  offset 150
-   0 : L1
-   1 : L2
-   2 : L3
-   3 : L4
-   4 : L5
-   5 : L6
-   6 : L7
-   7 : L8
-   8 : L9
-   9 : L10
-   10 : L11
-   11 : L12
-   12 : L13
-   13 : L14
-   14 : L15
-   15 : L16
-   16 : L17
-   17 : L18
-   18 : L19
-   19 : L20
-   20 : L21
+  LoadParam         r0, 1
+  SwitchImm         r0, 150, [144], 0, 20
+  LoadConstString   r0, "twenty"
+  Ret               r0
+  LoadConstString   r0, "nineteen"
+  Ret               r0
+  LoadConstString   r0, "eighteen"
+  Ret               r0
+  LoadConstString   r0, "seventeen"
+  Ret               r0
+  LoadConstString   r0, "sixteen"
+  Ret               r0
+  LoadConstString   r0, "fifteen"
+  Ret               r0
+  LoadConstString   r0, "fourteen"
+  Ret               r0
+  LoadConstString   r0, "thirteen"
+  Ret               r0
+  LoadConstString   r0, "twelve"
+  Ret               r0
+  LoadConstString   r0, "eleven"
+  Ret               r0
+  LoadConstString   r0, "ten"
+  Ret               r0
+  LoadConstString   r0, "nine"
+  Ret               r0
+  LoadConstString   r0, "eight"
+  Ret               r0
+  LoadConstString   r0, "seven"
+  Ret               r0
+  LoadConstString   r0, "six"
+  Ret               r0
+  LoadConstString   r0, "five"
+  Ret               r0
+  LoadConstString   r0, "four"
+  Ret               r0
+  LoadConstString   r0, "three"
+  Ret               r0
+  LoadConstString   r0, "two"
+  Ret               r0
+  LoadConstString   r0, "one"
+  Ret               r0
+  LoadConstString   r0, "zero"
+  Ret               r0
+  LoadConstString   r0, "other"
+  Ret               r0
 
 Function<largeSwitchTest>2(2 params, 2 registers, 0 symbols):
-    LoadParam         r1, 1
-    LoadConstInt      r0, -5
-    JStrictEqualLong  L1, r0, r1
-    LoadConstInt      r0, -4
-    JStrictEqualLong  L2, r0, r1
-    LoadConstInt      r0, -3
-    JStrictEqualLong  L3, r0, r1
-    LoadConstInt      r0, -2
-    JStrictEqualLong  L4, r0, r1
-    LoadConstInt      r0, -1
-    JStrictEqualLong  L5, r0, r1
-    LoadConstZero     r0
-    JStrictEqualLong  L6, r0, r1
-    LoadConstUInt8    r0, 1
-    JStrictEqualLong  L7, r0, r1
-    LoadConstUInt8    r0, 2
-    JStrictEqual      L8, r0, r1
-    LoadConstUInt8    r0, 3
-    JStrictEqual      L9, r0, r1
-    LoadConstUInt8    r0, 4
-    JStrictEqual      L10, r0, r1
-    LoadConstUInt8    r0, 5
-    JStrictEqual      L11, r0, r1
-    LoadConstUInt8    r0, 6
-    JStrictEqual      L12, r0, r1
-    LoadConstUInt8    r0, 7
-    JStrictEqual      L13, r0, r1
-    LoadConstUInt8    r0, 8
-    JStrictEqual      L14, r0, r1
-    LoadConstUInt8    r0, 9
-    JStrictEqual      L15, r0, r1
-    LoadConstUInt8    r0, 10
-    JStrictEqual      L16, r0, r1
-    LoadConstString   r0, "unknown"
-    Ret               r0
+  LoadParam         r1, 1
+  LoadConstInt      r0, -5
+  JStrictEqualLong  L1, r0, r1
+  LoadConstInt      r0, -4
+  JStrictEqualLong  L2, r0, r1
+  LoadConstInt      r0, -3
+  JStrictEqualLong  L3, r0, r1
+  LoadConstInt      r0, -2
+  JStrictEqualLong  L4, r0, r1
+  LoadConstInt      r0, -1
+  JStrictEqualLong  L5, r0, r1
+  LoadConstZero     r0
+  JStrictEqualLong  L6, r0, r1
+  LoadConstUInt8    r0, 1
+  JStrictEqualLong  L7, r0, r1
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L8, r0, r1
+  LoadConstUInt8    r0, 3
+  JStrictEqual      L9, r0, r1
+  LoadConstUInt8    r0, 4
+  JStrictEqual      L10, r0, r1
+  LoadConstUInt8    r0, 5
+  JStrictEqual      L11, r0, r1
+  LoadConstUInt8    r0, 6
+  JStrictEqual      L12, r0, r1
+  LoadConstUInt8    r0, 7
+  JStrictEqual      L13, r0, r1
+  LoadConstUInt8    r0, 8
+  JStrictEqual      L14, r0, r1
+  LoadConstUInt8    r0, 9
+  JStrictEqual      L15, r0, r1
+  LoadConstUInt8    r0, 10
+  JStrictEqual      L16, r0, r1
+  LoadConstString   r0, "unknown"
+  Ret               r0
 L16:
-    LoadConstString   r0, "ten"
-    Ret               r0
+  LoadConstString   r0, "ten"
+  Ret               r0
 L15:
-    LoadConstString   r0, "nine"
-    Ret               r0
+  LoadConstString   r0, "nine"
+  Ret               r0
 L14:
-    LoadConstString   r0, "eight"
-    Ret               r0
+  LoadConstString   r0, "eight"
+  Ret               r0
 L13:
-    LoadConstString   r0, "seven"
-    Ret               r0
+  LoadConstString   r0, "seven"
+  Ret               r0
 L12:
-    LoadConstString   r0, "six"
-    Ret               r0
+  LoadConstString   r0, "six"
+  Ret               r0
 L11:
-    LoadConstString   r0, "five"
-    Ret               r0
+  LoadConstString   r0, "five"
+  Ret               r0
 L10:
-    LoadConstString   r0, "four"
-    Ret               r0
+  LoadConstString   r0, "four"
+  Ret               r0
 L9:
-    LoadConstString   r0, "three"
-    Ret               r0
+  LoadConstString   r0, "three"
+  Ret               r0
 L8:
-    LoadConstString   r0, "two"
-    Ret               r0
+  LoadConstString   r0, "two"
+  Ret               r0
 L7:
-    LoadConstString   r0, "one"
-    Ret               r0
+  LoadConstString   r0, "one"
+  Ret               r0
 L6:
-    LoadConstString   r0, "zero"
-    Ret               r0
+  LoadConstString   r0, "zero"
+  Ret               r0
 L5:
-    LoadConstString   r0, "negative one"
-    Ret               r0
+  LoadConstString   r0, "negative one"
+  Ret               r0
 L4:
-    LoadConstString   r0, "negative two"
-    Ret               r0
+  LoadConstString   r0, "negative two"
+  Ret               r0
 L3:
-    LoadConstString   r0, "negative three"
-    Ret               r0
+  LoadConstString   r0, "negative three"
+  Ret               r0
 L2:
-    LoadConstString   r0, "negative four"
-    Ret               r0
+  LoadConstString   r0, "negative four"
+  Ret               r0
 L1:
-    LoadConstString   r0, "negative five"
-    Ret               r0
+  LoadConstString   r0, "negative five"
+  Ret               r0
 
 Function<switchWithBreak>3(2 params, 3 registers, 0 symbols):
-    LoadParam         r2, 1
-    LoadConstString   r0, "zero"
-    LoadConstZero     r1
-    JStrictEqual      L1, r1, r2
-    LoadConstUInt8    r1, 1
-    JStrictEqual      L2, r1, r2
-    LoadConstUInt8    r1, 2
-    JStrictEqual      L3, r1, r2
-    LoadConstUInt8    r1, 3
-    JStrictEqual      L4, r1, r2
-    LoadConstUInt8    r1, 4
-    JStrictEqual      L5, r1, r2
-    LoadConstUInt8    r1, 5
-    JStrictEqual      L6, r1, r2
-    LoadConstString   r0, "other"
-    Jmp               L1
+  LoadParam         r2, 1
+  LoadConstString   r0, "zero"
+  LoadConstZero     r1
+  JStrictEqual      L1, r1, r2
+  LoadConstUInt8    r1, 1
+  JStrictEqual      L2, r1, r2
+  LoadConstUInt8    r1, 2
+  JStrictEqual      L3, r1, r2
+  LoadConstUInt8    r1, 3
+  JStrictEqual      L4, r1, r2
+  LoadConstUInt8    r1, 4
+  JStrictEqual      L5, r1, r2
+  LoadConstUInt8    r1, 5
+  JStrictEqual      L6, r1, r2
+  LoadConstString   r0, "other"
+  Jmp               L1
 L6:
-    LoadConstString   r0, "five"
-    Jmp               L1
+  LoadConstString   r0, "five"
+  Jmp               L1
 L5:
-    LoadConstString   r0, "four"
-    Jmp               L1
+  LoadConstString   r0, "four"
+  Jmp               L1
 L4:
-    LoadConstString   r0, "three"
-    Jmp               L1
+  LoadConstString   r0, "three"
+  Jmp               L1
 L3:
-    LoadConstString   r0, "two"
-    Jmp               L1
+  LoadConstString   r0, "two"
+  Jmp               L1
 L2:
-    LoadConstString   r0, "one"
+  LoadConstString   r0, "one"
 L1:
-    Ret               r0
+  Ret               r0
 
 Function<switchWithFallthrough>4(2 params, 5 registers, 0 symbols):
-    LoadParam         r3, 1
-    LoadConstZero     r0
-    JStrictEqual      L1, r0, r3
-    LoadConstUInt8    r0, 1
-    JStrictEqual      L1, r0, r3
-    LoadConstUInt8    r0, 2
-    JStrictEqual      L1, r0, r3
-    LoadConstString   r1, ""
-    LoadConstUInt8    r0, 3
-    Mov               r2, r1
-    JStrictEqual      L2, r0, r3
-    LoadConstUInt8    r0, 4
-    Mov               r2, r1
-    JStrictEqual      L2, r0, r3
-    LoadConstString   r4, "high"
-    LoadConstUInt8    r1, 5
-    Mov               r0, r4
-    JStrictEqual      L3, r1, r3
-    LoadConstUInt8    r1, 6
-    Mov               r0, r4
-    JStrictEqual      L3, r1, r3
-    LoadConstUInt8    r1, 7
-    Mov               r0, r4
-    JStrictEqual      L3, r1, r3
-    LoadConstString   r0, "unknown"
-    Jmp               L3
+  LoadParam         r3, 1
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r3
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L1, r0, r3
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L1, r0, r3
+  LoadConstString   r1, ""
+  LoadConstUInt8    r0, 3
+  Mov               r2, r1
+  JStrictEqual      L2, r0, r3
+  LoadConstUInt8    r0, 4
+  Mov               r2, r1
+  JStrictEqual      L2, r0, r3
+  LoadConstString   r4, "high"
+  LoadConstUInt8    r1, 5
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstUInt8    r1, 6
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstUInt8    r1, 7
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstString   r0, "unknown"
+  Jmp               L3
 L1:
-    LoadConstString   r2, "low "
+  LoadConstString   r2, "low "
 L2:
-    LoadConstString   r1, "mid "
-    Add               r0, r2, r1
+  LoadConstString   r1, "mid "
+  Add               r0, r2, r1
 L3:
-    Ret               r0
+  Ret               r0
 
 Function<nestedSwitch>5(3 params, 5 registers, 0 symbols):
-    LoadParam         r4, 1
-    LoadParam         r1, 2
-    LoadConstZero     r0
-    JStrictEqual      L1, r0, r4
-    LoadConstUInt8    r2, 1
-    JStrictEqual      L2, r2, r4
-    LoadConstUInt8    r3, 2
-    JStrictEqual      L3, r3, r4
-    JStrictEqual      L4, r0, r1
-    JStrictEqual      L5, r2, r1
-    LoadConstString   r3, "default-other"
-    Ret               r3
+  LoadParam         r4, 1
+  LoadParam         r1, 2
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r4
+  LoadConstUInt8    r2, 1
+  JStrictEqual      L2, r2, r4
+  LoadConstUInt8    r3, 2
+  JStrictEqual      L3, r3, r4
+  JStrictEqual      L4, r0, r1
+  JStrictEqual      L5, r2, r1
+  LoadConstString   r3, "default-other"
+  Ret               r3
 L5:
-    LoadConstString   r3, "default-1"
-    Ret               r3
+  LoadConstString   r3, "default-1"
+  Ret               r3
 L4:
-    LoadConstString   r3, "default-0"
-    Ret               r3
+  LoadConstString   r3, "default-0"
+  Ret               r3
 L3:
-    LoadConstString   r3, "outer-2"
-    Ret               r3
+  LoadConstString   r3, "outer-2"
+  Ret               r3
 L2:
-    JStrictEqual      L6, r0, r1
-    JStrictEqual      L7, r2, r1
-    LoadConstUInt8    r2, 2
-    JStrictEqual      L8, r2, r1
-    LoadConstString   r2, "1-other"
-    Ret               r2
+  JStrictEqual      L6, r0, r1
+  JStrictEqual      L7, r2, r1
+  LoadConstUInt8    r2, 2
+  JStrictEqual      L8, r2, r1
+  LoadConstString   r2, "1-other"
+  Ret               r2
 L8:
-    LoadConstString   r2, "1-2"
-    Ret               r2
+  LoadConstString   r2, "1-2"
+  Ret               r2
 L7:
-    LoadConstString   r2, "1-1"
-    Ret               r2
+  LoadConstString   r2, "1-1"
+  Ret               r2
 L6:
-    LoadConstString   r2, "1-0"
-    Ret               r2
+  LoadConstString   r2, "1-0"
+  Ret               r2
 L1:
-    JStrictEqual      L9, r0, r1
-    LoadConstUInt8    r0, 1
-    JStrictEqual      L10, r0, r1
-    LoadConstUInt8    r0, 2
-    JStrictEqual      L11, r0, r1
-    LoadConstString   r0, "0-other"
-    Ret               r0
+  JStrictEqual      L9, r0, r1
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L10, r0, r1
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L11, r0, r1
+  LoadConstString   r0, "0-other"
+  Ret               r0
 L11:
-    LoadConstString   r0, "0-2"
-    Ret               r0
+  LoadConstString   r0, "0-2"
+  Ret               r0
 L10:
-    LoadConstString   r0, "0-1"
-    Ret               r0
+  LoadConstString   r0, "0-1"
+  Ret               r0
 L9:
-    LoadConstString   r0, "0-0"
-    Ret               r0
+  LoadConstString   r0, "0-0"
+  Ret               r0
 
 Function<mixedBreakReturn>6(2 params, 4 registers, 0 symbols):
-Offset in debug table: source 0x009b, scope 0x0000, textified callees 0x0000
-; dense_switch_test.js:133:1
-    LoadParam         r1, 1
-; dense_switch_test.js:133:1
-    LoadConstZero     r0
-; dense_switch_test.js:133:1
-    JStrictEqual      L1, r0, r1
-; dense_switch_test.js:133:1
-    LoadConstString   r0, "special: "
-; dense_switch_test.js:133:1
-    LoadConstUInt8    r2, 1
-; dense_switch_test.js:133:1
-    JStrictEqual      L2, r2, r1
-; dense_switch_test.js:133:1
-    LoadConstUInt8    r2, 2
-; dense_switch_test.js:133:1
-    JStrictEqual      L3, r2, r1
-; dense_switch_test.js:133:1
-    LoadConstString   r3, "value: "
-; dense_switch_test.js:133:1
-    LoadConstUInt8    r2, 3
-; dense_switch_test.js:133:1
-    JStrictEqual      L4, r2, r1
-; dense_switch_test.js:133:1
-    LoadConstUInt8    r2, 4
-; dense_switch_test.js:133:1
-    JStrictEqual      L5, r2, r1
-; dense_switch_test.js:133:1
-    LoadConstString   r2, "unknown"
-; dense_switch_test.js:133:1
-    Ret               r2
+  LoadParam         r1, 1
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r1
+  LoadConstString   r0, "special: "
+  LoadConstUInt8    r2, 1
+  JStrictEqual      L2, r2, r1
+  LoadConstUInt8    r2, 2
+  JStrictEqual      L3, r2, r1
+  LoadConstString   r3, "value: "
+  LoadConstUInt8    r2, 3
+  JStrictEqual      L4, r2, r1
+  LoadConstUInt8    r2, 4
+  JStrictEqual      L5, r2, r1
+  LoadConstString   r2, "unknown"
+  Ret               r2
 L5:
-; dense_switch_test.js:133:1
-    LoadConstString   r0, "quad: "
-; dense_switch_test.js:133:1
-    Jmp               L2
+  LoadConstString   r0, "quad: "
+  Jmp               L2
 L3:
-; dense_switch_test.js:133:1
-    LoadConstString   r3, "double: "
+  LoadConstString   r3, "double: "
 L4:
-; dense_switch_test.js:133:1
-    LoadConstString   r2, "two or three"
-; dense_switch_test.js:133:1
-    Add               r2, r3, r2
-; dense_switch_test.js:133:1
-    Ret               r2
+  LoadConstString   r2, "two or three"
+  Add               r2, r3, r2
+  Ret               r2
 L2:
-; dense_switch_test.js:152:12
-    Add               r0, r0, r1
-; dense_switch_test.js:152:12
-    Ret               r0
+  Add               r0, r0, r1
+  Ret               r0
 L1:
-; dense_switch_test.js:152:12
-    LoadConstString   r0, "immediate zero"
-; dense_switch_test.js:152:12
-    Ret               r0
-
-Debug filename table:
-  0: dense_switch_test.js
-
-Debug file table:
-  source table offset 0x0000: filename id 0
-
-Debug source table:
-  0x0000  function idx 0, starts at line 1 col 1
-    bc 39: line 1 col 1 scope offset 0x0000 env r2
-    bc 50: line 1 col 1 scope offset 0x0000 env r2
-    bc 61: line 1 col 1 scope offset 0x0000 env r2
-    bc 72: line 1 col 1 scope offset 0x0000 env r2
-    bc 83: line 1 col 1 scope offset 0x0000 env r2
-    bc 94: line 1 col 1 scope offset 0x0000 env r1
-    bc 100: line 156 col 1 scope offset 0x0000 env r3
-    bc 110: line 156 col 16 scope offset 0x0000 env r1
-    bc 115: line 157 col 1 scope offset 0x0000 env r3
-    bc 123: line 157 col 16 scope offset 0x0000 env r1
-    bc 128: line 158 col 1 scope offset 0x0000 env r1
-    bc 136: line 158 col 16 scope offset 0x0000 env r1
-    bc 141: line 159 col 1 scope offset 0x0000 env r1
-    bc 148: line 159 col 22 scope offset 0x0000 env r1
-    bc 153: line 160 col 1 scope offset 0x0000 env r1
-    bc 158: line 160 col 22 scope offset 0x0000 env r1
-    bc 163: line 161 col 1 scope offset 0x0000 env r3
-    bc 171: line 161 col 22 scope offset 0x0000 env r1
-    bc 176: line 162 col 1 scope offset 0x0000 env r1
-    bc 184: line 162 col 13 scope offset 0x0000 env r1
-    bc 190: line 163 col 1 scope offset 0x0000 env r1
-    bc 195: line 163 col 13 scope offset 0x0000 env r1
-    bc 201: line 164 col 1 scope offset 0x0000 env r1
-    bc 206: line 164 col 13 scope offset 0x0000 env r1
-    bc 212: line 165 col 1 scope offset 0x0000 env r1
-    bc 217: line 165 col 17 scope offset 0x0000 env r1
-    bc 222: line 166 col 1 scope offset 0x0000 env r3
-    bc 230: line 166 col 17 scope offset 0x0000 env r1
-    bc 235: line 167 col 1 scope offset 0x0000 env r1
-    bc 243: line 167 col 17 scope offset 0x0000 env r0
-  0x009b  function idx 6, starts at line 133 col 1
-    bc 71: line 152 col 12 scope offset 0x0000 env none
-  0x00aa  end of debug source table
-
-Debug scope descriptor table:
-  0x0000  lexical parent:   none, flags:    , variable count: 0
-  0x0003  end of debug scope descriptor table
-
-Textified callees table:
-  0x0000  entries: 0
-  0x0001  end of textified callees table
-
-Debug string table:
-  0x0000  end of debug string table
+  LoadConstString   r0, "immediate zero"
+  Ret               r0
 

@@ -20,7 +20,7 @@ fn test_switch_table_parsing() {
     let hbc_file = HbcFile::parse(&data).expect("Failed to parse HBC file");
 
     // Verify basic structure
-    assert_eq!(hbc_file.header.function_count(), 3);
+    assert_eq!(hbc_file.header.function_count(), 7);
 
     // Check that function 1 has switch tables
     assert!(hbc_file.switch_tables.has_switch_tables(1));

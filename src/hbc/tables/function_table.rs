@@ -1,4 +1,8 @@
-use super::super::{header::HbcHeader, HbcFile};
+use super::super::{
+    header::HbcHeader,
+    instruction_types::{InstructionIndex, InstructionOffset},
+    HbcFile,
+};
 use super::string_table::StringTable;
 use crate::error::{Error as DecompilerError, Result as DecompilerResult};
 use crate::generated::unified_instructions::UnifiedInstruction;
@@ -190,12 +194,12 @@ pub struct ParsedFunctionHeader<'a> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HbcFunctionInstruction {
-    /// The byte offset of the instruction in the function body
-    pub offset: u32,
+    /// The absolute byte offset of the instruction in the bytecode
+    pub offset: InstructionOffset,
     /// The function index
     pub function_index: u32,
-    /// The instruction index
-    pub instruction_index: u32,
+    /// The instruction index within the function (0-based position in function's instruction list)
+    pub instruction_index: InstructionIndex,
     /// The instruction contents itself
     pub instruction: UnifiedInstruction,
 }
@@ -225,7 +229,7 @@ impl HbcFunctionInstruction {
         let formatted_instruction = self.instruction.format_instruction(hbc_file);
         let jump_operand = hbc_file
             .jump_table
-            .get_label_by_jump_op_index(self.function_index, self.instruction_index);
+            .get_label_by_jump_op_index(self.function_index, self.instruction_index.into());
         if let Some(label) = jump_operand {
             // replace [\d+] with label
             JUMP_LABEL_REGEX
@@ -428,6 +432,22 @@ impl<'a> FunctionTable<'a> {
             })
         }
     }
+
+    /// Get a single instruction by index
+    pub fn get_instruction(
+        &self,
+        function_index: u32,
+        instruction_index: InstructionIndex,
+    ) -> DecompilerResult<HbcFunctionInstruction> {
+        if function_index < self.count {
+            let parsed_header = &self.parsed_headers[function_index as usize];
+            parsed_header.instruction(instruction_index)
+        } else {
+            Err(DecompilerError::Internal {
+                message: format!("Function index {} out of bounds", function_index),
+            })
+        }
+    }
 }
 
 impl<'a> ParsedFunctionHeader<'a> {
@@ -441,6 +461,22 @@ impl<'a> ParsedFunctionHeader<'a> {
         let result = self.parse_instructions();
         let _ = self.cached_instructions.set(result.clone());
         result
+    }
+
+    pub fn instruction(
+        &self,
+        instruction_index: InstructionIndex,
+    ) -> DecompilerResult<HbcFunctionInstruction> {
+        let instructions = self.instructions()?;
+        let index = instruction_index.value();
+
+        if index < instructions.len() {
+            Ok(instructions[index].clone())
+        } else {
+            Err(DecompilerError::Internal {
+                message: format!("Instruction index {} out of bounds", instruction_index),
+            })
+        }
     }
 
     /// Internal method to parse instructions from the function body.
@@ -459,9 +495,9 @@ impl<'a> ParsedFunctionHeader<'a> {
             match UnifiedInstruction::parse(self.version, opcode, self.body, &mut offset) {
                 Ok((instruction, _bytes_read)) => {
                     instructions.push(HbcFunctionInstruction {
-                        offset: start_offset as u32,
+                        offset: InstructionOffset::from(start_offset as u32),
                         function_index: self.index as u32,
-                        instruction_index: instructions.len() as u32,
+                        instruction_index: InstructionIndex::from(instructions.len()),
                         instruction,
                     });
                 }

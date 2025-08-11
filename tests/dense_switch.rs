@@ -181,12 +181,12 @@ fn test_dense_switch_hbc_parsing() {
     let parsed_file = hermes_dec_rs::hbc::HbcFile::parse(&data).expect("Failed to parse HBC file");
 
     // Verify basic structure
-    assert_eq!(parsed_file.header.function_count(), 3);
+    assert_eq!(parsed_file.header.function_count(), 7);
     assert!(parsed_file.header.string_count() > 0);
 
     // Verify functions can be accessed
     let functions = &parsed_file.functions;
-    assert_eq!(functions.count(), 3);
+    assert_eq!(functions.count(), 7);
 
     // Verify we can get instructions for each function
     for i in 0..functions.count() {

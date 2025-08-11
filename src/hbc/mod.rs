@@ -10,12 +10,14 @@ use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
 
 pub mod header;
+pub mod instruction_types;
 pub mod instructions;
 pub mod regexp_bytecode;
 pub mod serialized_literal_parser;
 pub mod tables;
 
 pub use header::*;
+pub use instruction_types::*;
 pub use tables::*;
 
 /// Magic number for HBC files

@@ -240,7 +240,7 @@ impl GlobalSSAAnalyzer {
                 CapturedEnvironment {
                     parent_function: parent_func,
                     env_register: env_reg,
-                    capture_point: RegisterDef::new(dest_reg, Default::default(), 0, 0), // TODO: Get actual location
+                    capture_point: RegisterDef::new(dest_reg, Default::default(), crate::hbc::InstructionIndex::zero()), // TODO: Get actual location
                 },
             );
         }

@@ -71,7 +71,7 @@ fn rename_block(
             *version += 1;
 
             phi.result.version = *version;
-            phi.result.def_site.pc = cfg.graph()[block_id].start_pc();
+            phi.result.def_site.instruction_idx = cfg.graph()[block_id].start_pc();
 
             let ssa_value = phi.result.clone();
             analysis
@@ -99,8 +99,7 @@ fn rename_block(
                     let use_site = RegisterUse {
                         register: source_reg,
                         block_id,
-                        instruction_idx: inst_idx,
-                        pc,
+                        instruction_idx: pc,
                     };
                     analysis
                         .use_def_chains
@@ -124,8 +123,7 @@ fn rename_block(
             let def_site = RegisterDef {
                 register: target_reg,
                 block_id,
-                instruction_idx: inst_idx,
-                pc,
+                instruction_idx: pc,
             };
 
             let ssa_value = SSAValue {

@@ -4,14 +4,13 @@
 //! that properly handles sequential, nested, and chained conditionals.
 
 use crate::cfg::{Block, EdgeKind};
-use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::visit::EdgeRef;
-use std::collections::{HashMap, HashSet, VecDeque};
-
-use super::{
+use crate::cfg::analysis::{
     BranchType, ChainType, ConditionalBranch, ConditionalChain, ConditionalAnalysis,
     PostDominatorAnalysis, ChainStatistics, find_lowest_common_post_dominator,
 };
+use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph::visit::EdgeRef;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Build node-to-chain mappings recursively
 fn build_node_mappings_recursive(

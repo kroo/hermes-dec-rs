@@ -6,6 +6,7 @@
 use crate::cfg::analysis::{BranchType, ChainType, ConditionalBranch, ConditionalChain};
 use crate::cfg::{Cfg, EdgeKind};
 use crate::generated::unified_instructions::UnifiedInstruction;
+use crate::hbc::InstructionIndex;
 use oxc_allocator::Vec as AllocVec;
 use oxc_ast::{ast::*, AstBuilder};
 use oxc_span::Span;
@@ -371,7 +372,7 @@ impl<'a> ConditionalConverter<'a> {
             .ok_or("Condition block has no instructions")?;
 
         // Calculate the PC of the last instruction
-        let pc = condition_block.start_pc() + (condition_block.instructions().len() - 1) as u32;
+        let pc = condition_block.start_pc() + ((condition_block.instructions().len() - 1) as u32);
 
         // Get the edge from condition block to branch entry to determine polarity
         let edges: Vec<_> = cfg
@@ -392,8 +393,11 @@ impl<'a> ConditionalConverter<'a> {
         };
 
         // Build the base condition expression
-        let base_expr =
-            self.build_condition_from_instruction(&last_instr.instruction, pc, block_converter)?;
+        let base_expr = self.build_condition_from_instruction(
+            &last_instr.instruction,
+            pc.into(),
+            block_converter,
+        )?;
 
         // Apply negation if needed
         if needs_negation {
@@ -411,16 +415,16 @@ impl<'a> ConditionalConverter<'a> {
     fn build_condition_from_instruction(
         &mut self,
         instruction: &UnifiedInstruction,
-        pc: u32,
+        pc: InstructionIndex,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
         match instruction {
             // Simple boolean jumps
             UnifiedInstruction::JmpTrue { operand_0, .. } => {
-                self.create_register_expression(*operand_0 as u8, pc, block_converter)
+                self.create_register_expression(*operand_0 as u8, pc.into(), block_converter)
             }
             UnifiedInstruction::JmpTrueLong { operand_0, .. } => {
-                self.create_register_expression(*operand_0 as u8, pc, block_converter)
+                self.create_register_expression(*operand_0 as u8, pc.into(), block_converter)
             }
 
             UnifiedInstruction::JmpFalse { operand_0, .. } => {
@@ -643,7 +647,7 @@ impl<'a> ConditionalConverter<'a> {
         left_reg: u8,
         right_reg: u8,
         operator: BinaryOperator,
-        pc: u32,
+        pc: InstructionIndex,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
         let left = self.create_register_expression(left_reg, pc, block_converter)?;
@@ -795,7 +799,7 @@ impl<'a> ConditionalConverter<'a> {
     fn create_register_expression(
         &mut self,
         register: u8,
-        pc: u32,
+        pc: InstructionIndex,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
         // Get the SSA-aware variable name from the block converter

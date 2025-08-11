@@ -416,7 +416,7 @@ fn generate_single_function(
                 // Check if this instruction should have a label
                 if let Some(label_name) = hbc_file.jump_table.get_label_by_inst_index(
                     instruction.function_index,
-                    instruction.instruction_index,
+                    instruction.instruction_index.into(),
                 ) {
                     result.push_str(&format!("{}:\n", label_name));
                 }
@@ -438,7 +438,7 @@ fn generate_single_function(
                 // Check if this instruction should have a label
                 if let Some(label_name) = hbc_file.jump_table.get_label_by_inst_index(
                     instruction.function_index,
-                    instruction.instruction_index,
+                    instruction.instruction_index.into(),
                 ) {
                     result.push_str(&format!("{}:\n", label_name));
                 }

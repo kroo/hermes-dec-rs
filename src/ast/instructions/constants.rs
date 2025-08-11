@@ -5,6 +5,7 @@
 
 use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
 use oxc_ast::ast::VariableDeclarationKind;
+
 use oxc_span::Span;
 
 /// Trait providing constant loading helper methods
@@ -143,11 +144,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
         let value_expr = self.ast_builder.expression_boolean_literal(span, value);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(value_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(value_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -163,11 +160,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
         let value_expr = self.ast_builder.expression_null_literal(span);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(value_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(value_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -184,11 +177,8 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
         let undefined_expr = self.ast_builder.expression_identifier(span, undefined_atom);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(undefined_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt =
+            self.create_variable_declaration_or_assignment(&dest_var, Some(undefined_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -211,11 +201,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_string_literal(span, string_atom, None);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(string_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(string_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -241,11 +227,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_syntax::number::BigintBase::Decimal,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(bigint_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(bigint_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -266,11 +248,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let comment_atom = self.ast_builder.allocator.alloc_str(empty_comment);
         let empty_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(empty_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(empty_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -317,11 +295,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -368,11 +342,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -419,11 +389,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -470,11 +436,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }

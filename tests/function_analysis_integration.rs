@@ -34,8 +34,9 @@ fn test_constructor_detection() {
 
     // Check that the constructor is properly identified
     assert!(
-        result.contains("/* Constructor:"),
-        "Expected constructor comment"
+        result.contains("/*Constructor:"),
+        "Expected constructor comment in: {}",
+        result
     );
 }
 
@@ -53,7 +54,7 @@ fn test_method_classification() {
         .expect("Failed to decompile method");
 
     assert!(
-        result.contains("/* Method */"),
+        result.contains("/*Method*/"),
         "Expected method classification comment in:\n{}",
         result
     );
@@ -64,7 +65,7 @@ fn test_method_classification() {
         .expect("Failed to decompile prototype method");
 
     assert!(
-        prototype_result.contains("/* Prototype method */"),
+        prototype_result.contains("/*Prototype method*/"),
         "Expected prototype method classification comment in:\n{}",
         prototype_result
     );

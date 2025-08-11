@@ -7,7 +7,7 @@ use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::function_table::HbcFunctionInstruction;
 use crate::hbc::tables::jump_table::JumpTable;
 use crate::hbc::tables::switch_table::SwitchTable;
-use crate::hbc::HbcFile;
+use crate::hbc::{HbcFile, InstructionIndex};
 use petgraph::algo::dominators::{self, Dominators};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -20,9 +20,9 @@ pub struct CfgBuilder<'a> {
     /// Function this builder is associated with
     function_index: u32,
     /// Mapping from block start PC to node index
-    block_starts: HashMap<u32, NodeIndex>,
+    block_starts: HashMap<InstructionIndex, NodeIndex>,
     /// Mapping from every PC value within a block's range to the block node
-    pc_to_block: HashMap<u32, NodeIndex>,
+    pc_to_block: HashMap<InstructionIndex, NodeIndex>,
     /// Exit node for the current function (if any)
     exit_node: Option<NodeIndex>,
 }
@@ -247,7 +247,7 @@ impl<'a> CfgBuilder<'a> {
     ) -> Option<&SwitchTable> {
         self.hbc_file
             .switch_tables
-            .get_switch_table_by_instruction(self.function_index, instruction.instruction_index)
+            .get_switch_table_by_instruction(self.function_index, instruction.instruction_index.into())
     }
 
     /// Add exception handler edges to the CFG
@@ -275,13 +275,13 @@ impl<'a> CfgBuilder<'a> {
                             .byte_offset_to_instruction_index(self.function_index, handler.target)
                         {
                             // Find the catch block
-                            if let Some(&catch_node) = self.block_starts.get(&catch_target_idx) {
+                            if let Some(&catch_node) = self.block_starts.get(&InstructionIndex::from(catch_target_idx)) {
                                 // Find all blocks that are within the try range
                                 // Sort by PC to ensure deterministic order
                                 let mut blocks_in_range: Vec<_> = self
                                     .block_starts
                                     .iter()
-                                    .filter(|(pc, _)| **pc >= try_start_idx && **pc < try_end_idx)
+                                    .filter(|(pc, _)| **pc >= InstructionIndex::from(try_start_idx) && **pc < InstructionIndex::from(try_end_idx))
                                     .collect();
                                 blocks_in_range.sort_by_key(|(pc, _)| **pc);
 
@@ -322,7 +322,7 @@ impl<'a> CfgBuilder<'a> {
                 .cloned()
                 .collect();
 
-            blocks.push(Block::new(start_pc, block_instructions));
+            blocks.push(Block::new(start_pc.into(), block_instructions));
         }
 
         blocks
@@ -334,8 +334,11 @@ impl<'a> CfgBuilder<'a> {
         let end_pc = block.end_pc;
         let node_index = graph.add_node(block);
         self.block_starts.insert(start_pc, node_index);
-        for pc in start_pc..end_pc {
-            self.pc_to_block.insert(pc, node_index);
+        // Create instruction indices for each instruction in the block
+        let start_idx: usize = start_pc.into();
+        let end_idx: usize = end_pc.into();
+        for idx in start_idx..end_idx {
+            self.pc_to_block.insert(InstructionIndex::from(idx as u32), node_index);
         }
         node_index
     }
@@ -352,7 +355,7 @@ impl<'a> CfgBuilder<'a> {
             }
             let end_pc = block.end_pc();
             let instructions = block.instructions().to_vec();
-            block_ends.push((end_pc, node_index, instructions));
+            block_ends.push((end_pc.into(), node_index, instructions));
         }
 
         // Add edges based on control flow
@@ -380,7 +383,7 @@ impl<'a> CfgBuilder<'a> {
                         {
                             // Add edge for default case
                             if let Some(default_target) = switch_table.default_instruction_index {
-                                if let Some(&to_node) = self.block_starts.get(&default_target) {
+                                if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(default_target)) {
                                     graph.add_edge(from_node, to_node, EdgeKind::Default);
                                 }
                             }
@@ -388,7 +391,7 @@ impl<'a> CfgBuilder<'a> {
                             // Add edges for all switch cases
                             for (case_index, case) in switch_table.cases.iter().enumerate() {
                                 if let Some(target) = case.target_instruction_index {
-                                    if let Some(&to_node) = self.block_starts.get(&target) {
+                                    if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(target)) {
                                         graph.add_edge(
                                             from_node,
                                             to_node,
@@ -401,7 +404,7 @@ impl<'a> CfgBuilder<'a> {
                     } else {
                         // Handle regular jump instructions
                         if let Some(target) = self.get_jump_target(last_instruction, jump_table) {
-                            if let Some(&to_node) = self.block_starts.get(&target) {
+                            if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(target)) {
                                 let edge_kind = self.get_edge_kind(last_instruction);
                                 graph.add_edge(from_node, to_node, edge_kind);
                             }
@@ -410,7 +413,7 @@ impl<'a> CfgBuilder<'a> {
                         // Add fallthrough edge for conditional jumps
                         if self.is_conditional_jump(last_instruction) {
                             let fallthrough_pc = end_pc;
-                            if let Some(&to_node) = self.block_starts.get(&fallthrough_pc) {
+                            if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(fallthrough_pc)) {
                                 // For JmpFalse, the fallthrough is the True branch
                                 // For all other conditional jumps, the fallthrough is the False branch
                                 let fallthrough_edge_kind = match &last_instruction.instruction {
@@ -429,7 +432,7 @@ impl<'a> CfgBuilder<'a> {
                     {
                         // Add edge for default case
                         if let Some(default_target) = switch_table.default_instruction_index {
-                            if let Some(&to_node) = self.block_starts.get(&default_target) {
+                            if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(default_target)) {
                                 graph.add_edge(from_node, to_node, EdgeKind::Default);
                             }
                         }
@@ -437,7 +440,7 @@ impl<'a> CfgBuilder<'a> {
                         // Add edges for all switch cases
                         for (case_index, case) in switch_table.cases.iter().enumerate() {
                             if let Some(target) = case.target_instruction_index {
-                                if let Some(&to_node) = self.block_starts.get(&target) {
+                                if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(target)) {
                                     graph.add_edge(
                                         from_node,
                                         to_node,
@@ -454,19 +457,19 @@ impl<'a> CfgBuilder<'a> {
                     // Handle SaveGenerator instructions - create both fallthrough and resume edges
                     // 1. Generator Resume edge: to the resumption label
                     if let Some(target) = self.get_jump_target(last_instruction, jump_table) {
-                        if let Some(&to_node) = self.block_starts.get(&target) {
+                        if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(target)) {
                             graph.add_edge(from_node, to_node, EdgeKind::GeneratorResume);
                         }
                     }
                     // 2. Generator Fallthrough edge: to the next instruction
                     let fallthrough_pc = end_pc;
-                    if let Some(&to_node) = self.block_starts.get(&fallthrough_pc) {
+                    if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(fallthrough_pc)) {
                         graph.add_edge(from_node, to_node, EdgeKind::GeneratorFallthrough);
                     }
                 } else {
                     // Fallthrough to next block
                     let fallthrough_pc = end_pc;
-                    if let Some(&to_node) = self.block_starts.get(&fallthrough_pc) {
+                    if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(fallthrough_pc)) {
                         graph.add_edge(from_node, to_node, EdgeKind::Fall);
                     }
                 }
@@ -1456,12 +1459,12 @@ impl<'a> CfgBuilder<'a> {
 
     /// Get the block containing the given PC, if any
     pub fn get_block_at_pc(&self, pc: u32) -> Option<NodeIndex> {
-        self.pc_to_block.get(&pc).copied()
+        self.pc_to_block.get(&InstructionIndex::from(pc)).copied()
     }
 
     /// Check whether the given PC is within any block
     pub fn is_pc_in_block(&self, pc: u32) -> bool {
-        self.pc_to_block.contains_key(&pc)
+        self.pc_to_block.contains_key(&InstructionIndex::from(pc))
     }
 
     /// Get the EXIT node for the current function
@@ -1866,7 +1869,7 @@ impl<'a> CfgBuilder<'a> {
         // The jump table now includes both jump targets and exception handler targets
         hbc_file
             .jump_table
-            .get_label_by_inst_index(self.function_index, start_pc)
+            .get_label_by_inst_index(self.function_index, start_pc.into())
             .cloned()
     }
 }

@@ -1,6 +1,7 @@
 use super::function_table::HbcFunctionInstruction;
 use crate::generated::generated_traits::is_jump_instruction;
 use crate::generated::unified_instructions::UnifiedInstruction;
+use crate::hbc::InstructionIndex;
 use crate::DecompilerError;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -83,10 +84,13 @@ impl JumpTable {
         let mut label_counter = 0;
 
         // Build address-to-instruction-index mapping
-        let mut address_to_index = HashMap::new();
+        let mut address_to_index: HashMap<u32, u32> = HashMap::new();
         for instruction in instructions.iter() {
             // Record the current offset for this instruction
-            address_to_index.insert(instruction.offset, instruction.instruction_index);
+            address_to_index.insert(
+                instruction.offset.value(),
+                instruction.instruction_index.into(),
+            );
         }
 
         // First pass: identify all jump targets by converting addresses to instruction indices
@@ -98,7 +102,7 @@ impl JumpTable {
                     Self::extract_jump_target_relative_offset_static(&instruction.instruction)
                 {
                     // Convert address to instruction index
-                    let target_address = instruction.offset as i32 + relative_offset;
+                    let target_address = instruction.offset.value() as i32 + relative_offset;
                     if let Some(&target_index) = address_to_index.get(&(target_address as u32)) {
                         if !jump_targets.contains(&target_index) {
                             // update jump targets set
@@ -115,7 +119,7 @@ impl JumpTable {
 
                             // create jump instruction
                             jumps.push(JumpInstruction {
-                                instruction_index: instruction.instruction_index,
+                                instruction_index: instruction.instruction_index.into(),
                                 target_address: target_address as u32,
                                 resolved_label: Some(label_name.clone()),
                                 function_index: instruction.function_index,
@@ -125,20 +129,22 @@ impl JumpTable {
                             label_map.insert(target_index, label_name.clone());
 
                             // update jump map
-                            jump_map.insert(instruction.instruction_index, label_name.clone());
+                            jump_map
+                                .insert(instruction.instruction_index.into(), label_name.clone());
                         } else {
                             let label_name = label_map.get(&target_index).unwrap();
 
                             // create jump instruction
                             jumps.push(JumpInstruction {
-                                instruction_index: instruction.instruction_index,
+                                instruction_index: instruction.instruction_index.into(),
                                 target_address: target_address as u32,
                                 resolved_label: Some(label_name.clone()),
                                 function_index: instruction.function_index,
                             });
 
                             // update jump map
-                            jump_map.insert(instruction.instruction_index, label_name.clone());
+                            jump_map
+                                .insert(instruction.instruction_index.into(), label_name.clone());
                         }
                     }
                 }
@@ -289,7 +295,7 @@ impl JumpTable {
                     *default_offset,
                     *jump_table_offset,
                     jump_table_addr,
-                    instruction.instruction_index,
+                    instruction.instruction_index.into(),
                     function_index,
                 );
 
@@ -306,7 +312,7 @@ impl JumpTable {
                         {
                             // Update the case with the target instruction index
                             if let Some(case) = switch_table.cases.last_mut() {
-                                case.target_instruction_index = Some(target_instruction_index);
+                                case.target_instruction_index = Some(target_instruction_index.into());
                             }
                         }
                     }
@@ -317,7 +323,7 @@ impl JumpTable {
                 let default_jump_dest =
                     switch_instruction_absolute_offset as i32 + default_target_offset;
                 switch_table.default_instruction_index =
-                    address_to_index.get(&(default_jump_dest as u32)).copied();
+                    address_to_index.get(&(default_jump_dest as u32)).copied().map(|idx| idx.into());
 
                 switch_tables.push(switch_table);
             }
@@ -472,11 +478,11 @@ impl JumpTable {
     pub fn get_label_by_jump_op_index(
         &self,
         function_index: u32,
-        instruction_index: u32,
+        instruction_index: InstructionIndex,
     ) -> Option<&String> {
         self.jump_map
             .get(&function_index)
-            .and_then(|jumps| jumps.get(&instruction_index))
+            .and_then(|jumps| jumps.get(&instruction_index.into()))
     }
 
     /// Get all labels for a function

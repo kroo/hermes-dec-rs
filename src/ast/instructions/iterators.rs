@@ -3,7 +3,6 @@
 //! This module provides helper methods for generating statements for
 
 use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
-use oxc_ast::ast::VariableDeclarationKind;
 use oxc_span::Span;
 
 /// Trait providing miscellaneous operation helper methods
@@ -93,11 +92,7 @@ impl<'a> IteratorHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -156,11 +151,7 @@ impl<'a> IteratorHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -261,11 +252,7 @@ impl<'a> IteratorHelpers<'a> for InstructionToStatementConverter<'a> {
             Some(body),
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(func_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(func_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -313,11 +300,7 @@ impl<'a> IteratorHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(call_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }

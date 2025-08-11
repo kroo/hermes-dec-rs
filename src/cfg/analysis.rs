@@ -275,7 +275,11 @@ pub fn find_switch_regions(
 
     // Step 3: Find fallthrough switch patterns first (more specific pattern)
     let fallthrough_candidates =
-        super::fallthrough_switch_analysis::find_fallthrough_switch_patterns(graph, post_doms, &mut globally_processed_nodes);
+        super::fallthrough_switch_analysis::find_fallthrough_switch_patterns(
+            graph,
+            post_doms,
+            &mut globally_processed_nodes,
+        );
 
     for candidate in fallthrough_candidates {
         let region =
@@ -290,8 +294,11 @@ pub fn find_switch_regions(
     }
 
     // Step 4: Find sparse switch patterns (series of equality comparisons)
-    let sparse_candidates =
-        super::sparse_switch_analysis::find_sparse_switch_patterns(graph, post_doms, &mut globally_processed_nodes);
+    let sparse_candidates = super::sparse_switch_analysis::find_sparse_switch_patterns(
+        graph,
+        post_doms,
+        &mut globally_processed_nodes,
+    );
     for candidate in sparse_candidates {
         let region = super::sparse_switch_analysis::sparse_candidate_to_switch_region(&candidate);
         let region_idx = regions.len();
@@ -478,6 +485,7 @@ fn add_nodes_to_switch_region_mapping(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hbc::InstructionIndex;
     use petgraph::graph::DiGraph;
     use std::collections::HashMap;
 
@@ -488,44 +496,44 @@ mod tests {
 
         // Create a simple switch CFG: entry -> dispatch -> case1/case2/default -> join -> exit
         let entry = graph.add_node(Block {
-            start_pc: 0,
-            end_pc: 0,
+            start_pc: InstructionIndex::zero(),
+            end_pc: InstructionIndex::zero(),
             instructions: vec![],
             is_exit: false,
         });
         let dispatch = graph.add_node(Block {
-            start_pc: 1,
-            end_pc: 1,
+            start_pc: InstructionIndex::from(1u32),
+            end_pc: InstructionIndex::from(1u32),
             instructions: vec![],
             is_exit: false,
         });
         let case1 = graph.add_node(Block {
-            start_pc: 2,
-            end_pc: 2,
+            start_pc: InstructionIndex::from(2u32),
+            end_pc: InstructionIndex::from(2u32),
             instructions: vec![],
             is_exit: false,
         });
         let case2 = graph.add_node(Block {
-            start_pc: 3,
-            end_pc: 3,
+            start_pc: InstructionIndex::from(3u32),
+            end_pc: InstructionIndex::from(3u32),
             instructions: vec![],
             is_exit: false,
         });
         let default_case = graph.add_node(Block {
-            start_pc: 4,
-            end_pc: 4,
+            start_pc: InstructionIndex::from(4u32),
+            end_pc: InstructionIndex::from(4u32),
             instructions: vec![],
             is_exit: false,
         });
         let join = graph.add_node(Block {
-            start_pc: 5,
-            end_pc: 5,
+            start_pc: InstructionIndex::from(5u32),
+            end_pc: InstructionIndex::from(5u32),
             instructions: vec![],
             is_exit: false,
         });
         let exit = graph.add_node(Block {
-            start_pc: 6,
-            end_pc: 6,
+            start_pc: InstructionIndex::from(6u32),
+            end_pc: InstructionIndex::from(6u32),
             instructions: vec![],
             is_exit: true,
         });

@@ -222,7 +222,7 @@ fn extract_comparison_info(block: &Block) -> Option<(u8, i32)> {
             } => {
                 // Look for a preceding constant load
                 for (i, prev_instr) in block.instructions().iter().enumerate() {
-                    if i >= instr.instruction_index as usize {
+                    if i >= usize::from(instr.instruction_index) {
                         break;
                     }
 

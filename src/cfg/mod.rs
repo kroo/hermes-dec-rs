@@ -5,6 +5,7 @@
 pub mod analysis;
 pub mod block;
 pub mod builder;
+pub mod conditional_analysis;
 pub mod fallthrough_switch_analysis;
 pub mod regions;
 pub mod sparse_switch_analysis;
@@ -137,6 +138,13 @@ impl<'a> Cfg<'a> {
         self.graph.node_indices().next()
     }
 
+    /// Get blocks in original order
+    pub fn block_order(&self) -> Vec<NodeIndex> {
+        let mut result: Vec<NodeIndex> = self.graph.node_indices().collect();
+        result.sort();
+        result
+    }
+
     /// Get blocks in execution-friendly order (depth-first from entry, handling loops appropriately)
     pub fn execution_order(&self) -> Vec<NodeIndex> {
         let mut visited = std::collections::HashSet::new();
@@ -230,6 +238,18 @@ impl<'a> Cfg<'a> {
         }
     }
 
+    /// Analyze conditional chains in the CFG
+    pub fn analyze_conditional_chains(&self) -> Option<analysis::ConditionalAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::analyze_conditional_chains(&self.graph, &post_doms))
+    }
+    
+    /// Analyze switch regions in the CFG
+    pub fn analyze_switch_regions(&self) -> Option<analysis::SwitchAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::find_switch_regions(&self.graph, &post_doms))
+    }
+    
     /// Get blocks that need labels (are targets of jumps that aren't simple fall-through)
     pub fn blocks_needing_labels(&self) -> std::collections::HashSet<NodeIndex> {
         let mut needs_labels = std::collections::HashSet::new();
@@ -350,21 +370,6 @@ impl<'a> Cfg<'a> {
     /// Analyze post-dominators for the CFG
     pub fn analyze_post_dominators(&self) -> Option<analysis::PostDominatorAnalysis> {
         self.builder.analyze_post_dominators(&self.graph)
-    }
-
-    /// Analyze conditional chains including if/else-if/else patterns
-    pub fn analyze_conditional_chains(&self) -> Option<analysis::ConditionalAnalysis> {
-        let post_doms = self.analyze_post_dominators()?;
-        Some(analysis::analyze_conditional_chains(
-            &self.graph,
-            &post_doms,
-        ))
-    }
-
-    /// Analyze switch regions in the CFG
-    pub fn analyze_switch_regions(&self) -> Option<analysis::SwitchAnalysis> {
-        let post_doms = self.analyze_post_dominators()?;
-        Some(analysis::find_switch_regions(&self.graph, &post_doms))
     }
 
     /// Export CFG to DOT format with comprehensive analysis visualization
