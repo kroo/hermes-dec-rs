@@ -121,6 +121,11 @@ impl<'a> InstructionToStatementConverter<'a> {
         &mut self.register_manager
     }
 
+    /// Get reference to register manager
+    pub fn register_manager(&self) -> &RegisterManager {
+        &self.register_manager
+    }
+
     /// Get reference to AST builder
     pub fn ast_builder(&self) -> &'a OxcAstBuilder<'a> {
         self.ast_builder

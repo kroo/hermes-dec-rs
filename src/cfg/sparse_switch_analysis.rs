@@ -45,19 +45,27 @@ pub fn find_sparse_switch_patterns(
 ) -> Vec<SparseSwitchCandidate> {
     let mut candidates = Vec::new();
     let mut processed = HashSet::new();
+    
+    log::debug!("Starting sparse switch pattern detection");
+    log::debug!("Initially globally processed blocks: {:?}", globally_processed);
 
     // Look for chains of equality comparisons
     for node in graph.node_indices() {
         if processed.contains(&node) || globally_processed.contains(&node) {
+            log::trace!("Skipping node {:?} - already processed", node);
             continue;
         }
+        log::trace!("Checking node {:?} for sparse switch pattern", node);
 
         if let Some(candidate) = detect_sparse_switch_chain(graph, post_doms, node, &mut processed)
         {
             // Mark only comparison blocks as globally processed
             // Don't mark target blocks (case heads) as they might contain inner switches
+            log::trace!("Found sparse switch pattern with {} comparison blocks", candidate.comparison_blocks.len());
             for comp in &candidate.comparison_blocks {
+                log::trace!("Marking block {:?} as globally processed", comp.block_index);
                 globally_processed.insert(comp.block_index);
+                processed.insert(comp.block_index); // Also mark in local processed set
                 // Don't mark comp.target_block - it might contain an inner switch
             }
             // Don't mark default block either - it might contain an inner switch
@@ -66,6 +74,8 @@ pub fn find_sparse_switch_patterns(
         }
     }
 
+    log::debug!("Sparse switch detection complete. Found {} patterns", candidates.len());
+    log::debug!("Final globally processed blocks: {:?}", globally_processed);
     candidates
 }
 
@@ -76,6 +86,11 @@ fn detect_sparse_switch_chain(
     start_node: NodeIndex,
     processed: &mut HashSet<NodeIndex>,
 ) -> Option<SparseSwitchCandidate> {
+    // If this node has already been processed, skip it
+    if processed.contains(&start_node) {
+        return None;
+    }
+
     let block = &graph[start_node];
 
     // Check if this block contains a JStrictEqual comparison
@@ -87,14 +102,29 @@ fn detect_sparse_switch_chain(
 
     // This must be a conditional block with true/false branches
     let (_true_target, _false_target) = get_conditional_targets(graph, start_node)?;
+    
+    log::debug!("Starting sparse switch chain detection from block {:?}", start_node);
+    log::debug!("Comparing register r{}", compared_register);
 
     // Initialize tracking
     let mut comparison_blocks = Vec::new();
     let mut current_node = start_node;
     let mut seen_values = HashSet::new();
+    let mut chain_blocks = Vec::new(); // Track all blocks in this chain
 
     // Follow the chain of comparisons
     loop {
+        // Check if the next block in the chain has already been processed
+        // This prevents detecting overlapping chains
+        if current_node != start_node && processed.contains(&current_node) {
+            // If we haven't collected any blocks yet, this isn't a valid chain
+            if comparison_blocks.is_empty() {
+                return None;
+            }
+            // Otherwise, end the chain here
+            break;
+        }
+
         let block = &graph[current_node];
         let (reg, value, is_not_equal) = extract_comparison_info(block, graph, current_node)?;
 
@@ -108,7 +138,7 @@ fn detect_sparse_switch_chain(
             break;
         }
 
-        processed.insert(current_node);
+        chain_blocks.push(current_node);
 
         let (true_target, false_target) = get_conditional_targets(graph, current_node)?;
 
@@ -151,6 +181,15 @@ fn detect_sparse_switch_chain(
 
         // We need at least 2 comparisons to consider it a switch pattern
         if comparison_blocks.len() >= 2 {
+            log::debug!("Found valid sparse switch chain with {} comparisons", comparison_blocks.len());
+            log::debug!("Chain blocks: {:?}", chain_blocks);
+            log::debug!("Comparison blocks: {:?}", comparison_blocks.iter().map(|c| c.block_index).collect::<Vec<_>>());
+            
+            // Mark all blocks in the chain as processed
+            for block in chain_blocks {
+                processed.insert(block);
+            }
+            
             return Some(SparseSwitchCandidate {
                 compared_register,
                 comparison_blocks,

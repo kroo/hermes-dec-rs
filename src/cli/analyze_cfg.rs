@@ -35,7 +35,9 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
 
     // Perform variable analysis
     let _var_analysis = if let Some(fn_ssa) = &fn_ssa {
-        Some(crate::cfg::ssa::variable_analysis::analyze_variables(fn_ssa, &cfg)?)
+        Some(crate::cfg::ssa::variable_analysis::analyze_variables(
+            fn_ssa, &cfg,
+        )?)
     } else {
         None
     };
@@ -69,6 +71,21 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
         }
     } else {
         println!("No conditional chains found in this function.");
+    }
+
+    // Analyze switch patterns
+    let switch_analysis = cfg.analyze_switch_regions();
+    if let Some(ref analysis) = switch_analysis {
+        println!("\nSwitch Analysis:");
+        println!("  Total switch regions: {}", analysis.regions.len());
+        println!();
+
+        // Print detailed switch information
+        for (i, region) in analysis.regions.iter().enumerate() {
+            print_switch_region(&region, i, &cfg, fn_ssa, &hbc_file);
+        }
+    } else {
+        println!("\nNo switch patterns found in this function.");
     }
 
     // Print verbose analysis if requested
@@ -119,20 +136,30 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
         if let Some(var_mapping) = &var_mapping {
             println!("Variable Analysis:");
             println!("  Total variables: {}", var_mapping.ssa_to_var.len());
-            println!("  Function-scope variables: {}", var_mapping.function_scope_vars.len());
+            println!(
+                "  Function-scope variables: {}",
+                var_mapping.function_scope_vars.len()
+            );
             println!();
-            
+
             println!("Variable Usage:");
             let mut var_usage: Vec<_> = var_mapping.variable_usage.iter().collect();
             var_usage.sort_by_key(|(name, _)| name.as_str());
-            
+
             for (var_name, usage) in var_usage {
-                let const_str = if usage.should_be_const { "const" } else { "let" };
+                let const_str = if usage.should_be_const {
+                    "const"
+                } else {
+                    "let"
+                };
                 let param_str = if usage.is_parameter { " (param)" } else { "" };
-                let def_pcs: Vec<_> = usage.definition_pcs.iter()
+                let def_pcs: Vec<_> = usage
+                    .definition_pcs
+                    .iter()
                     .map(|pc| pc.value().to_string())
                     .collect();
-                println!("  {} {} - defined at PC: [{}], assignments: {}{}",
+                println!(
+                    "  {} {} - defined at PC: [{}], assignments: {}{}",
                     const_str,
                     var_name,
                     def_pcs.join(", "),
@@ -141,7 +168,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 );
             }
             println!();
-            
+
             println!("First Definitions:");
             let mut first_defs: Vec<_> = var_mapping.first_definitions.iter().collect();
             first_defs.sort_by_key(|(name, _)| name.as_str());
@@ -149,6 +176,50 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 println!("  {} - first defined at PC: {}", var_name, pc.value());
             }
             println!();
+        }
+    }
+
+    // Pre-compute switch patterns for all regions to avoid repeated detection
+    let mut all_switch_infos = Vec::new();
+    if let Some(ref analysis) = switch_analysis {
+        for region in &analysis.regions {
+            // Check if this is a sparse switch by examining the dispatch block
+            let dispatch_block = &cfg.graph()[region.dispatch];
+            let mut is_sparse = false;
+            for instr in dispatch_block.instructions() {
+                match &instr.instruction {
+                    crate::generated::unified_instructions::UnifiedInstruction::JStrictEqual { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JStrictEqualLong { .. } => {
+                        is_sparse = true;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            
+            if is_sparse && fn_ssa.is_some() {
+                let allocator = oxc_allocator::Allocator::default();
+                let ast_builder = oxc_ast::AstBuilder::new(&allocator);
+                let expression_context = crate::ast::context::ExpressionContext::with_hbc_file(&hbc_file);
+                let switch_converter = crate::ast::control_flow::switch_converter::SwitchConverter::with_context(&ast_builder, expression_context);
+                
+                if let Some(postdom) = cfg.analyze_post_dominators() {
+                    if let Some(switch_info) = switch_converter.detect_switch_pattern(
+                        region.dispatch,
+                        &cfg,
+                        fn_ssa.unwrap(),
+                        &postdom,
+                    ) {
+                        all_switch_infos.push(Some(switch_info));
+                    } else {
+                        all_switch_infos.push(None);
+                    }
+                } else {
+                    all_switch_infos.push(None);
+                }
+            } else {
+                all_switch_infos.push(None);
+            }
         }
     }
 
@@ -178,12 +249,98 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
             );
         }
 
+        // Add block-level switch annotations
+        if let Some(analysis) = &switch_analysis {
+            let mut block_annotations = Vec::new();
+            
+            for (region_idx, region) in analysis.regions.iter().enumerate() {
+                // Is this the dispatch block?
+                if region.dispatch == block_idx {
+                    block_annotations.push(format!("SWITCH_DISPATCH[{}]", region_idx));
+                }
+                
+                // Is this a case head?
+                for case in &region.cases {
+                    if case.case_head == block_idx {
+                        block_annotations.push(format!("CASE_HEAD[{}.{}]", region_idx, case.case_index));
+                    }
+                }
+                
+                // Is this the default head?
+                if let Some(default_head) = region.default_head {
+                    if default_head == block_idx {
+                        block_annotations.push(format!("DEFAULT_HEAD[{}]", region_idx));
+                    }
+                }
+                
+                // Is this the join block?
+                if region.join_block == block_idx {
+                    block_annotations.push(format!("SWITCH_JOIN[{}]", region_idx));
+                }
+                
+                // Is this a shared tail block?
+                if let Some(Some(switch_info)) = all_switch_infos.get(region_idx) {
+                    if let Some(shared_tail) = &switch_info.shared_tail {
+                        if shared_tail.block_id == block_idx {
+                            block_annotations.push(format!("SHARED_TAIL[{}]", region_idx));
+                        }
+                    }
+                }
+                
+                // Is this a comparison block?
+                if let Some(Some(switch_info)) = all_switch_infos.get(region_idx) {
+                    if switch_info.cases.iter().any(|c| c.comparison_block == block_idx) {
+                        block_annotations.push(format!("SWITCH_COMPARISON[{}]", region_idx));
+                    }
+                }
+            }
+            
+            if !block_annotations.is_empty() {
+                println!("  // {}", block_annotations.join(", "));
+            }
+        }
+        
         for phi_function in phi_functions {
             println!("  Phi function: {}", phi_function.format_phi_function());
         }
 
         for instruction in block.instructions() {
-            println!("  {}", instruction.format_instruction(&hbc_file));
+            let mut instruction_line = format!("  {}", instruction.format_instruction(&hbc_file));
+
+            // Add switch-related annotations (only instruction-specific ones)
+            if let Some(analysis) = &switch_analysis {
+                let mut annotations = Vec::new();
+
+                // Add instruction-specific annotations
+                match &instruction.instruction {
+                    crate::generated::unified_instructions::UnifiedInstruction::SwitchImm { .. } => {
+                        annotations.push("DENSE_SWITCH".to_string());
+                    }
+                    crate::generated::unified_instructions::UnifiedInstruction::Ret { .. } => {
+                        if analysis.regions.iter().any(|r| r.join_block == block_idx) {
+                            annotations.push("SHARED_RETURN".to_string());
+                        }
+                    }
+                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstString { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::LoadConstInt { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::LoadConstZero { .. } => {
+                        // Check if this is a case value load
+                        if analysis.regions.iter().any(|r| {
+                            r.cases.iter().any(|c| c.case_head == block_idx) ||
+                            r.default_head == Some(block_idx)
+                        }) {
+                            annotations.push("CASE_VALUE".to_string());
+                        }
+                    }
+                    _ => {}
+                }
+
+                if !annotations.is_empty() {
+                    instruction_line.push_str(&format!(" // {}", annotations.join(", ")));
+                }
+            }
+
+            println!("{}", instruction_line);
 
             if let Some(func_ssa) = fn_ssa {
                 let definition = func_ssa
@@ -200,14 +357,17 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 if let Some(def) = definition {
                     if let Some(ssa_value) = ssa_value {
                         // Get the coalesced representative if available
-                        let coalesced_info = if let Some(ref var_analysis) = func_ssa.variable_analysis {
-                            var_analysis.coalesced_values.get(ssa_value)
-                                .map(|representative| format!(" -> {}", representative.name()))
-                                .unwrap_or_else(|| " (not coalesced)".to_string())
-                        } else {
-                            String::new()
-                        };
-                        
+                        let coalesced_info =
+                            if let Some(ref var_analysis) = func_ssa.variable_analysis {
+                                var_analysis
+                                    .coalesced_values
+                                    .get(ssa_value)
+                                    .map(|representative| format!(" -> {}", representative.name()))
+                                    .unwrap_or_else(|| " (not coalesced)".to_string())
+                            } else {
+                                String::new()
+                            };
+
                         if let Some(phi) = phi_functions.iter().find(|p| p.register == def.register)
                         {
                             println!(
@@ -235,14 +395,18 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                     if let Some(reg_use_def) = reg_use_def {
                         if let Some(reg_use_def_value) = func_ssa.ssa_values.get(reg_use_def) {
                             // Get the coalesced representative if available
-                            let coalesced_info = if let Some(ref var_analysis) = func_ssa.variable_analysis {
-                                var_analysis.coalesced_values.get(reg_use_def_value)
+                            let coalesced_info = if let Some(ref var_analysis) =
+                                func_ssa.variable_analysis
+                            {
+                                var_analysis
+                                    .coalesced_values
+                                    .get(reg_use_def_value)
                                     .map(|representative| format!(" -> {}", representative.name()))
                                     .unwrap_or_else(|| " (not coalesced)".to_string())
                             } else {
                                 String::new()
                             };
-                            
+
                             if let Some(phi) = phi_functions
                                 .iter()
                                 .find(|phi| phi.register == reg_use_def.register)
@@ -329,4 +493,258 @@ fn print_chain_recursive(
     }
 
     println!();
+}
+
+/// Print detailed switch region information
+fn print_switch_region(
+    region: &crate::cfg::analysis::SwitchRegion,
+    index: usize,
+    cfg: &Cfg,
+    ssa: Option<&crate::cfg::ssa::SSAAnalysis>,
+    hbc_file: &HbcFile,
+) {
+    println!("Switch Region {}:", index);
+    println!(
+        "  Dispatch block: {} (block index {})",
+        region.dispatch.index(),
+        region.dispatch.index()
+    );
+    println!(
+        "  Join block: {} (block index {})",
+        region.join_block.index(),
+        region.join_block.index()
+    );
+
+    // Print case information
+    println!("  Cases:");
+    for case in &region.cases {
+        println!(
+            "    Case {}: head block {} (block index {})",
+            case.case_index,
+            case.case_head.index(),
+            case.case_head.index()
+        );
+    }
+
+    if let Some(default) = region.default_head {
+        println!(
+            "  Default: head block {} (block index {})",
+            default.index(),
+            default.index()
+        );
+    } else {
+        println!("  Default: None");
+    }
+
+    // Analyze if this is a sparse switch pattern
+    println!("\n  Pattern Analysis:");
+
+    // Check if dispatch block contains comparisons (sparse switch) or SwitchImm (dense switch)
+    let dispatch_block = &cfg.graph()[region.dispatch];
+    let mut is_sparse = false;
+    let mut _discriminator_reg = None;
+
+    for instr in dispatch_block.instructions() {
+        match &instr.instruction {
+            crate::generated::unified_instructions::UnifiedInstruction::SwitchImm { .. } => {
+                println!("    Type: Dense switch (SwitchImm instruction)");
+                break;
+            }
+            crate::generated::unified_instructions::UnifiedInstruction::JStrictEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | crate::generated::unified_instructions::UnifiedInstruction::JStrictEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            } => {
+                is_sparse = true;
+                // Try to identify which operand is the discriminator
+                _discriminator_reg = Some(*operand_1); // Assume first operand for now
+                println!("    Type: Sparse switch (JStrictEqual comparisons)");
+                println!(
+                    "    Discriminator register: r{} (comparing with r{})",
+                    operand_1, operand_2
+                );
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    // If sparse switch, try to analyze the pattern more deeply
+    if is_sparse {
+        println!("\n  Sparse Switch Analysis:");
+
+        // Create a temporary switch converter to use its pattern detection
+        let allocator = oxc_allocator::Allocator::default();
+        let ast_builder = oxc_ast::AstBuilder::new(&allocator);
+        let expression_context = crate::ast::context::ExpressionContext::with_hbc_file(hbc_file);
+        let switch_converter =
+            crate::ast::control_flow::switch_converter::SwitchConverter::with_context(
+                &ast_builder,
+                expression_context,
+            );
+
+        // Try to detect the switch pattern
+        if let Some(postdom) = cfg.analyze_post_dominators() {
+            // Only proceed if we have SSA analysis
+            if let Some(ssa_analysis) = ssa {
+                if let Some(switch_info) = switch_converter.detect_switch_pattern(
+                    region.dispatch,
+                    cfg,
+                    ssa_analysis,
+                    &postdom,
+                ) {
+                    println!("    Detected switch pattern:");
+                    println!("      Discriminator: r{}", switch_info.discriminator);
+                    println!("      Cases: {}", switch_info.cases.len());
+
+                    // Print case details
+                    for (i, case) in switch_info.cases.iter().enumerate() {
+                        println!("\n      Case {}:", i);
+                        println!("        Keys: {:?}", case.keys);
+                        println!("        Target block: {}", case.target_block.index());
+                        println!(
+                            "        Comparison block: {}",
+                            case.comparison_block.index()
+                        );
+                        println!("        Execution order: {}", case.execution_order);
+                        if !case.setup.is_empty() {
+                            println!(
+                                "        Setup instructions: {} instructions",
+                                case.setup.len()
+                            );
+                            for (i, setup) in case.setup.iter().enumerate() {
+                                println!(
+                                    "          [{}] {:?} = {:?}",
+                                    i, 
+                                    setup.ssa_value,
+                                    setup.value
+                                );
+                            }
+                        }
+                    }
+
+                    if let Some(default) = &switch_info.default_case {
+                        println!("\n      Default case:");
+                        println!("        Target block: {}", default.target_block.index());
+                    }
+
+                    // Analyze shared tail and PHI nodes
+                    if let Some(shared_tail) = &switch_info.shared_tail {
+                        println!("\n    Shared Tail Analysis:");
+                        println!("      Shared tail block: {}", shared_tail.block_id.index());
+                        println!("      PHI nodes: {}", shared_tail.phi_nodes.len());
+
+                        for (_reg, phi_node) in &shared_tail.phi_nodes {
+                            if let Some(ref ssa_phi) = phi_node.ssa_phi_value {
+                                println!("\n      PHI node: {} (register r{})", ssa_phi.name(), phi_node.register);
+                            } else {
+                                println!("\n      PHI node for register r{}:", phi_node.register);
+                            }
+                            println!("        Values by predecessor:");
+                            for (block_id, value) in &phi_node.values {
+                                println!(
+                                    "          Block {}: {}",
+                                    block_id.index(),
+                                    format_constant_value(value, hbc_file)
+                                );
+                            }
+                        }
+
+                        // Analyze what values each case contributes to PHI nodes
+                        println!("\n      Case PHI Contributions:");
+                        for (i, case) in switch_info.cases.iter().enumerate() {
+                            println!("        Case {} (keys {:?}):", i, case.keys);
+
+                            // Create a temporary case group to analyze PHI contributions
+                            let group = crate::ast::control_flow::switch_converter::CaseGroup {
+                                keys: case.keys.clone(),
+                                target_block: case.target_block,
+                                setup: case.setup.clone(),
+                                always_terminates: case.always_terminates,
+                                first_execution_order: case.execution_order,
+                                comparison_blocks: vec![case.comparison_block],
+                            };
+
+                            for (_reg, phi_node) in &shared_tail.phi_nodes {
+                                let phi_name = phi_node.ssa_phi_value.as_ref()
+                                    .map(|ssa| ssa.name())
+                                    .unwrap_or_else(|| format!("r{}", phi_node.register));
+                                
+                                if let Some(value) = switch_converter
+                                    .find_phi_contribution_for_case(&group, phi_node, cfg)
+                                {
+                                    println!(
+                                        "          {} = {}",
+                                        phi_name,
+                                        format_constant_value(&value, hbc_file)
+                                    );
+                                } else {
+                                    // Check if this case flows through a block that computes a value
+                                    if group.target_block != shared_tail.block_id {
+                                        println!("          {} = <computed value>", phi_name);
+                                    } else {
+                                        println!("          {} = <no contribution found>", phi_name);
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Analyze default case PHI contributions if it exists
+                        if let Some(default) = &switch_info.default_case {
+                            println!("        Default case:");
+                            
+                            for (_reg, phi_node) in &shared_tail.phi_nodes {
+                                let phi_name = phi_node.ssa_phi_value.as_ref()
+                                    .map(|ssa| ssa.name())
+                                    .unwrap_or_else(|| format!("r{}", phi_node.register));
+                                
+                                // Check if the PHI node has a value from the default target block
+                                if let Some(value) = phi_node.values.get(&default.target_block) {
+                                    println!(
+                                        "          {} = {}",
+                                        phi_name,
+                                        format_constant_value(&value, hbc_file)
+                                    );
+                                } else {
+                                    // Check if default flows through a block that computes a value
+                                    if default.target_block != shared_tail.block_id {
+                                        println!("          {} = <computed value>", phi_name);
+                                    } else {
+                                        println!("          {} = <no contribution found>", phi_name);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    println!("    Could not detect complete switch pattern");
+                }
+            } else {
+                println!("    SSA analysis not available for switch pattern detection");
+            }
+        }
+    }
+
+    println!();
+}
+
+/// Format a ConstantValue for display
+fn format_constant_value(
+    value: &crate::ast::control_flow::switch_converter::ConstantValue,
+    _hbc_file: &HbcFile,
+) -> String {
+    use crate::ast::control_flow::switch_converter::ConstantValue;
+
+    match value {
+        ConstantValue::Number(n) => format!("Number({})", n.0),
+        ConstantValue::String(s) => format!("String(\"{}\")", s),
+        ConstantValue::Boolean(b) => format!("Boolean({})", b),
+        ConstantValue::Null => "Null".to_string(),
+        ConstantValue::Undefined => "Undefined".to_string(),
+    }
 }

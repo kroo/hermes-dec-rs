@@ -1,1129 +1,1831 @@
-//! Switch statement conversion from CFG switch regions
+//! Switch statement conversion from CFG switch regions (Simplified Design)
 //!
-//! This module converts switch regions detected in the CFG into JavaScript switch statements.
+//! This module converts switch regions detected in the CFG into JavaScript switch statements
+//! using a simplified single-pass approach as described in the design document.
 
-use crate::cfg::{analysis::SwitchRegion, Cfg, EdgeKind};
-use crate::generated::unified_instructions::UnifiedInstruction;
+use crate::cfg::analysis::PostDominatorAnalysis;
+use crate::cfg::ssa::SSAAnalysis;
+use crate::cfg::{analysis::SwitchRegion, Cfg};
 use crate::generated::instruction_analysis::analyze_register_usage;
+use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::function_table::HbcFunctionInstruction;
-use crate::hbc::tables::switch_table::SwitchTable;
+use crate::hbc::InstructionIndex;
+use ordered_float::OrderedFloat;
 use oxc_allocator::Vec as ArenaVec;
 use oxc_ast::{
-    ast::{Expression, Statement, SwitchCase},
+    ast::{
+        AssignmentOperator, AssignmentTarget, Expression, SimpleAssignmentTarget, Statement,
+        SwitchCase,
+    },
     AstBuilder as OxcAstBuilder,
 };
 use oxc_span::Span;
+use oxc_syntax::number::NumberBase;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
-use std::collections::{HashMap, HashSet};
+use smallvec::SmallVec;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::rc::Rc;
 
 /// Error types for switch conversion
 #[derive(Debug, thiserror::Error)]
 pub enum SwitchConversionError {
     #[error("Invalid switch region: {0}")]
     InvalidRegion(String),
-    #[error("Missing switch instruction in dispatch block")]
+    #[error("Missing switch instruction")]
     MissingSwitchInstruction,
-    #[error("Failed to build switch expression: {0}")]
-    ExpressionBuildError(String),
-    #[error("Failed to convert case blocks: {0}")]
+    #[error("Failed to convert case: {0}")]
     CaseConversionError(String),
+    #[error("Switch too complex: {0}")]
+    TooComplex(String),
 }
 
-/// Information about a switch case
+/// Information about a switch pattern detected in the CFG (simplified approach)
 #[derive(Debug, Clone)]
-pub struct SwitchCaseInfo {
-    /// The case value (for now, only integer values)
-    pub value: i32,
-    /// The blocks that make up this case
-    pub blocks: Vec<NodeIndex>,
-    /// Whether this case has an explicit break
-    pub has_break: bool,
-    /// Whether this case falls through to the next
-    pub falls_through: bool,
+pub struct SwitchInfo {
+    /// The register being switched on
+    pub discriminator: u8,
+    /// Information about each case
+    pub cases: Vec<CaseInfo>,
+    /// Default case target and setup (if any)
+    pub default_case: Option<DefaultCase>,
+    /// Blocks that are part of this switch pattern
+    pub involved_blocks: HashSet<NodeIndex>,
+    /// Shared tail block that multiple cases jump to (if any)
+    pub shared_tail: Option<SharedTailInfo>,
 }
 
-/// Converts switch regions to JavaScript switch statements
+/// Information about a single case or group of cases
+#[derive(Debug, Clone)]
+pub struct CaseInfo {
+    /// The case keys (numeric or string)
+    pub keys: Vec<CaseKey>,
+    /// Setup instructions needed for this case (SmallVec for memory efficiency)
+    pub setup: SmallVec<[SetupInstruction; 4]>,
+    /// The target block for this case
+    pub target_block: NodeIndex,
+    /// Whether this case's body always terminates (return/throw)
+    pub always_terminates: bool,
+    /// Source compare block PC for deterministic ordering
+    pub source_pc: InstructionIndex,
+    /// Execution order index (order in which comparisons are evaluated)
+    pub execution_order: usize,
+    /// The comparison block for this case (for PHI tracking)
+    pub comparison_block: NodeIndex,
+}
+
+/// Default case information
+#[derive(Debug, Clone)]
+pub struct DefaultCase {
+    /// Target block for default
+    pub target_block: NodeIndex,
+    /// Setup instructions for default (often after last compare)
+    pub setup: SmallVec<[SetupInstruction; 4]>,
+}
+
+/// Information about a shared tail block
+#[derive(Debug, Clone)]
+pub struct SharedTailInfo {
+    /// The block that multiple cases converge to
+    pub block_id: NodeIndex,
+    /// PHI nodes needed (register -> case-specific values)
+    pub phi_nodes: HashMap<u8, PhiNode>,
+}
+
+/// PHI node information for join locals
+#[derive(Debug, Clone)]
+pub struct PhiNode {
+    /// The register being phi'd
+    pub register: u8,
+    /// Values per predecessor block
+    pub values: HashMap<NodeIndex, ConstantValue>,
+    /// SSA value that represents this PHI (if available)
+    pub ssa_phi_value: Option<crate::cfg::ssa::SSAValue>,
+}
+
+/// A group of consecutive cases that share the same behavior
+#[derive(Debug, Clone)]
+pub struct CaseGroup {
+    /// The case keys in this group (in execution order)
+    pub keys: Vec<CaseKey>,
+    /// The shared target block
+    pub target_block: NodeIndex,
+    /// The shared setup instructions
+    pub setup: SmallVec<[SetupInstruction; 4]>,
+    /// Whether this group's body always terminates
+    pub always_terminates: bool,
+    /// The execution order of the first case in the group
+    pub first_execution_order: usize,
+    /// The comparison blocks for each case in this group (parallel to keys)
+    pub comparison_blocks: Vec<NodeIndex>,
+}
+
+/// A setup instruction that needs to be emitted in a case
+#[derive(Debug, Clone)]
+pub struct SetupInstruction {
+    /// The SSA value being defined
+    pub ssa_value: crate::cfg::ssa::SSAValue,
+    /// The value to assign
+    pub value: ConstantValue,
+    /// Original instruction (for comments if needed)
+    pub instruction: HbcFunctionInstruction,
+}
+
+/// Case key types for switch statements
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CaseKey {
+    /// Numeric case key (supports Infinity/-Infinity)
+    Num(OrderedFloat<f64>),
+    /// String case key (for string switches)
+    /// Note: Rc<str> implements Eq by value comparison (string contents), not pointer identity
+    Str(Rc<str>),
+}
+
+impl CaseKey {
+    /// Normalize for grouping (treat +0 and -0 as same key)
+    pub fn normalize_for_grouping(&self) -> Self {
+        match self {
+            CaseKey::Num(n) if n.0 == 0.0 => CaseKey::Num(OrderedFloat(0.0)), // Normalize -0 to +0
+            _ => self.clone(),
+        }
+    }
+}
+
+/// Constant values that can be set up
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ConstantValue {
+    Number(OrderedFloat<f64>),
+    String(String),
+    Boolean(bool),
+    Null,
+    Undefined,
+}
+
+/// Setup signature for grouping - maps registers to their final values
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SetupSignature {
+    /// Map of register to its value (last writer wins)
+    pub register_values: BTreeMap<u8, ConstantValue>,
+    /// Target block for this setup
+    pub target: NodeIndex,
+}
+
+
+/// Context for comparison instruction analysis
+#[derive(Debug, Clone)]
+pub struct CompareContext {
+    pub compare_block: NodeIndex,
+    pub true_successor: NodeIndex,
+    pub false_successor: NodeIndex,
+    pub discriminator: u8,
+}
+
+/// Determines if a setup instruction is safe to sink into a case
+pub struct SetupSafetyChecker<'a> {
+    #[allow(dead_code)]
+    cfg: &'a Cfg<'a>,
+    #[allow(dead_code)]
+    ssa: &'a SSAAnalysis,
+    #[allow(dead_code)]
+    postdom: &'a PostDominatorAnalysis,
+    #[allow(dead_code)]
+    reachability_cache: RefCell<HashMap<(NodeIndex, NodeIndex), HashSet<NodeIndex>>>,
+}
+
+impl<'a> SetupSafetyChecker<'a> {
+    pub fn new(cfg: &'a Cfg<'a>, ssa: &'a SSAAnalysis, postdom: &'a PostDominatorAnalysis) -> Self {
+        Self {
+            cfg,
+            ssa,
+            postdom,
+            reachability_cache: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn is_case_localizable(
+        &self,
+        setup_instr: &SetupInstruction,
+        _compare_ctx: &CompareContext,
+    ) -> bool {
+        // Simplified safety check - for now, allow all constant loads and moves
+        // In a full implementation, this would check:
+        // 1. No observable effects between setup and use
+        // 2. Setup instruction is anchored to the comparison
+        // 3. No interference with other register definitions
+        matches!(
+            &setup_instr.instruction.instruction,
+            UnifiedInstruction::LoadConstString { .. }
+                | UnifiedInstruction::LoadConstStringLongIndex { .. }
+                | UnifiedInstruction::LoadConstUInt8 { .. }
+                | UnifiedInstruction::LoadConstInt { .. }
+                | UnifiedInstruction::LoadConstDouble { .. }
+                | UnifiedInstruction::LoadConstZero { .. }
+                | UnifiedInstruction::LoadConstNull { .. }
+                | UnifiedInstruction::LoadConstUndefined { .. }
+                | UnifiedInstruction::LoadConstTrue { .. }
+                | UnifiedInstruction::LoadConstFalse { .. }
+                | UnifiedInstruction::Mov { .. }
+        )
+    }
+
+    /// Check if an instruction uses a register
+    #[allow(dead_code)]
+    fn instruction_uses_register(&self, instr: &UnifiedInstruction, register: u8) -> bool {
+        // Use existing register analysis to determine register usage
+        let usage = analyze_register_usage(instr);
+        usage.sources.contains(&register)
+    }
+
+    /// Check if an instruction defines a register
+    #[allow(dead_code)]
+    fn instruction_defines_register(&self, instr: &UnifiedInstruction, register: u8) -> bool {
+        // Use existing register analysis to determine if register is defined
+        let usage = analyze_register_usage(instr);
+        usage.target == Some(register)
+    }
+}
+
+/// Switch statement converter using the simplified design
 pub struct SwitchConverter<'a> {
     ast_builder: &'a OxcAstBuilder<'a>,
-}
-
-/// Type of switch region
-#[derive(Debug, Clone, PartialEq)]
-pub enum SwitchType {
-    /// Dense switch with SwitchImm instruction and switch table
-    Dense,
-    /// Sparse switch detected from equality comparison chain
-    Sparse,
+    expression_context: Option<crate::ast::context::ExpressionContext<'a>>,
 }
 
 impl<'a> SwitchConverter<'a> {
     /// Create a new switch converter
     pub fn new(ast_builder: &'a OxcAstBuilder<'a>) -> Self {
-        Self { ast_builder }
-    }
-
-    /// Add a break statement with optional instruction comment
-    fn add_break_statement_with_comment(
-        &self,
-        statements: &mut ArenaVec<'a, Statement<'a>>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-        block_id: NodeIndex,
-        reason: &str,
-    ) {
-        let span = Span::default();
-        let break_stmt = self.ast_builder.break_statement(span, None);
-        let break_stmt = Statement::BreakStatement(self.ast_builder.alloc(break_stmt));
-        statements.push(break_stmt);
-
-        // Add comment to the break statement if we have a comment manager
-        if block_converter.include_instruction_comments() {
-            if let Some(ref mut comment_manager) = block_converter.comment_manager_mut() {
-                if let Some(stmt) = statements.last() {
-                    let comment = format!("Break from block {} - {}", block_id.index(), reason);
-                    comment_manager.add_comment(
-                        stmt,
-                        comment,
-                        crate::ast::comments::CommentKind::Line,
-                        crate::ast::comments::CommentPosition::Leading,
-                    );
-                }
-            }
+        Self {
+            ast_builder,
+            expression_context: None,
         }
     }
 
-    /// Convert a single instruction and add it to statements
-    fn convert_single_instruction(
-        &self,
-        instr: &HbcFunctionInstruction,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-        statements: &mut ArenaVec<'a, Statement<'a>>,
-        block_id: NodeIndex,
-        cfg: &Cfg<'a>,
-    ) -> Result<(), SwitchConversionError> {
-        // Create a temporary block with just this instruction
-        let temp_block = crate::cfg::Block::new(
-            instr.instruction_index,
-            vec![instr.clone()],
-        );
-        
-        // Use the block converter to convert this single instruction
-        match block_converter.convert_block_with_options(
-            &temp_block,
-            block_id,
-            cfg.graph(),
-            None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>, // No filter needed for single instruction
-            true, // Skip phi declarations for single instructions
-        ) {
-            Ok(result_statements) => {
-                statements.extend(result_statements);
-                Ok(())
-            }
-            Err(e) => Err(SwitchConversionError::CaseConversionError(format!(
-                "Failed to convert instruction: {}",
-                e
-            ))),
+    /// Create a new switch converter with expression context
+    pub fn with_context(
+        ast_builder: &'a OxcAstBuilder<'a>,
+        expression_context: crate::ast::context::ExpressionContext<'a>,
+    ) -> Self {
+        Self {
+            ast_builder,
+            expression_context: Some(expression_context),
         }
     }
 
-    /// Create a switch case with optional comment about its source block
-    fn create_switch_case_with_comment(
-        &self,
-        test: Option<Expression<'a>>,
-        consequent: ArenaVec<'a, Statement<'a>>,
-        _block_converter: &mut super::BlockToStatementConverter<'a>,
-        _source_block_id: NodeIndex,
-        _case_info: &str,
-    ) -> SwitchCase<'a> {
-        let span = Span::default();
-        let switch_case = self.ast_builder.switch_case(span, test, consequent);
-        
-        // We can't add comments directly to SwitchCase since it doesn't implement GetAddress
-        // Instead, we should add comments to the statements within the case
-        // For now, just return the switch case without the comment
-        
-        switch_case
-    }
-
-
-    /// Convert a switch region to a switch statement
+    /// Convert a switch region to statements (compatibility method for block converter)
     pub fn convert_switch_region(
         &mut self,
         region: &SwitchRegion,
         cfg: &Cfg<'a>,
         block_converter: &mut super::BlockToStatementConverter<'a>,
     ) -> Result<Vec<Statement<'a>>, SwitchConversionError> {
-        let mut statements = Vec::new();
-
-        // Determine the type of switch
-        let switch_type = self.detect_switch_type(region, cfg)?;
-        
-        // No complexity check - handle all sparse switches as switch statements
-
-        // First, process any setup instructions in the dispatch block
-        // (e.g., LoadParam instructions that come before the switch)
+        // Check if this is a dense switch (SwitchImm instruction)
         let dispatch_block = &cfg.graph()[region.dispatch];
+        let has_switch_imm = dispatch_block
+            .instructions()
+            .iter()
+            .any(|instr| matches!(&instr.instruction, UnifiedInstruction::SwitchImm { .. }));
 
-        // Find where the switch/comparison starts
-        let switch_start_idx = match switch_type {
-            SwitchType::Dense => {
-                // Find the SwitchImm instruction
-                dispatch_block
-                    .instructions()
-                    .iter()
-                    .position(|instr| {
-                        matches!(instr.instruction, UnifiedInstruction::SwitchImm { .. })
-                    })
-                    .ok_or(SwitchConversionError::MissingSwitchInstruction)?
+        if has_switch_imm {
+            // This is a dense switch - convert it to AST
+            return self.convert_dense_switch_region(region, cfg, block_converter);
+        }
+
+        // For sparse switch regions, we need to find all comparison blocks
+        // Start from dispatch block and follow the chain
+        let mut comparison_blocks = HashSet::new();
+        let mut current = region.dispatch;
+        let mut visited = HashSet::new();
+
+        // Collect all blocks that are part of the comparison chain
+        loop {
+            if !visited.insert(current) {
+                break;
             }
-            SwitchType::Sparse => {
-                // Find the first comparison instruction
-                dispatch_block
-                    .instructions()
-                    .iter()
-                    .position(|instr| {
-                        matches!(
-                            instr.instruction,
-                            UnifiedInstruction::JStrictEqual { .. }
-                                | UnifiedInstruction::JStrictEqualLong { .. }
-                        )
-                    })
-                    .ok_or(SwitchConversionError::MissingSwitchInstruction)?
+
+            comparison_blocks.insert(current);
+            let block = &cfg.graph()[current];
+
+            // Check if this block has a comparison
+            let has_comparison = block.instructions().iter().any(|instr| {
+                matches!(
+                    &instr.instruction,
+                    UnifiedInstruction::JStrictEqual { .. }
+                        | UnifiedInstruction::JStrictEqualLong { .. }
+                        | UnifiedInstruction::JStrictNotEqual { .. }
+                        | UnifiedInstruction::JStrictNotEqualLong { .. }
+                )
+            });
+
+            if !has_comparison {
+                break;
             }
+
+            // Follow false edge to next comparison
+            if let Some(next) = self.get_false_successor(current, cfg) {
+                // Check if next block is still part of comparison chain
+                if next != region.join_block && !region.cases.iter().any(|c| c.case_head == next) {
+                    current = next;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        // Mark all comparison block instructions as rendered
+        for block_id in &comparison_blocks {
+            let block = &cfg.graph()[*block_id];
+            for instruction in block.instructions() {
+                block_converter.mark_instruction_rendered(instruction);
+            }
+        }
+
+        // Create SSA and postdominator analysis for pattern detection using existing infrastructure
+        let ssa_analysis = crate::cfg::ssa::construct_ssa(cfg, 0).map_err(|e| {
+            SwitchConversionError::TooComplex(format!("SSA construction failed: {}", e))
+        })?;
+
+        // Use existing postdominator analysis from cfg builder
+        let postdom_analysis = cfg
+            .builder()
+            .analyze_post_dominators(cfg.graph())
+            .ok_or_else(|| {
+                SwitchConversionError::TooComplex(
+                    "Failed to compute postdominator analysis".to_string(),
+                )
+            })?;
+
+        // Try to detect a switch pattern in the switch region
+        if let Some(switch_info) =
+            self.detect_switch_pattern(region.dispatch, cfg, &ssa_analysis, &postdom_analysis)
+        {
+            // Convert the detected switch pattern to AST
+            match self.convert_switch_pattern(&switch_info, cfg, block_converter) {
+                Ok(statements) => {
+                    // Mark all instructions in involved blocks as rendered
+                    // BUT exclude the shared tail block - it needs to be processed after the switch
+                    for block_id in &switch_info.involved_blocks {
+                        // Skip the shared tail block if it exists
+                        if let Some(ref shared_tail) = switch_info.shared_tail {
+                            if *block_id == shared_tail.block_id {
+                                continue; // Don't mark shared tail instructions as rendered
+                            }
+                        }
+
+                        let block = &cfg.graph()[*block_id];
+                        for instruction in block.instructions() {
+                            block_converter.mark_instruction_rendered(instruction);
+                        }
+                    }
+                    return Ok(statements);
+                }
+                Err(e) => {
+                    // Log the error and fall back to block-by-block conversion
+                    eprintln!("Warning: Switch pattern conversion failed: {}", e);
+                }
+            }
+        }
+
+        // Fall back to traditional block-by-block conversion
+        // This is a simplified fallback - in practice, block_converter would
+        // handle the individual blocks in the switch region
+        Ok(Vec::new())
+    }
+
+    /// Detect if a block starts a sparse switch pattern (simplified approach)
+    pub fn detect_switch_pattern(
+        &self,
+        start_block: NodeIndex,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+        postdom: &PostDominatorAnalysis,
+    ) -> Option<SwitchInfo> {
+        // Quick check: does this block load a parameter or have a comparison?
+        let first_block = &cfg.graph()[start_block];
+        let discriminator = self.find_discriminator(first_block, start_block, cfg)?;
+
+        // Safety checker for setup instructions
+        let safety_checker = SetupSafetyChecker::new(cfg, ssa, postdom);
+
+        // Follow the comparison chain
+        let mut current_block = start_block;
+        let mut cases = Vec::new();
+        let mut involved_blocks = HashSet::new();
+        let mut visited = HashSet::new();
+        let mut execution_order = 0;
+
+        // Track which registers are live across false edges
+        let live_across_false = HashSet::new();
+
+        loop {
+            if !visited.insert(current_block) {
+                break; // Avoid infinite loops
+            }
+
+            involved_blocks.insert(current_block);
+            let block = &cfg.graph()[current_block];
+
+            // Look for comparison pattern
+            if let Some(mut case_info) =
+                self.extract_case_from_block(block, discriminator, current_block, cfg, ssa)
+            {
+                // Create compare context for anchored safety checks
+                let true_successor = case_info.target_block;
+                let false_successor = self.get_false_successor(current_block, cfg)?;
+                let compare_ctx = CompareContext {
+                    compare_block: current_block,
+                    true_successor,
+                    false_successor,
+                    discriminator,
+                };
+
+                // Filter setup instructions by safety
+                case_info.setup.retain(|setup_instr| {
+                    safety_checker.is_case_localizable(setup_instr, &compare_ctx)
+                });
+
+                // Set execution order
+                case_info.execution_order = execution_order;
+                execution_order += 1;
+
+                cases.push(case_info);
+
+                // Move to false successor to continue the chain
+                current_block = false_successor;
+            } else {
+                // No more comparisons found - this might be the default case
+                break;
+            }
+        }
+
+        // We need at least 2 cases to form a switch
+        if cases.len() < 2 {
+            return None;
+        }
+
+        // Determine default case
+        let default_case = if current_block != start_block {
+            // If we ended up at a different block, it might be the default
+            let setup = self
+                .extract_default_setup(current_block, &live_across_false, cfg, ssa)
+                .unwrap_or_default();
+
+            Some(DefaultCase {
+                target_block: current_block,
+                setup,
+            })
+        } else {
+            None
         };
 
-        // Check if the dispatch block needs phi declarations
-        if region.dispatch == cfg.entry_node().unwrap_or(NodeIndex::new(0)) {
-            // Process phi declarations for the entry block
-            let dispatch_block = &cfg.graph()[region.dispatch];
-            match block_converter.convert_block_with_options(
-                dispatch_block,
-                region.dispatch,
-                cfg.graph(),
-                Some(|_: &crate::hbc::function_table::HbcFunctionInstruction, _: bool| -> bool {
-                    false // Don't process any instructions, just phi declarations
-                }),
-                false, // Don't skip phi declarations
+        // 3. Detect shared tail block
+        let shared_tail = self.detect_shared_tail(&cases, &default_case, postdom, cfg, ssa);
+
+        // 4. Check PHI scenarios and control flow (more expensive)
+        if self.should_bail_out_for_phi_scenarios(&shared_tail) {
+            return None;
+        }
+
+        if self.should_bail_out_for_control_flow(&involved_blocks, cfg) {
+            return None;
+        }
+
+        if self.should_bail_out_for_constants(&cases) {
+            return None;
+        }
+
+        Some(SwitchInfo {
+            discriminator,
+            cases,
+            default_case,
+            involved_blocks,
+            shared_tail,
+        })
+    }
+
+    /// Convert a switch pattern to switch statement AST nodes
+    pub fn convert_switch_pattern(
+        &mut self,
+        switch_info: &SwitchInfo,
+        cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<Vec<Statement<'a>>, SwitchConversionError> {
+        let mut statements = Vec::new();
+
+        // Create discriminator expression based on the register used in switch
+        let discriminator_expr = self.create_discriminator_expression(switch_info.discriminator);
+
+        // Get SSA analysis from block converter (required for proper switch handling)
+        let ssa = block_converter
+            .ssa_analysis()
+            .expect("SSA analysis required for switch conversion");
+
+        // Group consecutive cases that share the same target and setup
+        let case_groups = self.group_consecutive_cases(&switch_info.cases, cfg, ssa);
+
+        // Collect all PHI nodes that need declarations:
+        // 1. PHI nodes from shared tail
+        // 2. PHI nodes referenced in setup instructions
+        let mut all_phi_nodes = HashMap::new();
+        
+        // Add shared tail PHI nodes
+        if let Some(shared_tail) = &switch_info.shared_tail {
+            all_phi_nodes.extend(shared_tail.phi_nodes.clone());
+        }
+        
+        // Find PHI nodes referenced in setup instructions
+        self.collect_phi_nodes_from_setup(&switch_info, &mut all_phi_nodes, cfg, ssa);
+        
+        // Create declarations for all collected PHI nodes
+        if !all_phi_nodes.is_empty() {
+            let phi_declarations = self.create_join_locals_for_phi_nodes(
+                &all_phi_nodes,
+                cfg,
+                block_converter,
+            )?;
+            statements.extend(phi_declarations);
+        }
+
+        // Generate switch cases
+        let mut switch_cases = ArenaVec::new_in(self.ast_builder.allocator);
+
+        for (i, group) in case_groups.iter().enumerate() {
+            // For groups with multiple keys, create multiple cases
+            if group.keys.len() > 1 {
+                // Create empty cases for all but the last key
+                for key in &group.keys[..group.keys.len() - 1] {
+                    let test_expr = Some(self.create_constant_expression(key));
+                    let empty_statements = ArenaVec::new_in(self.ast_builder.allocator);
+                    let span = Span::default();
+                    let empty_case =
+                        self.ast_builder
+                            .switch_case(span, test_expr, empty_statements);
+                    switch_cases.push(empty_case);
+                }
+            }
+
+            // Create the actual case with the body for the last key
+            let is_last_group = i == case_groups.len() - 1;
+            let switch_case = self.convert_case_group(
+                group,
+                cfg,
+                block_converter,
+                switch_info,
+                is_last_group,
+                i,
+                &case_groups,
+            )?;
+            switch_cases.push(switch_case);
+        }
+
+        // Handle default case
+        if let Some(default_case) = &switch_info.default_case {
+            let default_switch_case =
+                self.convert_default_case(default_case, cfg, block_converter, switch_info)?;
+            switch_cases.push(default_switch_case);
+        }
+
+        // Create the switch statement
+        let span = Span::default();
+        let switch_stmt = self
+            .ast_builder
+            .switch_statement(span, discriminator_expr, switch_cases);
+
+        statements.push(Statement::SwitchStatement(
+            self.ast_builder.alloc(switch_stmt),
+        ));
+
+        Ok(statements)
+    }
+
+    /// Group consecutive cases that share the same target and setup
+    /// But don't group cases that would have different PHI contributions to the target block
+    fn group_consecutive_cases(
+        &self,
+        cases: &[CaseInfo],
+        _cfg: &Cfg<'a>,
+        _ssa: &SSAAnalysis,
+    ) -> Vec<CaseGroup> {
+        let mut groups = Vec::new();
+        let mut i = 0;
+
+        while i < cases.len() {
+            let mut group_keys = vec![cases[i].keys[0].clone()];
+            let mut comparison_blocks = vec![cases[i].comparison_block];
+            let target = cases[i].target_block;
+            let setup = cases[i].setup.clone();
+            // eprintln!("Case at index {} has {} setup instructions", i, setup.len());
+            let first_order = cases[i].execution_order;
+            let mut j = i + 1;
+
+            // Group consecutive cases with same target and setup
+            while j < cases.len() {
+                // Check if next case is consecutive in execution order
+                if cases[j].execution_order != cases[j - 1].execution_order + 1 {
+                    break;
+                }
+
+                // Check if target matches
+                if cases[j].target_block == target {
+                    // Allow grouping if:
+                    // 1. Setup instructions are equal, OR
+                    // 2. The next case has no setup (relies on previous case's setup)
+                    if self.setup_instructions_equal(&cases[j].setup, &setup) || cases[j].setup.is_empty() {
+                        group_keys.push(cases[j].keys[0].clone());
+                        comparison_blocks.push(cases[j].comparison_block);
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            // eprintln!("Creating group with {} keys, setup={:?}", group_keys.len(), setup.len());
+            groups.push(CaseGroup {
+                keys: group_keys,
+                target_block: target,
+                setup,
+                always_terminates: cases[i].always_terminates,
+                first_execution_order: first_order,
+                comparison_blocks,
+            });
+
+            i = j;
+        }
+
+        groups
+    }
+
+    /// Check if two setup instruction lists are equal
+    fn setup_instructions_equal(
+        &self,
+        a: &SmallVec<[SetupInstruction; 4]>,
+        b: &SmallVec<[SetupInstruction; 4]>,
+    ) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+
+        for (instr_a, instr_b) in a.iter().zip(b.iter()) {
+            if instr_a.ssa_value.register != instr_b.ssa_value.register
+                || !self.constant_values_equal(&instr_a.value, &instr_b.value)
+            {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Check if two constant values are equal
+    fn constant_values_equal(&self, a: &ConstantValue, b: &ConstantValue) -> bool {
+        match (a, b) {
+            (ConstantValue::Number(n1), ConstantValue::Number(n2)) => n1 == n2,
+            (ConstantValue::String(s1), ConstantValue::String(s2)) => s1 == s2,
+            (ConstantValue::Boolean(b1), ConstantValue::Boolean(b2)) => b1 == b2,
+            (ConstantValue::Null, ConstantValue::Null) => true,
+            (ConstantValue::Undefined, ConstantValue::Undefined) => true,
+            _ => false,
+        }
+    }
+
+    /// Group cases by normalized setup signatures for consistent ordering
+    fn group_cases_by_setup(&self, cases: &[CaseInfo]) -> Vec<(SetupSignature, Vec<CaseInfo>)> {
+        let mut groups: HashMap<SetupSignature, Vec<CaseInfo>> = HashMap::new();
+
+        for case in cases {
+            let normalized_signature = self.normalize_setup(&case.setup, case.target_block);
+            groups
+                .entry(normalized_signature)
+                .or_default()
+                .push(case.clone());
+        }
+
+        // Sort groups by the minimum execution order in each group to preserve evaluation order
+        let mut sorted_groups: Vec<_> = groups.into_iter().collect();
+        sorted_groups.sort_by(|(_, cases_a), (_, cases_b)| {
+            // Get minimum execution order from each group
+            let min_order_a = cases_a.iter().map(|c| c.execution_order).min().unwrap_or(0);
+            let min_order_b = cases_b.iter().map(|c| c.execution_order).min().unwrap_or(0);
+            min_order_a.cmp(&min_order_b)
+        });
+
+        sorted_groups
+    }
+
+    /// Create discriminator expression from register
+    fn create_discriminator_expression(&self, register: u8) -> Expression<'a> {
+        let span = Span::default();
+        // For now, if register is r3 and it's loaded with LoadParam index 1, use arg0
+        // In a real implementation, we'd track parameter mappings properly
+        let name = if register == 3 {
+            "arg0".to_string()
+        } else {
+            format!("r{}", register)
+        };
+        let name_atom = self.ast_builder.allocator.alloc_str(&name);
+        let identifier = self.ast_builder.identifier_reference(span, name_atom);
+        Expression::Identifier(self.ast_builder.alloc(identifier))
+    }
+
+    /// Convert a case group to a switch case AST node
+    fn convert_case_group(
+        &mut self,
+        group: &CaseGroup,
+        cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+        switch_info: &SwitchInfo,
+        _is_last_group: bool,
+        group_index: usize,
+        all_groups: &[CaseGroup],
+    ) -> Result<SwitchCase<'a>, SwitchConversionError> {
+        if group.keys.is_empty() {
+            return Err(SwitchConversionError::InvalidRegion(
+                "Empty case group".to_string(),
+            ));
+        }
+
+        // Use the last key in the group for the case with body
+        let test_expr = Some(self.create_constant_expression(&group.keys[group.keys.len() - 1]));
+
+        // Convert the case body
+        let mut case_statements = ArenaVec::new_in(self.ast_builder.allocator);
+
+        // Check if this case goes directly to the shared tail
+        if let Some(shared_tail) = &switch_info.shared_tail {
+            if group.target_block == shared_tail.block_id {
+                // This case goes directly to the shared tail
+                // Generate code based on PHI node contributions
+                self.generate_case_body_for_shared_tail(
+                    &mut case_statements,
+                    group,
+                    shared_tail,
+                    cfg,
+                    block_converter,
+                )?;
+            } else {
+                // Check if the target block has PHI nodes
+                let has_phi = block_converter
+                    .ssa_analysis()
+                    .and_then(|ssa| ssa.phi_functions.get(&group.target_block))
+                    .map(|phis| !phis.is_empty())
+                    .unwrap_or(false);
+
+                if has_phi {
+                    // Target block has PHI nodes - generate PHI assignments
+                    self.generate_case_body_with_phi_assignments(
+                        &mut case_statements,
+                        group,
+                        group.target_block,
+                        cfg,
+                        block_converter,
+                    )?;
+                } else {
+                    // No PHI nodes - convert normally
+                    self.convert_target_block_normally(
+                        &mut case_statements,
+                        group,
+                        cfg,
+                        block_converter,
+                    )?;
+                }
+            }
+        } else {
+            // No shared tail - still need to check for PHI nodes in target
+            let has_phi = block_converter
+                .ssa_analysis()
+                .and_then(|ssa| ssa.phi_functions.get(&group.target_block))
+                .map(|phis| !phis.is_empty())
+                .unwrap_or(false);
+
+            if has_phi {
+                // Target block has PHI nodes - generate PHI assignments
+                self.generate_case_body_with_phi_assignments(
+                    &mut case_statements,
+                    group,
+                    group.target_block,
+                    cfg,
+                    block_converter,
+                )?;
+            } else {
+                // No PHI nodes - convert normally
+                self.convert_target_block_normally(
+                    &mut case_statements,
+                    group,
+                    cfg,
+                    block_converter,
+                )?;
+            }
+        }
+
+        // Check if we need to include fallthrough blocks that have PHI nodes
+        // This happens when the current block flows to the next group's target block
+        // and that target has PHI nodes. We need to duplicate the block to ensure
+        // correct execution when falling through from this case.
+        if group_index + 1 < all_groups.len() {
+            let next_group = &all_groups[group_index + 1];
+
+            // Check if current block falls through to next group's target
+            let blocks_are_consecutive = {
+                let current_idx = group.target_block.index();
+                let next_idx = next_group.target_block.index();
+                next_idx == current_idx + 1
+            };
+
+            if blocks_are_consecutive
+                || self.block_flows_to(group.target_block, next_group.target_block, cfg)
+            {
+                // Don't duplicate the shared tail
+                let is_shared_tail = if let Some(shared_tail) = &switch_info.shared_tail {
+                    if next_group.target_block == shared_tail.block_id {
+                        // Skip duplicating the shared tail - it will be generated after the switch
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                // Check if the next block has PHI nodes
+                if let Some(ssa) = block_converter.ssa_analysis() {
+                    if let Some(phi_functions) = ssa.phi_functions.get(&next_group.target_block) {
+                        if !phi_functions.is_empty() && !is_shared_tail {
+                            // We need to duplicate the next block(s) here
+                            // This ensures correct PHI values for the fallthrough path
+                            let target_block = &cfg.graph()[next_group.target_block];
+                            match block_converter.convert_block_with_marking_control(
+                                target_block,
+                                next_group.target_block,
+                                cfg.graph(),
+                                None::<
+                                    fn(
+                                        &crate::hbc::function_table::HbcFunctionInstruction,
+                                        bool,
+                                    ) -> bool,
+                                >,
+                                false,
+                                false, // don't mark as rendered
+                            ) {
+                                Ok(statements) => {
+                                    case_statements.extend(statements);
+                                }
+                                Err(e) => {
+                                    return Err(SwitchConversionError::CaseConversionError(
+                                        format!("Failed to convert fallthrough block: {}", e),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add break if this case doesn't fall through
+        if self.should_add_break_for_group(
+            group,
+            switch_info,
+            cfg,
+            group_index,
+            all_groups,
+            block_converter,
+        ) {
+            let span = Span::default();
+            let break_stmt = self.ast_builder.break_statement(span, None);
+            case_statements.push(Statement::BreakStatement(
+                self.ast_builder.alloc(break_stmt),
+            ));
+        }
+
+        let span = Span::default();
+        Ok(self
+            .ast_builder
+            .switch_case(span, test_expr, case_statements))
+    }
+
+    /// Determine if a case group needs a break statement
+    fn should_add_break_for_group(
+        &self,
+        group: &CaseGroup,
+        switch_info: &SwitchInfo,
+        cfg: &Cfg<'a>,
+        group_index: usize,
+        all_groups: &[CaseGroup],
+        block_converter: &super::BlockToStatementConverter<'a>,
+    ) -> bool {
+        // A case needs a break if it doesn't fall through to the next case or shared tail
+
+        // First check if the target block has a terminator (return/throw)
+        let target_block = &cfg.graph()[group.target_block];
+        for instr in target_block.instructions() {
+            if matches!(
+                instr.instruction,
+                UnifiedInstruction::Ret { .. } | UnifiedInstruction::Throw { .. }
             ) {
-                Ok(phi_statements) => {
-                    statements.extend(phi_statements);
+                return false; // No break needed, already terminates
+            }
+        }
+
+        // FIRST: Check if the next case group would have PHI conflicts if we fall through
+        // This takes precedence over shared tail checks
+        if group_index + 1 < all_groups.len() {
+            let next_group = &all_groups[group_index + 1];
+
+            // Check if blocks are consecutive (fallthrough)
+            let blocks_are_consecutive = {
+                let current_idx = group.target_block.index();
+                let next_idx = next_group.target_block.index();
+                next_idx == current_idx + 1
+            };
+
+            // Check if the current group flows to the next group's target
+            let flows_to_next =
+                self.block_flows_to(group.target_block, next_group.target_block, cfg);
+
+            if flows_to_next || blocks_are_consecutive {
+                // Check if the next group's target has PHI nodes
+                if let Some(ssa) = block_converter.ssa_analysis() {
+                    if let Some(phi_functions) = ssa.phi_functions.get(&next_group.target_block) {
+                        if !phi_functions.is_empty() {
+                            // The next case's target has PHI nodes
+                            // We MUST add a break to prevent incorrect PHI values from fallthrough
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // THEN: Check if this block flows to the shared tail
+        if let Some(shared_tail) = &switch_info.shared_tail {
+            if self.block_flows_to(group.target_block, shared_tail.block_id, cfg) {
+                // If it flows to shared tail, check if shared tail has a return
+                let tail_block = &cfg.graph()[shared_tail.block_id];
+                for instr in tail_block.instructions() {
+                    if matches!(instr.instruction, UnifiedInstruction::Ret { .. }) {
+                        return false; // No break needed, flows to return
+                    }
+                }
+            }
+        }
+
+        // Otherwise, add a break to prevent fall-through
+        true
+    }
+
+    /// Generate case body with PHI assignments for direct entry
+    fn generate_case_body_with_phi_assignments(
+        &mut self,
+        case_statements: &mut ArenaVec<'a, Statement<'a>>,
+        group: &CaseGroup,
+        target_block: NodeIndex,
+        cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<(), SwitchConversionError> {
+        // For each PHI function in the target block, generate appropriate assignments
+        // based on which comparison blocks are entering this case
+
+        // First, generate setup instructions if any
+        self.generate_setup_instructions(case_statements, group, block_converter)?;
+
+        // Get PHI functions for the target block
+        let phi_functions = block_converter
+            .ssa_analysis()
+            .and_then(|ssa| ssa.phi_functions.get(&target_block))
+            .map(|phis| phis.as_slice())
+            .unwrap_or(&[]);
+
+        // Then, generate PHI assignments for direct entry into this case
+        for phi_function in phi_functions {
+            // Find the PHI contribution from one of this group's comparison blocks
+            let mut phi_value = None;
+            for comp_block in &group.comparison_blocks {
+                if let Some(value) = phi_function.operands.get(comp_block) {
+                    phi_value = Some(value);
+                    break;
+                }
+            }
+
+            if let Some(ssa_value) = phi_value {
+                // Get the variable name for the PHI result
+                let phi_var_name = if let Some(mapping) = block_converter.instruction_converter().register_manager().variable_mapping() {
+                    mapping.ssa_to_var.get(&phi_function.result)
+                        .cloned()
+                        .unwrap_or_else(|| format!("var{}", phi_function.register))
+                } else {
+                    format!("var{}", phi_function.register)
+                };
+
+                // Get the variable name for the source SSA value
+                let source_var_name = if let Some(mapping) = block_converter.instruction_converter().register_manager().variable_mapping() {
+                    mapping.ssa_to_var.get(ssa_value)
+                        .cloned()
+                        .unwrap_or_else(|| format!("var{}", ssa_value.register))
+                } else {
+                    format!("var{}", ssa_value.register)
+                };
+
+                // Only generate assignment if source and destination are different
+                if phi_var_name != source_var_name {
+                    // Generate assignment: phi_var = source_var
+                    let span = Span::default();
+                    
+                    // Create identifier reference for the PHI variable
+                    let phi_var_atom = self.ast_builder.allocator.alloc_str(&phi_var_name);
+                    let phi_ident_ref = self.ast_builder.alloc_identifier_reference(span, phi_var_atom);
+                    
+                    // Create identifier expression for the source variable
+                    let source_var_atom = self.ast_builder.allocator.alloc_str(&source_var_name);
+                    let source_ident_ref = self.ast_builder.expression_identifier(span, source_var_atom);
+                    
+                    // Create assignment expression: phi_var = source_var
+                    let simple_target = SimpleAssignmentTarget::AssignmentTargetIdentifier(phi_ident_ref);
+                    let assignment_target = AssignmentTarget::from(simple_target);
+                    let assignment = self.ast_builder.expression_assignment(
+                        span,
+                        AssignmentOperator::Assign,
+                        assignment_target,
+                        source_ident_ref,
+                    );
+                    
+                    // Wrap in expression statement
+                    let expr_stmt = self.ast_builder.expression_statement(span, assignment);
+                    case_statements.push(Statement::ExpressionStatement(
+                        self.ast_builder.alloc(expr_stmt),
+                    ));
+                }
+            }
+        }
+
+        // Then convert the target block normally
+        self.convert_target_block_normally(case_statements, group, cfg, block_converter)
+    }
+
+    /// Generate statements for setup instructions
+    fn generate_setup_instructions(
+        &mut self,
+        case_statements: &mut ArenaVec<'a, Statement<'a>>,
+        group: &CaseGroup,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<(), SwitchConversionError> {
+        // First, identify which SSA values are just temporaries (defined and only used in Mov)
+        let mut temp_ssa_values = HashSet::new();
+        for setup_instr in &group.setup {
+            if let UnifiedInstruction::Mov { .. } = &setup_instr.instruction.instruction {
+                // This is a Mov, skip temp detection for it
+                continue;
+            }
+            // Check if this SSA value is only used by a Mov
+            let is_temp = group.setup.iter().any(|other| {
+                if let UnifiedInstruction::Mov { operand_1, .. } = &other.instruction.instruction {
+                    *operand_1 as u8 == setup_instr.ssa_value.register
+                } else {
+                    false
+                }
+            });
+            if is_temp {
+                temp_ssa_values.insert(&setup_instr.ssa_value);
+            }
+        }
+        
+        for setup_instr in &group.setup {
+            // Skip LoadConst instructions that load into temporary SSA values
+            // But always process Mov instructions as they assign to the actual variables
+            if temp_ssa_values.contains(&setup_instr.ssa_value) {
+                if let UnifiedInstruction::Mov { .. } = &setup_instr.instruction.instruction {
+                    // Process Mov instructions even if source is temporary
+                } else {
+                    continue;
+                }
+            }
+            
+            // Get the variable name for this SSA value
+            let var_name = if let Some(mapping) = block_converter.instruction_converter().register_manager().variable_mapping() {
+                let ssa = block_converter.ssa_analysis().expect("SSA analysis required for switch conversion");
+                
+                // Check if there's a PHI function at the target block for this register
+                if let Some(phi_functions) = ssa.phi_functions.get(&group.target_block) {
+                    if let Some(phi_func) = phi_functions.iter().find(|phi| phi.register == setup_instr.ssa_value.register) {
+                        // Use the PHI result variable
+                        mapping.ssa_to_var.get(&phi_func.result)
+                            .cloned()
+                            .unwrap_or_else(|| format!("var{}", setup_instr.ssa_value.register))
+                    } else {
+                        // No PHI function for this register, use the SSA value directly
+                        mapping.ssa_to_var.get(&setup_instr.ssa_value)
+                            .cloned()
+                            .unwrap_or_else(|| format!("var{}", setup_instr.ssa_value.register))
+                    }
+                } else {
+                    // No PHI functions at target block, use the SSA value directly
+                    mapping.ssa_to_var.get(&setup_instr.ssa_value)
+                        .cloned()
+                        .unwrap_or_else(|| format!("var{}", setup_instr.ssa_value.register))
+                }
+            } else {
+                format!("var{}", setup_instr.ssa_value.register)
+            };
+
+            // Create the constant expression from the setup value
+            let value_expr = self.create_constant_expression_from_value(&setup_instr.value);
+
+            // Generate assignment: var = value
+            let span = Span::default();
+            
+            // Create identifier reference for the variable
+            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+            let ident_ref = self.ast_builder.alloc_identifier_reference(span, var_atom);
+            
+            // Create assignment expression
+            let simple_target = SimpleAssignmentTarget::AssignmentTargetIdentifier(ident_ref);
+            let assignment_target = AssignmentTarget::from(simple_target);
+            let assignment = self.ast_builder.expression_assignment(
+                span,
+                AssignmentOperator::Assign,
+                assignment_target,
+                value_expr,
+            );
+            
+            // Wrap in expression statement
+            let expr_stmt = self.ast_builder.expression_statement(span, assignment);
+            let stmt = Statement::ExpressionStatement(self.ast_builder.alloc(expr_stmt));
+            
+            // Add instruction comment if enabled
+            if block_converter.include_instruction_comments() {
+                if let Some(comment_manager) = block_converter.comment_manager_mut() {
+                    if let Some(expr_ctx) = &self.expression_context {
+                        if let Some(hbc_file) = expr_ctx.hbc_file() {
+                            let instruction_info = format!(
+                                "PC {}: {}",
+                                setup_instr.instruction.instruction_index.value(),
+                                setup_instr.instruction.format_instruction(hbc_file)
+                            );
+                            comment_manager.add_comment(
+                                &stmt,
+                                instruction_info,
+                                crate::ast::comments::CommentKind::Line,
+                                crate::ast::comments::CommentPosition::Leading,
+                            );
+                        }
+                    }
+                }
+            }
+            
+            case_statements.push(stmt);
+        }
+        Ok(())
+    }
+
+    /// Convert target block normally without PHI handling
+    fn convert_target_block_normally(
+        &mut self,
+        case_statements: &mut ArenaVec<'a, Statement<'a>>,
+        group: &CaseGroup,
+        cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<(), SwitchConversionError> {
+        let target_block = &cfg.graph()[group.target_block];
+        match block_converter.convert_block_with_options(
+            target_block,
+            group.target_block,
+            cfg.graph(),
+            None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>,
+            false,
+        ) {
+            Ok(statements) => {
+                case_statements.extend(statements);
+                Ok(())
+            }
+            Err(e) => Err(SwitchConversionError::CaseConversionError(format!(
+                "Failed to convert case body: {}",
+                e
+            ))),
+        }
+    }
+
+    /// Generate case body for cases that go directly to shared tail
+    fn generate_case_body_for_shared_tail(
+        &mut self,
+        case_statements: &mut ArenaVec<'a, Statement<'a>>,
+        group: &CaseGroup,
+        _shared_tail: &SharedTailInfo,
+        _cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<(), SwitchConversionError> {
+        // For cases that jump directly to the shared tail, we need to:
+        // 1. Generate setup instructions
+        // 2. Generate any PHI value assignments
+        // 3. Add a break statement
+        
+        // Generate setup instructions - these should handle all necessary assignments
+        self.generate_setup_instructions(case_statements, group, block_converter)?;
+
+        // Add break statement
+        let span = Span::default();
+        let break_stmt = self.ast_builder.break_statement(span, None);
+        case_statements.push(Statement::BreakStatement(
+            self.ast_builder.alloc(break_stmt),
+        ));
+
+        Ok(())
+    }
+
+    /// Find what value a case contributes to a PHI node
+    pub fn find_phi_contribution_for_case(
+        &self,
+        group: &CaseGroup,
+        phi_node: &PhiNode,
+        _cfg: &Cfg<'a>,
+    ) -> Option<ConstantValue> {
+        // The PHI node has values from specific predecessor blocks.
+        // We need to trace the control flow path from this case to the PHI block
+        // and find which predecessor block on that path contributes to the PHI.
+
+        // If we don't have SSA PHI info, we can't properly trace contributions
+        let _phi_block = if let Some(ref ssa_phi) = phi_node.ssa_phi_value {
+            // The SSA value's definition site tells us which block has the PHI
+            ssa_phi.def_site.block_id
+        } else {
+            // Without SSA info, we can't properly trace
+            return None;
+        };
+
+        // For each case, we need to find the path to the PHI block
+        // The contribution comes from whichever predecessor block is on that path
+
+        // Start from the case's target block
+        let start_block = group.target_block;
+
+        // If the target block is directly in the PHI's predecessors, use its value
+        if let Some(value) = phi_node.values.get(&start_block) {
+            return Some(value.clone());
+        }
+
+        // Otherwise, check comparison blocks (for cases that jump directly to PHI)
+        for comparison_block in &group.comparison_blocks {
+            if let Some(value) = phi_node.values.get(comparison_block) {
+                return Some(value.clone());
+            }
+        }
+
+        // If neither the target nor comparison blocks contribute to the PHI,
+        // then this case must flow through an intermediate block that computes a value.
+        // We can't represent computed values as constants.
+        None
+    }
+
+    /// Create constant expression from a ConstantValue
+    fn create_constant_expression_from_value(&self, value: &ConstantValue) -> Expression<'a> {
+        let span = Span::default();
+        match value {
+            ConstantValue::Number(n) => {
+                self.ast_builder.expression_numeric_literal(
+                    span,
+                    n.0,
+                    None, // raw
+                    NumberBase::Decimal,
+                )
+            }
+            ConstantValue::String(s) => {
+                let string_atom = self.ast_builder.allocator.alloc_str(s);
+                self.ast_builder
+                    .expression_string_literal(span, string_atom, None)
+            }
+            ConstantValue::Boolean(b) => self.ast_builder.expression_boolean_literal(span, *b),
+            ConstantValue::Null => self.ast_builder.expression_null_literal(span),
+            ConstantValue::Undefined => {
+                let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                self.ast_builder.expression_identifier(span, undefined_atom)
+            }
+        }
+    }
+
+    /// Check if one block flows to another (follows unconditional jumps)
+    fn block_flows_to(&self, from: NodeIndex, to: NodeIndex, cfg: &Cfg<'a>) -> bool {
+        use petgraph::Direction;
+
+        let mut current = from;
+        let mut visited = HashSet::new();
+
+        while visited.insert(current) {
+            if current == to {
+                return true;
+            }
+
+            // Get outgoing edges
+            let edges: Vec<_> = cfg
+                .graph()
+                .edges_directed(current, Direction::Outgoing)
+                .collect();
+
+            // If only one unconditional edge, follow it
+            if edges.len() == 1
+                && matches!(
+                    edges[0].weight(),
+                    crate::cfg::EdgeKind::Uncond | crate::cfg::EdgeKind::Fall
+                )
+            {
+                current = edges[0].target();
+            } else {
+                break;
+            }
+        }
+
+        false
+    }
+
+    /// Convert a single case to a switch case AST node
+    fn convert_single_case(
+        &mut self,
+        case_info: &CaseInfo,
+        _setup_signature: &SetupSignature,
+        cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<SwitchCase<'a>, SwitchConversionError> {
+        // Create test expressions for all keys in this case
+        let test_expr = if case_info.keys.len() == 1 {
+            // Single key - direct constant
+            Some(self.create_constant_expression(&case_info.keys[0]))
+        } else {
+            // Multiple keys - should have been grouped and handled appropriately
+            // For now, use the first key (this might need refinement)
+            Some(self.create_constant_expression(&case_info.keys[0]))
+        };
+
+        // Convert setup instructions to statements
+        let mut case_statements = ArenaVec::new_in(self.ast_builder.allocator);
+
+        // Note: SetupSignature doesn't contain instructions directly
+        // Instead, it contains register_values that represent the final state
+        // For now, we skip setup instruction generation as it's complex to reconstruct
+        // In a full implementation, we'd need to track the original setup instructions
+
+        // Convert the case body (target block)
+        let target_block = &cfg.graph()[case_info.target_block];
+        let mut body_statements = ArenaVec::new_in(self.ast_builder.allocator);
+
+        match block_converter.convert_block_with_options(
+            target_block,
+            case_info.target_block,
+            cfg.graph(),
+            None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>,
+            false,
+        ) {
+            Ok(statements) => {
+                body_statements.extend(statements);
+            }
+            Err(e) => {
+                return Err(SwitchConversionError::CaseConversionError(format!(
+                    "Failed to convert case body: {}",
+                    e
+                )));
+            }
+        }
+
+        // Combine setup and body statements
+        case_statements.extend(body_statements);
+
+        // Add break statement if needed (check if case doesn't fall through)
+        if !self.case_falls_through(case_info, cfg) {
+            let span = Span::default();
+            let break_stmt = self.ast_builder.break_statement(span, None);
+            case_statements.push(Statement::BreakStatement(
+                self.ast_builder.alloc(break_stmt),
+            ));
+        }
+
+        let span = Span::default();
+        Ok(self
+            .ast_builder
+            .switch_case(span, test_expr, case_statements))
+    }
+
+    /// Convert default case to switch case AST node
+    fn convert_default_case(
+        &mut self,
+        default_case: &DefaultCase,
+        cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+        switch_info: &SwitchInfo,
+    ) -> Result<SwitchCase<'a>, SwitchConversionError> {
+        let mut case_statements = ArenaVec::new_in(self.ast_builder.allocator);
+
+        // Check if default case contributes to shared tail
+        if let Some(shared_tail) = &switch_info.shared_tail {
+            // Check if default case flows to shared tail (either directly or through a simple block)
+            let flows_to_shared_tail = default_case.target_block == shared_tail.block_id
+                || self.block_flows_to(default_case.target_block, shared_tail.block_id, cfg);
+
+            if flows_to_shared_tail {
+                // Generate setup instructions for default case
+                if !default_case.setup.is_empty() {
+                    // Create a temporary CaseGroup to reuse generate_setup_instructions
+                    let temp_group = CaseGroup {
+                        keys: vec![], // Default case has no keys
+                        target_block: default_case.target_block,
+                        setup: default_case.setup.clone(),
+                        always_terminates: false,
+                        first_execution_order: usize::MAX, // Default is last
+                        comparison_blocks: vec![],
+                    };
+                    
+                    self.generate_setup_instructions(&mut case_statements, &temp_group, block_converter)?;
+                }
+                
+                // If the target block is not the shared tail itself, convert it
+                if default_case.target_block != shared_tail.block_id {
+                    let target_block = &cfg.graph()[default_case.target_block];
+                    match block_converter.convert_block_with_options(
+                        target_block,
+                        default_case.target_block,
+                        cfg.graph(),
+                        None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>,
+                        false,
+                    ) {
+                        Ok(statements) => {
+                            case_statements.extend(statements);
+                        }
+                        Err(e) => {
+                            return Err(SwitchConversionError::CaseConversionError(format!(
+                                "Failed to convert default case body: {}",
+                                e
+                            )));
+                        }
+                    }
+                }
+            } else {
+                // Convert the default case body normally
+                let target_block = &cfg.graph()[default_case.target_block];
+                match block_converter.convert_block_with_options(
+                    target_block,
+                    default_case.target_block,
+                    cfg.graph(),
+                    None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>,
+                    false,
+                ) {
+                    Ok(statements) => {
+                        case_statements.extend(statements);
+                    }
+                    Err(e) => {
+                        return Err(SwitchConversionError::CaseConversionError(format!(
+                            "Failed to convert default case body: {}",
+                            e
+                        )));
+                    }
+                }
+            }
+        } else {
+            // No shared tail - but still generate setup instructions if any
+            if !default_case.setup.is_empty() {
+                let temp_group = CaseGroup {
+                    keys: vec![], // Default case has no keys
+                    target_block: default_case.target_block,
+                    setup: default_case.setup.clone(),
+                    always_terminates: false,
+                    first_execution_order: usize::MAX, // Default is last
+                    comparison_blocks: vec![],
+                };
+                
+                self.generate_setup_instructions(&mut case_statements, &temp_group, block_converter)?;
+            }
+            
+            // Then convert the target block normally
+            let target_block = &cfg.graph()[default_case.target_block];
+            match block_converter.convert_block_with_options(
+                target_block,
+                default_case.target_block,
+                cfg.graph(),
+                None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>,
+                false,
+            ) {
+                Ok(statements) => {
+                    case_statements.extend(statements);
                 }
                 Err(e) => {
                     return Err(SwitchConversionError::CaseConversionError(format!(
-                        "Failed to convert phi declarations in dispatch block: {}",
+                        "Failed to convert default case body: {}",
                         e
                     )));
                 }
             }
         }
 
-        // For sparse switches, handle initial setup instructions
-        if matches!(switch_type, SwitchType::Sparse) {
-            // For sparse switches, find truly global setup instructions
-            // These are instructions that initialize variables used across multiple cases
-            // Walk through the comparison chain to find the first LoadConstString
-            let mut current = region.dispatch;
-            let mut visited_for_setup = HashSet::new();
-
-            while !visited_for_setup.contains(&current) {
-                visited_for_setup.insert(current);
-                let block = &cfg.graph()[current];
-
-                // Look for LoadConstString that appears before any comparison
-                // and is not immediately followed by a comparison using the same register
-                for (i, instr) in block.instructions().iter().enumerate() {
-                    if let UnifiedInstruction::LoadConstString {
-                        operand_0,
-                        operand_1,
-                    } = &instr.instruction
-                    {
-                        // Check if this is followed by a comparison that uses this register
-                        let used_in_comparison =
-                            block.instructions().iter().skip(i + 1).any(|later| {
-                                match &later.instruction {
-                                    UnifiedInstruction::JStrictEqual {
-                                        operand_1: op1,
-                                        operand_2: op2,
-                                        ..
-                                    }
-                                    | UnifiedInstruction::JStrictEqualLong {
-                                        operand_1: op1,
-                                        operand_2: op2,
-                                        ..
-                                    } => op1 == operand_0 || op2 == operand_0,
-                                    _ => false,
-                                }
-                            });
-
-                        // If not used in comparison and is an empty string, it's likely initial setup
-                        if !used_in_comparison && *operand_1 == 0 {
-                            // String index 0 is empty string
-                            // Convert to ArenaVec for compatibility
-                            let mut arena_statements = ArenaVec::new_in(self.ast_builder.allocator);
-                            self.convert_single_instruction(
-                                instr,
-                                block_converter,
-                                &mut arena_statements,
-                                region.dispatch,
-                                cfg,
-                            )?;
-                            // Move statements to our Vec
-                            for stmt in arena_statements {
-                                statements.push(stmt);
-                            }
-                            break; // Only process the first such instruction
-                        }
-                    }
-                }
-
-                // Move to next block in chain
-                let mut next = None;
-                for edge in cfg
-                    .graph()
-                    .edges_directed(current, petgraph::Direction::Outgoing)
-                {
-                    if matches!(edge.weight(), EdgeKind::False) {
-                        next = Some(edge.target());
-                        break;
-                    }
-                }
-
-                match next {
-                    Some(n) => current = n,
-                    None => break,
-                }
-            }
-        } else {
-            // For dense switches, convert instructions before the SwitchImm
-            if switch_start_idx > 0 {
-                let setup_instructions = &dispatch_block.instructions()[..switch_start_idx];
-                for (_instr_idx, instr) in setup_instructions.iter().enumerate() {
-                    // Convert with comments
-                    let mut arena_statements = ArenaVec::new_in(self.ast_builder.allocator);
-                    self.convert_single_instruction(
-                        instr,
-                        block_converter,
-                        &mut arena_statements,
-                        region.dispatch,
-                        cfg,
-                    )?;
-                    // Move statements to our Vec
-                    for stmt in arena_statements {
-                        statements.push(stmt);
-                    }
-                }
-            }
-        }
-
-        // For sparse switches, ensure LoadParam is processed before building expression
-        if matches!(switch_type, SwitchType::Sparse) {
-            if let Some(entry) = cfg.entry_node() {
-                let entry_block = &cfg.graph()[entry];
-                for (_instr_idx, instr) in entry_block.instructions().iter().enumerate() {
-                    if matches!(instr.instruction, UnifiedInstruction::LoadParam { .. }) {
-                        if !block_converter.is_instruction_rendered(instr) {
-                            // Convert with comments
-                            let mut arena_statements = ArenaVec::new_in(self.ast_builder.allocator);
-                            self.convert_single_instruction(
-                                instr,
-                                block_converter,
-                                &mut arena_statements,
-                                entry,
-                                cfg,
-                            )?;
-                            // Move statements to our Vec
-                            for stmt in arena_statements {
-                                statements.push(stmt);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Build the switch expression
-        let discriminant = match switch_type {
-            SwitchType::Dense => {
-                self.build_dense_switch_expression(region, cfg, block_converter)?
-            }
-            SwitchType::Sparse => {
-                self.build_sparse_switch_expression(region, cfg, block_converter)?
-            }
-        };
-
-        // Convert case blocks
-        let cases = match switch_type {
-            SwitchType::Dense => self.convert_dense_cases(region, cfg, block_converter)?,
-            SwitchType::Sparse => self.convert_sparse_cases(region, cfg, block_converter)?,
-        };
-
-        // Create the switch statement
-        let span = Span::default();
-        let switch_stmt = self.ast_builder.switch_statement(span, discriminant, cases);
-
-        statements.push(Statement::SwitchStatement(
-            self.ast_builder.alloc(switch_stmt),
-        ));
-
-        // Check if we need to add a return statement after the switch
-        // This happens when all cases jump to a shared return block
-        if let Some(shared_return_block) = self.detect_shared_return_block(region, cfg) {
-            // Get the return instruction from the shared block
-            let return_block = &cfg.graph()[shared_return_block];
-            if let Some(ret_instr) = return_block.instructions().first() {
-                if let UnifiedInstruction::Ret { operand_0: _ } = &ret_instr.instruction {
-                    // Convert the return instruction with comments
-                    let mut return_statements = ArenaVec::new_in(self.ast_builder.allocator);
-                    self.convert_single_instruction(
-                        ret_instr,
-                        block_converter,
-                        &mut return_statements,
-                        shared_return_block,
-                        cfg,
-                    )?;
-                    // Add the return statement(s) to our output
-                    for stmt in return_statements {
-                        statements.push(stmt);
-                    }
-                }
-            }
-        }
-
-        // Mark all infrastructure block instructions as rendered
-        self.mark_infrastructure_instructions_rendered(region, cfg, block_converter);
-
-        Ok(statements)
-    }
-
-    /// Mark all instructions in switch infrastructure blocks as rendered
-    fn mark_infrastructure_instructions_rendered(
-        &self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) {
-        let infrastructure_blocks = get_switch_infrastructure_blocks(region, cfg);
-        for &block_idx in &infrastructure_blocks {
-            let block = &cfg.graph()[block_idx];
-            for instr in block.instructions().iter() {
-                block_converter.mark_instruction_rendered(instr);
-            }
-        }
-    }
-
-    /// Detect the type of switch (dense or sparse)
-    fn detect_switch_type(
-        &self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-    ) -> Result<SwitchType, SwitchConversionError> {
-        let dispatch_block = &cfg.graph()[region.dispatch];
-
-        // Check if this is a dense switch (has SwitchImm instruction)
-        let has_switch_imm = dispatch_block
-            .instructions()
-            .iter()
-            .any(|instr| matches!(instr.instruction, UnifiedInstruction::SwitchImm { .. }));
-
-        if has_switch_imm {
-            Ok(SwitchType::Dense)
-        } else {
-            // This is a sparse switch detected from comparison chain
-            Ok(SwitchType::Sparse)
-        }
-    }
-
-    /// Build the switch expression from the dispatch block (dense switch)
-    fn build_dense_switch_expression(
-        &mut self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<Expression<'a>, SwitchConversionError> {
-        let dispatch_block = &cfg.graph()[region.dispatch];
-
-        // Find the SwitchImm instruction
-        let switch_instr = dispatch_block
-            .instructions()
-            .iter()
-            .find(|instr| matches!(instr.instruction, UnifiedInstruction::SwitchImm { .. }))
-            .ok_or(SwitchConversionError::MissingSwitchInstruction)?;
-
-        // Extract the operand register
-        let operand_register = match &switch_instr.instruction {
-            UnifiedInstruction::SwitchImm { operand_0, .. } => *operand_0,
-            _ => unreachable!(),
-        };
-
-        // Get the variable name using SSA analysis
-        // We need the PC of the switch instruction itself
-        let pc = switch_instr.instruction_index;
-        // But we need to get the variable name from before the instruction
-        let var_name = block_converter.get_variable_name_for_condition(operand_register, pc.into());
-
-        // Build identifier expression
-        let span = Span::default();
-        // Convert to Atom to handle lifetime
-        let atom = self.ast_builder.atom(&var_name);
-        let ident = self.ast_builder.identifier_reference(span, atom);
-        Ok(Expression::Identifier(self.ast_builder.alloc(ident)))
-    }
-
-    /// Build the switch expression from the dispatch block (sparse switch)
-    fn build_sparse_switch_expression(
-        &mut self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<Expression<'a>, SwitchConversionError> {
-        // For sparse switches, we need to get the variable being compared from the sparse switch analysis
-        // The sparse switch detection has already determined which register is the variable
-
-        // Re-run the sparse switch detection to get the compared register
-        // This is a bit inefficient but ensures we have the correct register
-        let dispatch_block = &cfg.graph()[region.dispatch];
-        if let Some((compared_register, _, _)) =
-            crate::cfg::sparse_switch_analysis::extract_comparison_info(
-                dispatch_block,
-                &cfg.graph(),
-                region.dispatch,
-            )
-        {
-            // Find the PC of the comparison instruction
-            let comparison_pc = dispatch_block
-                .instructions()
-                .iter()
-                .enumerate()
-                .find(|(_, instr)| {
-                    matches!(
-                        instr.instruction,
-                        UnifiedInstruction::JStrictEqual { .. }
-                            | UnifiedInstruction::JStrictEqualLong { .. }
-                    )
-                })
-                .map(|(idx, _)| dispatch_block.start_pc() + idx as u32)
-                .unwrap_or(dispatch_block.start_pc());
-
-            let var_name = block_converter
-                .get_variable_name_for_condition(compared_register, comparison_pc.into());
-
-            // Build identifier expression
+        // Add break statement if needed
+        if !self.default_case_falls_through(default_case, cfg) {
             let span = Span::default();
-            let atom = self.ast_builder.atom(&var_name);
-            let ident = self.ast_builder.identifier_reference(span, atom);
-            Ok(Expression::Identifier(self.ast_builder.alloc(ident)))
+            let break_stmt = self.ast_builder.break_statement(span, None);
+            case_statements.push(Statement::BreakStatement(
+                self.ast_builder.alloc(break_stmt),
+            ));
+        }
+
+        let span = Span::default();
+        Ok(self.ast_builder.switch_case(span, None, case_statements)) // None = default case
+    }
+
+    /// Create constant expression from case key
+    fn create_constant_expression(&self, key: &CaseKey) -> Expression<'a> {
+        let span = Span::default();
+        match key {
+            CaseKey::Str(s) => {
+                // Allocate the string in the arena to manage its lifetime
+                let s_str = self.ast_builder.allocator.alloc_str(s.as_ref());
+                self.ast_builder
+                    .expression_string_literal(span, s_str, None)
+            }
+            CaseKey::Num(n) => {
+                self.ast_builder
+                    .expression_numeric_literal(span, n.0, None, NumberBase::Decimal)
+            }
+        }
+    }
+
+    /// Get the consistent variable name for a PHI node
+    fn get_phi_variable_name(
+        &self,
+        phi_node: &PhiNode,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<String, SwitchConversionError> {
+        // PHI nodes must have SSA information
+        let ssa_phi_value = phi_node.ssa_phi_value.as_ref().ok_or_else(|| {
+            SwitchConversionError::InvalidRegion(
+                "PHI node missing SSA value information".to_string(),
+            )
+        })?;
+
+        // Variable mapping must be available
+        let var_mapping = block_converter
+            .instruction_converter_mut()
+            .register_manager_mut()
+            .variable_mapping()
+            .ok_or_else(|| {
+                SwitchConversionError::InvalidRegion("Variable mapping not available".to_string())
+            })?;
+
+        // The SSA value must have a variable name assigned
+        var_mapping
+            .ssa_to_var
+            .get(ssa_phi_value)
+            .cloned()
+            .ok_or_else(|| {
+                SwitchConversionError::InvalidRegion(format!(
+                    "No variable name found for PHI SSA value {}",
+                    ssa_phi_value.name()
+                ))
+            })
+    }
+
+    /// Collect PHI nodes referenced in setup instructions
+    fn collect_phi_nodes_from_setup(
+        &self,
+        switch_info: &SwitchInfo,
+        all_phi_nodes: &mut HashMap<u8, PhiNode>,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+    ) {
+        // Check each case's setup instructions
+        for case in &switch_info.cases {
+            for setup_instr in &case.setup {
+                // Check if this register has a PHI function at its target block
+                if let Some(phi_functions) = ssa.phi_functions.get(&case.target_block) {
+                    if let Some(phi_func) = phi_functions.iter().find(|phi| phi.register == setup_instr.ssa_value.register) {
+                        // Convert PhiFunction to PhiNode
+                        let phi_node = self.convert_phi_function_to_node(phi_func, cfg);
+                        all_phi_nodes.insert(phi_func.register, phi_node);
+                    }
+                }
+                
+                // Also check for PHI functions at any block in the switch region
+                // This handles cases where variables are defined by PHI functions in intermediate blocks
+                for block_id in cfg.graph().node_indices() {
+                    if let Some(phi_functions) = ssa.phi_functions.get(&block_id) {
+                        if let Some(phi_func) = phi_functions.iter().find(|phi| phi.result == setup_instr.ssa_value) {
+                            // Convert PhiFunction to PhiNode
+                            let phi_node = self.convert_phi_function_to_node(phi_func, cfg);
+                            all_phi_nodes.insert(phi_func.register, phi_node);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also check default case setup instructions
+        if let Some(default_case) = &switch_info.default_case {
+            for setup_instr in &default_case.setup {
+                // Check if this register has a PHI function at its target block
+                if let Some(phi_functions) = ssa.phi_functions.get(&default_case.target_block) {
+                    if let Some(phi_func) = phi_functions.iter().find(|phi| phi.register == setup_instr.ssa_value.register) {
+                        // Convert PhiFunction to PhiNode
+                        let phi_node = self.convert_phi_function_to_node(phi_func, cfg);
+                        all_phi_nodes.insert(phi_func.register, phi_node);
+                    }
+                }
+                
+                // Also check for PHI functions at any block in the switch region
+                for block_id in cfg.graph().node_indices() {
+                    if let Some(phi_functions) = ssa.phi_functions.get(&block_id) {
+                        if let Some(phi_func) = phi_functions.iter().find(|phi| phi.result == setup_instr.ssa_value) {
+                            // Convert PhiFunction to PhiNode
+                            let phi_node = self.convert_phi_function_to_node(phi_func, cfg);
+                            all_phi_nodes.insert(phi_func.register, phi_node);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Convert a PhiFunction to a PhiNode
+    fn convert_phi_function_to_node(
+        &self,
+        phi_func: &crate::cfg::ssa::PhiFunction,
+        _cfg: &Cfg<'a>,
+    ) -> PhiNode {
+        // For now, create a PhiNode without constant values
+        // In a real implementation, we would analyze the operands to extract constant values
+        PhiNode {
+            register: phi_func.register,
+            values: HashMap::new(), // Empty for now
+            ssa_phi_value: Some(phi_func.result.clone()),
+        }
+    }
+    
+    /// Create join locals for PHI nodes in shared tail
+    fn create_join_locals_for_phi_nodes(
+        &mut self,
+        phi_nodes: &HashMap<u8, PhiNode>,
+        _cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<Vec<Statement<'a>>, SwitchConversionError> {
+        let mut declarations = Vec::new();
+
+        // For each PHI node in the shared tail, we need to create a variable declaration
+        // before the switch statement to ensure the variable is in scope for all cases
+
+        for (_reg, phi_node) in phi_nodes {
+            // Get the variable name for this PHI node
+            let var_name = self.get_phi_variable_name(phi_node, block_converter)?;
+
+            // Create a variable declaration: let var_name;
+            let span = Span::default();
+            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+
+            // Create binding identifier
+            let binding_identifier = oxc_ast::ast::BindingIdentifier {
+                span,
+                name: oxc_span::Atom::from(var_atom),
+                symbol_id: std::cell::Cell::new(None),
+            };
+
+            // Create binding pattern
+            let binding_pattern = oxc_ast::ast::BindingPattern {
+                kind: oxc_ast::ast::BindingPatternKind::BindingIdentifier(
+                    self.ast_builder.alloc(binding_identifier),
+                ),
+                type_annotation: None,
+                optional: false,
+            };
+
+            // Create variable declarator without initializer
+            let var_declarator = self.ast_builder.variable_declarator(
+                span,
+                oxc_ast::ast::VariableDeclarationKind::Let,
+                binding_pattern,
+                None,  // No initializer
+                false, // definite
+            );
+
+            // Create variable declaration statement
+            let mut declarators = self.ast_builder.vec();
+            declarators.push(var_declarator);
+
+            let var_decl = self.ast_builder.variable_declaration(
+                span,
+                oxc_ast::ast::VariableDeclarationKind::Let,
+                declarators,
+                false, // declare
+            );
+
+            declarations.push(Statement::VariableDeclaration(
+                self.ast_builder.alloc(var_decl),
+            ));
+        }
+
+        Ok(declarations)
+    }
+
+    /// Compare case keys for deterministic ordering
+    fn compare_case_keys(&self, key_a: &CaseKey, key_b: &CaseKey) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        // First compare by type for consistent ordering
+        let type_order_a = self.get_case_key_type_order(key_a);
+        let type_order_b = self.get_case_key_type_order(key_b);
+
+        match type_order_a.cmp(&type_order_b) {
+            Ordering::Equal => {
+                // Same type, compare values
+                match (key_a, key_b) {
+                    (CaseKey::Str(a), CaseKey::Str(b)) => a.cmp(b),
+                    (CaseKey::Num(a), CaseKey::Num(b)) => a.cmp(b),
+                    _ => unreachable!("Type orders should be equal only for same types"),
+                }
+            }
+            other => other,
+        }
+    }
+
+    /// Get type order for case keys (for deterministic sorting)
+    fn get_case_key_type_order(&self, key: &CaseKey) -> u8 {
+        match key {
+            CaseKey::Num(_) => 0,
+            CaseKey::Str(_) => 1,
+        }
+    }
+
+    /// Calculate hash of setup signature for deterministic ordering
+    fn calculate_setup_hash(&self, signature: &SetupSignature) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        signature.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Check if a case falls through to the next case
+    fn case_falls_through(&self, case_info: &CaseInfo, cfg: &Cfg<'a>) -> bool {
+        let block = &cfg.graph()[case_info.target_block];
+
+        // Check if the last instruction is a jump or return
+        if let Some(last_instr) = block.instructions().last() {
+            match &last_instr.instruction {
+                UnifiedInstruction::Jmp { .. }
+                | UnifiedInstruction::JmpLong { .. }
+                | UnifiedInstruction::Ret { .. } => false, // Explicit control flow, no fallthrough
+                _ => true, // Implicit fallthrough
+            }
         } else {
-            Err(SwitchConversionError::MissingSwitchInstruction)
+            true // Empty block falls through
         }
     }
 
-    /// Convert switch cases (dense)
-    fn convert_dense_cases(
-        &mut self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<ArenaVec<'a, SwitchCase<'a>>, SwitchConversionError> {
-        let mut cases = ArenaVec::new_in(self.ast_builder.allocator);
+    /// Check if default case falls through
+    fn default_case_falls_through(&self, default_case: &DefaultCase, cfg: &Cfg<'a>) -> bool {
+        let block = &cfg.graph()[default_case.target_block];
 
-        // Get switch table information
-        let min_value = {
-            let switch_table = self.get_switch_table(region, cfg)?;
-            switch_table.min_value
-        };
-
-        // Collect all case heads for fallthrough detection
-        let case_heads: HashSet<NodeIndex> = region.cases.iter().map(|c| c.case_head).collect();
-
-        // Process each case
-        for (idx, case_info) in region.cases.iter().enumerate() {
-            // For dense switches, the case value is calculated from min_value + case_index
-            let case_value = min_value as i32 + case_info.case_index as i32;
-
-            // Build case test expression
-            let test = self.build_case_test(case_value)?;
-
-            // Determine the end block for this case (next case or join block)
-            let next_case_head = if idx + 1 < region.cases.len() {
-                Some(region.cases[idx + 1].case_head)
-            } else {
-                None
-            };
-
-            // Convert case body with fallthrough detection
-            let (consequent, _falls_through) = self.convert_case_body_with_fallthrough(
-                case_info.case_head,
-                region.join_block,
-                next_case_head,
-                &case_heads,
-                cfg,
-                block_converter,
-            )?;
-
-            let switch_case = self.create_switch_case_with_comment(
-                Some(test),
-                consequent,
-                block_converter,
-                case_info.case_head,
-                &format!("dense case {} (value {})", idx, case_value),
-            );
-            cases.push(switch_case);
+        // Check if the last instruction is a jump or return
+        if let Some(last_instr) = block.instructions().last() {
+            match &last_instr.instruction {
+                UnifiedInstruction::Jmp { .. }
+                | UnifiedInstruction::JmpLong { .. }
+                | UnifiedInstruction::Ret { .. } => false, // Explicit control flow, no fallthrough
+                _ => true, // Implicit fallthrough
+            }
+        } else {
+            true // Empty block falls through
         }
-
-        // Add default case if present
-        if let Some(default_head) = region.default_head {
-            let consequent =
-                self.convert_case_body(default_head, region.join_block, cfg, block_converter)?;
-
-            let default_case = self.create_switch_case_with_comment(
-                None,
-                consequent,
-                block_converter,
-                default_head,
-                "default case",
-            );
-            cases.push(default_case);
-        }
-
-        Ok(cases)
     }
 
-    /// Collect setup instructions for sparse switch cases
-    /// Returns a map from case index to the instructions that should be prepended to that case
-    fn collect_sparse_case_setup_instructions(
-        &self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-    ) -> HashMap<usize, Vec<(NodeIndex, usize)>> {
-        let mut case_setup_instructions = HashMap::new();
+    /// Normalize setup instructions for grouping
+    fn normalize_setup(&self, setup: &[SetupInstruction], target: NodeIndex) -> SetupSignature {
+        let mut register_values = BTreeMap::new();
 
-        // Walk through the comparison chain
-        let mut current_block = region.dispatch;
-        let mut visited = HashSet::new();
-        let mut case_idx = 0;
-
-        while !visited.contains(&current_block) && case_idx < region.cases.len() {
-            visited.insert(current_block);
-            let block = &cfg.graph()[current_block];
-
-            // Find the comparison instruction in this block
-            let mut comparison_idx = None;
-            for (i, instr) in block.instructions().iter().enumerate() {
-                if matches!(
-                    instr.instruction,
-                    UnifiedInstruction::JStrictEqual { .. }
-                        | UnifiedInstruction::JStrictEqualLong { .. }
-                ) {
-                    comparison_idx = Some(i);
-                    break;
-                }
-            }
-
-            if let Some(comp_idx) = comparison_idx {
-                // Collect setup instructions that appear between comparisons
-                // These are instructions that execute if the previous comparison failed
-                let mut setup_instrs = Vec::new();
-
-                // Only collect instructions that are truly setup for the next case
-                // Skip instructions that are part of the comparison mechanism
-                for i in 0..comp_idx {
-                    let instr = &block.instructions()[i];
-
-                    // Skip LoadConstString that initializes variables at the start
-                    if case_idx == 0
-                        && i == 0
-                        && matches!(
-                            instr.instruction,
-                            UnifiedInstruction::LoadConstString { operand_1: 0, .. } // empty string
-                        )
-                    {
-                        continue; // This is handled as pre-switch setup
-                    }
-
-                    // Skip constant loads that are part of the comparison
-                    if i + 1 == comp_idx
-                        && matches!(
-                            instr.instruction,
-                            UnifiedInstruction::LoadConstZero { .. }
-                                | UnifiedInstruction::LoadConstUInt8 { .. }
-                                | UnifiedInstruction::LoadConstInt { .. }
-                        )
-                    {
-                        continue;
-                    }
-
-                    // Skip parameter loads and jumps
-                    if matches!(
-                        instr.instruction,
-                        UnifiedInstruction::LoadParam { .. } | UnifiedInstruction::Jmp { .. }
-                    ) {
-                        continue;
-                    }
-
-                    // Include LoadConstString and Mov instructions that set up case-specific values
-                    if matches!(
-                        instr.instruction,
-                        UnifiedInstruction::LoadConstString { .. } | UnifiedInstruction::Mov { .. }
-                    ) {
-                        setup_instrs.push((current_block, i));
-                    }
-                }
-
-                // IMPORTANT: These setup instructions should NOT be added to cases that
-                // can be fallen through to. They should only execute when jumping
-                // directly to the case via the comparison chain.
-                // We'll handle this in convert_sparse_cases by checking fallthrough relationships
-                if !setup_instrs.is_empty() {
-                    // Special case: if this is the first block and we have a LoadConstString
-                    // at the beginning, it's likely an initial value that should go before the switch
-                    if case_idx == 0 && current_block == region.dispatch {
-                        // Check if first instruction is LoadConstString with empty string
-                        if let Some((_, 0)) = setup_instrs.first() {
-                            let block = &cfg.graph()[current_block];
-                            if matches!(
-                                block.instructions()[0].instruction,
-                                UnifiedInstruction::LoadConstString { operand_1: 0, .. } // empty string
-                            ) {
-                                // Skip this - it will be handled as a pre-switch setup
-                                continue;
-                            }
-                        }
-                    }
-
-                    // These instructions belong to the current case
-                    case_setup_instructions
-                        .entry(case_idx)
-                        .or_insert_with(Vec::new)
-                        .extend(setup_instrs);
-                }
-
-                case_idx += 1;
-            }
-
-            // Move to the next block in the chain (false branch)
-            let mut next_block = None;
-            for edge in cfg
-                .graph()
-                .edges_directed(current_block, petgraph::Direction::Outgoing)
-            {
-                if matches!(edge.weight(), EdgeKind::False) {
-                    next_block = Some(edge.target());
-                    break;
-                }
-            }
-
-            match next_block {
-                Some(next) => current_block = next,
-                None => break,
-            }
+        // Build final register state (last writer wins)
+        for instr in setup {
+            register_values.insert(instr.ssa_value.register, instr.value.clone());
         }
 
-        case_setup_instructions
+        SetupSignature {
+            register_values,
+            target,
+        }
     }
 
-    /// Convert switch cases (sparse)
-    fn convert_sparse_cases(
-        &mut self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<ArenaVec<'a, SwitchCase<'a>>, SwitchConversionError> {
-        let mut cases = ArenaVec::new_in(self.ast_builder.allocator);
+    // Helper methods for pattern detection
 
-        // TODO: Replace with simplified pattern detection from the new design
-        // For now, we'll skip the complex pattern analysis
-
-        // Collect all case heads for fallthrough detection
-        let case_heads: HashSet<NodeIndex> = region.cases.iter().map(|c| c.case_head).collect();
-
-        // Use the old setup instruction collection for now, but enhanced with our analysis
-        let case_setup_instructions = self.collect_sparse_case_setup_instructions(region, cfg);
-
-        // Group cases by their target block and fallthrough relationships
-        let mut processed = vec![false; region.cases.len()];
-
-        // First, create initial groups based on same target blocks
-        let mut case_groups: Vec<Vec<usize>> = Vec::new();
-        for i in 0..region.cases.len() {
-            if processed[i] {
-                continue;
-            }
-
-            let mut group = vec![i];
-            processed[i] = true;
-
-            // Find all other cases with the same target
-            for j in (i + 1)..region.cases.len() {
-                if !processed[j] && region.cases[j].case_head == region.cases[i].case_head {
-                    group.push(j);
-                    processed[j] = true;
-                }
-            }
-
-            case_groups.push(group);
-        }
-
-        // Build a map of which cases should have bodies
-        let mut case_should_have_body = vec![false; region.cases.len()];
-
-        // Mark the last case in each group as needing a body
-        for group in &case_groups {
-            if let Some(&last_idx) = group.last() {
-                case_should_have_body[last_idx] = true;
-            }
-        }
-
-        // Process cases in original order
-        for (idx, case_info) in region.cases.iter().enumerate() {
-            // Extract case value
-            let comparison_block_idx = if idx == 0 {
-                region.dispatch
-            } else {
-                self.find_comparison_block_for_case(region, cfg, idx)?
-            };
-
-            let comparison_block = &cfg.graph()[comparison_block_idx];
-            let case_value = self.extract_case_value_from_comparison(comparison_block)?;
-
-            // Build case test expression
-            let test = self.build_case_test(case_value)?;
-
-            let consequent = if case_should_have_body[idx] {
-                // This case gets the actual body
-                let mut case_statements = ArenaVec::new_in(self.ast_builder.allocator);
-
-                // First, add any setup instructions for this case
-                // IMPORTANT: Only add setup instructions if this is the FIRST case in a fallthrough group
-                // Otherwise, we'd be overwriting values set by previous cases
-                
-                // Find which group this case belongs to
-                let mut is_first_in_group = true;
-                for group in &case_groups {
-                    if group.contains(&idx) {
-                        // Check if this is the first case in the group
-                        is_first_in_group = group.first() == Some(&idx);
-                        break;
-                    }
-                }
-                
-                // Only process setup instructions if this is the first case in a fallthrough group
-                // For cases that are fallen through to, we skip their setup instructions
-                if is_first_in_group {
-                    if let Some(setup_instrs) = case_setup_instructions.get(&idx) {
-                        for &(block_idx, instr_idx) in setup_instrs {
-                            let block = &cfg.graph()[block_idx];
-                            let instr = &block.instructions()[instr_idx];
-                            self.convert_single_instruction(
-                                instr,
-                                block_converter,
-                                &mut case_statements,
-                                block_idx,
-                                cfg,
-                            )?;
-                        }
-                    }
-                }
-
-                // Determine the next case head for fallthrough detection
-                let next_case_head = if idx + 1 < region.cases.len() {
-                    Some(region.cases[idx + 1].case_head)
-                } else {
-                    None
-                };
-
-                // For sparse switches, check if this case jumps to a simple return block
-                // If so, we need to get assignment instructions from the comparison block
-                let case_block = &cfg.graph()[case_info.case_head];
-                let is_sparse_case_to_return = case_block.instructions().len() == 1
-                    && matches!(
-                        &case_block.instructions()[0].instruction,
-                        UnifiedInstruction::Ret { .. }
-                    );
-                
-                if is_sparse_case_to_return {
-                    // Find the comparison block for this case
-                    let comparison_block_idx = self.find_comparison_block_for_case(region, cfg, idx)?;
-                    let comparison_block = &cfg.graph()[comparison_block_idx];
-                    
-                    // For sparse switches, we may need to include setup from earlier blocks
-                    // For example, case 5 loads "high" into r4, but cases 6-7 just use r4
-                    // Find which registers are used but not defined in this block
-                    let mut undefined_registers = HashSet::new();
-                    for instr in comparison_block.instructions().iter() {
-                        if let UnifiedInstruction::Mov { operand_0: _, operand_1 } = &instr.instruction {
-                            // Check if operand_1 (source) is used but not defined in this block
-                            let mut defined_in_block = false;
-                            for earlier_instr in comparison_block.instructions().iter() {
-                                let usage = analyze_register_usage(&earlier_instr.instruction);
-                                if let Some(target) = usage.target {
-                                    if target == *operand_1 {
-                                        defined_in_block = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if !defined_in_block {
-                                undefined_registers.insert(*operand_1);
-                            }
-                        }
-                    }
-                    
-                    // If we have undefined registers, look for their definitions in earlier comparison blocks
-                    if !undefined_registers.is_empty() && idx > 0 {
-                        // Check earlier cases in the same group (they should have the same target)
-                        for earlier_idx in 0..idx {
-                            if region.cases[earlier_idx].case_head == case_info.case_head {
-                                let earlier_block_idx = self.find_comparison_block_for_case(region, cfg, earlier_idx)?;
-                                let earlier_block = &cfg.graph()[earlier_block_idx];
-                                
-                                // Look for LoadConstString instructions that define our undefined registers
-                                for instr in earlier_block.instructions().iter() {
-                                    if let UnifiedInstruction::LoadConstString { operand_0, .. } = &instr.instruction {
-                                        if undefined_registers.contains(operand_0) {
-                                            self.convert_single_instruction(
-                                                instr,
-                                                block_converter,
-                                                &mut case_statements,
-                                                earlier_block_idx,
-                                                cfg,
-                                            )?;
-                                            undefined_registers.remove(operand_0);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Process instructions from the comparison block
-                    // We need to extract only the value assignment instructions
-                    // For sparse switches, the pattern is typically:
-                    // - LoadConstString/LoadConstUInt8 (for comparison value)
-                    // - Mov/LoadConstString (actual assignments)
-                    // - JStrictEqual (comparison jump)
-                    
-                    // First pass: identify which registers hold values (not comparison constants)
-                    let mut value_registers = HashSet::new();
-                    let mut skip_next_use = HashSet::new();
-                    
-                    for (i, instr) in comparison_block.instructions().iter().enumerate() {
-                        match &instr.instruction {
-                            // LoadConstString is usually for values, not comparisons
-                            UnifiedInstruction::LoadConstString { operand_0, .. } => {
-                                value_registers.insert(*operand_0);
-                            }
-                            // Constants loaded right before comparisons are for the comparison
-                            UnifiedInstruction::LoadConstZero { operand_0 }
-                            | UnifiedInstruction::LoadConstUInt8 { operand_0, .. }
-                            | UnifiedInstruction::LoadConstInt { operand_0, .. } => {
-                                if i + 1 < comparison_block.instructions().len()
-                                    && matches!(
-                                        comparison_block.instructions()[i + 1].instruction,
-                                        UnifiedInstruction::JStrictEqual { .. }
-                                            | UnifiedInstruction::JStrictEqualLong { .. }
-                                    )
-                                {
-                                    skip_next_use.insert(*operand_0);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    
-                    // Second pass: convert only the relevant instructions
-                    for (_i, instr) in comparison_block.instructions().iter().enumerate() {
-                        // Skip the final jump instruction
-                        if matches!(
-                            instr.instruction,
-                            UnifiedInstruction::JStrictEqual { .. }
-                                | UnifiedInstruction::JStrictEqualLong { .. }
-                        ) {
-                            continue;
-                        }
-                        
-                        match &instr.instruction {
-                            // Skip constants used for comparison
-                            UnifiedInstruction::LoadConstZero { operand_0 }
-                            | UnifiedInstruction::LoadConstUInt8 { operand_0, .. }
-                            | UnifiedInstruction::LoadConstInt { operand_0, .. } 
-                                if skip_next_use.contains(operand_0) => {
-                                continue;
-                            }
-                            // Include ALL Mov instructions (they're assignments)
-                            UnifiedInstruction::Mov { .. } => {
-                                self.convert_single_instruction(
-                                    instr,
-                                    block_converter,
-                                    &mut case_statements,
-                                    comparison_block_idx,
-                                    cfg,
-                                )?;
-                            }
-                            // Include LoadConstString (usually values)
-                            UnifiedInstruction::LoadConstString { .. } => {
-                                self.convert_single_instruction(
-                                    instr,
-                                    block_converter,
-                                    &mut case_statements,
-                                    comparison_block_idx,
-                                    cfg,
-                                )?;
-                            }
-                            _ => {}
-                        }
-                    }
-                    
-                    // Add break since this case jumps to the join block
-                    if !self.has_terminal_statement(&case_statements) {
-                        self.add_break_statement_with_comment(
-                            &mut case_statements,
-                            block_converter,
-                            case_info.case_head,
-                            "case jumps to join",
-                        );
-                    }
-                    
-                    case_statements
-                } else if case_block.instructions().is_empty()
-                        || (case_block.instructions().len() == 1
-                            && matches!(
-                                &case_block.instructions()[0].instruction,
-                                UnifiedInstruction::Ret { .. }
-                            ) && !is_sparse_case_to_return) // Don't treat sparse return cases as empty
-                {
-                        // This case has an empty body or just a return
-                        // Add break if needed
-                        if !self.has_terminal_statement(&case_statements) {
-                            self.add_break_statement_with_comment(
-                                &mut case_statements,
-                                block_converter,
-                                case_info.case_head,
-                                "empty case body",
-                            );
-                        }
-
-                        case_statements
-                } else {
-                    // Regular case body conversion
-                    let (body, mut falls_through) = self.convert_case_body_with_fallthrough(
-                        case_info.case_head,
-                        region.join_block,
-                        next_case_head,
-                        &case_heads,
-                        cfg,
-                        block_converter,
-                    )?;
-
-                    // Prepend setup instructions to the body
-                    case_statements.extend(body);
-
-                    // Check if this case falls through to another case's target block
-                    // This happens when the case body ends by jumping to a block that is another case's head
-                    if !falls_through && !self.has_terminal_statement(&case_statements) {
-                        // Check where this case's blocks lead
-                        let case_blocks = self.identify_case_blocks(
-                            case_info.case_head,
-                            region.join_block,
-                            next_case_head,
-                            &case_heads,
-                            cfg,
-                        );
-
-                        // Find the exit edges from this case
-                        for block_idx in &case_blocks {
-                            for edge in cfg.graph().edges(*block_idx) {
-                                let target = edge.target();
-                                // Check if this target is another case's head (not the next case for regular fallthrough)
-                                if case_heads.contains(&target)
-                                    && Some(target) != next_case_head
-                                    && target != region.join_block
-                                {
-                                    // This case falls through to another case
-                                    // We should not add a break statement
-                                    falls_through = true;
-                                    break;
-                                }
-                            }
-                            if falls_through {
-                                break;
-                            }
-                        }
-                    }
-
-                    case_statements
-                }
-            } else {
-                // This case is empty (fallthrough)
-                ArenaVec::new_in(self.ast_builder.allocator)
-            };
-
-            let switch_case = self.create_switch_case_with_comment(
-                Some(test),
-                consequent,
-                block_converter,
-                case_info.case_head,
-                &format!("sparse switch case {}", idx),
-            );
-            cases.push(switch_case);
-        }
-
-        // Add default case if present
-        if let Some(default_head) = region.default_head {
-            let consequent =
-                self.convert_case_body(default_head, region.join_block, cfg, block_converter)?;
-
-            let default_case = self.create_switch_case_with_comment(
-                None,
-                consequent,
-                block_converter,
-                default_head,
-                "default case",
-            );
-            cases.push(default_case);
-        }
-
-        Ok(cases)
-    }
-
-    /// Find the comparison block for a specific case in a sparse switch
-    fn find_comparison_block_for_case(
-        &self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-        case_index: usize,
-    ) -> Result<NodeIndex, SwitchConversionError> {
-        // Start from dispatch and follow false edges
-        let mut current = region.dispatch;
-
-        for i in 0..case_index {
-            // Find the false edge
-            let false_target = cfg
-                .graph()
-                .edges(current)
-                .find(|e| matches!(e.weight(), crate::cfg::EdgeKind::False))
-                .map(|e| e.target())
-                .ok_or_else(|| {
-                    SwitchConversionError::InvalidRegion(format!(
-                        "No false edge from comparison block {}",
-                        i
-                    ))
-                })?;
-            current = false_target;
-        }
-
-        Ok(current)
-    }
-
-    /// Extract case value from a comparison block
-    fn extract_case_value_from_comparison(
+    /// Find what register is being used as discriminator
+    fn find_discriminator(
         &self,
         block: &crate::cfg::Block,
-    ) -> Result<i32, SwitchConversionError> {
-        // First, find the comparison instruction
-        let mut comparison_idx = None;
-        let mut comparison_operands = None;
+        _block_id: NodeIndex,
+        _cfg: &Cfg<'a>,
+    ) -> Option<u8> {
+        // Look for LoadParam as first instruction
+        if let Some(first) = block.instructions().first() {
+            if let UnifiedInstruction::LoadParam { operand_0, .. } = &first.instruction {
+                return Some(*operand_0);
+            }
+        }
 
-        for (i, instr) in block.instructions().iter().enumerate() {
+        // Look for JStrictEqual instruction and extract discriminator register
+        // The discriminator is the register that's NOT loaded with a constant in this block
+        for instr in block.instructions() {
             match &instr.instruction {
                 UnifiedInstruction::JStrictEqual {
                     operand_1,
@@ -1135,941 +1837,959 @@ impl<'a> SwitchConverter<'a> {
                     operand_2,
                     ..
                 } => {
-                    comparison_idx = Some(i);
-                    comparison_operands = Some((*operand_1, *operand_2));
-                    break;
-                }
-                _ => {}
-            }
-        }
-
-        if let (Some(idx), Some((op1, op2))) = (comparison_idx, comparison_operands) {
-            // Now look backwards for constant loads into either operand
-            for i in (0..idx).rev() {
-                match &block.instructions()[i].instruction {
-                    UnifiedInstruction::LoadConstInt {
-                        operand_0,
-                        operand_1,
-                    } => {
-                        if *operand_0 == op1 || *operand_0 == op2 {
-                            return Ok(*operand_1);
+                    // Check which operand was loaded with a constant in this block
+                    let op1_is_const = block.instructions().iter().any(|i| match &i.instruction {
+                        UnifiedInstruction::LoadConstZero { operand_0 } => {
+                            *operand_0 == *operand_1 as u8
                         }
-                    }
-                    UnifiedInstruction::LoadConstUInt8 {
-                        operand_0,
-                        operand_1,
-                    } => {
-                        if *operand_0 == op1 || *operand_0 == op2 {
-                            return Ok(*operand_1 as i32);
+                        UnifiedInstruction::LoadConstUInt8 { operand_0, .. } => {
+                            *operand_0 == *operand_1 as u8
                         }
-                    }
-                    UnifiedInstruction::LoadConstZero { operand_0 } => {
-                        if *operand_0 == op1 || *operand_0 == op2 {
-                            return Ok(0);
+                        UnifiedInstruction::LoadConstInt { operand_0, .. } => {
+                            *operand_0 == *operand_1 as u8
                         }
-                    }
-                    _ => {}
-                }
-            }
-        }
+                        _ => false,
+                    });
 
-        Err(SwitchConversionError::InvalidRegion(
-            "Could not extract case value from comparison block".to_string(),
-        ))
-    }
-
-    /// Build case test expression (the value to match)
-    fn build_case_test(&mut self, value: i32) -> Result<Expression<'a>, SwitchConversionError> {
-        let span = Span::default();
-        let numeric_literal = self.ast_builder.numeric_literal(
-            span,
-            value as f64,
-            None, // raw value
-            oxc_syntax::number::NumberBase::Decimal,
-        );
-        Ok(Expression::NumericLiteral(
-            self.ast_builder.alloc(numeric_literal),
-        ))
-    }
-
-    /// Convert case body blocks to statements with fallthrough detection
-    fn convert_case_body_with_fallthrough(
-        &mut self,
-        case_head: NodeIndex,
-        join_block: NodeIndex,
-        next_case_head: Option<NodeIndex>,
-        case_heads: &HashSet<NodeIndex>,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<(ArenaVec<'a, Statement<'a>>, bool), SwitchConversionError> {
-        let mut statements = ArenaVec::new_in(self.ast_builder.allocator);
-        let mut falls_through = false;
-
-        // Special case: if the case head is the join block, this is an empty case
-        // that jumps directly to the end of the switch
-        if case_head == join_block {
-            // Return empty statements - the switch will add a break if needed
-            return Ok((statements, false));
-        }
-
-        // Check if this block contains only a return statement and is shared by other cases
-        let case_block = &cfg.graph()[case_head];
-        if case_block.instructions().len() == 1 {
-            if let UnifiedInstruction::Ret { .. } = &case_block.instructions()[0].instruction {
-                // Check how many blocks jump to this return block
-                let mut jumps_to_this_block = 0;
-                for node in cfg.graph().node_indices() {
-                    for edge in cfg.graph().edges(node) {
-                        if edge.target() == case_head {
-                            jumps_to_this_block += 1;
+                    let op2_is_const = block.instructions().iter().any(|i| match &i.instruction {
+                        UnifiedInstruction::LoadConstZero { operand_0 } => {
+                            *operand_0 == *operand_2 as u8
                         }
+                        UnifiedInstruction::LoadConstUInt8 { operand_0, .. } => {
+                            *operand_0 == *operand_2 as u8
+                        }
+                        UnifiedInstruction::LoadConstInt { operand_0, .. } => {
+                            *operand_0 == *operand_2 as u8
+                        }
+                        _ => false,
+                    });
+
+                    // The discriminator is the non-constant operand
+                    if op1_is_const && !op2_is_const {
+                        return Some(*operand_2 as u8);
+                    } else if !op1_is_const && op2_is_const {
+                        return Some(*operand_1 as u8);
                     }
+                    // If neither or both are constants in this block, default to operand_2
+                    return Some(*operand_2 as u8);
                 }
-
-                // If this is a shared return block (multiple cases jump here),
-                // we should return empty statements for this case (but it will get a break)
-                if jumps_to_this_block > 1 {
-                    // Add a break statement since this case is empty
-                    self.add_break_statement_with_comment(
-                        &mut statements,
-                        block_converter,
-                        case_head,
-                        "shared return block",
-                    );
-                    return Ok((statements, false));
-                }
+                _ => continue,
             }
-        }
-
-        // First, identify all blocks that belong to this case
-        let case_blocks =
-            self.identify_case_blocks(case_head, join_block, next_case_head, case_heads, cfg);
-
-        // Check for fallthrough by seeing if any block in this case jumps to the next case head
-        if let Some(next_case) = next_case_head {
-            for block_idx in &case_blocks {
-                for edge in cfg.graph().edges(*block_idx) {
-                    if edge.target() == next_case {
-                        falls_through = true;
-                        break;
-                    }
-                }
-                if falls_through {
-                    break;
-                }
-            }
-        }
-
-        // Now convert the case body starting from the head, preserving control flow
-        self.convert_case_control_flow(
-            case_head,
-            &case_blocks,
-            join_block,
-            cfg,
-            block_converter,
-            &mut statements,
-            &mut HashSet::new(),
-        )?;
-
-        // Add break if needed
-        if !falls_through && !self.has_terminal_statement(&statements) {
-            self.add_break_statement_with_comment(
-                &mut statements,
-                block_converter,
-                case_head,
-                "case exit",
-            );
-        }
-
-        Ok((statements, falls_through))
-    }
-
-    /// Detect if all cases jump to a shared return block
-    fn detect_shared_return_block(
-        &self,
-        region: &SwitchRegion,
-        cfg: &Cfg<'a>,
-    ) -> Option<NodeIndex> {
-        // Check all case heads to see if they jump to a common return block
-        let mut return_blocks = HashSet::new();
-
-        // Check each case
-        for case in &region.cases {
-            // Find what block this case jumps to
-            for edge in cfg.graph().edges(case.case_head) {
-                let target = edge.target();
-                let target_block = &cfg.graph()[target];
-
-                // Check if it's a return block
-                if target_block.instructions().len() == 1 {
-                    if let UnifiedInstruction::Ret { .. } =
-                        &target_block.instructions()[0].instruction
-                    {
-                        return_blocks.insert(target);
-                    }
-                }
-            }
-        }
-
-        // Check default case too
-        if let Some(default_head) = region.default_head {
-            for edge in cfg.graph().edges(default_head) {
-                let target = edge.target();
-                let target_block = &cfg.graph()[target];
-
-                // Check if it's a return block
-                if target_block.instructions().len() == 1 {
-                    if let UnifiedInstruction::Ret { .. } =
-                        &target_block.instructions()[0].instruction
-                    {
-                        return_blocks.insert(target);
-                    }
-                }
-            }
-        }
-
-        // If there's exactly one shared return block, return it
-        if return_blocks.len() == 1 {
-            return return_blocks.into_iter().next();
         }
 
         None
     }
 
-    /// Convert case body blocks to statements
-    fn convert_case_body(
-        &mut self,
-        case_head: NodeIndex,
-        join_block: NodeIndex,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<ArenaVec<'a, Statement<'a>>, SwitchConversionError> {
-        let mut statements = ArenaVec::new_in(self.ast_builder.allocator);
-
-        // Special case: if the case head is the join block, this is an empty case
-        // that jumps directly to the end of the switch
-        if case_head == join_block {
-            // Return empty statements - the switch will add a break if needed
-            return Ok(statements);
-        }
-
-        // Check if this block contains only a return statement and is shared by other cases
-        let case_block = &cfg.graph()[case_head];
-        if case_block.instructions().len() == 1 {
-            if let UnifiedInstruction::Ret { .. } = &case_block.instructions()[0].instruction {
-                // Check how many blocks jump to this return block
-                let mut jumps_to_this_block = 0;
-                for node in cfg.graph().node_indices() {
-                    for edge in cfg.graph().edges(node) {
-                        if edge.target() == case_head {
-                            jumps_to_this_block += 1;
-                        }
-                    }
-                }
-
-                // If this is a shared return block, return empty statements
-                if jumps_to_this_block > 1 {
-                    return Ok(statements);
-                }
-            }
-        }
-
-        let mut visited = HashSet::new();
-        let mut to_visit = vec![case_head];
-
-        // Collect all blocks that belong to this case
-        while let Some(block_idx) = to_visit.pop() {
-            if visited.contains(&block_idx) || block_idx == join_block {
-                continue;
-            }
-            visited.insert(block_idx);
-
-            // Convert the block
-            let block = &cfg.graph()[block_idx];
-
-            // Skip if this is an exit block
-            if block.is_exit() {
-                continue;
-            }
-
-            // Convert block statements, filtering out jump instructions
-            let block_stmts =
-                self.convert_case_block_statements(block, block_idx, cfg, block_converter)?;
-
-            statements.extend(block_stmts);
-
-            // Check if we need a break statement
-            let needs_break = self.check_needs_break(block_idx, join_block, cfg, &statements);
-            if needs_break {
-                self.add_break_statement_with_comment(
-                    &mut statements,
-                    block_converter,
-                    block_idx,
-                    "block exit to join",
-                );
-            }
-
-            // Add successor blocks within the case
-            for edge in cfg.graph().edges(block_idx) {
-                let target = edge.target();
-                if target != join_block && !visited.contains(&target) {
-                    // Also skip if this is a shared return block
-                    let target_block = &cfg.graph()[target];
-                    if target_block.instructions().len() == 1 {
-                        if let UnifiedInstruction::Ret { .. } =
-                            &target_block.instructions()[0].instruction
-                        {
-                            // Check if this is shared by multiple blocks
-                            let mut incoming_count = 0;
-                            for node in cfg.graph().node_indices() {
-                                for edge in cfg.graph().edges(node) {
-                                    if edge.target() == target {
-                                        incoming_count += 1;
-                                    }
-                                }
-                            }
-                            if incoming_count > 1 {
-                                continue;
-                            }
-                        }
-                    }
-                    to_visit.push(target);
-                }
-            }
-        }
-
-        Ok(statements)
-    }
-
-    /// Check if a block needs a break statement
-    fn check_needs_break(
+    /// Extract case information from a comparison block
+    fn extract_case_from_block(
         &self,
-        block_idx: NodeIndex,
-        join_block: NodeIndex,
-        cfg: &Cfg<'a>,
-        statements: &[Statement<'a>],
-    ) -> bool {
-        // Don't add break if the last statement is already a return or break
-        if let Some(last_stmt) = statements.last() {
-            match last_stmt {
-                Statement::ReturnStatement(_) => return false,
-                Statement::BreakStatement(_) => return false,
-                Statement::ThrowStatement(_) => return false,
-                _ => {}
-            }
-        }
-
-        // If the block has a direct edge to the join block, it needs a break
-        cfg.graph()
-            .edges(block_idx)
-            .any(|edge| edge.target() == join_block)
-    }
-
-    /// Identify all blocks that belong to a case
-    fn identify_case_blocks(
-        &self,
-        case_head: NodeIndex,
-        join_block: NodeIndex,
-        next_case_head: Option<NodeIndex>,
-        case_heads: &HashSet<NodeIndex>,
-        cfg: &Cfg<'a>,
-    ) -> HashSet<NodeIndex> {
-        let mut case_blocks = HashSet::new();
-        let mut to_visit = vec![case_head];
-
-        while let Some(block_idx) = to_visit.pop() {
-            if case_blocks.contains(&block_idx) || block_idx == join_block {
-                continue;
-            }
-
-            // Stop if we hit another case
-            if block_idx != case_head && case_heads.contains(&block_idx) {
-                // Don't include other case heads in our case blocks
-                continue;
-            }
-
-            case_blocks.insert(block_idx);
-
-            // Add successors
-            for edge in cfg.graph().edges(block_idx) {
-                let target = edge.target();
-                if !case_blocks.contains(&target) {
-                    // Don't follow edges to blocks that are case heads of other cases
-                    // unless it's the expected next case (fallthrough)
-                    if case_heads.contains(&target) && Some(target) != next_case_head {
-                        continue;
-                    }
-                    to_visit.push(target);
-                }
-            }
-        }
-
-        case_blocks
-    }
-
-    /// Convert control flow within a case, preserving structure
-    fn convert_case_control_flow(
-        &mut self,
-        current_block: NodeIndex,
-        case_blocks: &HashSet<NodeIndex>,
-        join_block: NodeIndex,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-        statements: &mut ArenaVec<'a, Statement<'a>>,
-        visited: &mut HashSet<NodeIndex>,
-    ) -> Result<(), SwitchConversionError> {
-        if visited.contains(&current_block) || !case_blocks.contains(&current_block) {
-            return Ok(());
-        }
-
-        // Before processing this block, check if it's the start of any nested control flow structure
-
-        // 1. Check for nested switch
-        if let Some(switch_analysis) = cfg.analyze_switch_regions() {
-            if let Some(nested_region) =
-                block_converter.find_switch_starting_at(current_block, &switch_analysis)
-            {
-                // This is a nested switch! Convert it as a whole
-                let mut nested_converter = SwitchConverter::new(self.ast_builder);
-                if let Ok(nested_statements) =
-                    nested_converter.convert_switch_region(nested_region, cfg, block_converter)
-                {
-                    statements.extend(nested_statements);
-
-                    // Mark all blocks in the nested switch as visited
-                    let nested_blocks = get_switch_infrastructure_blocks(nested_region, cfg);
-                    for block in &nested_blocks {
-                        visited.insert(*block);
-                    }
-                    // Also mark case heads as visited
-                    for case in &nested_region.cases {
-                        visited.insert(case.case_head);
-                    }
-                    if let Some(default) = nested_region.default_head {
-                        visited.insert(default);
-                    }
-
-                    // Continue from the join block of the nested switch
-                    if case_blocks.contains(&nested_region.join_block)
-                        && nested_region.join_block != join_block
-                    {
-                        return self.convert_case_control_flow(
-                            nested_region.join_block,
-                            case_blocks,
-                            join_block,
-                            cfg,
-                            block_converter,
-                            statements,
-                            visited,
-                        );
-                    }
-                    return Ok(());
-                }
-            }
-        }
-
-        // 2. Check for nested if/else chains
-        if let Some(conditional_analysis) = cfg.analyze_conditional_chains() {
-            if let Some(nested_chain) =
-                block_converter.find_chain_starting_at(current_block, &conditional_analysis)
-            {
-                // This is a nested conditional! Convert it as a whole
-                let mut conditional_converter =
-                    super::conditional_converter::ConditionalConverter::new(self.ast_builder);
-                if let Ok(nested_statements) =
-                    conditional_converter.convert_chain(nested_chain, cfg, block_converter)
-                {
-                    statements.extend(nested_statements);
-
-                    // Mark all blocks in the conditional chain as visited
-                    let nested_blocks = super::conditional_converter::ConditionalConverter::get_all_chain_blocks(nested_chain);
-                    for block in &nested_blocks {
-                        visited.insert(*block);
-                    }
-
-                    // Continue from the join block of the conditional
-                    if case_blocks.contains(&nested_chain.join_block)
-                        && nested_chain.join_block != join_block
-                    {
-                        return self.convert_case_control_flow(
-                            nested_chain.join_block,
-                            case_blocks,
-                            join_block,
-                            cfg,
-                            block_converter,
-                            statements,
-                            visited,
-                        );
-                    }
-                    return Ok(());
-                }
-            }
-        }
-
-        // 3. TODO: Check for nested loops (when loop analysis is implemented)
-        // if let Some(loop_analysis) = cfg.analyze_loops() {
-        //     if let Some(nested_loop) = block_converter.find_loop_starting_at(current_block, &loop_analysis) {
-        //         // Convert nested loop...
-        //     }
-        // }
-
-        visited.insert(current_block);
-
-        let block = &cfg.graph()[current_block];
-        if block.is_exit() {
-            return Ok(());
-        }
-
-        // Convert the statements in this block
-        let block_stmts =
-            self.convert_case_block_statements(block, current_block, cfg, block_converter)?;
-        statements.extend(block_stmts);
-
-        // Check the outgoing edges to determine control flow
-        let edges: Vec<_> = cfg.graph().edges(current_block).collect();
-
-        match edges.len() {
-            0 => {} // No successors
-            1 => {
-                // Unconditional flow to next block
-                let target = edges[0].target();
-                if case_blocks.contains(&target) && target != join_block {
-                    self.convert_case_control_flow(
-                        target,
-                        case_blocks,
-                        join_block,
-                        cfg,
-                        block_converter,
-                        statements,
-                        visited,
-                    )?;
-                }
-            }
-            2 => {
-                // Conditional branch - need to create if statement
-                self.convert_conditional_in_case(
-                    current_block,
-                    case_blocks,
-                    join_block,
-                    cfg,
-                    block_converter,
-                    statements,
-                    visited,
-                )?;
-            }
-            _ => {
-                // Multiple branches (switch?) - handle specially
-                // For now, just convert the first successor
-                if let Some(edge) = edges.first() {
-                    let target = edge.target();
-                    if case_blocks.contains(&target) && target != join_block {
-                        self.convert_case_control_flow(
-                            target,
-                            case_blocks,
-                            join_block,
-                            cfg,
-                            block_converter,
-                            statements,
-                            visited,
-                        )?;
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Convert a conditional branch within a case
-    fn convert_conditional_in_case(
-        &mut self,
-        cond_block: NodeIndex,
-        case_blocks: &HashSet<NodeIndex>,
-        join_block: NodeIndex,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-        statements: &mut ArenaVec<'a, Statement<'a>>,
-        visited: &mut HashSet<NodeIndex>,
-    ) -> Result<(), SwitchConversionError> {
-        // Find the true and false branches
-        let mut true_branch = None;
-        let mut false_branch = None;
-
-        for edge in cfg.graph().edges(cond_block) {
-            match edge.weight() {
-                crate::cfg::EdgeKind::True => true_branch = Some(edge.target()),
-                crate::cfg::EdgeKind::False => false_branch = Some(edge.target()),
-                _ => {}
-            }
-        }
-
-        if let (Some(true_target), Some(false_target)) = (true_branch, false_branch) {
-            // Get the condition from the block
-            let block = &cfg.graph()[cond_block];
-            let condition = self.extract_condition_from_block(block, block_converter)?;
-
-            // Convert true branch
-            let mut consequent = ArenaVec::new_in(self.ast_builder.allocator);
-            if case_blocks.contains(&true_target) && true_target != join_block {
-                self.convert_case_control_flow(
-                    true_target,
-                    case_blocks,
-                    join_block,
-                    cfg,
-                    block_converter,
-                    &mut consequent,
-                    visited,
-                )?;
-            }
-
-            // Convert false branch
-            let mut alternate = None;
-            if case_blocks.contains(&false_target) && false_target != join_block {
-                let mut alt_stmts = ArenaVec::new_in(self.ast_builder.allocator);
-                self.convert_case_control_flow(
-                    false_target,
-                    case_blocks,
-                    join_block,
-                    cfg,
-                    block_converter,
-                    &mut alt_stmts,
-                    visited,
-                )?;
-                if !alt_stmts.is_empty() {
-                    alternate = Some(Statement::BlockStatement(
-                        self.ast_builder
-                            .alloc(self.ast_builder.block_statement(Span::default(), alt_stmts)),
-                    ));
-                }
-            }
-
-            // Create if statement
-            let span = Span::default();
-            let if_stmt = self.ast_builder.if_statement(
-                span,
-                condition,
-                Statement::BlockStatement(
-                    self.ast_builder
-                        .alloc(self.ast_builder.block_statement(span, consequent)),
-                ),
-                alternate,
-            );
-            statements.push(Statement::IfStatement(self.ast_builder.alloc(if_stmt)));
-        }
-
-        Ok(())
-    }
-
-    /// Extract condition expression from a block
-    fn extract_condition_from_block(
-        &mut self,
         block: &crate::cfg::Block,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<Expression<'a>, SwitchConversionError> {
-        // Look for a comparison instruction followed by a conditional jump
-        let instructions = block.instructions();
+        discriminator: u8,
+        block_id: NodeIndex,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+    ) -> Option<CaseInfo> {
+        let mut setup = SmallVec::new();
+        let mut keys = Vec::new();
+        let mut comparison_index = None;
+        let mut comparison_const_reg = None;
+        let mut target_block = None;
+        let mut source_pc = InstructionIndex(0);
 
-        // Find the conditional jump at the end
-        if let Some(last_instr) = instructions.last() {
-            match &last_instr.instruction {
-                // Direct conditional jumps with built-in comparisons
-                UnifiedInstruction::JGreater {
-                    operand_0: _,
-                    operand_1,
-                    operand_2,
-                }
-                | UnifiedInstruction::JGreaterLong {
-                    operand_0: _,
-                    operand_1,
-                    operand_2,
-                } => {
-                    let pc = block.start_pc() + (instructions.len() - 1) as u32;
-                    block_converter
-                        .instruction_converter_mut()
-                        .set_current_pc(pc.into());
-                    let left = self.build_operand_expression(*operand_1 as u8, block_converter);
-                    let right = self.build_operand_expression(*operand_2 as u8, block_converter);
-                    let span = Span::default();
-                    return Ok(Expression::BinaryExpression(self.ast_builder.alloc(
-                        self.ast_builder.binary_expression(
-                            span,
-                            left,
-                            oxc_ast::ast::BinaryOperator::GreaterThan,
-                            right,
-                        ),
-                    )));
-                }
-                UnifiedInstruction::JLess {
-                    operand_0: _,
-                    operand_1,
-                    operand_2,
-                }
-                | UnifiedInstruction::JLessLong {
-                    operand_0: _,
-                    operand_1,
-                    operand_2,
-                } => {
-                    let pc = block.start_pc() + (instructions.len() - 1) as u32;
-                    block_converter
-                        .instruction_converter_mut()
-                        .set_current_pc(pc.into());
-                    let left = self.build_operand_expression(*operand_1 as u8, block_converter);
-                    let right = self.build_operand_expression(*operand_2 as u8, block_converter);
-                    let span = Span::default();
-                    return Ok(Expression::BinaryExpression(self.ast_builder.alloc(
-                        self.ast_builder.binary_expression(
-                            span,
-                            left,
-                            oxc_ast::ast::BinaryOperator::LessThan,
-                            right,
-                        ),
-                    )));
-                }
+        // First pass: find the JStrictEqual comparison
+        for (i, instr) in block.instructions().iter().enumerate() {
+            match &instr.instruction {
                 UnifiedInstruction::JStrictEqual {
                     operand_0: _,
                     operand_1,
                     operand_2,
-                }
-                | UnifiedInstruction::JStrictEqualLong {
+                } | UnifiedInstruction::JStrictEqualLong {
                     operand_0: _,
                     operand_1,
                     operand_2,
                 } => {
-                    let pc = block.start_pc() + (instructions.len() - 1) as u32;
-                    block_converter
-                        .instruction_converter_mut()
-                        .set_current_pc(pc.into());
-                    let left = self.build_operand_expression(*operand_1 as u8, block_converter);
-                    let right = self.build_operand_expression(*operand_2 as u8, block_converter);
-                    let span = Span::default();
-                    return Ok(Expression::BinaryExpression(self.ast_builder.alloc(
-                        self.ast_builder.binary_expression(
-                            span,
-                            left,
-                            oxc_ast::ast::BinaryOperator::StrictEquality,
-                            right,
-                        ),
-                    )));
-                }
-                UnifiedInstruction::JmpTrue { .. } | UnifiedInstruction::JmpFalse { .. } => {
-                    // Look backwards for the condition-setting instruction
-                    for i in (0..instructions.len() - 1).rev() {
-                        let instr = &instructions[i];
-                        match &instr.instruction {
-                            // Comparison instructions that set a boolean result
-                            UnifiedInstruction::Less {
-                                operand_0: _,
-                                operand_1,
-                                operand_2,
-                            }
-                            | UnifiedInstruction::LessEq {
-                                operand_0: _,
-                                operand_1,
-                                operand_2,
-                            }
-                            | UnifiedInstruction::Greater {
-                                operand_0: _,
-                                operand_1,
-                                operand_2,
-                            }
-                            | UnifiedInstruction::GreaterEq {
-                                operand_0: _,
-                                operand_1,
-                                operand_2,
-                            }
-                            | UnifiedInstruction::Eq {
-                                operand_0: _,
-                                operand_1,
-                                operand_2,
-                            }
-                            | UnifiedInstruction::Neq {
-                                operand_0: _,
-                                operand_1,
-                                operand_2,
-                            }
-                            | UnifiedInstruction::StrictEq {
-                                operand_0: _,
-                                operand_1,
-                                operand_2,
-                            }
-                            | UnifiedInstruction::StrictNeq {
-                                operand_0: _,
-                                operand_1,
-                                operand_2,
-                            } => {
-                                // Convert this comparison to an expression
-                                let pc = block.start_pc() + i as u32;
-                                block_converter
-                                    .instruction_converter_mut()
-                                    .set_current_pc(pc.into());
+                    // Check if this is comparing our discriminator
+                    let (const_reg, is_discriminator_match) = if *operand_1 as u8 == discriminator {
+                        (*operand_2 as u8, true)
+                    } else if *operand_2 as u8 == discriminator {
+                        (*operand_1 as u8, true)
+                    } else {
+                        (0, false)
+                    };
 
-                                // Build the comparison expression directly
-                                let left = self
-                                    .build_operand_expression(*operand_1 as u8, block_converter);
-                                let right = self
-                                    .build_operand_expression(*operand_2 as u8, block_converter);
-
-                                let span = Span::default();
-                                let op = match &instr.instruction {
-                                    UnifiedInstruction::Less { .. } => {
-                                        oxc_ast::ast::BinaryOperator::LessThan
-                                    }
-                                    UnifiedInstruction::LessEq { .. } => {
-                                        oxc_ast::ast::BinaryOperator::LessEqualThan
-                                    }
-                                    UnifiedInstruction::Greater { .. } => {
-                                        oxc_ast::ast::BinaryOperator::GreaterThan
-                                    }
-                                    UnifiedInstruction::GreaterEq { .. } => {
-                                        oxc_ast::ast::BinaryOperator::GreaterEqualThan
-                                    }
-                                    UnifiedInstruction::Eq { .. } => {
-                                        oxc_ast::ast::BinaryOperator::Equality
-                                    }
-                                    UnifiedInstruction::Neq { .. } => {
-                                        oxc_ast::ast::BinaryOperator::Inequality
-                                    }
-                                    UnifiedInstruction::StrictEq { .. } => {
-                                        oxc_ast::ast::BinaryOperator::StrictEquality
-                                    }
-                                    UnifiedInstruction::StrictNeq { .. } => {
-                                        oxc_ast::ast::BinaryOperator::StrictInequality
-                                    }
-                                    _ => unreachable!(),
-                                };
-
-                                return Ok(Expression::BinaryExpression(self.ast_builder.alloc(
-                                    self.ast_builder.binary_expression(span, left, op, right),
-                                )));
-                            }
-                            _ => {}
+                    if is_discriminator_match {
+                        comparison_index = Some(i);
+                        comparison_const_reg = Some(const_reg);
+                        source_pc = instr.instruction_index;
+                        
+                        // Extract the constant value for the case key
+                        if let Some(constant_value) =
+                            self.get_constant_value_at(block_id, i, const_reg, cfg)
+                        {
+                            let case_key = match constant_value {
+                                ConstantValue::Number(n) => CaseKey::Num(n),
+                                ConstantValue::String(s) => CaseKey::Str(s.into()),
+                                _ => return None,
+                            };
+                            keys.push(case_key);
                         }
+                        
+                        // Find the target block
+                        target_block = self.get_true_successor(block_id, cfg);
+                        break;
                     }
                 }
                 _ => {}
             }
         }
-
-        // Fallback to placeholder
-        let span = Span::default();
-        Ok(Expression::BooleanLiteral(
-            self.ast_builder
-                .alloc(self.ast_builder.boolean_literal(span, true)),
-        ))
-    }
-
-    /// Build an expression for an operand (register)
-    fn build_operand_expression(
-        &mut self,
-        register: u8,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Expression<'a> {
-        // Note: The PC should already be set by the caller
-        // Use get_source_variable_name to get the correct SSA name for reading
-        let var_name = block_converter
-            .instruction_converter_mut()
-            .register_manager_mut()
-            .get_source_variable_name(register);
-
-        let span = Span::default();
-        let atom = self.ast_builder.atom(&var_name);
-        let ident = self.ast_builder.identifier_reference(span, atom);
-        Expression::Identifier(self.ast_builder.alloc(ident))
-    }
-
-    /// Check if the statements list has a terminal statement
-    fn has_terminal_statement(&self, statements: &[Statement<'a>]) -> bool {
-        if let Some(last) = statements.last() {
-            matches!(
-                last,
-                Statement::ReturnStatement(_)
-                    | Statement::BreakStatement(_)
-                    | Statement::ThrowStatement(_)
-            )
-        } else {
-            false
-        }
-    }
-
-    /// Convert statements in a case block, filtering out structural jumps
-    fn convert_case_block_statements(
-        &mut self,
-        block: &crate::cfg::Block,
-        block_idx: NodeIndex,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<ArenaVec<'a, Statement<'a>>, SwitchConversionError> {
-        // Define a filter to skip terminal jump instructions
-        let instruction_filter = |instruction: &crate::hbc::function_table::HbcFunctionInstruction, is_last: bool| -> bool {
-            if is_last {
-                match &instruction.instruction {
-                    UnifiedInstruction::Jmp { .. }
-                    | UnifiedInstruction::JmpLong { .. }
-                    | UnifiedInstruction::JmpTrue { .. }
-                    | UnifiedInstruction::JmpFalse { .. }
-                    | UnifiedInstruction::JStrictEqual { .. }
-                    | UnifiedInstruction::JStrictEqualLong { .. } => {
-                        // Terminal jump - skip it
-                        false
-                    }
-                    _ => true,
-                }
-            } else {
-                true
+        
+        // Bail if we didn't find a comparison
+        let comparison_idx = comparison_index?;
+        let const_reg = comparison_const_reg?;
+        let target = target_block?;
+        
+        // Second pass: collect all setup instructions
+        // These are all instructions except:
+        // 1. The LoadConst that loads the comparison value
+        // 2. The JStrictEqual comparison itself
+        for (i, instr) in block.instructions().iter().enumerate() {
+            // Skip the comparison instruction
+            if i == comparison_idx {
+                continue;
             }
-        };
+            
+            // Check if this instruction defines a register
+            let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+            if let Some(target_reg) = usage.target {
+                // Skip if this is loading the constant for comparison
+                let loads_comparison_const = target_reg == const_reg && i < comparison_idx && match &instr.instruction {
+                    UnifiedInstruction::LoadConstZero { .. } |
+                    UnifiedInstruction::LoadConstUInt8 { .. } |
+                    UnifiedInstruction::LoadConstInt { .. } |
+                    UnifiedInstruction::LoadConstDouble { .. } |
+                    UnifiedInstruction::LoadConstString { .. } |
+                    UnifiedInstruction::LoadConstStringLongIndex { .. } |
+                    UnifiedInstruction::LoadConstTrue { .. } |
+                    UnifiedInstruction::LoadConstFalse { .. } |
+                    UnifiedInstruction::LoadConstNull { .. } |
+                    UnifiedInstruction::LoadConstUndefined { .. } => true,
+                    _ => false,
+                };
+                
+                if loads_comparison_const {
+                    continue;
+                }
+                
+                // Find the SSA value for this definition
+                let def_site = crate::cfg::ssa::RegisterDef {
+                    register: target_reg,
+                    block_id,
+                    instruction_idx: instr.instruction_index,
+                };
+                
+                if let Some(ssa_value) = ssa.ssa_values.get(&def_site) {
+                    // Extract the value for this instruction
+                    if let Some(value) = self.extract_constant_value_from_instruction(&instr.instruction, target_reg) {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value,
+                            instruction: instr.clone(),
+                        });
+                    } else if let UnifiedInstruction::Mov { operand_0: _, operand_1 } = &instr.instruction {
+                        // For Mov, find the source value from our setup instructions
+                        if let Some(source_setup) = setup.iter().find(|s: &&SetupInstruction| s.ssa_value.register == *operand_1 as u8) {
+                            setup.push(SetupInstruction {
+                                ssa_value: ssa_value.clone(),
+                                value: source_setup.value.clone(),
+                                instruction: instr.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        // eprintln!("Case with {} keys has {} setup instructions:", keys.len(), setup.len());
+        // for (i, s) in setup.iter().enumerate() {
+        //     eprintln!("  Setup[{}]: ssa={:?}, value={:?}", i, s.ssa_value, s.value);
+        // }
+        
+        Some(CaseInfo {
+            keys,
+            setup,
+            target_block: target,
+            always_terminates: false,
+            source_pc,
+            execution_order: 0,
+            comparison_block: block_id,
+        })
+    }
 
-        // Use the block converter's convert_block_with_options method
-        // This ensures phi declarations are handled properly
-        match block_converter.convert_block_with_options(
-            block,
-            block_idx,
-            cfg.graph(),
-            Some(instruction_filter),
-            false, // Don't skip phi declarations
-        ) {
-            Ok(statements) => Ok(statements),
-            Err(e) => Err(SwitchConversionError::CaseConversionError(format!(
-                "Failed to convert block {}: {}",
-                block_idx.index(),
-                e
-            ))),
+    /// Get the constant value that a register holds at a specific location
+    fn get_constant_value_at(
+        &self,
+        block_id: NodeIndex,
+        instruction_idx: usize,
+        register: u8,
+        cfg: &Cfg<'a>,
+    ) -> Option<ConstantValue> {
+        let block = &cfg.graph()[block_id];
+
+        // Look backwards from the instruction for the most recent definition of this register
+        for instr in block.instructions().iter().take(instruction_idx).rev() {
+            let usage = analyze_register_usage(&instr.instruction);
+
+            if let Some(target_reg) = usage.target {
+                if target_reg == register {
+                    // Found a definition - try to extract the constant value
+                    return self
+                        .extract_constant_value_from_instruction(&instr.instruction, target_reg);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Extract constant value from an instruction that defines a register
+    fn extract_constant_value_from_instruction(
+        &self,
+        instr: &UnifiedInstruction,
+        _target_reg: u8,
+    ) -> Option<ConstantValue> {
+        match instr {
+            UnifiedInstruction::LoadConstString { operand_1, .. } => {
+                // Get the actual string from the HBC file
+                if let Some(ref ctx) = self.expression_context {
+                    if let Some(hbc_file) = ctx.hbc_file() {
+                        if let Ok(string_value) = hbc_file.strings.get(*operand_1 as u32) {
+                            return Some(ConstantValue::String(string_value));
+                        } else {
+                            panic!("String not found in HBC file");
+                        }
+                    }
+                }
+                // Fallback if we can't get the string
+                Some(ConstantValue::String(format!("string_{}", operand_1)))
+            }
+            UnifiedInstruction::LoadConstZero { .. } => {
+                Some(ConstantValue::Number(OrderedFloat(0.0)))
+            }
+            UnifiedInstruction::LoadConstUInt8 { operand_1, .. } => {
+                Some(ConstantValue::Number(OrderedFloat(*operand_1 as f64)))
+            }
+            UnifiedInstruction::LoadConstInt { operand_1, .. } => {
+                Some(ConstantValue::Number(OrderedFloat(*operand_1 as f64)))
+            }
+            UnifiedInstruction::LoadConstDouble { operand_1, .. } => {
+                Some(ConstantValue::Number(OrderedFloat(*operand_1 as f64)))
+            }
+            UnifiedInstruction::LoadConstNull { .. } => Some(ConstantValue::Null),
+            UnifiedInstruction::LoadConstUndefined { .. } => Some(ConstantValue::Undefined),
+            UnifiedInstruction::LoadConstTrue { .. } => Some(ConstantValue::Boolean(true)),
+            UnifiedInstruction::LoadConstFalse { .. } => Some(ConstantValue::Boolean(false)),
+            UnifiedInstruction::Mov { .. } => {
+                // For Mov instructions, we need to trace the source register
+                // This will be handled by the caller to look up the value of operand_1
+                None
+            }
+            _ => None, // Non-constant instruction
         }
     }
 
-    /// Get the switch table for the dispatch block
-    fn get_switch_table(
+    /// Get the true successor (taken branch) for a comparison block
+    fn get_true_successor(&self, block_id: NodeIndex, cfg: &Cfg<'a>) -> Option<NodeIndex> {
+        let edges: Vec<_> = cfg.graph().edges(block_id).collect();
+        if edges.len() == 2 {
+            // Find the true edge
+            edges
+                .iter()
+                .find(|e| matches!(e.weight(), crate::cfg::EdgeKind::True))
+                .map(|e| e.target())
+        } else {
+            None
+        }
+    }
+
+    /// Get the false successor (not-taken branch) for a comparison block
+    fn get_false_successor(&self, block_id: NodeIndex, cfg: &Cfg<'a>) -> Option<NodeIndex> {
+        let edges: Vec<_> = cfg.graph().edges(block_id).collect();
+        if edges.len() == 2 {
+            // Find the false edge
+            edges
+                .iter()
+                .find(|e| matches!(e.weight(), crate::cfg::EdgeKind::False))
+                .map(|e| e.target())
+        } else {
+            None
+        }
+    }
+
+    /// Extract default case setup instructions
+    fn extract_default_setup(
         &self,
+        default_block: NodeIndex,
+        _live_across_false: &HashSet<u8>,
+        cfg: &Cfg<'a>,
+        ssa_analysis: &SSAAnalysis,
+    ) -> Option<SmallVec<[SetupInstruction; 4]>> {
+        // Use the same logic as extract_case_from_block but without the comparison handling
+        let block = &cfg.graph()[default_block];
+        let mut setup = SmallVec::new();
+        
+        // For default block, extract all instructions except the final jump
+        let instructions = block.instructions();
+        if instructions.is_empty() {
+            return Some(setup);
+        }
+        
+        // Get HBC file from cfg
+        let hbc_file = cfg.hbc_file();
+        
+        // Process all instructions except the last (which should be a jump)
+        for (i, instr) in instructions.iter().enumerate() {
+            // Skip the last instruction if it's a jump
+            if i == instructions.len() - 1 {
+                if matches!(instr.instruction, 
+                    UnifiedInstruction::Jmp { .. } |
+                    UnifiedInstruction::JmpLong { .. } |
+                    UnifiedInstruction::JmpTrue { .. } |
+                    UnifiedInstruction::JmpFalse { .. } |
+                    UnifiedInstruction::JmpUndefined { .. } |
+                    UnifiedInstruction::Ret { .. }
+                ) {
+                    continue;
+                }
+            }
+            
+            // Find SSA value defined by this instruction
+            let ssa_value = ssa_analysis.definitions.iter()
+                .find(|def| def.instruction_idx == instr.instruction_index)
+                .and_then(|def| ssa_analysis.ssa_values.get(def));
+            
+            if let Some(ssa_value) = ssa_value {
+                // Extract constant value from LoadConst instructions
+                match &instr.instruction {
+                    UnifiedInstruction::LoadConstString { operand_0: _, operand_1 } => {
+                        if let Ok(string_value) = hbc_file.strings.get(*operand_1 as u32) {
+                            setup.push(SetupInstruction {
+                                ssa_value: ssa_value.clone(),
+                                value: ConstantValue::String(string_value),
+                                instruction: instr.clone(),
+                            });
+                        }
+                    }
+                    UnifiedInstruction::LoadConstInt { operand_0: _, operand_1 } => {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value: ConstantValue::Number(OrderedFloat(*operand_1 as f64)),
+                            instruction: instr.clone(),
+                        });
+                    }
+                    UnifiedInstruction::LoadConstDouble { operand_0: _, operand_1 } => {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value: ConstantValue::Number(OrderedFloat(*operand_1)),
+                            instruction: instr.clone(),
+                        });
+                    }
+                    UnifiedInstruction::LoadConstZero { operand_0: _ } => {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value: ConstantValue::Number(OrderedFloat(0.0)),
+                            instruction: instr.clone(),
+                        });
+                    }
+                    UnifiedInstruction::LoadConstNull { operand_0: _ } => {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value: ConstantValue::Null,
+                            instruction: instr.clone(),
+                        });
+                    }
+                    UnifiedInstruction::LoadConstUndefined { operand_0: _ } => {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value: ConstantValue::Undefined,
+                            instruction: instr.clone(),
+                        });
+                    }
+                    UnifiedInstruction::LoadConstTrue { operand_0: _ } => {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value: ConstantValue::Boolean(true),
+                            instruction: instr.clone(),
+                        });
+                    }
+                    UnifiedInstruction::LoadConstFalse { operand_0: _ } => {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value: ConstantValue::Boolean(false),
+                            instruction: instr.clone(),
+                        });
+                    }
+                    UnifiedInstruction::LoadConstUInt8 { operand_0: _, operand_1 } => {
+                        setup.push(SetupInstruction {
+                            ssa_value: ssa_value.clone(),
+                            value: ConstantValue::Number(OrderedFloat(*operand_1 as f64)),
+                            instruction: instr.clone(),
+                        });
+                    }
+                    _ => {
+                        // Other instructions are not considered setup for default case
+                    }
+                }
+            }
+        }
+        
+        Some(setup)
+    }
+
+    /// Detect if multiple cases converge to a shared tail block
+    fn detect_shared_tail(
+        &self,
+        cases: &[CaseInfo],
+        default_case: &Option<DefaultCase>,
+        postdom: &PostDominatorAnalysis,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+    ) -> Option<SharedTailInfo> {
+        // Find blocks that are jumped to by multiple cases
+        let mut target_counts: HashMap<NodeIndex, usize> = HashMap::new();
+
+        for case in cases {
+            *target_counts.entry(case.target_block).or_insert(0) += 1;
+        }
+
+        if let Some(default) = default_case {
+            *target_counts.entry(default.target_block).or_insert(0) += 1;
+        }
+
+        // Find postdominator of all targets
+        let all_targets: Vec<NodeIndex> = target_counts.keys().copied().collect();
+        let shared_tail = self.find_common_postdominator(&all_targets, postdom)?;
+
+        // Check if this is a meaningful shared tail (not just exit block)
+        if !self.is_meaningful_shared_tail(shared_tail, cfg) {
+            return None;
+        }
+
+        // Analyze PHI requirements
+        let phi_nodes = self.analyze_phi_requirements(shared_tail, cases, default_case, cfg, ssa);
+
+        Some(SharedTailInfo {
+            block_id: shared_tail,
+            phi_nodes,
+        })
+    }
+
+    /// Find common postdominator
+    fn find_common_postdominator(
+        &self,
+        targets: &[NodeIndex],
+        postdom: &PostDominatorAnalysis,
+    ) -> Option<NodeIndex> {
+        if targets.is_empty() {
+            return None;
+        }
+
+        if targets.len() == 1 {
+            return Some(targets[0]);
+        }
+
+        // Find a node that postdominates all targets
+        let mut best_candidate = None;
+
+        for &candidate in targets {
+            let dominates_all = targets
+                .iter()
+                .all(|&target| postdom.dominates(candidate, target));
+
+            if dominates_all {
+                // Choose the one that's closest (has the highest node index, indicating it's deeper)
+                if best_candidate.map_or(true, |best: NodeIndex| candidate.index() > best.index()) {
+                    best_candidate = Some(candidate);
+                }
+            }
+        }
+
+        best_candidate
+    }
+
+    /// Check if this is a meaningful shared tail (not just exit block)
+    fn is_meaningful_shared_tail(&self, tail_block: NodeIndex, cfg: &Cfg<'a>) -> bool {
+        // A meaningful shared tail should have:
+        // 1. More than just a return/throw instruction
+        // 2. Some actual computation or multiple instructions
+        // 3. Not be the CFG exit node
+
+        // Simple heuristic: if the block has more than 1 instruction, it's meaningful
+        // or if it has exactly 1 instruction that's not just Ret/Throw
+        let block = &cfg.graph()[tail_block];
+        let instructions = block.instructions();
+
+        if instructions.len() > 1 {
+            return true;
+        }
+
+        if instructions.len() == 1 {
+            match &instructions[0].instruction {
+                UnifiedInstruction::Ret { .. } => {
+                    // A return is meaningful if it has PHI nodes (multiple paths converge)
+                    // For now, consider all return blocks as meaningful for switch handling
+                    true
+                }
+                UnifiedInstruction::Throw { .. } => false,
+                _ => true, // Other single instructions are meaningful
+            }
+        } else {
+            false // Empty blocks are not meaningful
+        }
+    }
+
+    /// Analyze which registers need PHI nodes at the shared tail
+    fn analyze_phi_requirements(
+        &self,
+        tail_block: NodeIndex,
+        _cases: &[CaseInfo],
+        _default_case: &Option<DefaultCase>,
+        _cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+    ) -> HashMap<u8, PhiNode> {
+        let mut phi_nodes = HashMap::new();
+
+        // Get existing PHI functions at the tail block
+        let existing_phis = ssa
+            .phi_functions
+            .get(&tail_block)
+            .map(|phis| phis.as_slice())
+            .unwrap_or(&[]);
+
+        // For each PHI function at the tail block, extract the values
+        for phi_func in existing_phis {
+            let mut values = HashMap::new();
+
+            // Extract constant values from each PHI operand
+            for (pred_block, ssa_value) in &phi_func.operands {
+                // Find which instruction defined this SSA value and extract its constant
+                if let Some(value) = self.extract_constant_from_ssa_value(ssa_value, _cfg, ssa) {
+                    values.insert(*pred_block, value);
+                }
+            }
+
+            // Only create our PhiNode if we have values to track
+            if !values.is_empty() {
+                phi_nodes.insert(
+                    phi_func.register,
+                    PhiNode {
+                        register: phi_func.register,
+                        values,
+                        ssa_phi_value: Some(phi_func.result.clone()),
+                    },
+                );
+            }
+        }
+
+        phi_nodes
+    }
+
+    /// Extract constant value from an SSA value by looking at its definition
+    fn extract_constant_from_ssa_value(
+        &self,
+        ssa_value: &crate::cfg::ssa::types::SSAValue,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+    ) -> Option<ConstantValue> {
+        // The SSA value has a definition site
+        let def_site = &ssa_value.def_site;
+        let block = &cfg.graph()[def_site.block_id];
+
+        // Find the instruction at the definition site
+        for instr in block.instructions() {
+            if instr.instruction_index != def_site.instruction_idx {
+                continue;
+            }
+
+            // Check if this instruction defines our register and extract the value
+            let usage = analyze_register_usage(&instr.instruction);
+            if let Some(target) = usage.target {
+                if target == ssa_value.register {
+                    // First try to extract a constant value
+                    if let Some(value) =
+                        self.extract_constant_value_from_instruction(&instr.instruction, target)
+                    {
+                        return Some(value);
+                    }
+
+                    // If it's a Mov instruction, trace the source
+                    if let UnifiedInstruction::Mov { operand_1, .. } = &instr.instruction {
+                        // Find the SSA value for the source register at this point
+                        for (def, ssa_val) in &ssa.ssa_values {
+                            if def.register == *operand_1
+                                && def.instruction_idx < def_site.instruction_idx
+                            {
+                                // Recursively extract from the source
+                                return self.extract_constant_from_ssa_value(ssa_val, cfg, ssa);
+                            }
+                        }
+                    }
+
+                    // If it's an Add instruction, try to fold if both operands are constants
+                    if let UnifiedInstruction::Add {
+                        operand_1,
+                        operand_2,
+                        ..
+                    } = &instr.instruction
+                    {
+                        // Find the SSA values for both operands that are live at this instruction
+                        let left_ssa =
+                            self.find_ssa_value_for_use(*operand_1, def_site.instruction_idx, ssa);
+                        let right_ssa =
+                            self.find_ssa_value_for_use(*operand_2, def_site.instruction_idx, ssa);
+
+                        if let (Some(left_ssa_val), Some(right_ssa_val)) = (left_ssa, right_ssa) {
+                            // Try to extract constants from both SSA values
+                            let left_const =
+                                self.extract_constant_from_ssa_value(left_ssa_val, cfg, ssa);
+                            let right_const =
+                                self.extract_constant_from_ssa_value(right_ssa_val, cfg, ssa);
+
+                            if let (Some(left), Some(right)) = (left_const, right_const) {
+                                // Try to fold the Add operation
+                                return self.fold_add_operation(&left, &right);
+                            }
+                        }
+                    }
+
+                    return None;
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Find registers consumed (read before def) in a block
+    fn find_consumed_registers_read_before_def(&self, block: &crate::cfg::Block) -> HashSet<u8> {
+        let mut consumed = HashSet::new();
+        let mut defined = HashSet::new();
+
+        // Scan instructions in order
+        for instr in block.instructions() {
+            let usage = analyze_register_usage(&instr.instruction);
+
+            // If we see a use of a register that hasn't been defined yet, it's consumed from outside
+            for &src_reg in &usage.sources {
+                if !defined.contains(&src_reg) {
+                    consumed.insert(src_reg);
+                }
+            }
+
+            // If we see a def, mark as defined (no longer needs external value)
+            if let Some(target_reg) = usage.target {
+                defined.insert(target_reg);
+                consumed.remove(&target_reg); // Remove if it was added earlier (now locally defined)
+            }
+        }
+
+        consumed
+    }
+
+    /// Get the reaching definition value for a register at a specific block
+    fn get_reaching_def_value(
+        &self,
+        register: u8,
+        block_id: NodeIndex,
+        cfg: &Cfg<'a>,
+    ) -> Option<ConstantValue> {
+        // This is a simplified implementation that looks for the most recent definition
+        // In a full implementation, this would use SSA analysis properly
+
+        let block = &cfg.graph()[block_id];
+
+        // Look backwards through the block for the last definition of this register
+        for instr in block.instructions().iter().rev() {
+            let usage = analyze_register_usage(&instr.instruction);
+
+            if let Some(target_reg) = usage.target {
+                if target_reg == register {
+                    // Found a definition - try to extract the constant value
+                    if let Some(value) =
+                        self.extract_constant_value_from_instruction(&instr.instruction, target_reg)
+                    {
+                        return Some(value);
+                    }
+
+                    // Special handling for Mov instructions
+                    if let UnifiedInstruction::Mov { operand_1, .. } = &instr.instruction {
+                        // Trace the source register within the same block
+                        return self.get_reaching_def_value(*operand_1, block_id, cfg);
+                    }
+                }
+            }
+        }
+
+        // If not found in current block, look at predecessors
+        // This handles the case where values flow from predecessor blocks
+        use petgraph::Direction;
+        let predecessors: Vec<_> = cfg
+            .graph()
+            .edges_directed(block_id, Direction::Incoming)
+            .collect();
+
+        // For sparse switches, typically there's one predecessor that loads the value
+        for pred_edge in predecessors {
+            let pred_block_id = pred_edge.source();
+            let pred_block = &cfg.graph()[pred_block_id];
+
+            // Look in the predecessor block
+            for instr in pred_block.instructions().iter().rev() {
+                let usage = analyze_register_usage(&instr.instruction);
+
+                if let Some(target_reg) = usage.target {
+                    if target_reg == register {
+                        // Found a definition in predecessor
+                        if let Some(value) = self
+                            .extract_constant_value_from_instruction(&instr.instruction, target_reg)
+                        {
+                            return Some(value);
+                        }
+
+                        // Special handling for Mov instructions
+                        if let UnifiedInstruction::Mov { operand_1, .. } = &instr.instruction {
+                            // Trace the source register in the predecessor block
+                            return self.get_reaching_def_value(*operand_1, pred_block_id, cfg);
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Find the SSA value for a register use at a specific instruction
+    fn find_ssa_value_for_use<'b>(
+        &self,
+        register: u8,
+        at_instruction: InstructionIndex,
+        ssa: &'b SSAAnalysis,
+    ) -> Option<&'b crate::cfg::ssa::types::SSAValue> {
+        // Find the use at this instruction
+        let use_site = ssa
+            .uses
+            .iter()
+            .find(|u| u.register == register && u.instruction_idx == at_instruction)?;
+
+        // Find the definition that reaches this use
+        let def = ssa.use_def_chains.get(use_site)?;
+
+        // Get the SSA value for this definition
+        ssa.ssa_values.get(def)
+    }
+
+    /// Fold an Add operation on two constant values
+    fn fold_add_operation(
+        &self,
+        left: &ConstantValue,
+        right: &ConstantValue,
+    ) -> Option<ConstantValue> {
+        match (left, right) {
+            // String concatenation
+            (ConstantValue::String(s1), ConstantValue::String(s2)) => {
+                Some(ConstantValue::String(format!("{}{}", s1, s2)))
+            }
+            // Number addition
+            (ConstantValue::Number(n1), ConstantValue::Number(n2)) => {
+                Some(ConstantValue::Number(OrderedFloat(n1.0 + n2.0)))
+            }
+            // String + Number (JavaScript coercion)
+            (ConstantValue::String(s), ConstantValue::Number(n)) => {
+                Some(ConstantValue::String(format!("{}{}", s, n.0)))
+            }
+            (ConstantValue::Number(n), ConstantValue::String(s)) => {
+                Some(ConstantValue::String(format!("{}{}", n.0, s)))
+            }
+            // Other combinations don't fold to constants
+            _ => None,
+        }
+    }
+
+    /// Check if we should bail out for PHI scenarios
+    fn should_bail_out_for_phi_scenarios(&self, _shared_tail: &Option<SharedTailInfo>) -> bool {
+        // For now, don't bail out for PHI scenarios
+        // In a full implementation, this would check for complex PHI node requirements
+        false
+    }
+
+    /// Convert a dense switch region (SwitchImm) to AST
+    fn convert_dense_switch_region(
+        &mut self,
         region: &SwitchRegion,
         cfg: &Cfg<'a>,
-    ) -> Result<&SwitchTable, SwitchConversionError> {
-        let dispatch_block = &cfg.graph()[region.dispatch];
-
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<Vec<Statement<'a>>, SwitchConversionError> {
         // Find the SwitchImm instruction
-        let switch_instr = dispatch_block
+        let dispatch_block = &cfg.graph()[region.dispatch];
+        let switch_imm_instr = dispatch_block
             .instructions()
             .iter()
-            .find(|instr| matches!(instr.instruction, UnifiedInstruction::SwitchImm { .. }))
-            .ok_or(SwitchConversionError::MissingSwitchInstruction)?;
-
-        // Get the actual instruction index
-        let switch_instr_idx = switch_instr.instruction_index;
-
-        // Get the switch table from HBC file
-        cfg.hbc_file()
-            .switch_tables
-            .get_switch_table_by_instruction(cfg.function_index(), switch_instr_idx.into())
+            .find(|instr| matches!(&instr.instruction, UnifiedInstruction::SwitchImm { .. }))
             .ok_or_else(|| {
-                SwitchConversionError::InvalidRegion(format!(
-                    "No switch table found for instruction {} in function {}",
-                    switch_instr_idx,
-                    cfg.function_index()
-                ))
-            })
+                SwitchConversionError::TooComplex("No SwitchImm instruction found".to_string())
+            })?;
+
+        // Mark dispatch block instructions as rendered
+        for instruction in dispatch_block.instructions() {
+            block_converter.mark_instruction_rendered(instruction);
+        }
+
+        // Extract discriminator register from SwitchImm
+        let discriminator_reg = match &switch_imm_instr.instruction {
+            UnifiedInstruction::SwitchImm { operand_0, .. } => *operand_0,
+            _ => unreachable!(),
+        };
+
+        // Create discriminator expression
+        let discriminator_expr = self.create_discriminator_expression(discriminator_reg);
+
+        // Get switch table from HBC file
+        let hbc_file = self
+            .expression_context
+            .as_ref()
+            .and_then(|ctx| ctx.hbc_file())
+            .ok_or_else(|| SwitchConversionError::TooComplex("No HBC file context".to_string()))?;
+
+        // Get function index from block converter
+        let function_index = cfg.function_index();
+
+        let switch_table = hbc_file
+            .switch_tables
+            .get_switch_table_by_instruction(
+                function_index,
+                switch_imm_instr.instruction_index.into(),
+            )
+            .ok_or_else(|| {
+                SwitchConversionError::TooComplex("No switch table found".to_string())
+            })?;
+
+        // Build case statements
+        let mut switch_cases = ArenaVec::new_in(self.ast_builder.allocator);
+
+        // Create cases for each value in the switch table
+        for (i, switch_case) in switch_table.cases.iter().enumerate() {
+            // Find the corresponding case in the region
+            let region_case = region.cases.get(i).ok_or_else(|| {
+                SwitchConversionError::TooComplex(format!("Case {} not found in region", i))
+            })?;
+
+            // Create case test expression
+            let case_value = switch_case.value as f64;
+            let test_expr =
+                Some(self.create_constant_expression(&CaseKey::Num(OrderedFloat(case_value))));
+
+            // Convert case block to statements
+            let case_block = &cfg.graph()[region_case.case_head];
+
+            // Convert the entire block
+            let case_statements = block_converter
+                .convert_block_with_options(
+                    case_block,
+                    region_case.case_head,
+                    cfg.graph(),
+                    None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>,
+                    false,
+                )
+                .map_err(|e| {
+                    SwitchConversionError::CaseConversionError(format!(
+                        "Failed to convert case body: {}",
+                        e
+                    ))
+                })?;
+
+            // Create the switch case
+            let span = Span::default();
+            let switch_case_node = self
+                .ast_builder
+                .switch_case(span, test_expr, case_statements);
+
+            switch_cases.push(switch_case_node);
+        }
+
+        // Handle default case if present
+        if let Some(default_head) = region.default_head {
+            let default_block = &cfg.graph()[default_head];
+
+            // Convert the default block
+            let default_statements = block_converter
+                .convert_block_with_options(
+                    default_block,
+                    default_head,
+                    cfg.graph(),
+                    None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>,
+                    false,
+                )
+                .map_err(|e| {
+                    SwitchConversionError::CaseConversionError(format!(
+                        "Failed to convert default case body: {}",
+                        e
+                    ))
+                })?;
+
+            // Create the default case
+            let span = Span::default();
+            let default_case = self.ast_builder.switch_case(
+                span,
+                None, // No test expression for default
+                default_statements,
+            );
+
+            switch_cases.push(default_case);
+        }
+
+        // Create the switch statement
+        let span = Span::default();
+        let switch_stmt = self
+            .ast_builder
+            .switch_statement(span, discriminator_expr, switch_cases);
+
+        Ok(vec![Statement::SwitchStatement(
+            self.ast_builder.alloc(switch_stmt),
+        )])
+    }
+
+    /// Check if we should bail out for control flow issues
+    fn should_bail_out_for_control_flow(
+        &self,
+        _involved_blocks: &HashSet<NodeIndex>,
+        _cfg: &Cfg<'a>,
+    ) -> bool {
+        // For now, don't bail out for control flow issues
+        // In a full implementation, this would check for:
+        // - Exception-throwing instructions
+        // - Complex nested control flow
+        // - Irreducible control flow patterns
+        false
+    }
+
+    /// Check if we should bail out for constant-related issues
+    fn should_bail_out_for_constants(&self, cases: &[CaseInfo]) -> bool {
+        let mut constant_set = HashSet::new();
+
+        // Check for duplicate constants
+        for case in cases {
+            for key in &case.keys {
+                if !constant_set.insert(key.normalize_for_grouping()) {
+                    return true; // Duplicate constant found
+                }
+            }
+        }
+
+        false
     }
 }
 
-/// Get all blocks that are part of a switch region for the purpose of tracking what was processed
+/// Get all switch blocks including case bodies and infrastructure
 /// This includes infrastructure blocks AND all blocks within case bodies
 pub fn get_all_switch_blocks_with_bodies(
     region: &SwitchRegion,
@@ -2077,98 +2797,48 @@ pub fn get_all_switch_blocks_with_bodies(
 ) -> HashSet<NodeIndex> {
     let mut blocks = HashSet::new();
 
-    // Add dispatch block
-    blocks.insert(region.dispatch);
+    // Add infrastructure blocks (dispatch and comparison blocks)
+    blocks.extend(get_switch_infrastructure_blocks(region, cfg));
 
-    // For sparse switches, add all comparison blocks
-    let mut current = region.dispatch;
+    // Add all case heads and their reachable blocks
+    // BUT: Don't add case heads that are the join block (they need to be processed after the switch)
+    // AND: Don't add case heads that are simple return blocks (shared tail)
     for case in &region.cases {
-        // Follow false edges to find comparison blocks
-        while current != case.case_head {
-            blocks.insert(current);
-            // Find the false edge
-            let false_target = cfg
-                .graph()
-                .edges(current)
-                .find(|e| matches!(e.weight(), crate::cfg::EdgeKind::False))
-                .map(|e| e.target());
-
-            if let Some(next) = false_target {
-                current = next;
-            } else {
-                break;
-            }
+        // Skip case heads that are the join block - they'll be processed after the switch
+        if case.case_head == region.join_block {
+            continue;
         }
+
+        // Also skip if this block contains a return statement (likely shared tail)
+        // This includes blocks with PHI nodes + return
+        let case_block = &cfg.graph()[case.case_head];
+        let contains_return = case_block.instructions().iter().any(|instr| {
+            matches!(
+                &instr.instruction,
+                crate::generated::unified_instructions::UnifiedInstruction::Ret { .. }
+            )
+        });
+
+        if !contains_return {
+            blocks.insert(case.case_head);
+        }
+
+        // For now, just add the immediate case head
+        // In a full implementation, we'd traverse all reachable blocks within the case
+        // until we hit a join block or return
     }
 
-    // Add all case heads
-    let mut case_heads = HashSet::new();
-    for case in &region.cases {
-        blocks.insert(case.case_head);
-        case_heads.insert(case.case_head);
-    }
-
-    // Add default head if present
+    // Add default case head if it exists
     if let Some(default_head) = region.default_head {
         blocks.insert(default_head);
-        case_heads.insert(default_head);
     }
-
-    // Now find all blocks that belong to each case body
-    // This is important to prevent them from being processed again
-    for case in &region.cases {
-        let mut to_visit = vec![case.case_head];
-        let mut case_blocks = HashSet::new();
-
-        while let Some(block_idx) = to_visit.pop() {
-            if case_blocks.contains(&block_idx) || block_idx == region.join_block {
-                continue;
-            }
-
-            case_blocks.insert(block_idx);
-            blocks.insert(block_idx);
-
-            // Add successors that aren't other case heads
-            for edge in cfg.graph().edges(block_idx) {
-                let target = edge.target();
-                if !case_blocks.contains(&target) && !case_heads.contains(&target) {
-                    to_visit.push(target);
-                }
-            }
-        }
-    }
-
-    // Do the same for default case
-    if let Some(default_head) = region.default_head {
-        let mut to_visit = vec![default_head];
-        let mut case_blocks = HashSet::new();
-
-        while let Some(block_idx) = to_visit.pop() {
-            if case_blocks.contains(&block_idx) || block_idx == region.join_block {
-                continue;
-            }
-
-            case_blocks.insert(block_idx);
-            blocks.insert(block_idx);
-
-            // Add successors that aren't other case heads
-            for edge in cfg.graph().edges(block_idx) {
-                let target = edge.target();
-                if !case_blocks.contains(&target) && !case_heads.contains(&target) {
-                    to_visit.push(target);
-                }
-            }
-        }
-    }
-
-    // Note: We don't add the join block as it might be shared with other control flow
 
     blocks
 }
 
 /// Get only the switch infrastructure blocks (dispatch and comparison blocks)
-/// This is called from block_converter to mark switch infrastructure as processed
-/// Case blocks are NOT included so they can be analyzed for nested control flow
+/// These are blocks that should not be processed as regular statements
+/// since they will be consumed during switch generation
 pub fn get_switch_infrastructure_blocks(
     region: &SwitchRegion,
     cfg: &crate::cfg::Cfg,

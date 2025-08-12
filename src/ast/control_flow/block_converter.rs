@@ -306,9 +306,10 @@ impl<'a> BlockToStatementConverter<'a> {
                     let switch_infrastructure =
                         super::switch_converter::get_switch_infrastructure_blocks(region, cfg);
                     processed_blocks.extend(&switch_infrastructure);
-                    // Create the switch converter
-                    let mut switch_converter = super::switch_converter::SwitchConverter::new(
+                    // Create the switch converter with expression context
+                    let mut switch_converter = super::switch_converter::SwitchConverter::with_context(
                         self.instruction_converter.ast_builder(),
+                        self.instruction_converter.get_expression_context().clone(),
                     );
                     // Convert the switch to statements
                     match switch_converter.convert_switch_region(region, cfg, self) {
@@ -340,6 +341,30 @@ impl<'a> BlockToStatementConverter<'a> {
                                     processed_blocks.insert(region.join_block);
                                 }
                             }
+                            
+                            // HACK: Special handling for blocks that are both case targets and contain return statements
+                            // This happens when cases jump directly to the function's return block
+                            // We need to ensure the return statement gets processed
+                            for case in &region.cases {
+                                let case_block = &cfg.graph()[case.case_head];
+                                // Check if this case block contains a return statement
+                                if case_block.instructions().iter().any(|instr| {
+                                    matches!(&instr.instruction, 
+                                        crate::generated::unified_instructions::UnifiedInstruction::Ret { .. })
+                                }) {
+                                    // If this block hasn't been processed yet, process it now
+                                    if !processed_blocks.contains(&case.case_head) {
+                                        let case_stmts = self.convert_block(
+                                            case_block,
+                                            case.case_head,
+                                            cfg.graph(),
+                                        )?;
+                                        all_statements.extend(case_stmts);
+                                        processed_blocks.insert(case.case_head);
+                                    }
+                                }
+                            }
+                            
                             continue;
                         }
                         Err(e) => {
@@ -446,6 +471,12 @@ impl<'a> BlockToStatementConverter<'a> {
                     .rendered_instructions
                     .contains(&instruction.instruction_index)
                 {
+                    // LoadParam instructions are handled as part of function parameter generation
+                    let is_param_load = matches!(
+                        &instruction.instruction,
+                        UnifiedInstruction::LoadParam { .. } | UnifiedInstruction::LoadParamLong { .. }
+                    );
+                    
                     // Terminal jumps are often skipped as they're implicit in control flow
                     let is_terminal_jump = idx == block.instructions().len() - 1
                         && matches!(
@@ -460,7 +491,7 @@ impl<'a> BlockToStatementConverter<'a> {
                                 | UnifiedInstruction::JStrictNotEqualLong { .. }
                         );
 
-                    if !is_terminal_jump {
+                    if !is_terminal_jump && !is_param_load {
                         return Err(BlockConversionError::InvalidBlock(format!(
                             "Instruction at PC {} (index {} in block {}) was not rendered: {:?}",
                             instruction.offset.value(),
@@ -557,6 +588,29 @@ impl<'a> BlockToStatementConverter<'a> {
         _cfg: &Graph<Block, EdgeKind>,
         instruction_filter: Option<F>,
         skip_phi_declarations: bool,
+    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> 
+    where
+        F: Fn(&HbcFunctionInstruction, bool) -> bool,
+    {
+        self.convert_block_with_marking_control(
+            block,
+            block_id,
+            _cfg,
+            instruction_filter,
+            skip_phi_declarations,
+            true, // mark_as_rendered
+        )
+    }
+    
+    /// Convert a block with full control over instruction marking
+    pub fn convert_block_with_marking_control<F>(
+        &mut self,
+        block: &Block,
+        block_id: NodeIndex,
+        _cfg: &Graph<Block, EdgeKind>,
+        instruction_filter: Option<F>,
+        skip_phi_declarations: bool,
+        mark_as_rendered: bool,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> 
     where
         F: Fn(&HbcFunctionInstruction, bool) -> bool,
@@ -670,8 +724,10 @@ impl<'a> BlockToStatementConverter<'a> {
                 statements.push(stmt);
             }
 
-            // Mark this instruction as rendered
-            self.mark_instruction_rendered(instruction);
+            // Mark this instruction as rendered (if requested)
+            if mark_as_rendered {
+                self.mark_instruction_rendered(instruction);
+            }
         }
 
         // Post-process for optimizations
