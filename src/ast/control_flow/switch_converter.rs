@@ -25,7 +25,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use smallvec::SmallVec;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 /// Error types for switch conversion
@@ -162,14 +162,6 @@ pub enum ConstantValue {
     Undefined,
 }
 
-/// Setup signature for grouping - maps registers to their final values
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SetupSignature {
-    /// Map of register to its value (last writer wins)
-    pub register_values: BTreeMap<u8, ConstantValue>,
-    /// Target block for this setup
-    pub target: NodeIndex,
-}
 
 
 /// Context for comparison instruction analysis
@@ -693,29 +685,6 @@ impl<'a> SwitchConverter<'a> {
         }
     }
 
-    /// Group cases by normalized setup signatures for consistent ordering
-    fn group_cases_by_setup(&self, cases: &[CaseInfo]) -> Vec<(SetupSignature, Vec<CaseInfo>)> {
-        let mut groups: HashMap<SetupSignature, Vec<CaseInfo>> = HashMap::new();
-
-        for case in cases {
-            let normalized_signature = self.normalize_setup(&case.setup, case.target_block);
-            groups
-                .entry(normalized_signature)
-                .or_default()
-                .push(case.clone());
-        }
-
-        // Sort groups by the minimum execution order in each group to preserve evaluation order
-        let mut sorted_groups: Vec<_> = groups.into_iter().collect();
-        sorted_groups.sort_by(|(_, cases_a), (_, cases_b)| {
-            // Get minimum execution order from each group
-            let min_order_a = cases_a.iter().map(|c| c.execution_order).min().unwrap_or(0);
-            let min_order_b = cases_b.iter().map(|c| c.execution_order).min().unwrap_or(0);
-            min_order_a.cmp(&min_order_b)
-        });
-
-        sorted_groups
-    }
 
     /// Create discriminator expression from register
     fn create_discriminator_expression(&self, register: u8) -> Expression<'a> {
@@ -1333,71 +1302,6 @@ impl<'a> SwitchConverter<'a> {
         false
     }
 
-    /// Convert a single case to a switch case AST node
-    fn convert_single_case(
-        &mut self,
-        case_info: &CaseInfo,
-        _setup_signature: &SetupSignature,
-        cfg: &Cfg<'a>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<SwitchCase<'a>, SwitchConversionError> {
-        // Create test expressions for all keys in this case
-        let test_expr = if case_info.keys.len() == 1 {
-            // Single key - direct constant
-            Some(self.create_constant_expression(&case_info.keys[0]))
-        } else {
-            // Multiple keys - should have been grouped and handled appropriately
-            // For now, use the first key (this might need refinement)
-            Some(self.create_constant_expression(&case_info.keys[0]))
-        };
-
-        // Convert setup instructions to statements
-        let mut case_statements = ArenaVec::new_in(self.ast_builder.allocator);
-
-        // Note: SetupSignature doesn't contain instructions directly
-        // Instead, it contains register_values that represent the final state
-        // For now, we skip setup instruction generation as it's complex to reconstruct
-        // In a full implementation, we'd need to track the original setup instructions
-
-        // Convert the case body (target block)
-        let target_block = &cfg.graph()[case_info.target_block];
-        let mut body_statements = ArenaVec::new_in(self.ast_builder.allocator);
-
-        match block_converter.convert_block_with_options(
-            target_block,
-            case_info.target_block,
-            cfg.graph(),
-            None::<fn(&crate::hbc::function_table::HbcFunctionInstruction, bool) -> bool>,
-            false,
-        ) {
-            Ok(statements) => {
-                body_statements.extend(statements);
-            }
-            Err(e) => {
-                return Err(SwitchConversionError::CaseConversionError(format!(
-                    "Failed to convert case body: {}",
-                    e
-                )));
-            }
-        }
-
-        // Combine setup and body statements
-        case_statements.extend(body_statements);
-
-        // Add break statement if needed (check if case doesn't fall through)
-        if !self.case_falls_through(case_info, cfg) {
-            let span = Span::default();
-            let break_stmt = self.ast_builder.break_statement(span, None);
-            case_statements.push(Statement::BreakStatement(
-                self.ast_builder.alloc(break_stmt),
-            ));
-        }
-
-        let span = Span::default();
-        Ok(self
-            .ast_builder
-            .switch_case(span, test_expr, case_statements))
-    }
 
     /// Convert default case to switch case AST node
     fn convert_default_case(
@@ -1713,61 +1617,8 @@ impl<'a> SwitchConverter<'a> {
         Ok(declarations)
     }
 
-    /// Compare case keys for deterministic ordering
-    fn compare_case_keys(&self, key_a: &CaseKey, key_b: &CaseKey) -> std::cmp::Ordering {
-        use std::cmp::Ordering;
 
-        // First compare by type for consistent ordering
-        let type_order_a = self.get_case_key_type_order(key_a);
-        let type_order_b = self.get_case_key_type_order(key_b);
 
-        match type_order_a.cmp(&type_order_b) {
-            Ordering::Equal => {
-                // Same type, compare values
-                match (key_a, key_b) {
-                    (CaseKey::Str(a), CaseKey::Str(b)) => a.cmp(b),
-                    (CaseKey::Num(a), CaseKey::Num(b)) => a.cmp(b),
-                    _ => unreachable!("Type orders should be equal only for same types"),
-                }
-            }
-            other => other,
-        }
-    }
-
-    /// Get type order for case keys (for deterministic sorting)
-    fn get_case_key_type_order(&self, key: &CaseKey) -> u8 {
-        match key {
-            CaseKey::Num(_) => 0,
-            CaseKey::Str(_) => 1,
-        }
-    }
-
-    /// Calculate hash of setup signature for deterministic ordering
-    fn calculate_setup_hash(&self, signature: &SetupSignature) -> u64 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        signature.hash(&mut hasher);
-        hasher.finish()
-    }
-
-    /// Check if a case falls through to the next case
-    fn case_falls_through(&self, case_info: &CaseInfo, cfg: &Cfg<'a>) -> bool {
-        let block = &cfg.graph()[case_info.target_block];
-
-        // Check if the last instruction is a jump or return
-        if let Some(last_instr) = block.instructions().last() {
-            match &last_instr.instruction {
-                UnifiedInstruction::Jmp { .. }
-                | UnifiedInstruction::JmpLong { .. }
-                | UnifiedInstruction::Ret { .. } => false, // Explicit control flow, no fallthrough
-                _ => true, // Implicit fallthrough
-            }
-        } else {
-            true // Empty block falls through
-        }
-    }
 
     /// Check if default case falls through
     fn default_case_falls_through(&self, default_case: &DefaultCase, cfg: &Cfg<'a>) -> bool {
@@ -1786,20 +1637,6 @@ impl<'a> SwitchConverter<'a> {
         }
     }
 
-    /// Normalize setup instructions for grouping
-    fn normalize_setup(&self, setup: &[SetupInstruction], target: NodeIndex) -> SetupSignature {
-        let mut register_values = BTreeMap::new();
-
-        // Build final register state (last writer wins)
-        for instr in setup {
-            register_values.insert(instr.ssa_value.register, instr.value.clone());
-        }
-
-        SetupSignature {
-            register_values,
-            target,
-        }
-    }
 
     // Helper methods for pattern detection
 
@@ -2463,104 +2300,6 @@ impl<'a> SwitchConverter<'a> {
         None
     }
 
-    /// Find registers consumed (read before def) in a block
-    fn find_consumed_registers_read_before_def(&self, block: &crate::cfg::Block) -> HashSet<u8> {
-        let mut consumed = HashSet::new();
-        let mut defined = HashSet::new();
-
-        // Scan instructions in order
-        for instr in block.instructions() {
-            let usage = analyze_register_usage(&instr.instruction);
-
-            // If we see a use of a register that hasn't been defined yet, it's consumed from outside
-            for &src_reg in &usage.sources {
-                if !defined.contains(&src_reg) {
-                    consumed.insert(src_reg);
-                }
-            }
-
-            // If we see a def, mark as defined (no longer needs external value)
-            if let Some(target_reg) = usage.target {
-                defined.insert(target_reg);
-                consumed.remove(&target_reg); // Remove if it was added earlier (now locally defined)
-            }
-        }
-
-        consumed
-    }
-
-    /// Get the reaching definition value for a register at a specific block
-    fn get_reaching_def_value(
-        &self,
-        register: u8,
-        block_id: NodeIndex,
-        cfg: &Cfg<'a>,
-    ) -> Option<ConstantValue> {
-        // This is a simplified implementation that looks for the most recent definition
-        // In a full implementation, this would use SSA analysis properly
-
-        let block = &cfg.graph()[block_id];
-
-        // Look backwards through the block for the last definition of this register
-        for instr in block.instructions().iter().rev() {
-            let usage = analyze_register_usage(&instr.instruction);
-
-            if let Some(target_reg) = usage.target {
-                if target_reg == register {
-                    // Found a definition - try to extract the constant value
-                    if let Some(value) =
-                        self.extract_constant_value_from_instruction(&instr.instruction, target_reg)
-                    {
-                        return Some(value);
-                    }
-
-                    // Special handling for Mov instructions
-                    if let UnifiedInstruction::Mov { operand_1, .. } = &instr.instruction {
-                        // Trace the source register within the same block
-                        return self.get_reaching_def_value(*operand_1, block_id, cfg);
-                    }
-                }
-            }
-        }
-
-        // If not found in current block, look at predecessors
-        // This handles the case where values flow from predecessor blocks
-        use petgraph::Direction;
-        let predecessors: Vec<_> = cfg
-            .graph()
-            .edges_directed(block_id, Direction::Incoming)
-            .collect();
-
-        // For sparse switches, typically there's one predecessor that loads the value
-        for pred_edge in predecessors {
-            let pred_block_id = pred_edge.source();
-            let pred_block = &cfg.graph()[pred_block_id];
-
-            // Look in the predecessor block
-            for instr in pred_block.instructions().iter().rev() {
-                let usage = analyze_register_usage(&instr.instruction);
-
-                if let Some(target_reg) = usage.target {
-                    if target_reg == register {
-                        // Found a definition in predecessor
-                        if let Some(value) = self
-                            .extract_constant_value_from_instruction(&instr.instruction, target_reg)
-                        {
-                            return Some(value);
-                        }
-
-                        // Special handling for Mov instructions
-                        if let UnifiedInstruction::Mov { operand_1, .. } = &instr.instruction {
-                            // Trace the source register in the predecessor block
-                            return self.get_reaching_def_value(*operand_1, pred_block_id, cfg);
-                        }
-                    }
-                }
-            }
-        }
-
-        None
-    }
 
     /// Find the SSA value for a register use at a specific instruction
     fn find_ssa_value_for_use<'b>(
