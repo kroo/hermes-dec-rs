@@ -676,7 +676,7 @@ fn print_switch_region(
                                     .unwrap_or_else(|| format!("r{}", phi_node.register));
                                 
                                 if let Some(value) = switch_converter
-                                    .find_phi_contribution_for_case(&group, phi_node, cfg)
+                                    .find_phi_contribution_for_case(&group, phi_node)
                                 {
                                     println!(
                                         "          {} = {}",

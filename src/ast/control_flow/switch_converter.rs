@@ -162,8 +162,6 @@ pub enum ConstantValue {
     Undefined,
 }
 
-
-
 /// Context for comparison instruction analysis
 #[derive(Debug, Clone)]
 pub struct CompareContext {
@@ -195,11 +193,7 @@ impl<'a> SetupSafetyChecker<'a> {
         }
     }
 
-    pub fn is_case_localizable(
-        &self,
-        setup_instr: &SetupInstruction,
-        _compare_ctx: &CompareContext,
-    ) -> bool {
+    pub fn is_case_localizable(&self, setup_instr: &SetupInstruction) -> bool {
         // Simplified safety check - for now, allow all constant loads and moves
         // In a full implementation, this would check:
         // 1. No observable effects between setup and use
@@ -396,7 +390,7 @@ impl<'a> SwitchConverter<'a> {
     ) -> Option<SwitchInfo> {
         // Quick check: does this block load a parameter or have a comparison?
         let first_block = &cfg.graph()[start_block];
-        let discriminator = self.find_discriminator(first_block, start_block, cfg)?;
+        let discriminator = self.find_discriminator(first_block)?;
 
         // Safety checker for setup instructions
         let safety_checker = SetupSafetyChecker::new(cfg, ssa, postdom);
@@ -409,7 +403,7 @@ impl<'a> SwitchConverter<'a> {
         let mut execution_order = 0;
 
         // Track which registers are live across false edges
-        let live_across_false = HashSet::new();
+        let _live_across_false: HashSet<u8> = HashSet::new();
 
         loop {
             if !visited.insert(current_block) {
@@ -426,7 +420,7 @@ impl<'a> SwitchConverter<'a> {
                 // Create compare context for anchored safety checks
                 let true_successor = case_info.target_block;
                 let false_successor = self.get_false_successor(current_block, cfg)?;
-                let compare_ctx = CompareContext {
+                let _compare_ctx = CompareContext {
                     compare_block: current_block,
                     true_successor,
                     false_successor,
@@ -434,9 +428,9 @@ impl<'a> SwitchConverter<'a> {
                 };
 
                 // Filter setup instructions by safety
-                case_info.setup.retain(|setup_instr| {
-                    safety_checker.is_case_localizable(setup_instr, &compare_ctx)
-                });
+                case_info
+                    .setup
+                    .retain(|setup_instr| safety_checker.is_case_localizable(setup_instr));
 
                 // Set execution order
                 case_info.execution_order = execution_order;
@@ -461,7 +455,7 @@ impl<'a> SwitchConverter<'a> {
         let default_case = if current_block != start_block {
             // If we ended up at a different block, it might be the default
             let setup = self
-                .extract_default_setup(current_block, &live_across_false, cfg, ssa)
+                .extract_default_setup(current_block, cfg, ssa)
                 .unwrap_or_default();
 
             Some(DefaultCase {
@@ -476,11 +470,11 @@ impl<'a> SwitchConverter<'a> {
         let shared_tail = self.detect_shared_tail(&cases, &default_case, postdom, cfg, ssa);
 
         // 4. Check PHI scenarios and control flow (more expensive)
-        if self.should_bail_out_for_phi_scenarios(&shared_tail) {
+        if self.should_bail_out_for_phi_scenarios() {
             return None;
         }
 
-        if self.should_bail_out_for_control_flow(&involved_blocks, cfg) {
+        if self.should_bail_out_for_control_flow() {
             return None;
         }
 
@@ -515,28 +509,25 @@ impl<'a> SwitchConverter<'a> {
             .expect("SSA analysis required for switch conversion");
 
         // Group consecutive cases that share the same target and setup
-        let case_groups = self.group_consecutive_cases(&switch_info.cases, cfg, ssa);
+        let case_groups = self.group_consecutive_cases(&switch_info.cases);
 
         // Collect all PHI nodes that need declarations:
         // 1. PHI nodes from shared tail
         // 2. PHI nodes referenced in setup instructions
         let mut all_phi_nodes = HashMap::new();
-        
+
         // Add shared tail PHI nodes
         if let Some(shared_tail) = &switch_info.shared_tail {
             all_phi_nodes.extend(shared_tail.phi_nodes.clone());
         }
-        
+
         // Find PHI nodes referenced in setup instructions
         self.collect_phi_nodes_from_setup(&switch_info, &mut all_phi_nodes, cfg, ssa);
-        
+
         // Create declarations for all collected PHI nodes
         if !all_phi_nodes.is_empty() {
-            let phi_declarations = self.create_join_locals_for_phi_nodes(
-                &all_phi_nodes,
-                cfg,
-                block_converter,
-            )?;
+            let phi_declarations =
+                self.create_join_locals_for_phi_nodes(&all_phi_nodes, block_converter)?;
             statements.extend(phi_declarations);
         }
 
@@ -559,16 +550,8 @@ impl<'a> SwitchConverter<'a> {
             }
 
             // Create the actual case with the body for the last key
-            let is_last_group = i == case_groups.len() - 1;
-            let switch_case = self.convert_case_group(
-                group,
-                cfg,
-                block_converter,
-                switch_info,
-                is_last_group,
-                i,
-                &case_groups,
-            )?;
+            let switch_case =
+                self.convert_case_group(group, cfg, block_converter, switch_info, i, &case_groups)?;
             switch_cases.push(switch_case);
         }
 
@@ -594,12 +577,7 @@ impl<'a> SwitchConverter<'a> {
 
     /// Group consecutive cases that share the same target and setup
     /// But don't group cases that would have different PHI contributions to the target block
-    fn group_consecutive_cases(
-        &self,
-        cases: &[CaseInfo],
-        _cfg: &Cfg<'a>,
-        _ssa: &SSAAnalysis,
-    ) -> Vec<CaseGroup> {
+    fn group_consecutive_cases(&self, cases: &[CaseInfo]) -> Vec<CaseGroup> {
         let mut groups = Vec::new();
         let mut i = 0;
 
@@ -624,7 +602,9 @@ impl<'a> SwitchConverter<'a> {
                     // Allow grouping if:
                     // 1. Setup instructions are equal, OR
                     // 2. The next case has no setup (relies on previous case's setup)
-                    if self.setup_instructions_equal(&cases[j].setup, &setup) || cases[j].setup.is_empty() {
+                    if self.setup_instructions_equal(&cases[j].setup, &setup)
+                        || cases[j].setup.is_empty()
+                    {
                         group_keys.push(cases[j].keys[0].clone());
                         comparison_blocks.push(cases[j].comparison_block);
                         j += 1;
@@ -685,7 +665,6 @@ impl<'a> SwitchConverter<'a> {
         }
     }
 
-
     /// Create discriminator expression from register
     fn create_discriminator_expression(&self, register: u8) -> Expression<'a> {
         let span = Span::default();
@@ -697,7 +676,7 @@ impl<'a> SwitchConverter<'a> {
                 // For simplicity, assume first parameter is always arg0
                 "arg0".to_string()
             }
-            _ => format!("r{}", register)
+            _ => format!("r{}", register),
         };
         let name_atom = self.ast_builder.allocator.alloc_str(&name);
         let identifier = self.ast_builder.identifier_reference(span, name_atom);
@@ -711,7 +690,6 @@ impl<'a> SwitchConverter<'a> {
         cfg: &Cfg<'a>,
         block_converter: &mut super::BlockToStatementConverter<'a>,
         switch_info: &SwitchInfo,
-        _is_last_group: bool,
         group_index: usize,
         all_groups: &[CaseGroup],
     ) -> Result<SwitchCase<'a>, SwitchConversionError> {
@@ -735,8 +713,6 @@ impl<'a> SwitchConverter<'a> {
                 self.generate_case_body_for_shared_tail(
                     &mut case_statements,
                     group,
-                    shared_tail,
-                    cfg,
                     block_converter,
                 )?;
             } else {
@@ -985,8 +961,14 @@ impl<'a> SwitchConverter<'a> {
 
             if let Some(ssa_value) = phi_value {
                 // Get the variable name for the PHI result
-                let phi_var_name = if let Some(mapping) = block_converter.instruction_converter().register_manager().variable_mapping() {
-                    mapping.ssa_to_var.get(&phi_function.result)
+                let phi_var_name = if let Some(mapping) = block_converter
+                    .instruction_converter()
+                    .register_manager()
+                    .variable_mapping()
+                {
+                    mapping
+                        .ssa_to_var
+                        .get(&phi_function.result)
                         .cloned()
                         .unwrap_or_else(|| format!("var{}", phi_function.register))
                 } else {
@@ -994,8 +976,14 @@ impl<'a> SwitchConverter<'a> {
                 };
 
                 // Get the variable name for the source SSA value
-                let source_var_name = if let Some(mapping) = block_converter.instruction_converter().register_manager().variable_mapping() {
-                    mapping.ssa_to_var.get(ssa_value)
+                let source_var_name = if let Some(mapping) = block_converter
+                    .instruction_converter()
+                    .register_manager()
+                    .variable_mapping()
+                {
+                    mapping
+                        .ssa_to_var
+                        .get(ssa_value)
                         .cloned()
                         .unwrap_or_else(|| format!("var{}", ssa_value.register))
                 } else {
@@ -1006,17 +994,22 @@ impl<'a> SwitchConverter<'a> {
                 if phi_var_name != source_var_name {
                     // Generate assignment: phi_var = source_var
                     let span = Span::default();
-                    
+
                     // Create identifier reference for the PHI variable
                     let phi_var_atom = self.ast_builder.allocator.alloc_str(&phi_var_name);
-                    let phi_ident_ref = self.ast_builder.alloc_identifier_reference(span, phi_var_atom);
-                    
+                    let phi_ident_ref = self
+                        .ast_builder
+                        .alloc_identifier_reference(span, phi_var_atom);
+
                     // Create identifier expression for the source variable
                     let source_var_atom = self.ast_builder.allocator.alloc_str(&source_var_name);
-                    let source_ident_ref = self.ast_builder.expression_identifier(span, source_var_atom);
-                    
+                    let source_ident_ref = self
+                        .ast_builder
+                        .expression_identifier(span, source_var_atom);
+
                     // Create assignment expression: phi_var = source_var
-                    let simple_target = SimpleAssignmentTarget::AssignmentTargetIdentifier(phi_ident_ref);
+                    let simple_target =
+                        SimpleAssignmentTarget::AssignmentTargetIdentifier(phi_ident_ref);
                     let assignment_target = AssignmentTarget::from(simple_target);
                     let assignment = self.ast_builder.expression_assignment(
                         span,
@@ -1024,7 +1017,7 @@ impl<'a> SwitchConverter<'a> {
                         assignment_target,
                         source_ident_ref,
                     );
-                    
+
                     // Wrap in expression statement
                     let expr_stmt = self.ast_builder.expression_statement(span, assignment);
                     case_statements.push(Statement::ExpressionStatement(
@@ -1064,7 +1057,7 @@ impl<'a> SwitchConverter<'a> {
                 temp_ssa_values.insert(&setup_instr.ssa_value);
             }
         }
-        
+
         for setup_instr in &group.setup {
             // Skip LoadConst instructions that load into temporary SSA values
             // But always process Mov instructions as they assign to the actual variables
@@ -1075,27 +1068,42 @@ impl<'a> SwitchConverter<'a> {
                     continue;
                 }
             }
-            
+
             // Get the variable name for this SSA value
-            let var_name = if let Some(mapping) = block_converter.instruction_converter().register_manager().variable_mapping() {
-                let ssa = block_converter.ssa_analysis().expect("SSA analysis required for switch conversion");
-                
+            let var_name = if let Some(mapping) = block_converter
+                .instruction_converter()
+                .register_manager()
+                .variable_mapping()
+            {
+                let ssa = block_converter
+                    .ssa_analysis()
+                    .expect("SSA analysis required for switch conversion");
+
                 // Check if there's a PHI function at the target block for this register
                 if let Some(phi_functions) = ssa.phi_functions.get(&group.target_block) {
-                    if let Some(phi_func) = phi_functions.iter().find(|phi| phi.register == setup_instr.ssa_value.register) {
+                    if let Some(phi_func) = phi_functions
+                        .iter()
+                        .find(|phi| phi.register == setup_instr.ssa_value.register)
+                    {
                         // Use the PHI result variable
-                        mapping.ssa_to_var.get(&phi_func.result)
+                        mapping
+                            .ssa_to_var
+                            .get(&phi_func.result)
                             .cloned()
                             .unwrap_or_else(|| format!("var{}", setup_instr.ssa_value.register))
                     } else {
                         // No PHI function for this register, use the SSA value directly
-                        mapping.ssa_to_var.get(&setup_instr.ssa_value)
+                        mapping
+                            .ssa_to_var
+                            .get(&setup_instr.ssa_value)
                             .cloned()
                             .unwrap_or_else(|| format!("var{}", setup_instr.ssa_value.register))
                     }
                 } else {
                     // No PHI functions at target block, use the SSA value directly
-                    mapping.ssa_to_var.get(&setup_instr.ssa_value)
+                    mapping
+                        .ssa_to_var
+                        .get(&setup_instr.ssa_value)
                         .cloned()
                         .unwrap_or_else(|| format!("var{}", setup_instr.ssa_value.register))
                 }
@@ -1110,14 +1118,16 @@ impl<'a> SwitchConverter<'a> {
             let stmt = block_converter
                 .instruction_converter_mut()
                 .create_variable_declaration_or_assignment(&var_name, Some(value_expr))
-                .map_err(|e| SwitchConversionError::CaseConversionError(format!(
-                    "Failed to create variable declaration/assignment: {}",
-                    e
-                )))?;
-            
+                .map_err(|e| {
+                    SwitchConversionError::CaseConversionError(format!(
+                        "Failed to create variable declaration/assignment: {}",
+                        e
+                    ))
+                })?;
+
             // Mark this instruction as rendered to prevent double processing
             block_converter.mark_instruction_rendered(&setup_instr.instruction);
-            
+
             // Add instruction comment if enabled
             if block_converter.include_instruction_comments() {
                 if let Some(comment_manager) = block_converter.comment_manager_mut() {
@@ -1138,7 +1148,7 @@ impl<'a> SwitchConverter<'a> {
                     }
                 }
             }
-            
+
             case_statements.push(stmt);
         }
         Ok(())
@@ -1176,15 +1186,13 @@ impl<'a> SwitchConverter<'a> {
         &mut self,
         case_statements: &mut ArenaVec<'a, Statement<'a>>,
         group: &CaseGroup,
-        _shared_tail: &SharedTailInfo,
-        _cfg: &Cfg<'a>,
         block_converter: &mut super::BlockToStatementConverter<'a>,
     ) -> Result<(), SwitchConversionError> {
         // For cases that jump directly to the shared tail, we need to:
         // 1. Generate setup instructions
         // 2. Generate any PHI value assignments
         // 3. Add a break statement
-        
+
         // Generate setup instructions - these should handle all necessary assignments
         self.generate_setup_instructions(case_statements, group, block_converter)?;
 
@@ -1203,20 +1211,16 @@ impl<'a> SwitchConverter<'a> {
         &self,
         group: &CaseGroup,
         phi_node: &PhiNode,
-        _cfg: &Cfg<'a>,
     ) -> Option<ConstantValue> {
         // The PHI node has values from specific predecessor blocks.
         // We need to trace the control flow path from this case to the PHI block
         // and find which predecessor block on that path contributes to the PHI.
 
         // If we don't have SSA PHI info, we can't properly trace contributions
-        let _phi_block = if let Some(ref ssa_phi) = phi_node.ssa_phi_value {
-            // The SSA value's definition site tells us which block has the PHI
-            ssa_phi.def_site.block_id
-        } else {
+        if phi_node.ssa_phi_value.is_none() {
             // Without SSA info, we can't properly trace
             return None;
-        };
+        }
 
         // For each case, we need to find the path to the PHI block
         // The contribution comes from whichever predecessor block is on that path
@@ -1302,7 +1306,6 @@ impl<'a> SwitchConverter<'a> {
         false
     }
 
-
     /// Convert default case to switch case AST node
     fn convert_default_case(
         &mut self,
@@ -1331,10 +1334,14 @@ impl<'a> SwitchConverter<'a> {
                         first_execution_order: usize::MAX, // Default is last
                         comparison_blocks: vec![],
                     };
-                    
-                    self.generate_setup_instructions(&mut case_statements, &temp_group, block_converter)?;
+
+                    self.generate_setup_instructions(
+                        &mut case_statements,
+                        &temp_group,
+                        block_converter,
+                    )?;
                 }
-                
+
                 // If the target block is not the shared tail itself, convert it
                 if default_case.target_block != shared_tail.block_id {
                     let target_block = &cfg.graph()[default_case.target_block];
@@ -1388,10 +1395,14 @@ impl<'a> SwitchConverter<'a> {
                     first_execution_order: usize::MAX, // Default is last
                     comparison_blocks: vec![],
                 };
-                
-                self.generate_setup_instructions(&mut case_statements, &temp_group, block_converter)?;
+
+                self.generate_setup_instructions(
+                    &mut case_statements,
+                    &temp_group,
+                    block_converter,
+                )?;
             }
-            
+
             // Then convert the target block normally
             let target_block = &cfg.graph()[default_case.target_block];
             match block_converter.convert_block_with_options(
@@ -1491,45 +1502,57 @@ impl<'a> SwitchConverter<'a> {
             for setup_instr in &case.setup {
                 // Check if this register has a PHI function at its target block
                 if let Some(phi_functions) = ssa.phi_functions.get(&case.target_block) {
-                    if let Some(phi_func) = phi_functions.iter().find(|phi| phi.register == setup_instr.ssa_value.register) {
+                    if let Some(phi_func) = phi_functions
+                        .iter()
+                        .find(|phi| phi.register == setup_instr.ssa_value.register)
+                    {
                         // Convert PhiFunction to PhiNode
-                        let phi_node = self.convert_phi_function_to_node(phi_func, cfg);
+                        let phi_node = self.convert_phi_function_to_node(phi_func);
                         all_phi_nodes.insert(phi_func.register, phi_node);
                     }
                 }
-                
+
                 // Also check for PHI functions at any block in the switch region
                 // This handles cases where variables are defined by PHI functions in intermediate blocks
                 for block_id in cfg.graph().node_indices() {
                     if let Some(phi_functions) = ssa.phi_functions.get(&block_id) {
-                        if let Some(phi_func) = phi_functions.iter().find(|phi| phi.result == setup_instr.ssa_value) {
+                        if let Some(phi_func) = phi_functions
+                            .iter()
+                            .find(|phi| phi.result == setup_instr.ssa_value)
+                        {
                             // Convert PhiFunction to PhiNode
-                            let phi_node = self.convert_phi_function_to_node(phi_func, cfg);
+                            let phi_node = self.convert_phi_function_to_node(phi_func);
                             all_phi_nodes.insert(phi_func.register, phi_node);
                         }
                     }
                 }
             }
         }
-        
+
         // Also check default case setup instructions
         if let Some(default_case) = &switch_info.default_case {
             for setup_instr in &default_case.setup {
                 // Check if this register has a PHI function at its target block
                 if let Some(phi_functions) = ssa.phi_functions.get(&default_case.target_block) {
-                    if let Some(phi_func) = phi_functions.iter().find(|phi| phi.register == setup_instr.ssa_value.register) {
+                    if let Some(phi_func) = phi_functions
+                        .iter()
+                        .find(|phi| phi.register == setup_instr.ssa_value.register)
+                    {
                         // Convert PhiFunction to PhiNode
-                        let phi_node = self.convert_phi_function_to_node(phi_func, cfg);
+                        let phi_node = self.convert_phi_function_to_node(phi_func);
                         all_phi_nodes.insert(phi_func.register, phi_node);
                     }
                 }
-                
+
                 // Also check for PHI functions at any block in the switch region
                 for block_id in cfg.graph().node_indices() {
                     if let Some(phi_functions) = ssa.phi_functions.get(&block_id) {
-                        if let Some(phi_func) = phi_functions.iter().find(|phi| phi.result == setup_instr.ssa_value) {
+                        if let Some(phi_func) = phi_functions
+                            .iter()
+                            .find(|phi| phi.result == setup_instr.ssa_value)
+                        {
                             // Convert PhiFunction to PhiNode
-                            let phi_node = self.convert_phi_function_to_node(phi_func, cfg);
+                            let phi_node = self.convert_phi_function_to_node(phi_func);
                             all_phi_nodes.insert(phi_func.register, phi_node);
                         }
                     }
@@ -1537,13 +1560,9 @@ impl<'a> SwitchConverter<'a> {
             }
         }
     }
-    
+
     /// Convert a PhiFunction to a PhiNode
-    fn convert_phi_function_to_node(
-        &self,
-        phi_func: &crate::cfg::ssa::PhiFunction,
-        _cfg: &Cfg<'a>,
-    ) -> PhiNode {
+    fn convert_phi_function_to_node(&self, phi_func: &crate::cfg::ssa::PhiFunction) -> PhiNode {
         // For now, create a PhiNode without constant values
         // In a real implementation, we would analyze the operands to extract constant values
         PhiNode {
@@ -1552,12 +1571,11 @@ impl<'a> SwitchConverter<'a> {
             ssa_phi_value: Some(phi_func.result.clone()),
         }
     }
-    
+
     /// Create join locals for PHI nodes in shared tail
     fn create_join_locals_for_phi_nodes(
         &mut self,
         phi_nodes: &HashMap<u8, PhiNode>,
-        _cfg: &Cfg<'a>,
         block_converter: &mut super::BlockToStatementConverter<'a>,
     ) -> Result<Vec<Statement<'a>>, SwitchConversionError> {
         let mut declarations = Vec::new();
@@ -1565,7 +1583,7 @@ impl<'a> SwitchConverter<'a> {
         // For each PHI node in the shared tail, we need to create a variable declaration
         // before the switch statement to ensure the variable is in scope for all cases
 
-        for (_reg, phi_node) in phi_nodes {
+        for phi_node in phi_nodes.values() {
             // Get the variable name for this PHI node
             let var_name = self.get_phi_variable_name(phi_node, block_converter)?;
 
@@ -1617,9 +1635,6 @@ impl<'a> SwitchConverter<'a> {
         Ok(declarations)
     }
 
-
-
-
     /// Check if default case falls through
     fn default_case_falls_through(&self, default_case: &DefaultCase, cfg: &Cfg<'a>) -> bool {
         let block = &cfg.graph()[default_case.target_block];
@@ -1637,16 +1652,10 @@ impl<'a> SwitchConverter<'a> {
         }
     }
 
-
     // Helper methods for pattern detection
 
     /// Find what register is being used as discriminator
-    fn find_discriminator(
-        &self,
-        block: &crate::cfg::Block,
-        _block_id: NodeIndex,
-        _cfg: &Cfg<'a>,
-    ) -> Option<u8> {
+    fn find_discriminator(&self, block: &crate::cfg::Block) -> Option<u8> {
         // Look for LoadParam as first instruction
         if let Some(first) = block.instructions().first() {
             if let UnifiedInstruction::LoadParam { operand_0, .. } = &first.instruction {
@@ -1734,7 +1743,8 @@ impl<'a> SwitchConverter<'a> {
                     operand_0: _,
                     operand_1,
                     operand_2,
-                } | UnifiedInstruction::JStrictEqualLong {
+                }
+                | UnifiedInstruction::JStrictEqualLong {
                     operand_0: _,
                     operand_1,
                     operand_2,
@@ -1752,7 +1762,7 @@ impl<'a> SwitchConverter<'a> {
                         comparison_index = Some(i);
                         comparison_const_reg = Some(const_reg);
                         source_pc = instr.instruction_index;
-                        
+
                         // Extract the constant value for the case key
                         if let Some(constant_value) =
                             self.get_constant_value_at(block_id, i, const_reg, cfg)
@@ -1764,7 +1774,7 @@ impl<'a> SwitchConverter<'a> {
                             };
                             keys.push(case_key);
                         }
-                        
+
                         // Find the target block
                         target_block = self.get_true_successor(block_id, cfg);
                         break;
@@ -1773,12 +1783,12 @@ impl<'a> SwitchConverter<'a> {
                 _ => {}
             }
         }
-        
+
         // Bail if we didn't find a comparison
         let comparison_idx = comparison_index?;
         let const_reg = comparison_const_reg?;
         let target = target_block?;
-        
+
         // Second pass: collect all setup instructions
         // These are all instructions except:
         // 1. The LoadConst that loads the comparison value
@@ -1788,47 +1798,59 @@ impl<'a> SwitchConverter<'a> {
             if i == comparison_idx {
                 continue;
             }
-            
+
             // Check if this instruction defines a register
-            let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+            let usage =
+                crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
             if let Some(target_reg) = usage.target {
                 // Skip if this is loading the constant for comparison
-                let loads_comparison_const = target_reg == const_reg && i < comparison_idx && match &instr.instruction {
-                    UnifiedInstruction::LoadConstZero { .. } |
-                    UnifiedInstruction::LoadConstUInt8 { .. } |
-                    UnifiedInstruction::LoadConstInt { .. } |
-                    UnifiedInstruction::LoadConstDouble { .. } |
-                    UnifiedInstruction::LoadConstString { .. } |
-                    UnifiedInstruction::LoadConstStringLongIndex { .. } |
-                    UnifiedInstruction::LoadConstTrue { .. } |
-                    UnifiedInstruction::LoadConstFalse { .. } |
-                    UnifiedInstruction::LoadConstNull { .. } |
-                    UnifiedInstruction::LoadConstUndefined { .. } => true,
-                    _ => false,
-                };
-                
+                let loads_comparison_const = target_reg == const_reg
+                    && i < comparison_idx
+                    && match &instr.instruction {
+                        UnifiedInstruction::LoadConstZero { .. }
+                        | UnifiedInstruction::LoadConstUInt8 { .. }
+                        | UnifiedInstruction::LoadConstInt { .. }
+                        | UnifiedInstruction::LoadConstDouble { .. }
+                        | UnifiedInstruction::LoadConstString { .. }
+                        | UnifiedInstruction::LoadConstStringLongIndex { .. }
+                        | UnifiedInstruction::LoadConstTrue { .. }
+                        | UnifiedInstruction::LoadConstFalse { .. }
+                        | UnifiedInstruction::LoadConstNull { .. }
+                        | UnifiedInstruction::LoadConstUndefined { .. } => true,
+                        _ => false,
+                    };
+
                 if loads_comparison_const {
                     continue;
                 }
-                
+
                 // Find the SSA value for this definition
                 let def_site = crate::cfg::ssa::RegisterDef {
                     register: target_reg,
                     block_id,
                     instruction_idx: instr.instruction_index,
                 };
-                
+
                 if let Some(ssa_value) = ssa.ssa_values.get(&def_site) {
                     // Extract the value for this instruction
-                    if let Some(value) = self.extract_constant_value_from_instruction(&instr.instruction, target_reg) {
+                    if let Some(value) =
+                        self.extract_constant_value_from_instruction(&instr.instruction)
+                    {
                         setup.push(SetupInstruction {
                             ssa_value: ssa_value.clone(),
                             value,
                             instruction: instr.clone(),
                         });
-                    } else if let UnifiedInstruction::Mov { operand_0: _, operand_1 } = &instr.instruction {
+                    } else if let UnifiedInstruction::Mov {
+                        operand_0: _,
+                        operand_1,
+                    } = &instr.instruction
+                    {
                         // For Mov, find the source value from our setup instructions
-                        if let Some(source_setup) = setup.iter().find(|s: &&SetupInstruction| s.ssa_value.register == *operand_1 as u8) {
+                        if let Some(source_setup) = setup
+                            .iter()
+                            .find(|s: &&SetupInstruction| s.ssa_value.register == *operand_1 as u8)
+                        {
                             setup.push(SetupInstruction {
                                 ssa_value: ssa_value.clone(),
                                 value: source_setup.value.clone(),
@@ -1839,12 +1861,12 @@ impl<'a> SwitchConverter<'a> {
                 }
             }
         }
-        
+
         // eprintln!("Case with {} keys has {} setup instructions:", keys.len(), setup.len());
         // for (i, s) in setup.iter().enumerate() {
         //     eprintln!("  Setup[{}]: ssa={:?}, value={:?}", i, s.ssa_value, s.value);
         // }
-        
+
         Some(CaseInfo {
             keys,
             setup,
@@ -1873,8 +1895,7 @@ impl<'a> SwitchConverter<'a> {
             if let Some(target_reg) = usage.target {
                 if target_reg == register {
                     // Found a definition - try to extract the constant value
-                    return self
-                        .extract_constant_value_from_instruction(&instr.instruction, target_reg);
+                    return self.extract_constant_value_from_instruction(&instr.instruction);
                 }
             }
         }
@@ -1886,7 +1907,6 @@ impl<'a> SwitchConverter<'a> {
     fn extract_constant_value_from_instruction(
         &self,
         instr: &UnifiedInstruction,
-        _target_reg: u8,
     ) -> Option<ConstantValue> {
         match instr {
             UnifiedInstruction::LoadConstString { operand_1, .. } => {
@@ -1901,7 +1921,7 @@ impl<'a> SwitchConverter<'a> {
                     }
                 }
                 // Fallback if we can't get the string
-                Some(ConstantValue::String(format!("string_{}", operand_1)))
+                panic!("String not found in HBC file")
             }
             UnifiedInstruction::LoadConstZero { .. } => {
                 Some(ConstantValue::Number(OrderedFloat(0.0)))
@@ -1960,48 +1980,53 @@ impl<'a> SwitchConverter<'a> {
     fn extract_default_setup(
         &self,
         default_block: NodeIndex,
-        _live_across_false: &HashSet<u8>,
         cfg: &Cfg<'a>,
         ssa_analysis: &SSAAnalysis,
     ) -> Option<SmallVec<[SetupInstruction; 4]>> {
         // Use the same logic as extract_case_from_block but without the comparison handling
         let block = &cfg.graph()[default_block];
         let mut setup = SmallVec::new();
-        
+
         // For default block, extract all instructions except the final jump
         let instructions = block.instructions();
         if instructions.is_empty() {
             return Some(setup);
         }
-        
+
         // Get HBC file from cfg
         let hbc_file = cfg.hbc_file();
-        
+
         // Process all instructions except the last (which should be a jump)
         for (i, instr) in instructions.iter().enumerate() {
             // Skip the last instruction if it's a jump
             if i == instructions.len() - 1 {
-                if matches!(instr.instruction, 
-                    UnifiedInstruction::Jmp { .. } |
-                    UnifiedInstruction::JmpLong { .. } |
-                    UnifiedInstruction::JmpTrue { .. } |
-                    UnifiedInstruction::JmpFalse { .. } |
-                    UnifiedInstruction::JmpUndefined { .. } |
-                    UnifiedInstruction::Ret { .. }
+                if matches!(
+                    instr.instruction,
+                    UnifiedInstruction::Jmp { .. }
+                        | UnifiedInstruction::JmpLong { .. }
+                        | UnifiedInstruction::JmpTrue { .. }
+                        | UnifiedInstruction::JmpFalse { .. }
+                        | UnifiedInstruction::JmpUndefined { .. }
+                        | UnifiedInstruction::Ret { .. }
                 ) {
                     continue;
                 }
             }
-            
+
             // Find SSA value defined by this instruction
-            let ssa_value = ssa_analysis.definitions.iter()
+            let ssa_value = ssa_analysis
+                .definitions
+                .iter()
                 .find(|def| def.instruction_idx == instr.instruction_index)
                 .and_then(|def| ssa_analysis.ssa_values.get(def));
-            
+
             if let Some(ssa_value) = ssa_value {
                 // Extract constant value from LoadConst instructions
                 match &instr.instruction {
-                    UnifiedInstruction::LoadConstString { operand_0: _, operand_1 } => {
+                    UnifiedInstruction::LoadConstString {
+                        operand_0: _,
+                        operand_1,
+                    } => {
                         if let Ok(string_value) = hbc_file.strings.get(*operand_1 as u32) {
                             setup.push(SetupInstruction {
                                 ssa_value: ssa_value.clone(),
@@ -2010,14 +2035,20 @@ impl<'a> SwitchConverter<'a> {
                             });
                         }
                     }
-                    UnifiedInstruction::LoadConstInt { operand_0: _, operand_1 } => {
+                    UnifiedInstruction::LoadConstInt {
+                        operand_0: _,
+                        operand_1,
+                    } => {
                         setup.push(SetupInstruction {
                             ssa_value: ssa_value.clone(),
                             value: ConstantValue::Number(OrderedFloat(*operand_1 as f64)),
                             instruction: instr.clone(),
                         });
                     }
-                    UnifiedInstruction::LoadConstDouble { operand_0: _, operand_1 } => {
+                    UnifiedInstruction::LoadConstDouble {
+                        operand_0: _,
+                        operand_1,
+                    } => {
                         setup.push(SetupInstruction {
                             ssa_value: ssa_value.clone(),
                             value: ConstantValue::Number(OrderedFloat(*operand_1)),
@@ -2059,7 +2090,10 @@ impl<'a> SwitchConverter<'a> {
                             instruction: instr.clone(),
                         });
                     }
-                    UnifiedInstruction::LoadConstUInt8 { operand_0: _, operand_1 } => {
+                    UnifiedInstruction::LoadConstUInt8 {
+                        operand_0: _,
+                        operand_1,
+                    } => {
                         setup.push(SetupInstruction {
                             ssa_value: ssa_value.clone(),
                             value: ConstantValue::Number(OrderedFloat(*operand_1 as f64)),
@@ -2072,7 +2106,7 @@ impl<'a> SwitchConverter<'a> {
                 }
             }
         }
-        
+
         Some(setup)
     }
 
@@ -2106,7 +2140,7 @@ impl<'a> SwitchConverter<'a> {
         }
 
         // Analyze PHI requirements
-        let phi_nodes = self.analyze_phi_requirements(shared_tail, cases, default_case, cfg, ssa);
+        let phi_nodes = self.analyze_phi_requirements(shared_tail, cfg, ssa);
 
         Some(SharedTailInfo {
             block_id: shared_tail,
@@ -2182,9 +2216,7 @@ impl<'a> SwitchConverter<'a> {
     fn analyze_phi_requirements(
         &self,
         tail_block: NodeIndex,
-        _cases: &[CaseInfo],
-        _default_case: &Option<DefaultCase>,
-        _cfg: &Cfg<'a>,
+        cfg: &Cfg<'a>,
         ssa: &SSAAnalysis,
     ) -> HashMap<u8, PhiNode> {
         let mut phi_nodes = HashMap::new();
@@ -2203,7 +2235,7 @@ impl<'a> SwitchConverter<'a> {
             // Extract constant values from each PHI operand
             for (pred_block, ssa_value) in &phi_func.operands {
                 // Find which instruction defined this SSA value and extract its constant
-                if let Some(value) = self.extract_constant_from_ssa_value(ssa_value, _cfg, ssa) {
+                if let Some(value) = self.extract_constant_from_ssa_value(ssa_value, cfg, ssa) {
                     values.insert(*pred_block, value);
                 }
             }
@@ -2247,7 +2279,7 @@ impl<'a> SwitchConverter<'a> {
                 if target == ssa_value.register {
                     // First try to extract a constant value
                     if let Some(value) =
-                        self.extract_constant_value_from_instruction(&instr.instruction, target)
+                        self.extract_constant_value_from_instruction(&instr.instruction)
                     {
                         return Some(value);
                     }
@@ -2300,7 +2332,6 @@ impl<'a> SwitchConverter<'a> {
         None
     }
 
-
     /// Find the SSA value for a register use at a specific instruction
     fn find_ssa_value_for_use<'b>(
         &self,
@@ -2349,7 +2380,7 @@ impl<'a> SwitchConverter<'a> {
     }
 
     /// Check if we should bail out for PHI scenarios
-    fn should_bail_out_for_phi_scenarios(&self, _shared_tail: &Option<SharedTailInfo>) -> bool {
+    fn should_bail_out_for_phi_scenarios(&self) -> bool {
         // For now, don't bail out for PHI scenarios
         // In a full implementation, this would check for complex PHI node requirements
         false
@@ -2492,11 +2523,7 @@ impl<'a> SwitchConverter<'a> {
     }
 
     /// Check if we should bail out for control flow issues
-    fn should_bail_out_for_control_flow(
-        &self,
-        _involved_blocks: &HashSet<NodeIndex>,
-        _cfg: &Cfg<'a>,
-    ) -> bool {
+    fn should_bail_out_for_control_flow(&self) -> bool {
         // For now, don't bail out for control flow issues
         // In a full implementation, this would check for:
         // - Exception-throwing instructions
