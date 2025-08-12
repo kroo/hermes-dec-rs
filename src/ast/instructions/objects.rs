@@ -563,7 +563,9 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let stmt = self.create_variable_declaration_or_assignment(
             &dest_var,
-            Some(oxc_ast::ast::Expression::StaticMemberExpression(member_expr)),
+            Some(oxc_ast::ast::Expression::StaticMemberExpression(
+                member_expr,
+            )),
         )?;
 
         Ok(InstructionResult::Statement(stmt))
@@ -597,7 +599,9 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let stmt = self.create_variable_declaration_or_assignment(
             &dest_var,
-            Some(oxc_ast::ast::Expression::ComputedMemberExpression(member_expr)),
+            Some(oxc_ast::ast::Expression::ComputedMemberExpression(
+                member_expr,
+            )),
         )?;
 
         Ok(InstructionResult::Statement(stmt))

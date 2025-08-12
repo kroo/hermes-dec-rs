@@ -240,15 +240,18 @@ impl<'a> Cfg<'a> {
     /// Analyze conditional chains in the CFG
     pub fn analyze_conditional_chains(&self) -> Option<analysis::ConditionalAnalysis> {
         let post_doms = self.analyze_post_dominators()?;
-        Some(analysis::analyze_conditional_chains(&self.graph, &post_doms))
+        Some(analysis::analyze_conditional_chains(
+            &self.graph,
+            &post_doms,
+        ))
     }
-    
+
     /// Analyze switch regions in the CFG
     pub fn analyze_switch_regions(&self) -> Option<analysis::SwitchAnalysis> {
         let post_doms = self.analyze_post_dominators()?;
         Some(analysis::find_switch_regions(&self.graph, &post_doms))
     }
-    
+
     /// Get blocks that need labels (are targets of jumps that aren't simple fall-through)
     pub fn blocks_needing_labels(&self) -> std::collections::HashSet<NodeIndex> {
         let mut needs_labels = std::collections::HashSet::new();

@@ -1692,7 +1692,7 @@ impl<'a> InstructionToStatementConverter<'a> {
     ) -> Result<Statement<'a>, StatementConversionError> {
         // Check if this is the first definition of the variable
         let is_first_definition = self.register_manager.is_first_definition(variable_name);
-        
+
         if is_first_definition {
             // Check if variable should be const
             let declaration_kind = if self.register_manager.should_be_const(variable_name) {

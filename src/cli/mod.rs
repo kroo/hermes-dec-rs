@@ -122,7 +122,11 @@ impl Cli {
                     analysis.as_deref(),
                 )?;
             }
-            Commands::AnalyzeCfg { input, function, verbose } => {
+            Commands::AnalyzeCfg {
+                input,
+                function,
+                verbose,
+            } => {
                 analyze_cfg::analyze_cfg(&input, function, verbose)?;
             }
         }

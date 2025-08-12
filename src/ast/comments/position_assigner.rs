@@ -68,7 +68,7 @@ impl<'a> VisitMut<'a> for PositionAssigner {
         if let Some(addressable) = Self::get_boxed_statement(stmt) {
             let addr = addressable.address();
             self.address_to_position.insert(addr, self.current_pos);
-            
+
             // Update the statement's span to the final position if possible
             match stmt {
                 Statement::ExpressionStatement(expr_stmt) => {
@@ -104,10 +104,10 @@ impl<'a> VisitMut<'a> for PositionAssigner {
                     // but the address mapping is still recorded
                 }
             }
-            
+
             self.current_pos += 100; // Leave space for comments
         }
-        
+
         walk_statement(self, stmt);
     }
 
@@ -134,16 +134,16 @@ mod tests {
     fn test_position_assigner() {
         let allocator = Allocator::default();
         let ast_builder = AstBuilder::new(&allocator);
-        
+
         // Create some test statements
         let return_stmt = ast_builder.statement_return(SPAN, None);
         let addr = return_stmt.address();
-        
+
         let mut statements = vec![return_stmt];
         let mut assigner = PositionAssigner::new();
-        
+
         assigner.assign_positions(&mut statements);
-        
+
         let positions = assigner.get_address_positions();
         assert!(positions.contains_key(&addr));
         assert_eq!(positions[&addr], 0);

@@ -147,8 +147,10 @@ fn main() -> Result<()> {
             analysis.as_ref().map(|v| &**v),
         )
         .map_err(|e| miette!("{}", e)),
-        Commands::AnalyzeCfg { input, function, verbose } => {
-            cli::analyze_cfg::analyze_cfg(&input, function, verbose).map_err(|e| miette!("{}", e))
-        }
+        Commands::AnalyzeCfg {
+            input,
+            function,
+            verbose,
+        } => cli::analyze_cfg::analyze_cfg(&input, function, verbose).map_err(|e| miette!("{}", e)),
     }
 }

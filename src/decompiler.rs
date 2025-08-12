@@ -7,7 +7,10 @@ use crate::analysis::{
     DefaultParameterAnalyzer, FunctionClassifier, FunctionType, GlobalAnalysisResult,
     GlobalSSAAnalyzer,
 };
-use crate::ast::{BlockToStatementConverter, AddressCommentManager, ExpressionContext, build_function_program, generate_code_with_comments, InstructionIndex};
+use crate::ast::{
+    build_function_program, generate_code_with_comments, AddressCommentManager,
+    BlockToStatementConverter, ExpressionContext, InstructionIndex,
+};
 use crate::cfg::Cfg;
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
@@ -103,7 +106,8 @@ impl Decompiler {
         let ast_builder = OxcAstBuilder::new(&allocator);
 
         // Create expression context with HBC file access
-        let expression_context = ExpressionContext::with_context(hbc_file, function_index, InstructionIndex::zero());
+        let expression_context =
+            ExpressionContext::with_context(hbc_file, function_index, InstructionIndex::zero());
 
         // Get the actual function name from the HBC file before moving expression_context
         let function_name = expression_context
@@ -159,7 +163,7 @@ impl Decompiler {
             &transformed_cfg,
             global_analysis.clone(),
         );
-        
+
         // Set the comment manager if we have one
         if let Some(cm) = comment_manager {
             converter.set_comment_manager(cm);
@@ -174,7 +178,7 @@ impl Decompiler {
                 });
             }
         };
-        
+
         // Take the comment manager back from the converter
         let comment_manager = converter.take_comment_manager();
 
@@ -384,7 +388,7 @@ impl Decompiler {
         } else {
             vec![]
         };
-        
+
         // Convert default_params to the format expected by build_function_program
         let default_params_strings: std::collections::HashMap<u32, String> = default_params
             .into_iter()

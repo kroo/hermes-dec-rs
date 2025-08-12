@@ -8,15 +8,15 @@ use super::types::{PhiRegisterDeclaration, SSAAnalysis, SSAValue};
 use crate::cfg::Cfg;
 use crate::error::Error;
 use crate::hbc::InstructionIndex;
-use petgraph::graph::NodeIndex;
 use petgraph::algo::dominators::Dominators;
+use petgraph::graph::NodeIndex;
 use std::collections::HashSet;
 
 /// Analyze phi functions and determine where variable declarations are needed
 pub fn analyze_phi_declarations(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Result<(), Error> {
-    let dominators = cfg
-        .analyze_dominators()
-        .ok_or_else(|| Error::Internal { message: "Failed to compute dominators".to_string() })?;
+    let dominators = cfg.analyze_dominators().ok_or_else(|| Error::Internal {
+        message: "Failed to compute dominators".to_string(),
+    })?;
 
     // For each block with phi functions
     for (_block_id, phi_functions) in &analysis.phi_functions {
@@ -52,7 +52,11 @@ fn analyze_phi_function(
     for (_pred_block, ssa_value) in &phi.operands {
         // Find the block where this SSA value was defined
         if let Some(def) = analysis.definitions.iter().find(|d| {
-            analysis.ssa_values.get(d).map(|v| v == ssa_value).unwrap_or(false)
+            analysis
+                .ssa_values
+                .get(d)
+                .map(|v| v == ssa_value)
+                .unwrap_or(false)
         }) {
             // Get the block containing this definition
             if let Some(block_id) = find_block_for_instruction(cfg, def.instruction_idx) {
@@ -70,12 +74,14 @@ fn analyze_phi_function(
     for (candidate_block, _candidate_value) in &def_blocks {
         let mut dominates_all = true;
         for (other_block, _) in &def_blocks {
-            if candidate_block != other_block && !dominates(dominators, *candidate_block, *other_block) {
+            if candidate_block != other_block
+                && !dominates(dominators, *candidate_block, *other_block)
+            {
                 dominates_all = false;
                 break;
             }
         }
-        
+
         if dominates_all {
             // This definition dominates all others, no extra declaration needed
             return Ok(None);
@@ -83,7 +89,10 @@ fn analyze_phi_function(
     }
 
     // No single definition dominates all others, find common dominator
-    let common_dominator = find_common_dominator(dominators, &def_blocks.iter().map(|(b, _)| *b).collect::<Vec<_>>())?;
+    let common_dominator = find_common_dominator(
+        dominators,
+        &def_blocks.iter().map(|(b, _)| *b).collect::<Vec<_>>(),
+    )?;
 
     // Use the phi result SSA value - this should be coalesced with all other versions
     // The variable mapper will have already assigned a name to the representative of this equivalence class
@@ -131,7 +140,9 @@ fn find_common_dominator(
     blocks: &[NodeIndex],
 ) -> Result<NodeIndex, Error> {
     if blocks.is_empty() {
-        return Err(Error::Internal { message: "No blocks to find common dominator".to_string() });
+        return Err(Error::Internal {
+            message: "No blocks to find common dominator".to_string(),
+        });
     }
 
     if blocks.len() == 1 {
@@ -140,7 +151,7 @@ fn find_common_dominator(
 
     // Start with the first block's dominator chain
     let mut common = blocks[0];
-    
+
     // For each subsequent block, find the common dominator
     for &block in &blocks[1..] {
         common = find_common_dominator_pair(dominators, common, block)?;
@@ -180,7 +191,9 @@ fn find_common_dominator_pair(
         }
     }
 
-    Err(Error::Internal { message: "No common dominator found".to_string() })
+    Err(Error::Internal {
+        message: "No common dominator found".to_string(),
+    })
 }
 
 #[cfg(test)]

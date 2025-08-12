@@ -86,14 +86,18 @@ fn test_complex_nested_conditionals_with_ssa() {
         "Should have arithmetic operations with parameters (arg3 + arg0). Got output:\n{}",
         output
     );
-    
-    // 2. Should NOT have self-referencing SSA variables in arithmetic  
+
+    // 2. Should NOT have self-referencing SSA variables in arithmetic
     let has_self_reference = output.lines().any(|line| {
-        if let Some(var_name) = line.trim_start().strip_prefix("const ").and_then(|s| s.split(' ').next()) {
-            line.contains(&format!(" = {} +", var_name)) || 
-            line.contains(&format!(" = {} -", var_name)) || 
-            line.contains(&format!("+ {} ", var_name)) ||
-            line.contains(&format!("- {} ", var_name))
+        if let Some(var_name) = line
+            .trim_start()
+            .strip_prefix("const ")
+            .and_then(|s| s.split(' ').next())
+        {
+            line.contains(&format!(" = {} +", var_name))
+                || line.contains(&format!(" = {} -", var_name))
+                || line.contains(&format!("+ {} ", var_name))
+                || line.contains(&format!("- {} ", var_name))
         } else {
             false
         }
@@ -106,18 +110,18 @@ fn test_complex_nested_conditionals_with_ssa() {
 
     // 3. Should use proper parameter names (arg0, arg1, arg2, arg3)
     assert!(
-        output.contains("let arg3 = arg0;") && 
-        output.contains("let arg0 = arg1;") && 
-        output.contains("let arg2 = arg2;") &&
-        output.contains("let arg1 = arg3;"),
+        output.contains("let arg3 = arg0;")
+            && output.contains("let arg0 = arg1;")
+            && output.contains("let arg2 = arg2;")
+            && output.contains("let arg1 = arg3;"),
         "Should have proper parameter setup. Got output:\n{}",
         output
     );
 
     // 4. Should have proper nested structure with parameters
     assert!(
-        output.contains("if (arg3 >") 
-            && output.contains("if (arg0 >") 
+        output.contains("if (arg3 >")
+            && output.contains("if (arg0 >")
             && output.contains("if (arg2 >"),
         "Should have nested if statements with parameters. Got output:\n{}",
         output

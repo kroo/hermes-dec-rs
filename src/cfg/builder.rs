@@ -245,9 +245,10 @@ impl<'a> CfgBuilder<'a> {
         &self,
         instruction: &HbcFunctionInstruction,
     ) -> Option<&SwitchTable> {
-        self.hbc_file
-            .switch_tables
-            .get_switch_table_by_instruction(self.function_index, instruction.instruction_index.into())
+        self.hbc_file.switch_tables.get_switch_table_by_instruction(
+            self.function_index,
+            instruction.instruction_index.into(),
+        )
     }
 
     /// Add exception handler edges to the CFG
@@ -275,13 +276,19 @@ impl<'a> CfgBuilder<'a> {
                             .byte_offset_to_instruction_index(self.function_index, handler.target)
                         {
                             // Find the catch block
-                            if let Some(&catch_node) = self.block_starts.get(&InstructionIndex::from(catch_target_idx)) {
+                            if let Some(&catch_node) = self
+                                .block_starts
+                                .get(&InstructionIndex::from(catch_target_idx))
+                            {
                                 // Find all blocks that are within the try range
                                 // Sort by PC to ensure deterministic order
                                 let mut blocks_in_range: Vec<_> = self
                                     .block_starts
                                     .iter()
-                                    .filter(|(pc, _)| **pc >= InstructionIndex::from(try_start_idx) && **pc < InstructionIndex::from(try_end_idx))
+                                    .filter(|(pc, _)| {
+                                        **pc >= InstructionIndex::from(try_start_idx)
+                                            && **pc < InstructionIndex::from(try_end_idx)
+                                    })
                                     .collect();
                                 blocks_in_range.sort_by_key(|(pc, _)| **pc);
 
@@ -338,7 +345,8 @@ impl<'a> CfgBuilder<'a> {
         let start_idx: usize = start_pc.into();
         let end_idx: usize = end_pc.into();
         for idx in start_idx..end_idx {
-            self.pc_to_block.insert(InstructionIndex::from(idx as u32), node_index);
+            self.pc_to_block
+                .insert(InstructionIndex::from(idx as u32), node_index);
         }
         node_index
     }
@@ -383,7 +391,10 @@ impl<'a> CfgBuilder<'a> {
                         {
                             // Add edge for default case
                             if let Some(default_target) = switch_table.default_instruction_index {
-                                if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(default_target)) {
+                                if let Some(&to_node) = self
+                                    .block_starts
+                                    .get(&InstructionIndex::from(default_target))
+                                {
                                     graph.add_edge(from_node, to_node, EdgeKind::Default);
                                 }
                             }
@@ -391,7 +402,9 @@ impl<'a> CfgBuilder<'a> {
                             // Add edges for all switch cases
                             for (case_index, case) in switch_table.cases.iter().enumerate() {
                                 if let Some(target) = case.target_instruction_index {
-                                    if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(target)) {
+                                    if let Some(&to_node) =
+                                        self.block_starts.get(&InstructionIndex::from(target))
+                                    {
                                         graph.add_edge(
                                             from_node,
                                             to_node,
@@ -404,7 +417,9 @@ impl<'a> CfgBuilder<'a> {
                     } else {
                         // Handle regular jump instructions
                         if let Some(target) = self.get_jump_target(last_instruction, jump_table) {
-                            if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(target)) {
+                            if let Some(&to_node) =
+                                self.block_starts.get(&InstructionIndex::from(target))
+                            {
                                 let edge_kind = self.get_edge_kind(last_instruction);
                                 graph.add_edge(from_node, to_node, edge_kind);
                             }
@@ -413,7 +428,10 @@ impl<'a> CfgBuilder<'a> {
                         // Add fallthrough edge for conditional jumps
                         if self.is_conditional_jump(last_instruction) {
                             let fallthrough_pc = end_pc;
-                            if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(fallthrough_pc)) {
+                            if let Some(&to_node) = self
+                                .block_starts
+                                .get(&InstructionIndex::from(fallthrough_pc))
+                            {
                                 // For JmpFalse, the fallthrough is the True branch
                                 // For all other conditional jumps, the fallthrough is the False branch
                                 let fallthrough_edge_kind = match &last_instruction.instruction {
@@ -432,7 +450,10 @@ impl<'a> CfgBuilder<'a> {
                     {
                         // Add edge for default case
                         if let Some(default_target) = switch_table.default_instruction_index {
-                            if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(default_target)) {
+                            if let Some(&to_node) = self
+                                .block_starts
+                                .get(&InstructionIndex::from(default_target))
+                            {
                                 graph.add_edge(from_node, to_node, EdgeKind::Default);
                             }
                         }
@@ -440,7 +461,9 @@ impl<'a> CfgBuilder<'a> {
                         // Add edges for all switch cases
                         for (case_index, case) in switch_table.cases.iter().enumerate() {
                             if let Some(target) = case.target_instruction_index {
-                                if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(target)) {
+                                if let Some(&to_node) =
+                                    self.block_starts.get(&InstructionIndex::from(target))
+                                {
                                     graph.add_edge(
                                         from_node,
                                         to_node,
@@ -457,19 +480,27 @@ impl<'a> CfgBuilder<'a> {
                     // Handle SaveGenerator instructions - create both fallthrough and resume edges
                     // 1. Generator Resume edge: to the resumption label
                     if let Some(target) = self.get_jump_target(last_instruction, jump_table) {
-                        if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(target)) {
+                        if let Some(&to_node) =
+                            self.block_starts.get(&InstructionIndex::from(target))
+                        {
                             graph.add_edge(from_node, to_node, EdgeKind::GeneratorResume);
                         }
                     }
                     // 2. Generator Fallthrough edge: to the next instruction
                     let fallthrough_pc = end_pc;
-                    if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(fallthrough_pc)) {
+                    if let Some(&to_node) = self
+                        .block_starts
+                        .get(&InstructionIndex::from(fallthrough_pc))
+                    {
                         graph.add_edge(from_node, to_node, EdgeKind::GeneratorFallthrough);
                     }
                 } else {
                     // Fallthrough to next block
                     let fallthrough_pc = end_pc;
-                    if let Some(&to_node) = self.block_starts.get(&InstructionIndex::from(fallthrough_pc)) {
+                    if let Some(&to_node) = self
+                        .block_starts
+                        .get(&InstructionIndex::from(fallthrough_pc))
+                    {
                         graph.add_edge(from_node, to_node, EdgeKind::Fall);
                     }
                 }

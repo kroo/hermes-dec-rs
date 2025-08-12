@@ -176,7 +176,9 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let stmt = self.create_variable_declaration_or_assignment(
             &dest_var,
-            Some(oxc_ast::ast::Expression::ComputedMemberExpression(member_expr)),
+            Some(oxc_ast::ast::Expression::ComputedMemberExpression(
+                member_expr,
+            )),
         )?;
 
         Ok(InstructionResult::Statement(stmt))
@@ -585,7 +587,8 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
                     let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
                     let var_expr = self.ast_builder.expression_identifier(span, var_atom);
 
-                    let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(var_expr))?;
+                    let stmt =
+                        self.create_variable_declaration_or_assignment(&dest_var, Some(var_expr))?;
 
                     return Ok(InstructionResult::Statement(stmt));
                 }
@@ -697,7 +700,8 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
                     let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
                     let var_expr = self.ast_builder.expression_identifier(span, var_atom);
 
-                    let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(var_expr))?;
+                    let stmt =
+                        self.create_variable_declaration_or_assignment(&dest_var, Some(var_expr))?;
 
                     return Ok(InstructionResult::Statement(stmt));
                 }

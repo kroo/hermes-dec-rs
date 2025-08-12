@@ -216,10 +216,10 @@ pub struct SSAAnalysis {
 
     // NEW: Closure variable declarations
     pub closure_variable_declarations: Vec<ClosureVarDecl>,
-    
+
     // NEW: Variable analysis (coalescing, scopes, lookups)
     pub variable_analysis: Option<super::variable_analysis::VariableAnalysis>,
-    
+
     // NEW: Phi variable declarations needed at specific blocks
     pub phi_variable_declarations: HashMap<NodeIndex, Vec<PhiRegisterDeclaration>>,
 }

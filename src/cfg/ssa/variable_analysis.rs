@@ -108,7 +108,10 @@ impl UnionFind {
 }
 
 /// Analyze variables for SSA values
-pub fn analyze_variables(ssa: &SSAAnalysis, cfg: &Cfg) -> Result<VariableAnalysis, crate::error::Error> {
+pub fn analyze_variables(
+    ssa: &SSAAnalysis,
+    cfg: &Cfg,
+) -> Result<VariableAnalysis, crate::error::Error> {
     let mut analysis = VariableAnalysis {
         coalesced_values: HashMap::new(),
         variable_scopes: HashMap::new(),
@@ -299,10 +302,13 @@ fn analyze_usage_patterns(
                 .hbc_file()
                 .functions
                 .get_instructions(cfg.function_index())?;
-            
+
             if let Some(instruction) = instructions.get(value.def_site.instruction_idx.value()) {
                 // Check if this is a LoadParam instruction
-                if matches!(instruction.instruction, crate::generated::unified_instructions::UnifiedInstruction::LoadParam { .. }) {
+                if matches!(
+                    instruction.instruction,
+                    crate::generated::unified_instructions::UnifiedInstruction::LoadParam { .. }
+                ) {
                     usage.is_parameter = true;
                 }
             }

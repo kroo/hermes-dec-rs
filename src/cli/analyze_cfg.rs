@@ -196,13 +196,18 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                     _ => {}
                 }
             }
-            
+
             if is_sparse && fn_ssa.is_some() {
                 let allocator = oxc_allocator::Allocator::default();
                 let ast_builder = oxc_ast::AstBuilder::new(&allocator);
-                let expression_context = crate::ast::context::ExpressionContext::with_hbc_file(&hbc_file);
-                let switch_converter = crate::ast::control_flow::switch_converter::SwitchConverter::with_context(&ast_builder, expression_context);
-                
+                let expression_context =
+                    crate::ast::context::ExpressionContext::with_hbc_file(&hbc_file);
+                let switch_converter =
+                    crate::ast::control_flow::switch_converter::SwitchConverter::with_context(
+                        &ast_builder,
+                        expression_context,
+                    );
+
                 if let Some(postdom) = cfg.analyze_post_dominators() {
                     if let Some(switch_info) = switch_converter.detect_switch_pattern(
                         region.dispatch,
@@ -252,32 +257,33 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
         // Add block-level switch annotations
         if let Some(analysis) = &switch_analysis {
             let mut block_annotations = Vec::new();
-            
+
             for (region_idx, region) in analysis.regions.iter().enumerate() {
                 // Is this the dispatch block?
                 if region.dispatch == block_idx {
                     block_annotations.push(format!("SWITCH_DISPATCH[{}]", region_idx));
                 }
-                
+
                 // Is this a case head?
                 for case in &region.cases {
                     if case.case_head == block_idx {
-                        block_annotations.push(format!("CASE_HEAD[{}.{}]", region_idx, case.case_index));
+                        block_annotations
+                            .push(format!("CASE_HEAD[{}.{}]", region_idx, case.case_index));
                     }
                 }
-                
+
                 // Is this the default head?
                 if let Some(default_head) = region.default_head {
                     if default_head == block_idx {
                         block_annotations.push(format!("DEFAULT_HEAD[{}]", region_idx));
                     }
                 }
-                
+
                 // Is this the join block?
                 if region.join_block == block_idx {
                     block_annotations.push(format!("SWITCH_JOIN[{}]", region_idx));
                 }
-                
+
                 // Is this a shared tail block?
                 if let Some(Some(switch_info)) = all_switch_infos.get(region_idx) {
                     if let Some(shared_tail) = &switch_info.shared_tail {
@@ -286,20 +292,24 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                         }
                     }
                 }
-                
+
                 // Is this a comparison block?
                 if let Some(Some(switch_info)) = all_switch_infos.get(region_idx) {
-                    if switch_info.cases.iter().any(|c| c.comparison_block == block_idx) {
+                    if switch_info
+                        .cases
+                        .iter()
+                        .any(|c| c.comparison_block == block_idx)
+                    {
                         block_annotations.push(format!("SWITCH_COMPARISON[{}]", region_idx));
                     }
                 }
             }
-            
+
             if !block_annotations.is_empty() {
                 println!("  // {}", block_annotations.join(", "));
             }
         }
-        
+
         for phi_function in phi_functions {
             println!("  Phi function: {}", phi_function.format_phi_function());
         }
@@ -620,9 +630,7 @@ fn print_switch_region(
                             for (i, setup) in case.setup.iter().enumerate() {
                                 println!(
                                     "          [{}] {:?} = {:?}",
-                                    i, 
-                                    setup.ssa_value,
-                                    setup.value
+                                    i, setup.ssa_value, setup.value
                                 );
                             }
                         }
@@ -641,7 +649,11 @@ fn print_switch_region(
 
                         for (_reg, phi_node) in &shared_tail.phi_nodes {
                             if let Some(ref ssa_phi) = phi_node.ssa_phi_value {
-                                println!("\n      PHI node: {} (register r{})", ssa_phi.name(), phi_node.register);
+                                println!(
+                                    "\n      PHI node: {} (register r{})",
+                                    ssa_phi.name(),
+                                    phi_node.register
+                                );
                             } else {
                                 println!("\n      PHI node for register r{}:", phi_node.register);
                             }
@@ -671,10 +683,12 @@ fn print_switch_region(
                             };
 
                             for (_reg, phi_node) in &shared_tail.phi_nodes {
-                                let phi_name = phi_node.ssa_phi_value.as_ref()
+                                let phi_name = phi_node
+                                    .ssa_phi_value
+                                    .as_ref()
                                     .map(|ssa| ssa.name())
                                     .unwrap_or_else(|| format!("r{}", phi_node.register));
-                                
+
                                 if let Some(value) = switch_converter
                                     .find_phi_contribution_for_case(&group, phi_node)
                                 {
@@ -688,21 +702,26 @@ fn print_switch_region(
                                     if group.target_block != shared_tail.block_id {
                                         println!("          {} = <computed value>", phi_name);
                                     } else {
-                                        println!("          {} = <no contribution found>", phi_name);
+                                        println!(
+                                            "          {} = <no contribution found>",
+                                            phi_name
+                                        );
                                     }
                                 }
                             }
                         }
-                        
+
                         // Analyze default case PHI contributions if it exists
                         if let Some(default) = &switch_info.default_case {
                             println!("        Default case:");
-                            
+
                             for (_reg, phi_node) in &shared_tail.phi_nodes {
-                                let phi_name = phi_node.ssa_phi_value.as_ref()
+                                let phi_name = phi_node
+                                    .ssa_phi_value
+                                    .as_ref()
                                     .map(|ssa| ssa.name())
                                     .unwrap_or_else(|| format!("r{}", phi_node.register));
-                                
+
                                 // Check if the PHI node has a value from the default target block
                                 if let Some(value) = phi_node.values.get(&default.target_block) {
                                     println!(
@@ -715,7 +734,10 @@ fn print_switch_region(
                                     if default.target_block != shared_tail.block_id {
                                         println!("          {} = <computed value>", phi_name);
                                     } else {
-                                        println!("          {} = <no contribution found>", phi_name);
+                                        println!(
+                                            "          {} = <no contribution found>",
+                                            phi_name
+                                        );
                                     }
                                 }
                             }

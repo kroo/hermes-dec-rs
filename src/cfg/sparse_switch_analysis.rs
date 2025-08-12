@@ -45,9 +45,12 @@ pub fn find_sparse_switch_patterns(
 ) -> Vec<SparseSwitchCandidate> {
     let mut candidates = Vec::new();
     let mut processed = HashSet::new();
-    
+
     log::debug!("Starting sparse switch pattern detection");
-    log::debug!("Initially globally processed blocks: {:?}", globally_processed);
+    log::debug!(
+        "Initially globally processed blocks: {:?}",
+        globally_processed
+    );
 
     // Look for chains of equality comparisons
     for node in graph.node_indices() {
@@ -61,20 +64,26 @@ pub fn find_sparse_switch_patterns(
         {
             // Mark only comparison blocks as globally processed
             // Don't mark target blocks (case heads) as they might contain inner switches
-            log::trace!("Found sparse switch pattern with {} comparison blocks", candidate.comparison_blocks.len());
+            log::trace!(
+                "Found sparse switch pattern with {} comparison blocks",
+                candidate.comparison_blocks.len()
+            );
             for comp in &candidate.comparison_blocks {
                 log::trace!("Marking block {:?} as globally processed", comp.block_index);
                 globally_processed.insert(comp.block_index);
                 processed.insert(comp.block_index); // Also mark in local processed set
-                // Don't mark comp.target_block - it might contain an inner switch
+                                                    // Don't mark comp.target_block - it might contain an inner switch
             }
             // Don't mark default block either - it might contain an inner switch
-            
+
             candidates.push(candidate);
         }
     }
 
-    log::debug!("Sparse switch detection complete. Found {} patterns", candidates.len());
+    log::debug!(
+        "Sparse switch detection complete. Found {} patterns",
+        candidates.len()
+    );
     log::debug!("Final globally processed blocks: {:?}", globally_processed);
     candidates
 }
@@ -102,8 +111,11 @@ fn detect_sparse_switch_chain(
 
     // This must be a conditional block with true/false branches
     let (_true_target, _false_target) = get_conditional_targets(graph, start_node)?;
-    
-    log::debug!("Starting sparse switch chain detection from block {:?}", start_node);
+
+    log::debug!(
+        "Starting sparse switch chain detection from block {:?}",
+        start_node
+    );
     log::debug!("Comparing register r{}", compared_register);
 
     // Initialize tracking
@@ -181,15 +193,24 @@ fn detect_sparse_switch_chain(
 
         // We need at least 2 comparisons to consider it a switch pattern
         if comparison_blocks.len() >= 2 {
-            log::debug!("Found valid sparse switch chain with {} comparisons", comparison_blocks.len());
+            log::debug!(
+                "Found valid sparse switch chain with {} comparisons",
+                comparison_blocks.len()
+            );
             log::debug!("Chain blocks: {:?}", chain_blocks);
-            log::debug!("Comparison blocks: {:?}", comparison_blocks.iter().map(|c| c.block_index).collect::<Vec<_>>());
-            
+            log::debug!(
+                "Comparison blocks: {:?}",
+                comparison_blocks
+                    .iter()
+                    .map(|c| c.block_index)
+                    .collect::<Vec<_>>()
+            );
+
             // Mark all blocks in the chain as processed
             for block in chain_blocks {
                 processed.insert(block);
             }
-            
+
             return Some(SparseSwitchCandidate {
                 compared_register,
                 comparison_blocks,
@@ -225,18 +246,22 @@ pub fn extract_comparison_info(
                 ..
             } => {
                 // First check if either operand has a constant load in this block
-                if let Some(const_val) = find_constant_load_before(block, idx, *operand_2, graph, node) {
+                if let Some(const_val) =
+                    find_constant_load_before(block, idx, *operand_2, graph, node)
+                {
                     return Some((*operand_1, const_val, false));
                 }
-                if let Some(const_val) = find_constant_load_before(block, idx, *operand_1, graph, node) {
+                if let Some(const_val) =
+                    find_constant_load_before(block, idx, *operand_1, graph, node)
+                {
                     return Some((*operand_2, const_val, false));
                 }
-                
+
                 // If not, check if this looks like a switch pattern where one register
                 // is being compared against different values across blocks
                 // For now, we'll assume operand_1 is the constant and operand_2 is the variable
                 // This is a heuristic that might need refinement
-                
+
                 // Try to extract the constant value from the register
                 // This requires looking at the overall pattern
                 // For now, return None to indicate we need a different approach
@@ -252,11 +277,15 @@ pub fn extract_comparison_info(
                 ..
             } => {
                 // Check if we're comparing against a constant
-                if let Some(const_val) = find_constant_load_before(block, idx, *operand_2, graph, node) {
+                if let Some(const_val) =
+                    find_constant_load_before(block, idx, *operand_2, graph, node)
+                {
                     return Some((*operand_1, const_val, true));
                 }
                 // Try the other operand
-                if let Some(const_val) = find_constant_load_before(block, idx, *operand_1, graph, node) {
+                if let Some(const_val) =
+                    find_constant_load_before(block, idx, *operand_1, graph, node)
+                {
                     return Some((*operand_2, const_val, true));
                 }
             }
@@ -300,22 +329,22 @@ fn find_constant_load_before(
             _ => {}
         }
     }
-    
+
     // If not found in current block and we haven't checked from the beginning,
     // check predecessor blocks (only if there's a single predecessor)
     if before_index > 0 {
         use petgraph::Direction;
         let predecessors: Vec<_> = graph.edges_directed(node, Direction::Incoming).collect();
-        
+
         if predecessors.len() == 1 {
             let pred_node = predecessors[0].source();
             let pred_block = &graph[pred_node];
-            
+
             // Check the entire predecessor block
             return find_constant_load_in_block(pred_block, register);
         }
     }
-    
+
     None
 }
 

@@ -6,9 +6,7 @@
 use crate::ast::{
     comments::AddressCommentManager,
     context::ExpressionContext,
-    instructions::{
-        InstructionResult, InstructionToStatementConverter, StatementConversionError,
-    },
+    instructions::{InstructionResult, InstructionToStatementConverter, StatementConversionError},
 };
 use crate::{
     analysis::GlobalAnalysisResult,
@@ -307,10 +305,11 @@ impl<'a> BlockToStatementConverter<'a> {
                         super::switch_converter::get_switch_infrastructure_blocks(region, cfg);
                     processed_blocks.extend(&switch_infrastructure);
                     // Create the switch converter with expression context
-                    let mut switch_converter = super::switch_converter::SwitchConverter::with_context(
-                        self.instruction_converter.ast_builder(),
-                        self.instruction_converter.get_expression_context().clone(),
-                    );
+                    let mut switch_converter =
+                        super::switch_converter::SwitchConverter::with_context(
+                            self.instruction_converter.ast_builder(),
+                            self.instruction_converter.get_expression_context().clone(),
+                        );
                     // Convert the switch to statements
                     match switch_converter.convert_switch_region(region, cfg, self) {
                         Ok(switch_statements) => {
@@ -341,7 +340,7 @@ impl<'a> BlockToStatementConverter<'a> {
                                     processed_blocks.insert(region.join_block);
                                 }
                             }
-                            
+
                             // HACK: Special handling for blocks that are both case targets and contain return statements
                             // This happens when cases jump directly to the function's return block
                             // We need to ensure the return statement gets processed
@@ -349,7 +348,7 @@ impl<'a> BlockToStatementConverter<'a> {
                                 let case_block = &cfg.graph()[case.case_head];
                                 // Check if this case block contains a return statement
                                 if case_block.instructions().iter().any(|instr| {
-                                    matches!(&instr.instruction, 
+                                    matches!(&instr.instruction,
                                         crate::generated::unified_instructions::UnifiedInstruction::Ret { .. })
                                 }) {
                                     // If this block hasn't been processed yet, process it now
@@ -364,7 +363,7 @@ impl<'a> BlockToStatementConverter<'a> {
                                     }
                                 }
                             }
-                            
+
                             continue;
                         }
                         Err(e) => {
@@ -400,12 +399,12 @@ impl<'a> BlockToStatementConverter<'a> {
                     match conditional_converter.convert_chain(chain, cfg, self) {
                         Ok(chain_statements) => {
                             all_statements.extend(chain_statements);
-                            
+
                             // After converting a conditional chain, we need to ensure the join block is processed
                             // The conditional converter marks it as processed but doesn't actually convert it
                             // Remove it from the processed set so it can be converted in the normal flow
                             processed_blocks.remove(&join_block);
-                            
+
                             continue;
                         }
                         Err(e) => {
@@ -474,9 +473,10 @@ impl<'a> BlockToStatementConverter<'a> {
                     // LoadParam instructions are handled as part of function parameter generation
                     let is_param_load = matches!(
                         &instruction.instruction,
-                        UnifiedInstruction::LoadParam { .. } | UnifiedInstruction::LoadParamLong { .. }
+                        UnifiedInstruction::LoadParam { .. }
+                            | UnifiedInstruction::LoadParamLong { .. }
                     );
-                    
+
                     // Terminal jumps are often skipped as they're implicit in control flow
                     let is_terminal_jump = idx == block.instructions().len() - 1
                         && matches!(
@@ -570,11 +570,17 @@ impl<'a> BlockToStatementConverter<'a> {
         block_id: NodeIndex,
         _cfg: &Graph<Block, EdgeKind>,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
-        self.convert_block_with_options(block, block_id, _cfg, None::<fn(&HbcFunctionInstruction, bool) -> bool>, false)
+        self.convert_block_with_options(
+            block,
+            block_id,
+            _cfg,
+            None::<fn(&HbcFunctionInstruction, bool) -> bool>,
+            false,
+        )
     }
 
     /// Convert a basic block into a sequence of JavaScript statements with options
-    /// 
+    ///
     /// # Arguments
     /// * `block` - The block to convert
     /// * `block_id` - The block's node index in the CFG
@@ -588,7 +594,7 @@ impl<'a> BlockToStatementConverter<'a> {
         _cfg: &Graph<Block, EdgeKind>,
         instruction_filter: Option<F>,
         skip_phi_declarations: bool,
-    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> 
+    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError>
     where
         F: Fn(&HbcFunctionInstruction, bool) -> bool,
     {
@@ -601,7 +607,7 @@ impl<'a> BlockToStatementConverter<'a> {
             true, // mark_as_rendered
         )
     }
-    
+
     /// Convert a block with full control over instruction marking
     pub fn convert_block_with_marking_control<F>(
         &mut self,
@@ -611,7 +617,7 @@ impl<'a> BlockToStatementConverter<'a> {
         instruction_filter: Option<F>,
         skip_phi_declarations: bool,
         mark_as_rendered: bool,
-    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> 
+    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError>
     where
         F: Fn(&HbcFunctionInstruction, bool) -> bool,
     {
@@ -1199,14 +1205,18 @@ impl<'a> BlockToStatementConverter<'a> {
     ) -> Result<Statement<'a>, BlockConversionError> {
         // Get the variable name from the SSA value through the variable mapper
         // The phi_decl.ssa_value should already be mapped to the correct coalesced variable name
-        let var_name = if let Some(mapping) = self.instruction_converter.register_manager_mut().variable_mapping() {
+        let var_name = if let Some(mapping) = self
+            .instruction_converter
+            .register_manager_mut()
+            .variable_mapping()
+        {
             // Look up the variable name for this SSA value
             // This should give us the coalesced name that all versions of this variable use
-            mapping.ssa_to_var.get(&phi_decl.ssa_value)
+            mapping
+                .ssa_to_var
+                .get(&phi_decl.ssa_value)
                 .cloned()
-                .unwrap_or_else(|| {
-                    format!("var{}", phi_decl.register)
-                })
+                .unwrap_or_else(|| format!("var{}", phi_decl.register))
         } else {
             // No variable mapping available, use default naming
             format!("var{}", phi_decl.register)

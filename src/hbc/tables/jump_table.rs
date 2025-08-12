@@ -312,7 +312,8 @@ impl JumpTable {
                         {
                             // Update the case with the target instruction index
                             if let Some(case) = switch_table.cases.last_mut() {
-                                case.target_instruction_index = Some(target_instruction_index.into());
+                                case.target_instruction_index =
+                                    Some(target_instruction_index.into());
                             }
                         }
                     }
@@ -322,8 +323,10 @@ impl JumpTable {
                 let default_target_offset = *default_offset;
                 let default_jump_dest =
                     switch_instruction_absolute_offset as i32 + default_target_offset;
-                switch_table.default_instruction_index =
-                    address_to_index.get(&(default_jump_dest as u32)).copied().map(|idx| idx.into());
+                switch_table.default_instruction_index = address_to_index
+                    .get(&(default_jump_dest as u32))
+                    .copied()
+                    .map(|idx| idx.into());
 
                 switch_tables.push(switch_table);
             }

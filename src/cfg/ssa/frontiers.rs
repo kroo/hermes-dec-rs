@@ -29,7 +29,7 @@ pub fn compute_dominance_frontiers(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Res
             // This is a join node, compute dominance frontier
             for pred in predecessors {
                 let mut runner = pred;
-                
+
                 // Get immediate dominator of the join node
                 let block_idom = dominators.immediate_dominator(block_id);
 
@@ -39,17 +39,17 @@ pub fn compute_dominance_frontiers(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Res
                     if Some(runner) == block_idom || runner == block_id {
                         break;
                     }
-                    
+
                     // Add block_id to runner's dominance frontier
                     analysis
                         .dominance_frontiers
                         .get_mut(&runner)
                         .unwrap()
                         .insert(block_id);
-                    
+
                     runner = runner_idom;
                 }
-                
+
                 // Handle the case where we've reached the entry node
                 if runner == cfg.entry_node().unwrap() && Some(runner) != block_idom {
                     analysis
@@ -80,7 +80,7 @@ pub fn dominates(
     if dominator == node {
         return true;
     }
-    
+
     let mut current = node;
     while let Some(immediate_dom) = dominators.immediate_dominator(current) {
         if immediate_dom == dominator {

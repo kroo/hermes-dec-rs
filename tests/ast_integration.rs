@@ -16,7 +16,10 @@ use oxc_allocator::Allocator;
 use oxc_ast::AstBuilder as OxcAstBuilder;
 use petgraph::Graph;
 
-fn create_test_instruction_with_index(instruction: UnifiedInstruction, index: usize) -> HbcFunctionInstruction {
+fn create_test_instruction_with_index(
+    instruction: UnifiedInstruction,
+    index: usize,
+) -> HbcFunctionInstruction {
     HbcFunctionInstruction {
         instruction,
         offset: InstructionOffset::new(index as u32),

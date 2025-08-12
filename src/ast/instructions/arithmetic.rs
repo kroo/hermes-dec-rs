@@ -236,7 +236,8 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
             self.ast_builder
                 .expression_binary(span, left_expr, comparison_op, right_expr);
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(comparison_expr))?;
+        let stmt =
+            self.create_variable_declaration_or_assignment(&dest_var, Some(comparison_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }

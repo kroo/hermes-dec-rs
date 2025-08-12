@@ -405,9 +405,18 @@ fn test_pc_lookup_three_blocks() {
     let mut graph: DiGraph<Block, EdgeKind> = DiGraph::new();
 
     let instructions = hbc_file.functions.get_instructions(0).unwrap();
-    let n0 = builder.add_block(&mut graph, Block::new(InstructionIndex::new(0), vec![instructions[0].clone()]));
-    let n1 = builder.add_block(&mut graph, Block::new(InstructionIndex::new(1), vec![instructions[1].clone()]));
-    let n2 = builder.add_block(&mut graph, Block::new(InstructionIndex::new(2), vec![instructions[2].clone()]));
+    let n0 = builder.add_block(
+        &mut graph,
+        Block::new(InstructionIndex::new(0), vec![instructions[0].clone()]),
+    );
+    let n1 = builder.add_block(
+        &mut graph,
+        Block::new(InstructionIndex::new(1), vec![instructions[1].clone()]),
+    );
+    let n2 = builder.add_block(
+        &mut graph,
+        Block::new(InstructionIndex::new(2), vec![instructions[2].clone()]),
+    );
 
     assert_eq!(builder.get_block_at_pc(0), Some(n0));
     assert_eq!(builder.get_block_at_pc(1), Some(n1));
@@ -649,7 +658,9 @@ fn test_jump_table_helper_functions() {
     assert!(jump_table.get_label_by_inst_index(0, 2).is_some());
 
     // Instruction 1 should be a jump instruction
-    assert!(jump_table.get_label_by_jump_op_index(0, InstructionIndex::new(1)).is_some());
+    assert!(jump_table
+        .get_label_by_jump_op_index(0, InstructionIndex::new(1))
+        .is_some());
 
     // Should have exactly one label and one jump
     assert_eq!(jump_table.get_label_count(0), 1);
@@ -688,7 +699,9 @@ fn test_make_test_hbc_file_with_jumps() {
     assert!(jump_table.get_label_by_inst_index(0, 2).is_some());
 
     // Instruction 1 should be a jump instruction
-    assert!(jump_table.get_label_by_jump_op_index(0, InstructionIndex::new(1)).is_some());
+    assert!(jump_table
+        .get_label_by_jump_op_index(0, InstructionIndex::new(1))
+        .is_some());
 
     // Should have exactly one label and one jump
     assert_eq!(jump_table.get_label_count(0), 1);
@@ -765,11 +778,17 @@ fn test_pc_lookup_overlapping_blocks() {
     let instructions = hbc_file.functions.get_instructions(0).unwrap();
     let n_a = builder.add_block(
         &mut graph,
-        Block::new(InstructionIndex::new(0), vec![instructions[0].clone(), instructions[1].clone()]),
+        Block::new(
+            InstructionIndex::new(0),
+            vec![instructions[0].clone(), instructions[1].clone()],
+        ),
     );
     let n_b = builder.add_block(
         &mut graph,
-        Block::new(InstructionIndex::new(1), vec![instructions[2].clone(), instructions[3].clone()]),
+        Block::new(
+            InstructionIndex::new(1),
+            vec![instructions[2].clone(), instructions[3].clone()],
+        ),
     );
 
     assert_eq!(builder.get_block_at_pc(0), Some(n_a));
