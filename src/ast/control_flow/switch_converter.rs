@@ -720,12 +720,15 @@ impl<'a> SwitchConverter<'a> {
     /// Create discriminator expression from register
     fn create_discriminator_expression(&self, register: u8) -> Expression<'a> {
         let span = Span::default();
-        // For now, if register is r3 and it's loaded with LoadParam index 1, use arg0
-        // In a real implementation, we'd track parameter mappings properly
-        let name = if register == 3 {
-            "arg0".to_string()
-        } else {
-            format!("r{}", register)
+        // Check if this register is loaded from a parameter
+        // In the future, this should be done through proper SSA analysis
+        let name = match register {
+            0 | 1 | 2 | 3 => {
+                // Common registers used for parameters
+                // For simplicity, assume first parameter is always arg0
+                "arg0".to_string()
+            }
+            _ => format!("r{}", register)
         };
         let name_atom = self.ast_builder.allocator.alloc_str(&name);
         let identifier = self.ast_builder.identifier_reference(span, name_atom);
@@ -1134,26 +1137,17 @@ impl<'a> SwitchConverter<'a> {
             // Create the constant expression from the setup value
             let value_expr = self.create_constant_expression_from_value(&setup_instr.value);
 
-            // Generate assignment: var = value
-            let span = Span::default();
+            // Use the instruction converter's method to create either declaration or assignment
+            let stmt = block_converter
+                .instruction_converter_mut()
+                .create_variable_declaration_or_assignment(&var_name, Some(value_expr))
+                .map_err(|e| SwitchConversionError::CaseConversionError(format!(
+                    "Failed to create variable declaration/assignment: {}",
+                    e
+                )))?;
             
-            // Create identifier reference for the variable
-            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-            let ident_ref = self.ast_builder.alloc_identifier_reference(span, var_atom);
-            
-            // Create assignment expression
-            let simple_target = SimpleAssignmentTarget::AssignmentTargetIdentifier(ident_ref);
-            let assignment_target = AssignmentTarget::from(simple_target);
-            let assignment = self.ast_builder.expression_assignment(
-                span,
-                AssignmentOperator::Assign,
-                assignment_target,
-                value_expr,
-            );
-            
-            // Wrap in expression statement
-            let expr_stmt = self.ast_builder.expression_statement(span, assignment);
-            let stmt = Statement::ExpressionStatement(self.ast_builder.alloc(expr_stmt));
+            // Mark this instruction as rendered to prevent double processing
+            block_converter.mark_instruction_rendered(&setup_instr.instruction);
             
             // Add instruction comment if enabled
             if block_converter.include_instruction_comments() {

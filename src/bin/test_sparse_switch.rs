@@ -87,8 +87,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         if !case.setup.is_empty() {
                                             println!("        Setup instructions: {}", case.setup.len());
                                             for (k, setup) in case.setup.iter().enumerate() {
-                                                println!("          {}: {:?} (r{} = {:?})", 
-                                                    k, setup.opcode, setup.register, setup.value);
+                                                println!("          {}: {} = {:?}", 
+                                                    k, setup.ssa_value.name(), setup.value);
                                             }
                                         }
                                     }

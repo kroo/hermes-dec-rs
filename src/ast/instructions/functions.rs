@@ -468,7 +468,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         &mut self,
         value_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let value_var = self.register_manager.get_variable_name(value_reg);
+        // Use get_source_variable_name since we're reading the value
+        let value_var = self.register_manager.get_source_variable_name(value_reg);
 
         let span = Span::default();
         let value_atom = self.ast_builder.allocator.alloc_str(&value_var);

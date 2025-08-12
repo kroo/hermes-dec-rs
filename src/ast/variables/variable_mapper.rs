@@ -76,8 +76,11 @@ impl VariableMapping {
             }
         }
 
-        // Fallback to simple register naming
-        self.fallback_register_names.get(&register)
+        // Used to be fallback to simple register naming, now panic.
+        panic!(
+            "Couldn't find mapping for register {} at PC {}; {:?}",
+            register, pc, self.register_at_pc
+        )
     }
 
     /// Get variable name for a source operand (before the instruction executes)
@@ -275,7 +278,9 @@ impl VariableMapper {
 
                 // Track the first definition PC
                 // Check if this variable has a phi declaration that should be the first definition
-                let first_def_pc = if let Some(_phi_decl_block) = find_phi_declaration_block(ssa, representative) {
+                let first_def_pc = if let Some(_phi_decl_block) =
+                    find_phi_declaration_block(ssa, representative)
+                {
                     // If there's a phi declaration, use the start of that block as first definition
                     InstructionIndex(0) // This will be handled specially in block converter
                 } else if let Some(first_pc) = usage.definition_pcs.first() {

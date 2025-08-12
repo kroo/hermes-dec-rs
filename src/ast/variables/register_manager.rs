@@ -66,8 +66,13 @@ impl RegisterManager {
                 return var_name.clone();
             }
         }
-        // Fallback to simple naming for backward compatibility
-        format!("var{}", register)
+
+        // if we can't find the variable in the variable mapping, panic.
+        panic!(
+            "Couldn't find mapping for register {} at PC {}",
+            register,
+            self.current_pc.unwrap()
+        )
     }
 
     /// Get variable name for a source operand (before current instruction)
