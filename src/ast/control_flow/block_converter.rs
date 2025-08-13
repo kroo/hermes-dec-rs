@@ -421,7 +421,7 @@ impl<'a> BlockToStatementConverter<'a> {
 
             // Convert the block to statements first
             let block_statements = self.convert_block(block, *block_id, cfg.graph())?;
-            
+
             // Only add label if this block needs one AND has statements to label
             // This avoids empty labels for blocks that were already processed
             if blocks_needing_labels.contains(block_id) && !block_statements.is_empty() {

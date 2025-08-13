@@ -89,12 +89,12 @@ pub struct CaseGroup {
 }
 
 /// A setup instruction that should be executed before entering a case
-/// 
+///
 /// Setup instructions are additional instructions (other than the comparison and its
 /// associated constant load) that appear in comparison blocks and need to be executed
 /// when taking that case path. This typically happens when multiple cases are grouped
 /// together and share some common setup code.
-/// 
+///
 /// For example, in a pattern like:
 /// ```
 /// case 1:
@@ -102,7 +102,7 @@ pub struct CaseGroup {
 ///     x = 5;  // This would be a setup instruction
 ///     // fall through to shared code
 /// ```
-/// 
+///
 /// Note: Instructions in the dispatch block that execute before ANY case comparison
 /// are NOT setup instructions - they're part of the normal control flow before the switch.
 #[derive(Debug, Clone)]

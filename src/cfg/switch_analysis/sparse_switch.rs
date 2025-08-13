@@ -2,7 +2,7 @@
 //!
 //! This module detects sparse switch patterns in the CFG where the compiler
 //! has converted a sparse switch statement into a series of equality comparisons.
-//! 
+//!
 //! This is used during CFG analysis to identify switch regions that can later
 //! be analyzed in detail by SparseSwitchAnalyzer for AST conversion.
 

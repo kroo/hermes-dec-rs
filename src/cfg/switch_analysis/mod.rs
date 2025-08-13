@@ -9,9 +9,9 @@
 //! 2. Detailed analysis (sparse_switch_analyzer.rs) - extracts switch info for AST conversion
 
 pub mod dense_switch_analyzer; // Currently unused - dense switches are handled directly
-pub mod sparse_switch;         // Region detection for CFG analysis
+pub mod sparse_switch; // Region detection for CFG analysis
 pub mod sparse_switch_analyzer; // Detailed analysis for AST conversion
-pub mod switch_info;           // Common types for switch information
+pub mod switch_info; // Common types for switch information
 
 // Re-export commonly used types
 pub use sparse_switch::{find_sparse_switch_patterns, sparse_candidate_to_switch_region};

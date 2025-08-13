@@ -64,7 +64,7 @@ impl<'a> SetupSafetyChecker<'a> {
 }
 
 /// Sparse switch pattern analyzer
-/// 
+///
 /// Analyzes chains of JStrictEqual comparisons that implement sparse switch statements
 pub struct SparseSwitchAnalyzer<'a> {
     hbc_file: Option<&'a HbcFile<'a>>,
@@ -111,9 +111,13 @@ impl<'a> SparseSwitchAnalyzer<'a> {
             }
 
             // Try to extract a case from this block
-            if let Some(mut case_info) =
-                self.extract_case_from_block_with_dispatch(current_block, discriminator, cfg, ssa, Some(start_block))
-            {
+            if let Some(mut case_info) = self.extract_case_from_block_with_dispatch(
+                current_block,
+                discriminator,
+                cfg,
+                ssa,
+                Some(start_block),
+            ) {
                 // Create compare context for anchored safety checks
                 let true_successor = case_info.target_block;
                 let false_successor = self.get_false_successor(current_block, cfg)?;
@@ -251,7 +255,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
     ) -> Option<CaseInfo> {
         self.extract_case_from_block_with_dispatch(block_id, discriminator, cfg, ssa, None)
     }
-    
+
     /// Extract case information from a block containing a comparison
     /// dispatch_block: If provided, instructions from the dispatch block won't be included as setup
     fn extract_case_from_block_with_dispatch(
@@ -340,7 +344,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         // 1. The LoadConst that loads the comparison value
         // 2. The comparison itself
         let mut setup = SmallVec::new();
-        
+
         for (i, instr) in instructions.iter().enumerate() {
             if i == comparison_idx {
                 continue;
@@ -394,7 +398,6 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                     }
                 }
 
-                
                 // This is a setup instruction
                 // Convert block-relative instruction index to absolute instruction index
                 let block = &cfg.graph()[block_id];
@@ -530,7 +533,6 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         }
         None
     }
-
 
     /// Detect if there's a shared tail block where all cases converge
     fn detect_shared_tail(

@@ -198,7 +198,8 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
             }
 
             if is_sparse && fn_ssa.is_some() {
-                let analyzer = crate::cfg::switch_analysis::SparseSwitchAnalyzer::with_hbc_file(&hbc_file);
+                let analyzer =
+                    crate::cfg::switch_analysis::SparseSwitchAnalyzer::with_hbc_file(&hbc_file);
 
                 if let Some(postdom) = cfg.analyze_post_dominators() {
                     if let Some(switch_info) = analyzer.detect_switch_pattern(
@@ -587,12 +588,9 @@ fn print_switch_region(
         if let Some(postdom) = cfg.analyze_post_dominators() {
             // Only proceed if we have SSA analysis
             if let Some(ssa_analysis) = ssa {
-                if let Some(switch_info) = analyzer.detect_switch_pattern(
-                    region.dispatch,
-                    cfg,
-                    ssa_analysis,
-                    &postdom,
-                ) {
+                if let Some(switch_info) =
+                    analyzer.detect_switch_pattern(region.dispatch, cfg, ssa_analysis, &postdom)
+                {
                     println!("    Detected switch pattern:");
                     println!("      Discriminator: r{}", switch_info.discriminator);
                     println!("      Cases: {}", switch_info.cases.len());
@@ -654,12 +652,15 @@ fn print_switch_region(
 
                         // Analyze what values each case contributes to PHI nodes
                         println!("\n      Case PHI Contributions:");
-                        
+
                         // Create a temporary switch converter for PHI analysis
                         let allocator = oxc_allocator::Allocator::default();
                         let ast_builder = oxc_ast::AstBuilder::new(&allocator);
-                        let switch_converter = crate::ast::control_flow::switch_converter::SwitchConverter::new(&ast_builder);
-                        
+                        let switch_converter =
+                            crate::ast::control_flow::switch_converter::SwitchConverter::new(
+                                &ast_builder,
+                            );
+
                         for (i, case) in switch_info.cases.iter().enumerate() {
                             println!("        Case {} (keys {:?}):", i, case.keys);
 

@@ -22,24 +22,46 @@ fn create_test_converter<'a>(
     context: ExpressionContext<'a>,
     cfg: &Graph<Block, EdgeKind>,
 ) -> BlockToStatementConverter<'a> {
-    // Create a simple CFG wrapper to generate fallback variable mapping
-    let hbc_file = hermes_dec_rs::hbc::HbcFile::dummy();
-    let mut cfg_wrapper = hermes_dec_rs::cfg::Cfg::new(&hbc_file, 0);
-    cfg_wrapper.set_graph(cfg.clone());
-    
-    // Generate fallback variable mapping
-    let mut variable_mapper = hermes_dec_rs::ast::variables::VariableMapper::new();
-    let variable_mapping = variable_mapper
-        .generate_fallback_mapping(&cfg_wrapper)
-        .expect("Should generate fallback mapping");
-    
+    use hermes_dec_rs::cfg::ssa::{RegisterDef, SSAValue};
+    use petgraph::graph::NodeIndex;
+
+    // Create a simple variable mapping for tests
+    let mut variable_mapping = hermes_dec_rs::ast::variables::VariableMapping::new();
+
+    // Map registers to SSA values and variable names for all possible PCs (0-100)
+    // This is a simple test mapping that ensures we have mappings for all PCs
+    for pc_value in 0..=100 {
+        let pc = InstructionIndex::new(pc_value);
+        let dummy_node = NodeIndex::new(0);
+
+        // For each possible register (0-20), create a mapping
+        for register in 0..=20 {
+            let def_site = RegisterDef::new(register, dummy_node, pc);
+            let ssa_value = SSAValue::new(register, 0, def_site);
+            let var_name = format!("var{}", register);
+
+            // Map SSA value to variable name
+            variable_mapping
+                .ssa_to_var
+                .insert(ssa_value.clone(), var_name.clone());
+
+            // Map (register, pc) to SSA value
+            variable_mapping
+                .register_at_pc
+                .insert((register, pc), ssa_value.clone());
+            variable_mapping
+                .register_before_pc
+                .insert((register, pc), ssa_value);
+        }
+    }
+
+    // Also set fallback names
+    for register in 0..=20 {
+        variable_mapping.set_fallback_variable_name(register, format!("var{}", register));
+    }
+
     // Create converter with fallback mapping
-    BlockToStatementConverter::with_fallback_mapping(
-        ast_builder,
-        context,
-        false,
-        variable_mapping,
-    )
+    BlockToStatementConverter::with_fallback_mapping(ast_builder, context, false, variable_mapping)
 }
 
 fn create_test_instruction_with_index(
@@ -434,6 +456,8 @@ fn test_multiple_blocks_conversion() {
     let block1_id = cfg.add_node(block1.clone());
     let block2_id = cfg.add_node(block2.clone());
 
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
+
     // Convert first block
     let result1 = converter.convert_block(&block1, block1_id, &cfg);
     assert!(result1.is_ok(), "First block conversion should succeed");
@@ -475,6 +499,8 @@ fn test_converter_reset_and_reuse() {
     let block1 = Block::new(InstructionIndex::new(0), instructions1);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block1_id = cfg.add_node(block1.clone());
+
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
 
     let result1 = converter.convert_block(&block1, block1_id, &cfg);
     assert!(result1.is_ok());

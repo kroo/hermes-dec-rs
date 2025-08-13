@@ -282,7 +282,7 @@ impl<'a> Cfg<'a> {
             if self.graph[node].is_exit() {
                 continue;
             }
-            
+
             let incoming_count = self
                 .graph
                 .neighbors_directed(node, petgraph::Direction::Incoming)

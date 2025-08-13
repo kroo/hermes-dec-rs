@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Dense switch pattern analyzer
-/// 
+///
 /// Analyzes SwitchImm instructions that implement dense switch statements with jump tables
 pub struct DenseSwitchAnalyzer<'a> {
     hbc_file: &'a HbcFile<'a>,
@@ -47,25 +47,25 @@ impl<'a> DenseSwitchAnalyzer<'a> {
         postdom: &PostDominatorAnalysis,
     ) -> Option<SwitchInfo> {
         let block = &cfg.graph()[start_block];
-        
+
         // Find SwitchImm instruction
-        let (switch_imm_idx, switch_imm_instr) = block
-            .instructions()
-            .iter()
-            .enumerate()
-            .find(|(_, instr)| matches!(&instr.instruction, UnifiedInstruction::SwitchImm { .. }))?;
+        let (switch_imm_idx, switch_imm_instr) =
+            block.instructions().iter().enumerate().find(|(_, instr)| {
+                matches!(&instr.instruction, UnifiedInstruction::SwitchImm { .. })
+            })?;
 
         // Extract discriminator and other info from SwitchImm
-        let (discriminator, _min_value, _default_offset, num_targets, _jump_table_offset) = match &switch_imm_instr.instruction {
-            UnifiedInstruction::SwitchImm {
-                operand_0,
-                operand_1,
-                operand_2,
-                operand_3,
-                operand_4,
-            } => (*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
-            _ => unreachable!(),
-        };
+        let (discriminator, _min_value, _default_offset, num_targets, _jump_table_offset) =
+            match &switch_imm_instr.instruction {
+                UnifiedInstruction::SwitchImm {
+                    operand_0,
+                    operand_1,
+                    operand_2,
+                    operand_3,
+                    operand_4,
+                } => (*operand_0, *operand_1, *operand_2, *operand_3, *operand_4),
+                _ => unreachable!(),
+            };
 
         // Get switch table from HBC file
         let switch_table = self
@@ -87,8 +87,9 @@ impl<'a> DenseSwitchAnalyzer<'a> {
             if let Some(target_reg) = usage.target {
                 let instr_idx = InstructionIndex::new(block.start_pc().value() + i);
                 if let Some(ssa_value) = ssa.get_value_at(target_reg, instr_idx) {
-                    let const_value = self.extract_constant_value_from_instruction(&instr.instruction);
-                    
+                    let const_value =
+                        self.extract_constant_value_from_instruction(&instr.instruction);
+
                     setup_instructions.push(SetupInstruction {
                         instruction: Rc::new(instr.clone()),
                         ssa_value: ssa_value.clone(),
@@ -99,11 +100,7 @@ impl<'a> DenseSwitchAnalyzer<'a> {
         }
 
         // Get all successor blocks
-        let successors: Vec<_> = cfg
-            .graph()
-            .edges(start_block)
-            .map(|e| e.target())
-            .collect();
+        let successors: Vec<_> = cfg.graph().edges(start_block).map(|e| e.target()).collect();
 
         if successors.len() != num_targets as usize {
             return None; // Mismatch in expected targets
@@ -125,7 +122,7 @@ impl<'a> DenseSwitchAnalyzer<'a> {
         // Process each case in the switch table
         for (i, switch_case) in switch_table.cases.iter().enumerate() {
             let case_value = switch_case.value;
-            
+
             // Calculate which successor this case maps to
             // The switch table stores offsets, we need to map them to successor indices
             // For now, we'll use the index directly if available
@@ -138,13 +135,13 @@ impl<'a> DenseSwitchAnalyzer<'a> {
                 // Fallback: use the case index
                 i.min(successors.len().saturating_sub(2))
             };
-            
+
             if target_index >= successors.len() - 1 {
                 continue; // Skip if this would point to default
             }
 
             let target_block = successors[target_index];
-            
+
             cases.push(CaseInfo {
                 keys: vec![CaseKey::Number(OrderedFloat(case_value as f64))],
                 comparison_block: start_block,

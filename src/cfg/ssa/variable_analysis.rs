@@ -294,7 +294,7 @@ fn analyze_usage_patterns(
 
         // Sort class_values by instruction index for deterministic ordering
         class_values.sort_by_key(|v| v.def_site.instruction_idx);
-        
+
         // Count assignments and track PCs
         for value in &class_values {
             usage.assignment_count += 1;
@@ -332,7 +332,7 @@ fn analyze_usage_patterns(
 
         // Sort definition PCs for deterministic ordering
         usage.definition_pcs.sort();
-        
+
         // Determine if reassigned
         usage.is_reassigned = usage.assignment_count > 1;
 

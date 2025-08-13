@@ -301,10 +301,7 @@ fn run_single_test_case(test_case: &SwitchTestCase) {
 /// Run pattern detection on a test case
 fn run_pattern_detection(
     test_case: &SwitchTestCase,
-) -> Result<
-    Option<hermes_dec_rs::cfg::switch_analysis::SwitchInfo>,
-    Box<dyn std::error::Error>,
-> {
+) -> Result<Option<hermes_dec_rs::cfg::switch_analysis::SwitchInfo>, Box<dyn std::error::Error>> {
     // Skip if test data file doesn't exist (for now)
     let hbc_path = Path::new(test_case.hbc_file);
     if !hbc_path.exists() {
@@ -319,7 +316,6 @@ fn run_pattern_detection(
     // Build CFG for the specified function
     let mut cfg = Cfg::new(&hbc_file, test_case.function_id);
     cfg.build();
-
 
     // Create SSA and postdominator analysis
     let ssa_analysis = hermes_dec_rs::cfg::ssa::construct_ssa(&cfg, test_case.function_id)?;
@@ -337,10 +333,11 @@ fn run_pattern_detection(
 
     // Test pattern detection on the first switch region
     let switch_region = &switch_regions[0];
-    
-    // Create a dense switch analyzer with the HBC file
-    let analyzer = hermes_dec_rs::cfg::switch_analysis::DenseSwitchAnalyzer::with_hbc_file(&hbc_file);
-    
+
+    // Create a sparse switch analyzer with the HBC file
+    let analyzer =
+        hermes_dec_rs::cfg::switch_analysis::SparseSwitchAnalyzer::with_hbc_file(&hbc_file);
+
     let switch_info = analyzer.detect_switch_pattern(
         switch_region.dispatch,
         &cfg,

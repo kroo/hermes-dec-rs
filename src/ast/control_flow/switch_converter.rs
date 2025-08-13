@@ -126,19 +126,23 @@ impl<'a> SwitchConverter<'a> {
             for j in 0..(group.keys.len() - 1) {
                 let test = self.create_constant_expression(&group.keys[j]);
                 let mut empty_case_body = ArenaVec::new_in(self.ast_builder.allocator);
-                
+
                 // Check if this empty case needs a break statement
                 // This handles the situation where case 0 falls through to case 1
                 // but they shouldn't be grouped because they contribute different values to PHI
-                if j == 0 && group.keys.len() > 1 && self.should_add_break_for_group(group, i, &case_groups, switch_info) {
+                if j == 0
+                    && group.keys.len() > 1
+                    && self.should_add_break_for_group(group, i, &case_groups, switch_info)
+                {
                     // Check if the first key in this group should have its own break
                     // This happens when consecutive cases have different PHI contributions
                     if let Some(shared_tail) = &switch_info.shared_tail {
                         if group.target_block == shared_tail.block_id {
                             // Before generating separate code for the first key, check if all keys
                             // in the group would generate the same code after optimization
-                            let all_keys_same_code = self.check_if_all_keys_generate_same_code(group, cfg);
-                            
+                            let all_keys_same_code =
+                                self.check_if_all_keys_generate_same_code(group, cfg);
+
                             if !all_keys_same_code {
                                 // Generate setup for just this key
                                 let single_key_group = CaseGroup {
@@ -149,9 +153,15 @@ impl<'a> SwitchConverter<'a> {
                                     first_execution_order: group.first_execution_order,
                                     comparison_blocks: vec![group.comparison_blocks[j]],
                                 };
-                                self.generate_setup_instructions(&mut empty_case_body, &single_key_group, block_converter, cfg)?;
-                                
-                                let break_stmt = self.ast_builder.break_statement(Span::default(), None);
+                                self.generate_setup_instructions(
+                                    &mut empty_case_body,
+                                    &single_key_group,
+                                    block_converter,
+                                    cfg,
+                                )?;
+
+                                let break_stmt =
+                                    self.ast_builder.break_statement(Span::default(), None);
                                 empty_case_body.push(Statement::BreakStatement(
                                     self.ast_builder.alloc(break_stmt),
                                 ));
@@ -159,12 +169,10 @@ impl<'a> SwitchConverter<'a> {
                         }
                     }
                 }
-                
-                let empty_case = self.ast_builder.switch_case(
-                    Span::default(),
-                    Some(test),
-                    empty_case_body,
-                );
+
+                let empty_case =
+                    self.ast_builder
+                        .switch_case(Span::default(), Some(test), empty_case_body);
                 switch_cases.push(empty_case);
             }
 
@@ -246,9 +254,9 @@ impl<'a> SwitchConverter<'a> {
             // 1. Have the same target block
             // 2. Are sequential in execution order
             // 3. Either have the same setup or later cases reuse constants from earlier ones
-            while j < cases.len() 
+            while j < cases.len()
                 && cases[j].target_block == target
-                && cases[j].execution_order == cases[j-1].execution_order + 1
+                && cases[j].execution_order == cases[j - 1].execution_order + 1
             {
                 // Check if this case can be grouped with the current group
                 // This happens when:
@@ -266,9 +274,15 @@ impl<'a> SwitchConverter<'a> {
                     let offset = setup.len() - cases[j].setup.len();
                     setup[offset..].iter().zip(&cases[j].setup).all(|(a, b)| {
                         // For Mov instructions, check if they reference the same source register
-                        if let (UnifiedInstruction::Mov { operand_1: src1, .. }, 
-                                UnifiedInstruction::Mov { operand_1: src2, .. }) = 
-                            (&a.instruction.instruction, &b.instruction.instruction) {
+                        if let (
+                            UnifiedInstruction::Mov {
+                                operand_1: src1, ..
+                            },
+                            UnifiedInstruction::Mov {
+                                operand_1: src2, ..
+                            },
+                        ) = (&a.instruction.instruction, &b.instruction.instruction)
+                        {
                             *src1 == *src2 && a.ssa_value.register == b.ssa_value.register
                         } else {
                             a.instruction.instruction.name() == b.instruction.instruction.name()
@@ -278,11 +292,11 @@ impl<'a> SwitchConverter<'a> {
                 } else {
                     false
                 };
-                
+
                 if !can_group {
                     break;
                 }
-                
+
                 group_keys.push(cases[j].keys[0].clone());
                 comparison_blocks.push(cases[j].comparison_block);
                 j += 1;
@@ -423,7 +437,12 @@ impl<'a> SwitchConverter<'a> {
                     )?;
                 } else {
                     // Normal case: generate setup instructions then convert target block
-                    self.generate_setup_instructions(&mut case_statements, group, block_converter, cfg)?;
+                    self.generate_setup_instructions(
+                        &mut case_statements,
+                        group,
+                        block_converter,
+                        cfg,
+                    )?;
                     self.convert_target_block_normally(
                         &mut case_statements,
                         group,
@@ -446,7 +465,9 @@ impl<'a> SwitchConverter<'a> {
         }
 
         // Check if we need to duplicate the next case's code due to fallthrough
-        if let Some(next_group) = self.needs_fallthrough_duplication(group, group_index, all_groups, cfg) {
+        if let Some(next_group) =
+            self.needs_fallthrough_duplication(group, group_index, all_groups, cfg)
+        {
             // Clone the next group to avoid borrow checker issues
             let next_group_clone = next_group.clone();
             // Duplicate the next case's target block code instead of falling through
@@ -478,14 +499,10 @@ impl<'a> SwitchConverter<'a> {
     }
 
     /// Check if all keys in a group would generate the same code after optimization
-    fn check_if_all_keys_generate_same_code(
-        &self,
-        group: &CaseGroup,
-        cfg: &Cfg<'a>,
-    ) -> bool {
+    fn check_if_all_keys_generate_same_code(&self, group: &CaseGroup, cfg: &Cfg<'a>) -> bool {
         // For now, we'll check if the group goes to the shared tail and has simple setup
         // In the future, this could do more sophisticated analysis
-        
+
         // If the target block has actual code, all keys will execute the same code
         if let Some(target_block) = cfg.graph().node_weight(group.target_block) {
             if !target_block.instructions().is_empty() {
@@ -493,37 +510,44 @@ impl<'a> SwitchConverter<'a> {
                 return true;
             }
         }
-        
+
         // If target block is empty (like the shared tail), check if setup generates the same output
         // For cases 5,6,7, they all generate var0_e = "high" after optimization
         // This is a simplified check - in practice we'd need to simulate the optimization
-        
+
         // Check if all setup instructions are Mov instructions with the same source
         let all_mov_same_source = group.setup.iter().all(|instr| {
-            matches!(&instr.instruction.instruction, UnifiedInstruction::Mov { .. })
+            matches!(
+                &instr.instruction.instruction,
+                UnifiedInstruction::Mov { .. }
+            )
         });
-        
+
         if all_mov_same_source && group.setup.len() > 1 {
             // Get the source registers from all Mov instructions
-            let sources: Vec<u8> = group.setup.iter()
+            let sources: Vec<u8> = group
+                .setup
+                .iter()
                 .filter_map(|instr| {
-                    if let UnifiedInstruction::Mov { operand_1, .. } = &instr.instruction.instruction {
+                    if let UnifiedInstruction::Mov { operand_1, .. } =
+                        &instr.instruction.instruction
+                    {
                         Some(*operand_1)
                     } else {
                         None
                     }
                 })
                 .collect();
-            
+
             // Check if all Mov instructions use the same source
             if !sources.is_empty() && sources.iter().all(|&s| s == sources[0]) {
                 return true;
             }
         }
-        
+
         false
     }
-    
+
     /// Determine if a break statement should be added for a case group
     fn should_add_break_for_group(
         &self,
@@ -552,7 +576,7 @@ impl<'a> SwitchConverter<'a> {
         // This includes cases that jump to shared tail
         true
     }
-    
+
     /// Check if this case group needs to duplicate the next case's code due to fallthrough
     fn needs_fallthrough_duplication<'b>(
         &self,
@@ -572,22 +596,23 @@ impl<'a> SwitchConverter<'a> {
                     | UnifiedInstruction::JmpLong { .. }
             )
         });
-        
+
         if has_terminator {
             return None;
         }
-        
+
         // Find which case group's target block this one falls through to
         for (i, other_group) in all_groups.iter().enumerate() {
             if i == group_index {
                 continue;
             }
-            
+
             // Check if control flow goes from our target to this group's target
-            let falls_through = cfg.graph()
+            let falls_through = cfg
+                .graph()
                 .edges(group.target_block)
                 .any(|e| e.target() == other_group.target_block);
-                
+
             if falls_through {
                 // Check if the target group has setup instructions that would conflict
                 if !other_group.setup.is_empty() {
@@ -595,7 +620,7 @@ impl<'a> SwitchConverter<'a> {
                 }
             }
         }
-        
+
         None
     }
 
@@ -726,92 +751,105 @@ impl<'a> SwitchConverter<'a> {
         cfg: &Cfg<'a>,
     ) -> Result<(), SwitchConversionError> {
         // Check if the target block is just a return statement
-        let target_is_simple_return = if let Some(target_block) = cfg.graph().node_weight(group.target_block) {
-            target_block.instructions().len() == 1 && 
-            matches!(
-                &target_block.instructions()[0].instruction,
-                UnifiedInstruction::Ret { .. }
-            )
-        } else {
-            false
-        };
-        
+        let target_is_simple_return =
+            if let Some(target_block) = cfg.graph().node_weight(group.target_block) {
+                target_block.instructions().len() == 1
+                    && matches!(
+                        &target_block.instructions()[0].instruction,
+                        UnifiedInstruction::Ret { .. }
+                    )
+            } else {
+                false
+            };
+
         // Identify registers that are only used as sources for Mov instructions
         let mov_only_sources: std::collections::HashSet<u8> = {
             let mut sources = std::collections::HashSet::new();
-            
+
             // First, find all Mov instructions and their source registers
             for setup_instr in &group.setup {
-                if let UnifiedInstruction::Mov { operand_1, .. } = &setup_instr.instruction.instruction {
+                if let UnifiedInstruction::Mov { operand_1, .. } =
+                    &setup_instr.instruction.instruction
+                {
                     // Check if this source is defined in the setup
                     let source_defined_in_setup = group.setup.iter().any(|other| {
-                        if let Some(target_reg) = crate::generated::instruction_analysis::analyze_register_usage(
-                            &other.instruction.instruction,
-                        ).target {
+                        if let Some(target_reg) =
+                            crate::generated::instruction_analysis::analyze_register_usage(
+                                &other.instruction.instruction,
+                            )
+                            .target
+                        {
                             target_reg == *operand_1
                         } else {
                             false
                         }
                     });
-                    
+
                     if source_defined_in_setup {
                         sources.insert(*operand_1);
                     }
                 }
             }
-            
+
             // Now check if these sources are used by anything other than Mov
             sources.retain(|&reg| {
                 group.setup.iter().all(|instr| {
                     let usage = crate::generated::instruction_analysis::analyze_register_usage(
                         &instr.instruction.instruction,
                     );
-                    
+
                     // If this instruction uses the register as a source
                     if usage.sources.contains(&reg) {
                         // It's only OK if this is a Mov instruction
-                        matches!(&instr.instruction.instruction, UnifiedInstruction::Mov { .. })
+                        matches!(
+                            &instr.instruction.instruction,
+                            UnifiedInstruction::Mov { .. }
+                        )
                     } else {
                         true // Not used as source, so OK
                     }
                 })
             });
-            
+
             sources
         };
-        
+
         for setup_instr in &group.setup {
             // Smart temporary instruction skipping
             // Skip LoadConst instructions if:
             // 1. They are immediately followed by a Ret instruction that uses the loaded value
             // 2. There are no other instructions between the LoadConst and Ret
-            let should_skip = if group.setup.len() == 1 && group.always_terminates && target_is_simple_return {
-                // Single setup instruction in a terminating case with just a return - likely a LoadConst + Ret pattern
-                matches!(
-                    &setup_instr.instruction.instruction,
-                    UnifiedInstruction::LoadConstString { .. }
-                    | UnifiedInstruction::LoadConstStringLongIndex { .. }
-                    | UnifiedInstruction::LoadConstUInt8 { .. }
-                    | UnifiedInstruction::LoadConstInt { .. }
-                    | UnifiedInstruction::LoadConstDouble { .. }
-                    | UnifiedInstruction::LoadConstZero { .. }
-                    | UnifiedInstruction::LoadConstNull { .. }
-                    | UnifiedInstruction::LoadConstUndefined { .. }
-                    | UnifiedInstruction::LoadConstTrue { .. }
-                    | UnifiedInstruction::LoadConstFalse { .. }
-                )
-            } else {
-                false
-            };
-            
+            let should_skip =
+                if group.setup.len() == 1 && group.always_terminates && target_is_simple_return {
+                    // Single setup instruction in a terminating case with just a return - likely a LoadConst + Ret pattern
+                    matches!(
+                        &setup_instr.instruction.instruction,
+                        UnifiedInstruction::LoadConstString { .. }
+                            | UnifiedInstruction::LoadConstStringLongIndex { .. }
+                            | UnifiedInstruction::LoadConstUInt8 { .. }
+                            | UnifiedInstruction::LoadConstInt { .. }
+                            | UnifiedInstruction::LoadConstDouble { .. }
+                            | UnifiedInstruction::LoadConstZero { .. }
+                            | UnifiedInstruction::LoadConstNull { .. }
+                            | UnifiedInstruction::LoadConstUndefined { .. }
+                            | UnifiedInstruction::LoadConstTrue { .. }
+                            | UnifiedInstruction::LoadConstFalse { .. }
+                    )
+                } else {
+                    false
+                };
+
             if should_skip {
                 continue;
             }
-            
+
             // Skip instructions that define registers only used as Mov sources
-            if let Some(target_reg) = crate::generated::instruction_analysis::analyze_register_usage(
-                &setup_instr.instruction.instruction,
-            ).target {
+            if let Some(target_reg) =
+                crate::generated::instruction_analysis::analyze_register_usage(
+                    &setup_instr.instruction.instruction,
+                )
+                .target
+            {
                 if mov_only_sources.contains(&target_reg) {
                     continue;
                 }
@@ -867,21 +905,28 @@ impl<'a> SwitchConverter<'a> {
                 // Convert the constant value to an expression
                 // Convert the constant value directly using the same method
                 self.create_constant_expression_from_value(const_value)
-            } else if let UnifiedInstruction::Mov { operand_1, .. } = &setup_instr.instruction.instruction {
+            } else if let UnifiedInstruction::Mov { operand_1, .. } =
+                &setup_instr.instruction.instruction
+            {
                 // For Mov instructions, find the value being moved
                 // Look for the source value in other setup instructions
-                let source_value = group.setup.iter()
+                let source_value = group
+                    .setup
+                    .iter()
                     .find(|s| {
-                        if let Some(target_reg) = crate::generated::instruction_analysis::analyze_register_usage(
-                            &s.instruction.instruction,
-                        ).target {
+                        if let Some(target_reg) =
+                            crate::generated::instruction_analysis::analyze_register_usage(
+                                &s.instruction.instruction,
+                            )
+                            .target
+                        {
                             target_reg == *operand_1 && s.value.is_some()
                         } else {
                             false
                         }
                     })
                     .and_then(|s| s.value.as_ref());
-                    
+
                 if let Some(const_value) = source_value {
                     self.create_constant_expression_from_value(const_value)
                 } else {
@@ -892,17 +937,21 @@ impl<'a> SwitchConverter<'a> {
                         .variable_mapping()
                     {
                         mapping
-                            .get_source_variable_name(*operand_1, setup_instr.instruction.instruction_index)
+                            .get_source_variable_name(
+                                *operand_1,
+                                setup_instr.instruction.instruction_index,
+                            )
                             .cloned()
                             .unwrap_or_else(|| format!("var{}", operand_1))
                     } else {
                         format!("var{}", operand_1)
                     };
-                    
+
                     let source_var_name = self.ast_builder.allocator.alloc_str(&source_var_name);
                     Expression::Identifier(
                         self.ast_builder.alloc(
-                            self.ast_builder.identifier_reference(Span::default(), source_var_name),
+                            self.ast_builder
+                                .identifier_reference(Span::default(), source_var_name),
                         ),
                     )
                 }
@@ -959,18 +1008,22 @@ impl<'a> SwitchConverter<'a> {
                 Statement::VariableDeclaration(self.ast_builder.alloc(var_declaration))
             } else {
                 // Create assignment expression
-                let ident_ref = self.ast_builder.alloc_identifier_reference(Span::default(), var_name);
-                let simple_target = oxc_ast::ast::SimpleAssignmentTarget::AssignmentTargetIdentifier(ident_ref);
+                let ident_ref = self
+                    .ast_builder
+                    .alloc_identifier_reference(Span::default(), var_name);
+                let simple_target =
+                    oxc_ast::ast::SimpleAssignmentTarget::AssignmentTargetIdentifier(ident_ref);
                 let assignment_target = oxc_ast::ast::AssignmentTarget::from(simple_target);
-                
+
                 let assignment_expr = self.ast_builder.expression_assignment(
                     Span::default(),
                     oxc_ast::ast::AssignmentOperator::Assign,
                     assignment_target,
                     value_expr,
                 );
-                
-                self.ast_builder.statement_expression(Span::default(), assignment_expr)
+
+                self.ast_builder
+                    .statement_expression(Span::default(), assignment_expr)
             };
 
             // Mark this instruction as rendered to prevent double processing
@@ -1009,11 +1062,9 @@ impl<'a> SwitchConverter<'a> {
                     // Format SSA info for this setup instruction
                     let ssa_info = format!(
                         " SSA: {} = r{} (version {})",
-                        var_name,
-                        setup_instr.ssa_value.register,
-                        setup_instr.ssa_value.version
+                        var_name, setup_instr.ssa_value.register, setup_instr.ssa_value.version
                     );
-                    
+
                     if let Some(comment_manager) = block_converter.comment_manager_mut() {
                         comment_manager.add_comment(
                             &stmt,
@@ -1024,7 +1075,7 @@ impl<'a> SwitchConverter<'a> {
                     }
                 }
             }
-            
+
             case_statements.push(stmt);
         }
         Ok(())
@@ -1048,7 +1099,7 @@ impl<'a> SwitchConverter<'a> {
             true, // mark_as_rendered
         )
     }
-    
+
     /// Convert target block with control over instruction marking
     fn convert_target_block_with_marking(
         &mut self,
@@ -1065,7 +1116,7 @@ impl<'a> SwitchConverter<'a> {
                 return Ok(());
             }
         }
-        
+
         let target_block = &cfg.graph()[group.target_block];
         match block_converter.convert_block_with_marking_control(
             target_block,
@@ -1219,7 +1270,7 @@ impl<'a> SwitchConverter<'a> {
                             for instruction in target_block.instructions() {
                                 block_converter.mark_instruction_rendered(instruction);
                             }
-                        },
+                        }
                         Err(e) => {
                             return Err(SwitchConversionError::BlockConversionError(format!(
                                 "Failed to convert default target block: {}",
@@ -1267,7 +1318,7 @@ impl<'a> SwitchConverter<'a> {
                         for instruction in target_block.instructions() {
                             block_converter.mark_instruction_rendered(instruction);
                         }
-                    },
+                    }
                     Err(e) => {
                         return Err(SwitchConversionError::BlockConversionError(format!(
                             "Failed to convert default target block: {}",
@@ -1312,7 +1363,7 @@ impl<'a> SwitchConverter<'a> {
                     for instruction in target_block.instructions() {
                         block_converter.mark_instruction_rendered(instruction);
                     }
-                },
+                }
                 Err(e) => {
                     return Err(SwitchConversionError::BlockConversionError(format!(
                         "Failed to convert default target block: {}",
@@ -1481,7 +1532,7 @@ impl<'a> SwitchConverter<'a> {
 
         // For each PHI node in the shared tail, we need to create a variable declaration
         // before the switch statement to ensure the variable is in scope for all cases
-        
+
         // Sort PHI nodes by register number for deterministic output
         let mut sorted_phi_nodes: Vec<&PhiNode> = phi_nodes.values().collect();
         sorted_phi_nodes.sort_by_key(|phi| phi.register);
@@ -1524,7 +1575,7 @@ impl<'a> SwitchConverter<'a> {
             declarations.push(Statement::VariableDeclaration(
                 self.ast_builder.alloc(var_declaration),
             ));
-            
+
             // Note: We've declared this variable, but we can't modify the pre-computed
             // first_definitions map. The non-determinism comes from HashMap iteration order
             // affecting which case gets treated as the "first" definition.
@@ -1620,7 +1671,7 @@ impl<'a> SwitchConverter<'a> {
                             | UnifiedInstruction::ThrowIfUndefinedInst { .. }
                     )
                 });
-                
+
                 cases.push(CaseInfo {
                     keys: vec![CaseKey::Number(OrderedFloat(switch_case.value as f64))],
                     comparison_block: region.dispatch,
