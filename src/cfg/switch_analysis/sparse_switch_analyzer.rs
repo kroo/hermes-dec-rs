@@ -1,6 +1,7 @@
-//! Dense switch pattern analysis
+//! Sparse switch pattern analysis  
 //!
-//! This module detects and analyzes dense switch patterns in the CFG
+//! This module detects and analyzes sparse switch patterns in the CFG
+//! where switches are implemented as chains of JStrictEqual comparisons
 
 use super::switch_info::*;
 use crate::cfg::analysis::PostDominatorAnalysis;
@@ -62,12 +63,14 @@ impl<'a> SetupSafetyChecker<'a> {
     }
 }
 
-/// Dense switch pattern analyzer
-pub struct DenseSwitchAnalyzer<'a> {
+/// Sparse switch pattern analyzer
+/// 
+/// Analyzes chains of JStrictEqual comparisons that implement sparse switch statements
+pub struct SparseSwitchAnalyzer<'a> {
     hbc_file: Option<&'a HbcFile<'a>>,
 }
 
-impl<'a> DenseSwitchAnalyzer<'a> {
+impl<'a> SparseSwitchAnalyzer<'a> {
     pub fn new() -> Self {
         Self { hbc_file: None }
     }

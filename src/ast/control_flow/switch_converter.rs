@@ -1713,9 +1713,9 @@ impl<'a> SwitchConverter<'a> {
             .hbc_file();
 
         let analyzer = if let Some(hbc) = hbc_file {
-            crate::cfg::switch_analysis::DenseSwitchAnalyzer::with_hbc_file(hbc)
+            crate::cfg::switch_analysis::SparseSwitchAnalyzer::with_hbc_file(hbc)
         } else {
-            crate::cfg::switch_analysis::DenseSwitchAnalyzer::new()
+            crate::cfg::switch_analysis::SparseSwitchAnalyzer::new()
         };
 
         // Detect the switch pattern

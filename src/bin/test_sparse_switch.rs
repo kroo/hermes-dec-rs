@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("    Join block: {:?}", region.join_block);
 
                             // Create a switch analyzer to test pattern detection
-                            let analyzer = hermes_dec_rs::cfg::switch_analysis::DenseSwitchAnalyzer::new();
+                            let analyzer = hermes_dec_rs::cfg::switch_analysis::SparseSwitchAnalyzer::new();
 
                             // Try to detect sparse switch pattern
                             match analyzer.detect_switch_pattern(

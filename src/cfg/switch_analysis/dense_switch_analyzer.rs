@@ -1,6 +1,12 @@
-//! SwitchImm (dense switch) pattern analysis
+//! Dense switch pattern analysis
 //!
-//! This module detects and analyzes SwitchImm-based switch patterns in the CFG
+//! This module detects and analyzes dense switch patterns in the CFG
+//! that use the SwitchImm instruction with jump tables.
+//!
+//! NOTE: This analyzer is currently not used. Dense switches are handled
+//! directly in switch_converter::convert_dense_switch_region without
+//! needing a separate analyzer. This code is kept for potential future use
+//! if more sophisticated dense switch analysis is needed.
 
 use super::switch_info::*;
 use crate::cfg::analysis::PostDominatorAnalysis;
@@ -16,13 +22,15 @@ use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-/// SwitchImm pattern analyzer
-pub struct SwitchImmAnalyzer<'a> {
+/// Dense switch pattern analyzer
+/// 
+/// Analyzes SwitchImm instructions that implement dense switch statements with jump tables
+pub struct DenseSwitchAnalyzer<'a> {
     hbc_file: &'a HbcFile<'a>,
     function_index: u32,
 }
 
-impl<'a> SwitchImmAnalyzer<'a> {
+impl<'a> DenseSwitchAnalyzer<'a> {
     pub fn new(hbc_file: &'a HbcFile<'a>, function_index: u32) -> Self {
         Self {
             hbc_file,

@@ -198,7 +198,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
             }
 
             if is_sparse && fn_ssa.is_some() {
-                let analyzer = crate::cfg::switch_analysis::DenseSwitchAnalyzer::with_hbc_file(&hbc_file);
+                let analyzer = crate::cfg::switch_analysis::SparseSwitchAnalyzer::with_hbc_file(&hbc_file);
 
                 if let Some(postdom) = cfg.analyze_post_dominators() {
                     if let Some(switch_info) = analyzer.detect_switch_pattern(
@@ -581,7 +581,7 @@ fn print_switch_region(
         println!("\n  Sparse Switch Analysis:");
 
         // Create a switch analyzer to detect the pattern
-        let analyzer = crate::cfg::switch_analysis::DenseSwitchAnalyzer::with_hbc_file(hbc_file);
+        let analyzer = crate::cfg::switch_analysis::SparseSwitchAnalyzer::with_hbc_file(hbc_file);
 
         // Try to detect the switch pattern
         if let Some(postdom) = cfg.analyze_post_dominators() {
