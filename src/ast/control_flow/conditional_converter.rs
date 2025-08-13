@@ -371,6 +371,8 @@ impl<'a> ConditionalConverter<'a> {
             .last()
             .ok_or("Condition block has no instructions")?;
 
+        assert!(last_instr.instruction.category() == "Jump");
+
         // Calculate the PC of the last instruction
         let pc = condition_block.start_pc() + ((condition_block.instructions().len() - 1) as u32);
 

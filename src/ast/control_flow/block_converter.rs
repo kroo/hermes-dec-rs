@@ -3,6 +3,7 @@
 //! This module provides the BlockToStatementConverter that transforms CFG basic blocks
 //! into sequences of JavaScript statements, building on instruction-to-expression conversion.
 
+use crate::ast::comments::{CommentKind, CommentPosition};
 use crate::ast::{
     comments::AddressCommentManager,
     context::ExpressionContext,
@@ -302,14 +303,14 @@ impl<'a> BlockToStatementConverter<'a> {
                     // Initially mark only switch infrastructure blocks as processed
                     // to allow nested control flow detection in case bodies
                     let switch_infrastructure =
-                        super::switch_converter::get_switch_infrastructure_blocks(region, cfg);
+                        super::switch_converter::get_switch_infrastructure_blocks(
+                            &[region.clone()],
+                        );
                     processed_blocks.extend(&switch_infrastructure);
                     // Create the switch converter with expression context
-                    let mut switch_converter =
-                        super::switch_converter::SwitchConverter::with_context(
-                            self.instruction_converter.ast_builder(),
-                            self.instruction_converter.get_expression_context().clone(),
-                        );
+                    let mut switch_converter = super::switch_converter::SwitchConverter::new(
+                        self.instruction_converter.ast_builder(),
+                    );
                     // Convert the switch to statements
                     match switch_converter.convert_switch_region(region, cfg, self) {
                         Ok(switch_statements) => {
@@ -319,7 +320,8 @@ impl<'a> BlockToStatementConverter<'a> {
                             // including case bodies to prevent duplicate processing
                             let all_switch_blocks =
                                 super::switch_converter::get_all_switch_blocks_with_bodies(
-                                    region, cfg,
+                                    &[region.clone()],
+                                    cfg,
                                 );
                             processed_blocks.extend(&all_switch_blocks);
 
@@ -417,14 +419,17 @@ impl<'a> BlockToStatementConverter<'a> {
                 }
             }
 
-            // Add label if this block needs one
-            if blocks_needing_labels.contains(block_id) {
+            // Convert the block to statements first
+            let block_statements = self.convert_block(block, *block_id, cfg.graph())?;
+            
+            // Only add label if this block needs one AND has statements to label
+            // This avoids empty labels for blocks that were already processed
+            if blocks_needing_labels.contains(block_id) && !block_statements.is_empty() {
                 let label_stmt = self.create_block_label(*block_id)?;
                 all_statements.push(label_stmt);
             }
 
-            // Convert the block to statements
-            let block_statements = self.convert_block(block, *block_id, cfg.graph())?;
+            // Add the block statements
             for stmt in block_statements {
                 all_statements.push(stmt);
             }
@@ -676,7 +681,7 @@ impl<'a> BlockToStatementConverter<'a> {
                     if let Some(ref ssa_analysis) = self.ssa_analysis {
                         let info = self.format_ssa_info(
                             block_id,
-                            InstructionIndex::from(instruction_index),
+                            instruction.instruction_index,
                             ssa_analysis,
                         );
                         info
@@ -1224,12 +1229,29 @@ impl<'a> BlockToStatementConverter<'a> {
 
         // Create a declaration without initialization
         // We use 'let' because phi variables are typically reassigned
-        self.instruction_converter
+        let mut stmt = self
+            .instruction_converter
             .create_variable_declaration(
                 &var_name,
                 None,
                 oxc_ast::ast::VariableDeclarationKind::Let,
             )
-            .map_err(BlockConversionError::StatementConversion)
+            .map_err(BlockConversionError::StatementConversion)?;
+
+        // Add a comment explaining why this PHI declaration is needed
+        if let Some(ref mut comment_manager) = self.comment_manager {
+            let comment = format!(
+                "PHI declaration for register {} ({}): declared at block {:?}",
+                phi_decl.register, var_name, phi_decl.declaration_block
+            );
+            comment_manager.add_comment(
+                &mut stmt,
+                comment,
+                CommentKind::Line,
+                CommentPosition::Leading,
+            );
+        }
+
+        Ok(stmt)
     }
 }

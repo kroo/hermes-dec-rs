@@ -16,6 +16,32 @@ use oxc_allocator::Allocator;
 use oxc_ast::AstBuilder as OxcAstBuilder;
 use petgraph::Graph;
 
+// Helper function to create a BlockToStatementConverter with variable mapping for tests
+fn create_test_converter<'a>(
+    ast_builder: &'a OxcAstBuilder<'a>,
+    context: ExpressionContext<'a>,
+    cfg: &Graph<Block, EdgeKind>,
+) -> BlockToStatementConverter<'a> {
+    // Create a simple CFG wrapper to generate fallback variable mapping
+    let hbc_file = hermes_dec_rs::hbc::HbcFile::dummy();
+    let mut cfg_wrapper = hermes_dec_rs::cfg::Cfg::new(&hbc_file, 0);
+    cfg_wrapper.set_graph(cfg.clone());
+    
+    // Generate fallback variable mapping
+    let mut variable_mapper = hermes_dec_rs::ast::variables::VariableMapper::new();
+    let variable_mapping = variable_mapper
+        .generate_fallback_mapping(&cfg_wrapper)
+        .expect("Should generate fallback mapping");
+    
+    // Create converter with fallback mapping
+    BlockToStatementConverter::with_fallback_mapping(
+        ast_builder,
+        context,
+        false,
+        variable_mapping,
+    )
+}
+
 fn create_test_instruction_with_index(
     instruction: UnifiedInstruction,
     index: usize,
@@ -51,7 +77,6 @@ fn test_end_to_end_simple_function() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create a simple function: let x = 42; return x;
     let instructions = vec![
@@ -67,6 +92,9 @@ fn test_end_to_end_simple_function() {
     let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
+
+    // Create converter with variable mapping
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
 
     // Convert the block
     let result = converter.convert_block(&block, block_id, &cfg);
@@ -93,7 +121,6 @@ fn test_end_to_end_arithmetic_chain() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create arithmetic chain: let a = 10; let b = 20; let c = a + b; return c;
     let instructions = vec![
@@ -119,6 +146,9 @@ fn test_end_to_end_arithmetic_chain() {
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
+    // Create converter with variable mapping
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
+
     // Convert the block
     let result = converter.convert_block(&block, block_id, &cfg);
     assert!(result.is_ok(), "Arithmetic chain conversion should succeed");
@@ -140,7 +170,6 @@ fn test_end_to_end_function_call() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create function call: let fn = true; let result = fn(); return result;
     // Using LoadConstTrue instead of LoadConstString to avoid string table dependency
@@ -161,6 +190,9 @@ fn test_end_to_end_function_call() {
     let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
+
+    // Create converter with variable mapping
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
 
     // Convert the block
     let result = converter.convert_block(&block, block_id, &cfg);
@@ -190,7 +222,6 @@ fn test_end_to_end_member_access() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create member access: let obj = 42; let prop = obj[1]; return prop;
     // Using numeric constants to avoid string table dependency
@@ -213,6 +244,9 @@ fn test_end_to_end_member_access() {
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
+    // Create converter with variable mapping
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
+
     // Convert the block
     let result = converter.convert_block(&block, block_id, &cfg);
     assert!(result.is_ok(), "Member access conversion should succeed");
@@ -234,7 +268,6 @@ fn test_end_to_end_variable_assignment_sequence() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create assignment sequence: let x = 5; let y = x; let z = y; return z;
     let instructions = vec![
@@ -258,6 +291,9 @@ fn test_end_to_end_variable_assignment_sequence() {
     let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
+
+    // Create converter with variable mapping
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
 
     // Convert the block
     let result = converter.convert_block(&block, block_id, &cfg);
@@ -283,7 +319,6 @@ fn test_end_to_end_side_effect_statements() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create side effect operations: call function (discard result), load const, return const
     let instructions = vec![
@@ -308,6 +343,9 @@ fn test_end_to_end_side_effect_statements() {
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
 
+    // Create converter with variable mapping
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
+
     // Convert the block
     let result = converter.convert_block(&block, block_id, &cfg);
     assert!(result.is_ok(), "Side effect conversion should succeed");
@@ -328,7 +366,6 @@ fn test_end_to_end_throw_statement() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create throw statement: let error = 404; throw error;
     let instructions = vec![
@@ -344,6 +381,9 @@ fn test_end_to_end_throw_statement() {
     let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
+
+    // Create converter with variable mapping
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
 
     // Convert the block
     let result = converter.convert_block(&block, block_id, &cfg);
@@ -370,7 +410,6 @@ fn test_multiple_blocks_conversion() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Test converting multiple blocks independently
     let block1_instructions = vec![create_test_instruction(
@@ -428,7 +467,6 @@ fn test_converter_reset_and_reuse() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Convert first block
     let instructions1 = vec![create_test_instruction(UnifiedInstruction::LoadConstTrue {
@@ -473,7 +511,6 @@ fn test_performance_targets() {
     let allocator = Allocator::default();
     let ast_builder = OxcAstBuilder::new(&allocator);
     let context = ExpressionContext::new();
-    let mut converter = BlockToStatementConverter::new(&ast_builder, context, false);
 
     // Create a moderately complex block with 20 instructions
     let instructions = vec![
@@ -575,6 +612,9 @@ fn test_performance_targets() {
     let block = Block::new(InstructionIndex::new(0), instructions);
     let mut cfg: Graph<Block, EdgeKind> = Graph::new();
     let block_id = cfg.add_node(block.clone());
+
+    // Create converter with variable mapping
+    let mut converter = create_test_converter(&ast_builder, context, &cfg);
 
     // Measure conversion time
     let start = Instant::now();

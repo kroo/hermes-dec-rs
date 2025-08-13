@@ -2,7 +2,6 @@
 //!
 //! This program decompiles HBC files and logs information about switch pattern detection.
 
-use hermes_dec_rs::ast::control_flow::switch_converter::SwitchConverter;
 use hermes_dec_rs::cfg::Cfg;
 use hermes_dec_rs::hbc::HbcFile;
 use hermes_dec_rs::Decompiler;
@@ -58,13 +57,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("    Default: {:?}", region.default_head);
                             println!("    Join block: {:?}", region.join_block);
 
-                            // Create a temporary AST builder to test pattern detection
-                            let allocator = oxc_allocator::Allocator::default();
-                            let ast_builder = oxc_ast::AstBuilder::new(&allocator);
-                            let switch_converter = SwitchConverter::new(&ast_builder);
+                            // Create a switch analyzer to test pattern detection
+                            let analyzer = hermes_dec_rs::cfg::switch_analysis::DenseSwitchAnalyzer::new();
 
                             // Try to detect sparse switch pattern
-                            match switch_converter.detect_switch_pattern(
+                            match analyzer.detect_switch_pattern(
                                 region.dispatch,
                                 &cfg,
                                 &ssa_analysis,
@@ -74,10 +71,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     println!("    ✅ Sparse switch pattern detected!");
                                     println!("    Discriminator: r{}", switch_info.discriminator);
                                     println!("    Cases detected: {}", switch_info.cases.len());
-                                    println!(
-                                        "    Involved blocks: {:?}",
-                                        switch_info.involved_blocks
-                                    );
 
                                     for (j, case) in switch_info.cases.iter().enumerate() {
                                         println!("\n      Case {}:", j);
@@ -87,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             "        Always terminates: {}",
                                             case.always_terminates
                                         );
-                                        println!("        Source PC: {:?}", case.source_pc);
+                                        // Source PC was removed from CaseInfo
                                         if !case.setup.is_empty() {
                                             println!(
                                                 "        Setup instructions: {}",

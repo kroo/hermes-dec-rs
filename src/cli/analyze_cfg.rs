@@ -198,18 +198,10 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
             }
 
             if is_sparse && fn_ssa.is_some() {
-                let allocator = oxc_allocator::Allocator::default();
-                let ast_builder = oxc_ast::AstBuilder::new(&allocator);
-                let expression_context =
-                    crate::ast::context::ExpressionContext::with_hbc_file(&hbc_file);
-                let switch_converter =
-                    crate::ast::control_flow::switch_converter::SwitchConverter::with_context(
-                        &ast_builder,
-                        expression_context,
-                    );
+                let analyzer = crate::cfg::switch_analysis::DenseSwitchAnalyzer::with_hbc_file(&hbc_file);
 
                 if let Some(postdom) = cfg.analyze_post_dominators() {
-                    if let Some(switch_info) = switch_converter.detect_switch_pattern(
+                    if let Some(switch_info) = analyzer.detect_switch_pattern(
                         region.dispatch,
                         &cfg,
                         fn_ssa.unwrap(),
@@ -588,21 +580,14 @@ fn print_switch_region(
     if is_sparse {
         println!("\n  Sparse Switch Analysis:");
 
-        // Create a temporary switch converter to use its pattern detection
-        let allocator = oxc_allocator::Allocator::default();
-        let ast_builder = oxc_ast::AstBuilder::new(&allocator);
-        let expression_context = crate::ast::context::ExpressionContext::with_hbc_file(hbc_file);
-        let switch_converter =
-            crate::ast::control_flow::switch_converter::SwitchConverter::with_context(
-                &ast_builder,
-                expression_context,
-            );
+        // Create a switch analyzer to detect the pattern
+        let analyzer = crate::cfg::switch_analysis::DenseSwitchAnalyzer::with_hbc_file(hbc_file);
 
         // Try to detect the switch pattern
         if let Some(postdom) = cfg.analyze_post_dominators() {
             // Only proceed if we have SSA analysis
             if let Some(ssa_analysis) = ssa {
-                if let Some(switch_info) = switch_converter.detect_switch_pattern(
+                if let Some(switch_info) = analyzer.detect_switch_pattern(
                     region.dispatch,
                     cfg,
                     ssa_analysis,
@@ -669,11 +654,17 @@ fn print_switch_region(
 
                         // Analyze what values each case contributes to PHI nodes
                         println!("\n      Case PHI Contributions:");
+                        
+                        // Create a temporary switch converter for PHI analysis
+                        let allocator = oxc_allocator::Allocator::default();
+                        let ast_builder = oxc_ast::AstBuilder::new(&allocator);
+                        let switch_converter = crate::ast::control_flow::switch_converter::SwitchConverter::new(&ast_builder);
+                        
                         for (i, case) in switch_info.cases.iter().enumerate() {
                             println!("        Case {} (keys {:?}):", i, case.keys);
 
                             // Create a temporary case group to analyze PHI contributions
-                            let group = crate::ast::control_flow::switch_converter::CaseGroup {
+                            let group = crate::cfg::switch_analysis::CaseGroup {
                                 keys: case.keys.clone(),
                                 target_block: case.target_block,
                                 setup: case.setup.clone(),
@@ -757,13 +748,13 @@ fn print_switch_region(
 
 /// Format a ConstantValue for display
 fn format_constant_value(
-    value: &crate::ast::control_flow::switch_converter::ConstantValue,
+    value: &crate::cfg::switch_analysis::ConstantValue,
     _hbc_file: &HbcFile,
 ) -> String {
-    use crate::ast::control_flow::switch_converter::ConstantValue;
+    use crate::cfg::switch_analysis::ConstantValue;
 
     match value {
-        ConstantValue::Number(n) => format!("Number({})", n.0),
+        ConstantValue::Number(n) => format!("Number({})", n),
         ConstantValue::String(s) => format!("String(\"{}\")", s),
         ConstantValue::Boolean(b) => format!("Boolean({})", b),
         ConstantValue::Null => "Null".to_string(),

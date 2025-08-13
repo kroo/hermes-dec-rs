@@ -62,7 +62,7 @@ impl RegisterManager {
     /// Pure lookup - no naming logic
     pub fn get_variable_name(&mut self, register: u8) -> String {
         if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
-            if let Some(var_name) = mapping.get_variable_name_with_fallback(register, pc) {
+            if let Some(var_name) = mapping.get_source_variable_name(register, pc) {
                 return var_name.clone();
             }
         }

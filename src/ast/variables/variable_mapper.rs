@@ -250,8 +250,12 @@ impl VariableMapper {
             representatives.insert(representative.clone());
         }
 
+        // Sort representatives for deterministic processing
+        let mut sorted_representatives: Vec<SSAValue> = representatives.into_iter().collect();
+        sorted_representatives.sort_by_key(|v| (v.register, v.version, v.def_site.instruction_idx));
+
         // Generate a name for each equivalence class
-        for representative in &representatives {
+        for representative in &sorted_representatives {
             let usage = var_analysis.variable_usage.get(representative);
             let name = self.generate_variable_name(representative, usage, &mut name_counter);
             class_to_name.insert(representative.clone(), name.clone());
@@ -329,7 +333,7 @@ impl VariableMapper {
         // Check if this is a parameter
         if let Some(usage) = usage {
             if usage.is_parameter {
-                let param_name = format!("arg{}", representative.register);
+                let param_name = format!("param{}", representative.register);
                 if !self.reserved_names.contains(&param_name) {
                     return param_name;
                 }
@@ -386,7 +390,7 @@ impl VariableMapper {
                             && instr_idx == InstructionIndex::zero()
                         {
                             // Likely a parameter
-                            format!("arg{}", target_reg)
+                            format!("param{}", target_reg)
                         } else {
                             format!("var{}", target_reg)
                         }
@@ -433,7 +437,7 @@ impl VariableMapper {
                                     && inst_idx_in_block == 0
                                     && instr_idx == InstructionIndex::zero()
                                 {
-                                    format!("arg{}", source_reg)
+                                    format!("param{}", source_reg)
                                 } else {
                                     format!("var{}", source_reg)
                                 }

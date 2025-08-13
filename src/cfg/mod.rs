@@ -7,8 +7,8 @@ pub mod block;
 pub mod builder;
 pub mod conditional_analysis;
 pub mod regions;
-pub mod sparse_switch_analysis;
 pub mod ssa;
+pub mod switch_analysis;
 pub mod visualization;
 
 use crate::hbc::HbcFile;
@@ -265,7 +265,11 @@ impl<'a> Cfg<'a> {
                 | EdgeKind::Switch(_)
                 | EdgeKind::Default
                 | EdgeKind::GeneratorResume => {
-                    needs_labels.insert(edge.target());
+                    let target = edge.target();
+                    // Don't add labels for EXIT blocks - they won't be rendered
+                    if !self.graph[target].is_exit() {
+                        needs_labels.insert(target);
+                    }
                 }
                 // Fall-through and generator fallthrough are sequential, no label needed
                 EdgeKind::Fall | EdgeKind::GeneratorFallthrough => {}
@@ -274,6 +278,11 @@ impl<'a> Cfg<'a> {
 
         // Also include blocks that have multiple incoming edges (potential merge points)
         for node in self.graph.node_indices() {
+            // Skip EXIT blocks
+            if self.graph[node].is_exit() {
+                continue;
+            }
+            
             let incoming_count = self
                 .graph
                 .neighbors_directed(node, petgraph::Direction::Incoming)
