@@ -246,17 +246,6 @@ impl<'a> SparseSwitchAnalyzer<'a> {
     }
 
     /// Extract case information from a block containing a comparison
-    fn extract_case_from_block(
-        &self,
-        block_id: NodeIndex,
-        discriminator: u8,
-        cfg: &Cfg<'a>,
-        ssa: &SSAAnalysis,
-    ) -> Option<CaseInfo> {
-        self.extract_case_from_block_with_dispatch(block_id, discriminator, cfg, ssa, None)
-    }
-
-    /// Extract case information from a block containing a comparison
     /// dispatch_block: If provided, instructions from the dispatch block won't be included as setup
     fn extract_case_from_block_with_dispatch(
         &self,

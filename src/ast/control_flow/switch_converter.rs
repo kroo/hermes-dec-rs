@@ -3,8 +3,7 @@
 //! This module converts analyzed switch patterns into JavaScript switch statement AST nodes
 
 use crate::cfg::switch_analysis::{
-    CaseGroup, CaseInfo, CaseKey, ConstantValue, DefaultCase, PhiNode, SetupInstruction,
-    SharedTailInfo, SwitchInfo,
+    CaseGroup, CaseInfo, CaseKey, ConstantValue, DefaultCase, PhiNode, SharedTailInfo, SwitchInfo,
 };
 use crate::cfg::{analysis::SwitchRegion, Cfg};
 use crate::generated::unified_instructions::UnifiedInstruction;
@@ -84,39 +83,10 @@ impl<'a> SwitchConverter<'a> {
     ) -> Result<Vec<Statement<'a>>, SwitchConversionError> {
         let mut statements = Vec::new();
 
-        // Get SSA analysis
-        let ssa = block_converter
-            .ssa_analysis()
-            .expect("SSA analysis required for switch conversion");
-
         // Group consecutive cases that share the same target and setup
         let case_groups_vec = self.group_consecutive_cases(&switch_info.cases);
         // Allocate in arena to extend lifetime
         let case_groups: Vec<CaseGroup> = case_groups_vec;
-
-        // Skip creating PHI declarations here - they should already be handled by SSA analysis
-        // This prevents duplicate variable declarations
-        /*
-        // Collect all PHI nodes that need declarations:
-        // 1. PHI nodes from shared tail
-        // 2. PHI nodes referenced in setup instructions
-        let mut all_phi_nodes = HashMap::new();
-
-        // Add shared tail PHI nodes
-        if let Some(shared_tail) = &switch_info.shared_tail {
-            all_phi_nodes.extend(shared_tail.phi_nodes.clone());
-        }
-
-        // Find PHI nodes referenced in setup instructions
-        self.collect_phi_nodes_from_setup(&switch_info, &mut all_phi_nodes, cfg, ssa);
-
-        // Create declarations for all collected PHI nodes
-        if !all_phi_nodes.is_empty() {
-            let phi_declarations =
-                self.create_join_locals_for_phi_nodes(&all_phi_nodes, block_converter)?;
-            statements.extend(phi_declarations);
-        }
-        */
 
         // Generate switch cases
         let mut switch_cases = ArenaVec::new_in(self.ast_builder.allocator);
@@ -315,45 +285,6 @@ impl<'a> SwitchConverter<'a> {
         }
 
         groups
-    }
-
-    /// Check if two sets of setup instructions are equal
-    fn setup_instructions_equal(&self, a: &[SetupInstruction], b: &[SetupInstruction]) -> bool {
-        if a.len() != b.len() {
-            return false;
-        }
-
-        for (a_setup, b_setup) in a.iter().zip(b.iter()) {
-            // Compare SSA values (they should be producing values to the same register)
-            if a_setup.ssa_value.register != b_setup.ssa_value.register {
-                return false;
-            }
-
-            // Compare constant values if present
-            match (&a_setup.value, &b_setup.value) {
-                (Some(a_val), Some(b_val)) => {
-                    if !self.constant_values_equal(a_val, b_val) {
-                        return false;
-                    }
-                }
-                (None, None) => {}
-                _ => return false,
-            }
-        }
-
-        true
-    }
-
-    /// Compare two constant values for equality
-    fn constant_values_equal(&self, a: &ConstantValue, b: &ConstantValue) -> bool {
-        match (a, b) {
-            (ConstantValue::Number(a), ConstantValue::Number(b)) => a == b,
-            (ConstantValue::String(a), ConstantValue::String(b)) => a == b,
-            (ConstantValue::Boolean(a), ConstantValue::Boolean(b)) => a == b,
-            (ConstantValue::Null, ConstantValue::Null) => true,
-            (ConstantValue::Undefined, ConstantValue::Undefined) => true,
-            _ => false,
-        }
     }
 
     /// Create discriminator expression from register
@@ -1412,176 +1343,6 @@ impl<'a> SwitchConverter<'a> {
                 Expression::Identifier(self.ast_builder.alloc(ident))
             }
         }
-    }
-
-    /// Get the variable name for a PHI node
-    fn get_phi_variable_name(
-        &self,
-        phi_node: &PhiNode,
-        block_converter: &super::BlockToStatementConverter<'a>,
-    ) -> Result<String, SwitchConversionError> {
-        // If we have SSA PHI value, use its variable mapping
-        if let Some(ref ssa_phi) = phi_node.ssa_phi_value {
-            if let Some(mapping) = block_converter
-                .instruction_converter()
-                .register_manager()
-                .variable_mapping()
-            {
-                if let Some(var_name) = mapping.ssa_to_var.get(ssa_phi) {
-                    return Ok(var_name.clone());
-                }
-            }
-            // Fallback to SSA value name
-            Ok(ssa_phi.name())
-        } else {
-            // Fallback to register-based name
-            Ok(format!("r{}", phi_node.register))
-        }
-    }
-
-    /// Collect PHI nodes referenced in setup instructions
-    fn collect_phi_nodes_from_setup(
-        &self,
-        switch_info: &SwitchInfo,
-        all_phi_nodes: &mut HashMap<u8, PhiNode>,
-        cfg: &Cfg<'a>,
-        ssa: &crate::cfg::ssa::SSAAnalysis,
-    ) {
-        // Check each case's setup instructions
-        for case in &switch_info.cases {
-            for setup_instr in &case.setup {
-                // Check if this register has a PHI function at its target block
-                if let Some(phi_functions) = ssa.phi_functions.get(&case.target_block) {
-                    if let Some(phi_func) = phi_functions
-                        .iter()
-                        .find(|phi| phi.register == setup_instr.ssa_value.register)
-                    {
-                        // Convert PhiFunction to PhiNode
-                        let phi_node = self.convert_phi_function_to_node(phi_func);
-                        all_phi_nodes.insert(phi_func.register, phi_node);
-                    }
-                }
-
-                // Also check for PHI functions at any block in the switch region
-                // This handles cases where variables are defined by PHI functions in intermediate blocks
-                for block_id in cfg.graph().node_indices() {
-                    if let Some(phi_functions) = ssa.phi_functions.get(&block_id) {
-                        if let Some(phi_func) = phi_functions
-                            .iter()
-                            .find(|phi| phi.result == setup_instr.ssa_value)
-                        {
-                            // Convert PhiFunction to PhiNode
-                            let phi_node = self.convert_phi_function_to_node(phi_func);
-                            all_phi_nodes.insert(phi_func.register, phi_node);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Also check default case setup instructions
-        if let Some(default_case) = &switch_info.default_case {
-            for setup_instr in &default_case.setup {
-                // Check if this register has a PHI function at its target block
-                if let Some(phi_functions) = ssa.phi_functions.get(&default_case.target_block) {
-                    if let Some(phi_func) = phi_functions
-                        .iter()
-                        .find(|phi| phi.register == setup_instr.ssa_value.register)
-                    {
-                        // Convert PhiFunction to PhiNode
-                        let phi_node = self.convert_phi_function_to_node(phi_func);
-                        all_phi_nodes.insert(phi_func.register, phi_node);
-                    }
-                }
-
-                // Also check for PHI functions at any block in the switch region
-                for block_id in cfg.graph().node_indices() {
-                    if let Some(phi_functions) = ssa.phi_functions.get(&block_id) {
-                        if let Some(phi_func) = phi_functions
-                            .iter()
-                            .find(|phi| phi.result == setup_instr.ssa_value)
-                        {
-                            // Convert PhiFunction to PhiNode
-                            let phi_node = self.convert_phi_function_to_node(phi_func);
-                            all_phi_nodes.insert(phi_func.register, phi_node);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Convert a PhiFunction to a PhiNode
-    fn convert_phi_function_to_node(&self, phi_func: &crate::cfg::ssa::PhiFunction) -> PhiNode {
-        // For now, create a PhiNode without constant values
-        // In a real implementation, we would analyze the operands to extract constant values
-        PhiNode {
-            register: phi_func.register,
-            values: HashMap::new(), // Empty for now
-            ssa_phi_value: Some(phi_func.result.clone()),
-        }
-    }
-
-    /// Create join locals for PHI nodes in shared tail
-    fn create_join_locals_for_phi_nodes(
-        &mut self,
-        phi_nodes: &HashMap<u8, PhiNode>,
-        block_converter: &mut super::BlockToStatementConverter<'a>,
-    ) -> Result<Vec<Statement<'a>>, SwitchConversionError> {
-        let mut declarations = Vec::new();
-
-        // For each PHI node in the shared tail, we need to create a variable declaration
-        // before the switch statement to ensure the variable is in scope for all cases
-
-        // Sort PHI nodes by register number for deterministic output
-        let mut sorted_phi_nodes: Vec<&PhiNode> = phi_nodes.values().collect();
-        sorted_phi_nodes.sort_by_key(|phi| phi.register);
-
-        for phi_node in sorted_phi_nodes {
-            // Get the variable name for this PHI node
-            let var_name = self.get_phi_variable_name(phi_node, block_converter)?;
-
-            // Create a variable declaration: let var_name;
-            let span = Span::default();
-            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-            let binding_ident = self.ast_builder.binding_identifier(span, var_atom);
-
-            let binding_pattern = self.ast_builder.binding_pattern(
-                oxc_ast::ast::BindingPatternKind::BindingIdentifier(
-                    self.ast_builder.alloc(binding_ident),
-                ),
-                None::<oxc_ast::ast::TSTypeAnnotation>,
-                false,
-            );
-
-            let var_declarator = self.ast_builder.variable_declarator(
-                span,
-                oxc_ast::ast::VariableDeclarationKind::Let,
-                binding_pattern,
-                None,
-                false,
-            );
-
-            let mut declarators = ArenaVec::new_in(self.ast_builder.allocator);
-            declarators.push(var_declarator);
-
-            let var_declaration = self.ast_builder.variable_declaration(
-                span,
-                oxc_ast::ast::VariableDeclarationKind::Let,
-                declarators,
-                false, // declare
-            );
-
-            declarations.push(Statement::VariableDeclaration(
-                self.ast_builder.alloc(var_declaration),
-            ));
-
-            // Note: We've declared this variable, but we can't modify the pre-computed
-            // first_definitions map. The non-determinism comes from HashMap iteration order
-            // affecting which case gets treated as the "first" definition.
-        }
-
-        Ok(declarations)
     }
 
     /// Convert a dense switch region (SwitchImm) to AST
