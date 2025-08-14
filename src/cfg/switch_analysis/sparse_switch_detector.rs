@@ -1,10 +1,12 @@
-//! Sparse switch region detection for CFG analysis
+//! Sparse switch pattern detection during CFG analysis
 //!
-//! This module detects sparse switch patterns in the CFG where the compiler
+//! This module provides early detection of sparse switch patterns in the CFG where the compiler
 //! has converted a sparse switch statement into a series of equality comparisons.
 //!
-//! This is used during CFG analysis to identify switch regions that can later
-//! be analyzed in detail by SparseSwitchAnalyzer for AST conversion.
+//! This detector runs during CFG analysis to identify potential switch regions by finding
+//! chains of JStrictEqual comparisons. The identified regions are later analyzed in detail
+//! by SparseSwitchAnalyzer during AST conversion to extract setup instructions, PHI nodes,
+//! and other information needed for JavaScript generation.
 
 use crate::cfg::{Block, EdgeKind};
 use crate::generated::unified_instructions::UnifiedInstruction;
