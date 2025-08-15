@@ -96,7 +96,7 @@ pub struct CaseGroup {
 /// together and share some common setup code.
 ///
 /// For example, in a pattern like:
-/// ```
+/// ```javascript
 /// case 1:
 /// case 2:
 ///     x = 5;  // This would be a setup instruction

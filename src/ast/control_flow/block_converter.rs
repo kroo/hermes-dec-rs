@@ -11,12 +11,17 @@ use crate::ast::{
 };
 use crate::{
     analysis::GlobalAnalysisResult,
+    cfg::ssa::SSAValue,
     cfg::{block::Block, ssa::SSAAnalysis, EdgeKind},
     generated::unified_instructions::UnifiedInstruction,
     hbc::{function_table::HbcFunctionInstruction, InstructionIndex},
 };
 use oxc_allocator::Vec as ArenaVec;
-use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
+use oxc_ast::{
+    ast::{BindingPatternKind, Statement, VariableDeclarationKind},
+    AstBuilder as OxcAstBuilder,
+};
+use oxc_span::Span;
 use petgraph::{graph::NodeIndex, Graph};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -122,6 +127,8 @@ pub struct BlockToStatementConverter<'a> {
     rendered_instructions: HashSet<InstructionIndex>,
     /// Address-based comment manager for collecting comments
     comment_manager: Option<AddressCommentManager>,
+    /// Track SSA values that are eliminated during switch conversion
+    eliminated_ssa_values: HashSet<SSAValue>,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
@@ -148,6 +155,7 @@ impl<'a> BlockToStatementConverter<'a> {
             } else {
                 None
             },
+            eliminated_ssa_values: HashSet::new(),
         }
     }
 
@@ -186,6 +194,7 @@ impl<'a> BlockToStatementConverter<'a> {
             } else {
                 None
             },
+            eliminated_ssa_values: HashSet::new(),
         }
     }
 
@@ -228,6 +237,7 @@ impl<'a> BlockToStatementConverter<'a> {
             } else {
                 None
             },
+            eliminated_ssa_values: HashSet::new(),
         }
     }
 
@@ -260,6 +270,7 @@ impl<'a> BlockToStatementConverter<'a> {
             } else {
                 None
             },
+            eliminated_ssa_values: HashSet::new(),
         }
     }
 
@@ -419,6 +430,19 @@ impl<'a> BlockToStatementConverter<'a> {
                 }
             }
 
+            // Check if all instructions in this block have been rendered
+            let all_rendered = block
+                .instructions()
+                .iter()
+                .all(|instr| self.is_instruction_rendered(instr));
+
+            // Skip blocks where all instructions have been rendered
+            // This avoids empty labels and stray variable declarations
+            if all_rendered {
+                processed_blocks.insert(*block_id);
+                continue;
+            }
+
             // Convert the block to statements first
             let block_statements = self.convert_block(block, *block_id, cfg.graph())?;
 
@@ -440,6 +464,14 @@ impl<'a> BlockToStatementConverter<'a> {
 
         // Verify all blocks and instructions were rendered
         self.verify_all_rendered(cfg, &processed_blocks)?;
+
+        // Generate function-scoped variable declarations AFTER processing blocks
+        // This allows us to filter out eliminated SSA values
+        let function_decls = self.generate_function_declarations();
+        if let Some(decl) = function_decls {
+            // Insert at the beginning
+            all_statements.insert(0, decl);
+        }
 
         Ok(all_statements)
     }
@@ -646,8 +678,9 @@ impl<'a> BlockToStatementConverter<'a> {
             if let Some(phi_declarations) = phi_declarations {
                 for phi_decl in &phi_declarations {
                     // Create a variable declaration for this phi register
-                    let var_decl = self.create_phi_variable_declaration(phi_decl)?;
-                    statements.push(var_decl);
+                    if let Some(var_decl) = self.create_phi_variable_declaration(phi_decl)? {
+                        statements.push(var_decl);
+                    }
                 }
             }
         }
@@ -1207,7 +1240,7 @@ impl<'a> BlockToStatementConverter<'a> {
     fn create_phi_variable_declaration(
         &mut self,
         phi_decl: &crate::cfg::ssa::PhiRegisterDeclaration,
-    ) -> Result<Statement<'a>, BlockConversionError> {
+    ) -> Result<Option<Statement<'a>>, BlockConversionError> {
         // Get the variable name from the SSA value through the variable mapper
         // The phi_decl.ssa_value should already be mapped to the correct coalesced variable name
         let var_name = if let Some(mapping) = self
@@ -1217,11 +1250,19 @@ impl<'a> BlockToStatementConverter<'a> {
         {
             // Look up the variable name for this SSA value
             // This should give us the coalesced name that all versions of this variable use
-            mapping
+            let name = mapping
                 .ssa_to_var
                 .get(&phi_decl.ssa_value)
                 .cloned()
-                .unwrap_or_else(|| format!("var{}", phi_decl.register))
+                .unwrap_or_else(|| format!("var{}", phi_decl.register));
+
+            // Check if this variable is already declared at function scope
+            if mapping.function_scope_vars.contains(&name) {
+                // Skip PHI declaration for function-scoped variables
+                return Ok(None);
+            }
+
+            name
         } else {
             // No variable mapping available, use default naming
             format!("var{}", phi_decl.register)
@@ -1252,6 +1293,91 @@ impl<'a> BlockToStatementConverter<'a> {
             );
         }
 
-        Ok(stmt)
+        Ok(Some(stmt))
+    }
+
+    /// Get the set of eliminated SSA values
+    pub fn get_eliminated_ssa_values(&self) -> &HashSet<SSAValue> {
+        &self.eliminated_ssa_values
+    }
+
+    /// Mark an SSA value as eliminated
+    pub fn mark_ssa_value_eliminated(&mut self, ssa_value: SSAValue) {
+        self.eliminated_ssa_values.insert(ssa_value);
+    }
+
+    /// Generate function-scoped variable declarations
+    fn generate_function_declarations(&self) -> Option<Statement<'a>> {
+        if let Some(mapping) = self.instruction_converter.get_variable_mapping() {
+            let mut function_vars: Vec<_> = mapping
+                .function_scope_vars
+                .iter()
+                .filter(|var_name| {
+                    // Check if all SSA values for this variable have been eliminated
+                    let var_ssa_values: Vec<_> = mapping
+                        .ssa_to_var
+                        .iter()
+                        .filter(|(_, var)| var == var_name)
+                        .map(|(ssa, _)| ssa)
+                        .collect();
+
+                    let all_eliminated = !var_ssa_values.is_empty()
+                        && var_ssa_values
+                            .iter()
+                            .all(|ssa| self.eliminated_ssa_values.contains(ssa));
+
+                    // Keep the variable if at least one SSA value is not eliminated
+                    // OR if there are no SSA values for this variable (shouldn't happen)
+                    !all_eliminated
+                })
+                .collect();
+            function_vars.sort(); // Sort for deterministic output
+
+            if !function_vars.is_empty() {
+                // Create a single let declaration with all function-scoped variables
+                let mut declarators =
+                    ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
+
+                for var_name in function_vars {
+                    let id = self.instruction_converter.ast_builder().binding_identifier(
+                        Span::default(),
+                        self.instruction_converter.ast_builder().atom(var_name),
+                    );
+                    let pattern = self.instruction_converter.ast_builder().binding_pattern(
+                        BindingPatternKind::BindingIdentifier(
+                            self.instruction_converter.ast_builder().alloc(id),
+                        ),
+                        None::<oxc_ast::ast::TSTypeAnnotation>,
+                        false,
+                    );
+                    let declarator = self
+                        .instruction_converter
+                        .ast_builder()
+                        .variable_declarator(
+                            Span::default(),
+                            VariableDeclarationKind::Let,
+                            pattern,
+                            None, // No initializer
+                            false,
+                        );
+                    declarators.push(declarator);
+                }
+
+                let var_decl = self
+                    .instruction_converter
+                    .ast_builder()
+                    .variable_declaration(
+                        Span::default(),
+                        VariableDeclarationKind::Let,
+                        declarators,
+                        false,
+                    );
+
+                return Some(Statement::VariableDeclaration(
+                    self.instruction_converter.ast_builder().alloc(var_decl),
+                ));
+            }
+        }
+        None
     }
 }

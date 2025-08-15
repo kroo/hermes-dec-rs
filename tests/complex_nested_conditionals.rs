@@ -80,10 +80,10 @@ fn test_complex_nested_conditionals_with_ssa() {
 
     // Key assertions for the complex nested conditionals:
 
-    // 1. Should use SSA variable names with parameters (arg0, arg1, etc.)
+    // 1. Should use SSA variable names with parameters (param3, param0, etc.)
     assert!(
-        output.contains("arg3 + arg0") && output.contains("const var"),
-        "Should have arithmetic operations with parameters (arg3 + arg0). Got output:\n{}",
+        output.contains("param3 + param0") && output.contains("const var"),
+        "Should have arithmetic operations with parameters (param3 + param0). Got output:\n{}",
         output
     );
 
@@ -108,28 +108,28 @@ fn test_complex_nested_conditionals_with_ssa() {
         output
     );
 
-    // 3. Should use proper parameter names (arg0, arg1, arg2, arg3)
+    // 3. Should use proper parameter names (param0, param1, param2, param3)
     assert!(
-        output.contains("let arg3 = arg0;")
-            && output.contains("let arg0 = arg1;")
-            && output.contains("let arg2 = arg2;")
-            && output.contains("let arg1 = arg3;"),
+        output.contains("let param3 = arg0;")
+            && output.contains("let param0 = arg1;")
+            && output.contains("let param2 = arg2;")
+            && output.contains("let param1 = arg3;"),
         "Should have proper parameter setup. Got output:\n{}",
         output
     );
 
     // 4. Should have proper nested structure with parameters
     assert!(
-        output.contains("if (arg3 >")
-            && output.contains("if (arg0 >")
-            && output.contains("if (arg2 >"),
+        output.contains("if (param3 >")
+            && output.contains("if (param0 >")
+            && output.contains("if (param2 >"),
         "Should have nested if statements with parameters. Got output:\n{}",
         output
     );
 
     // 5. Should have proper else-if chains with parameters
     assert!(
-        output.contains("} else if (arg2 <") || output.contains("} else if (arg3 <"),
+        output.contains("} else if (param2 <") || output.contains("} else if (param3 <"),
         "Should have else-if chains with parameters. Got output:\n{}",
         output
     );

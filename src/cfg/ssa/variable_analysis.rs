@@ -347,29 +347,27 @@ fn analyze_usage_patterns(
 }
 
 /// Build register lookup tables
-fn build_lookup_tables(ssa: &SSAAnalysis, cfg: &Cfg, analysis: &mut VariableAnalysis) {
+fn build_lookup_tables(ssa: &SSAAnalysis, _cfg: &Cfg, analysis: &mut VariableAnalysis) {
     // Build register_at_pc mapping
     for def in &ssa.definitions {
         if let Some(ssa_value) = ssa.ssa_values.values().find(|v| v.def_site == *def) {
-            if let Some(representative) = analysis.coalesced_values.get(ssa_value) {
-                analysis
-                    .register_at_pc
-                    .insert((def.register, def.instruction_idx), representative.clone());
-            }
+            // Store the actual SSA value, not the representative
+            // The coalescing is already tracked in coalesced_values
+            analysis
+                .register_at_pc
+                .insert((def.register, def.instruction_idx), ssa_value.clone());
         }
     }
 
-    // Map phi functions - they're available at the start of their block
-    for (block_id, phi_list) in &ssa.phi_functions {
-        if let Some(block) = cfg.graph().node_weight(*block_id) {
-            let block_start_pc = block.start_pc();
-            for phi in phi_list {
-                if let Some(representative) = analysis.coalesced_values.get(&phi.result) {
-                    analysis
-                        .register_at_pc
-                        .insert((phi.register, block_start_pc), representative.clone());
-                }
-            }
+    // Map phi functions - they're available at their definition site
+    for (_block_id, phi_list) in &ssa.phi_functions {
+        for phi in phi_list {
+            // Use the PHI's actual definition site, which is set to block_start_pc - 1
+            // to avoid collisions with instructions at the block start
+            analysis.register_at_pc.insert(
+                (phi.register, phi.result.def_site.instruction_idx),
+                phi.result.clone(),
+            );
         }
     }
 
@@ -377,12 +375,11 @@ fn build_lookup_tables(ssa: &SSAAnalysis, cfg: &Cfg, analysis: &mut VariableAnal
     // For each use, map it to the SSA value that was live before the instruction
     for (use_site, def_site) in &ssa.use_def_chains {
         if let Some(ssa_value) = ssa.ssa_values.values().find(|v| v.def_site == *def_site) {
-            if let Some(representative) = analysis.coalesced_values.get(ssa_value) {
-                analysis.register_before_pc.insert(
-                    (use_site.register, use_site.instruction_idx),
-                    representative.clone(),
-                );
-            }
+            // Store the actual SSA value, not the representative
+            analysis.register_before_pc.insert(
+                (use_site.register, use_site.instruction_idx),
+                ssa_value.clone(),
+            );
         }
     }
 }

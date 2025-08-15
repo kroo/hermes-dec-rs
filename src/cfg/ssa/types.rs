@@ -256,14 +256,50 @@ impl SSAAnalysis {
         }
     }
 
-    /// Get the SSA value for a register at a specific program point
-    pub fn get_value_at(
+    /// Get the SSA value for a register that is available before an instruction executes
+    /// This is used when looking up operand values
+    pub fn get_value_before_instruction(
+        &self,
+        register: u8,
+        instruction_idx: InstructionIndex,
+    ) -> Option<&SSAValue> {
+        // First check if there's a PHI function at this PC
+        // PHI functions conceptually execute before any regular instruction at the same PC
+        if let Some(phi_value) = self
+            .definitions
+            .iter()
+            .filter(|def| def.register == register && def.instruction_idx == instruction_idx)
+            .find_map(|def| {
+                // Check if this definition is from a PHI function
+                self.ssa_values.get(def).filter(|ssa_val| {
+                    // Check if any block has a PHI function with this result
+                    self.phi_functions.values().any(|phis| {
+                        phis.iter()
+                            .any(|phi| phi.result.def_site == ssa_val.def_site)
+                    })
+                })
+            })
+        {
+            return Some(phi_value);
+        }
+
+        // Otherwise find the most recent definition BEFORE this PC
+        self.definitions
+            .iter()
+            .filter(|def| def.register == register && def.instruction_idx < instruction_idx)
+            .max_by_key(|def| def.instruction_idx)
+            .and_then(|def| self.ssa_values.get(def))
+    }
+
+    /// Get the SSA value for a register after an instruction executes
+    /// This includes the definition from the instruction itself
+    pub fn get_value_after_instruction(
         &self,
         register: u8,
         instruction_idx: InstructionIndex,
     ) -> Option<&SSAValue> {
         // Find the definition that reaches this program point
-        // For now, find the most recent definition before or at this PC
+        // We want the most recent definition at or before this PC
         self.definitions
             .iter()
             .filter(|def| def.register == register && def.instruction_idx <= instruction_idx)

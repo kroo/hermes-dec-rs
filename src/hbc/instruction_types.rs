@@ -73,6 +73,10 @@ impl InstructionIndex {
     }
 
     pub const MAX: InstructionIndex = InstructionIndex(usize::MAX);
+
+    pub fn saturating_sub(self, rhs: usize) -> Self {
+        Self(self.0.saturating_sub(rhs))
+    }
 }
 
 impl std::ops::Add<i32> for InstructionIndex {

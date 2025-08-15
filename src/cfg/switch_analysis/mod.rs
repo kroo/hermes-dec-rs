@@ -11,11 +11,11 @@
 //! Note: Dense switches are currently handled directly in switch_converter::convert_dense_switch_region
 //! without a separate analyzer, as they can be processed in a single pass.
 
-pub mod sparse_switch_detector; // Early pattern detection during CFG analysis
 pub mod sparse_switch_analyzer; // Detailed analysis for AST conversion
+pub mod sparse_switch_detector; // Early pattern detection during CFG analysis
 pub mod switch_info; // Common types for switch information
 
 // Re-export commonly used types
-pub use sparse_switch_detector::{find_sparse_switch_patterns, sparse_candidate_to_switch_region};
 pub use sparse_switch_analyzer::{SetupSafetyChecker, SparseSwitchAnalyzer};
+pub use sparse_switch_detector::{find_sparse_switch_patterns, sparse_candidate_to_switch_region};
 pub use switch_info::*;

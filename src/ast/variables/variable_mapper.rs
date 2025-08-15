@@ -78,8 +78,9 @@ impl VariableMapping {
 
         // Used to be fallback to simple register naming, now panic.
         panic!(
-            "Couldn't find mapping for register {} at PC {}; {:?}",
-            register, pc, self.register_at_pc
+            "Couldn't find mapping for register {} at PC {}",
+            register,
+            pc.value()
         )
     }
 
@@ -260,18 +261,21 @@ impl VariableMapper {
             let name = self.generate_variable_name(representative, usage, &mut name_counter);
             class_to_name.insert(representative.clone(), name.clone());
 
-            // Add to appropriate scope
-            if let Some(scope) = var_analysis.variable_scopes.get(representative) {
-                match scope {
-                    VariableScope::Function => {
-                        mapping.function_scope_vars.insert(name.clone());
-                    }
-                    VariableScope::Block(block_id) => {
-                        mapping
-                            .block_scope_vars
-                            .entry(*block_id)
-                            .or_default()
-                            .insert(name.clone());
+            // Add to appropriate scope (but not if it's a parameter)
+            let is_parameter = usage.map(|u| u.is_parameter).unwrap_or(false);
+            if !is_parameter {
+                if let Some(scope) = var_analysis.variable_scopes.get(representative) {
+                    match scope {
+                        VariableScope::Function => {
+                            mapping.function_scope_vars.insert(name.clone());
+                        }
+                        VariableScope::Block(block_id) => {
+                            mapping
+                                .block_scope_vars
+                                .entry(*block_id)
+                                .or_default()
+                                .insert(name.clone());
+                        }
                     }
                 }
             }
@@ -304,20 +308,16 @@ impl VariableMapper {
         }
 
         // Build register lookup tables
-        for ((reg, pc), representative) in &var_analysis.register_at_pc {
-            if let Some(_name) = class_to_name.get(representative) {
-                mapping
-                    .register_at_pc
-                    .insert((*reg, *pc), representative.clone());
-            }
+        for ((reg, pc), ssa_value) in &var_analysis.register_at_pc {
+            mapping
+                .register_at_pc
+                .insert((*reg, *pc), ssa_value.clone());
         }
 
-        for ((reg, pc), representative) in &var_analysis.register_before_pc {
-            if let Some(_name) = class_to_name.get(representative) {
-                mapping
-                    .register_before_pc
-                    .insert((*reg, *pc), representative.clone());
-            }
+        for ((reg, pc), ssa_value) in &var_analysis.register_before_pc {
+            mapping
+                .register_before_pc
+                .insert((*reg, *pc), ssa_value.clone());
         }
 
         Ok(mapping)

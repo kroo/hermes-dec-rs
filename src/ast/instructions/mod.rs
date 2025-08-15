@@ -146,6 +146,11 @@ impl<'a> InstructionToStatementConverter<'a> {
         self.global_analyzer = analyzer;
     }
 
+    /// Get the variable mapping from the register manager
+    pub fn get_variable_mapping(&self) -> Option<&crate::ast::variables::VariableMapping> {
+        self.register_manager.variable_mapping()
+    }
+
     /// Convert a unified instruction to a JavaScript statement or jump condition
     pub fn convert_instruction(
         &mut self,

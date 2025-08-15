@@ -88,6 +88,9 @@ impl<'a> SwitchConverter<'a> {
         // Allocate in arena to extend lifetime
         let case_groups: Vec<CaseGroup> = case_groups_vec;
 
+        // Identify blocks that are targeted by multiple case groups
+        let shared_blocks = self.identify_shared_target_blocks(&case_groups, cfg);
+
         // Generate switch cases
         let mut switch_cases = ArenaVec::new_in(self.ast_builder.allocator);
 
@@ -102,7 +105,7 @@ impl<'a> SwitchConverter<'a> {
                 // but they shouldn't be grouped because they contribute different values to PHI
                 if j == 0
                     && group.keys.len() > 1
-                    && self.should_add_break_for_group(group, i, &case_groups, switch_info)
+                    && self.should_add_break_for_group(group, i, &case_groups, switch_info, cfg)
                 {
                     // Check if the first key in this group should have its own break
                     // This happens when consecutive cases have different PHI contributions
@@ -147,8 +150,15 @@ impl<'a> SwitchConverter<'a> {
             }
 
             // Create the actual case with the body for the last key
-            let switch_case =
-                self.convert_case_group(group, cfg, block_converter, switch_info, i, &case_groups)?;
+            let switch_case = self.convert_case_group(
+                group,
+                cfg,
+                block_converter,
+                switch_info,
+                i,
+                &case_groups,
+                &shared_blocks,
+            )?;
             switch_cases.push(switch_case);
         }
 
@@ -197,6 +207,56 @@ impl<'a> SwitchConverter<'a> {
                 Err(e) => {
                     return Err(SwitchConversionError::BlockConversionError(format!(
                         "Failed to convert shared tail: {}",
+                        e
+                    )));
+                }
+            }
+        }
+
+        // Convert any other shared blocks that are true post-switch code
+        for block_id in &shared_blocks {
+            // Skip if this is the main shared tail (already processed)
+            if let Some(shared_tail) = &switch_info.shared_tail {
+                if *block_id == shared_tail.block_id {
+                    continue;
+                }
+            }
+
+            // Only process blocks that have PHI nodes (indicating convergence of values)
+            let has_phi = block_converter
+                .ssa_analysis()
+                .and_then(|ssa| ssa.phi_functions.get(block_id))
+                .map(|phis| !phis.is_empty())
+                .unwrap_or(false);
+
+            if !has_phi {
+                continue; // Skip blocks without PHI nodes
+            }
+
+            let block = &cfg.graph()[*block_id];
+
+            // Check if this block was already rendered
+            if block
+                .instructions()
+                .iter()
+                .all(|instr| block_converter.is_instruction_rendered(instr))
+            {
+                continue;
+            }
+
+            // Convert this shared block
+            match block_converter.convert_block(block, *block_id, cfg.graph()) {
+                Ok(block_stmts) => {
+                    statements.extend(block_stmts);
+                    // Mark the block instructions as rendered
+                    for instruction in block.instructions() {
+                        block_converter.mark_instruction_rendered(instruction);
+                    }
+                }
+                Err(e) => {
+                    return Err(SwitchConversionError::BlockConversionError(format!(
+                        "Failed to convert shared block {}: {}",
+                        block_id.index(),
                         e
                     )));
                 }
@@ -326,6 +386,7 @@ impl<'a> SwitchConverter<'a> {
         switch_info: &SwitchInfo,
         group_index: usize,
         all_groups: &[CaseGroup],
+        shared_blocks: &HashSet<NodeIndex>,
     ) -> Result<SwitchCase<'a>, SwitchConversionError> {
         if group.keys.is_empty() {
             return Err(SwitchConversionError::InvalidRegion(
@@ -339,68 +400,147 @@ impl<'a> SwitchConverter<'a> {
         // Generate case body
         let mut case_statements = ArenaVec::new_in(self.ast_builder.allocator);
 
-        // Handle different case patterns
-        if let Some(shared_tail) = &switch_info.shared_tail {
-            if group.target_block == shared_tail.block_id {
-                // This case goes directly to the shared tail
-                // Generate code based on PHI node contributions
-                self.generate_case_body_for_shared_tail(
-                    &mut case_statements,
-                    group,
-                    block_converter,
-                    cfg,
-                )?;
+        // Check if the target block is post-switch code
+        // A block is post-switch if multiple cases converge to it (even if one targets it directly)
+        // We need to handle the case where case 1 directly targets block 9, but case 4 also reaches it
+        let is_post_switch_shared = if !shared_blocks.contains(&group.target_block) {
+            false
+        } else {
+            // This block is in shared_blocks, but we need to check if it's truly post-switch
+            // or just a fallthrough target (like block 8 for cases 2 and 3)
+
+            // Check if this is part of a consecutive case pattern (fallthrough)
+            // If the current group and the previous group are consecutive cases that share the target,
+            // then this is a fallthrough pattern, not post-switch code
+            let is_fallthrough_pattern = if group_index > 0 {
+                let prev_group = &all_groups[group_index - 1];
+                // Check if previous case can reach current target through fallthrough
+                // This happens when the previous case's target can reach the current target
+                let prev_can_reach_current = cfg
+                    .graph()
+                    .edges(prev_group.target_block)
+                    .any(|edge| edge.target() == group.target_block);
+
+                // Also check if cases are consecutive in the original switch
+                let cases_consecutive = if let (Some(prev_key), Some(curr_key)) =
+                    (prev_group.keys.last(), group.keys.first())
+                {
+                    match (prev_key, curr_key) {
+                        (CaseKey::Number(OrderedFloat(n1)), CaseKey::Number(OrderedFloat(n2))) => {
+                            (*n2 - *n1).abs() == 1.0
+                        }
+                        _ => false,
+                    }
+                } else {
+                    false
+                };
+
+                prev_can_reach_current && cases_consecutive
             } else {
-                // Check if the target block has PHI nodes
+                false
+            };
+
+            if is_fallthrough_pattern {
+                false // This is part of a fallthrough pattern, not post-switch code
+            } else {
+                // Check for PHI nodes as additional evidence
                 let has_phi = block_converter
                     .ssa_analysis()
                     .and_then(|ssa| ssa.phi_functions.get(&group.target_block))
                     .map(|phis| !phis.is_empty())
                     .unwrap_or(false);
 
-                if has_phi {
-                    // Generate PHI assignments before converting the target block
-                    self.generate_case_body_with_phi_assignments(
+                has_phi
+            }
+        };
+
+        if is_post_switch_shared {
+            // This case jumps to a post-switch shared block - generate setup and break
+            self.generate_setup_instructions(&mut case_statements, group, block_converter, cfg)?;
+            // The shared block will be processed after the switch
+            // so we don't inline it here
+            // The break will be added by the logic at the end of this method
+        } else {
+            // Handle normal cases that aren't post-switch shared
+            if let Some(shared_tail) = &switch_info.shared_tail {
+                if group.target_block == shared_tail.block_id {
+                    // This case goes directly to the shared tail
+                    // Generate code based on PHI node contributions
+                    self.generate_case_body_for_shared_tail(
                         &mut case_statements,
                         group,
-                        cfg,
                         block_converter,
+                        cfg,
                     )?;
                 } else {
-                    // Normal case: generate setup instructions then convert target block
-                    self.generate_setup_instructions(
-                        &mut case_statements,
-                        group,
-                        block_converter,
-                        cfg,
-                    )?;
-                    self.convert_target_block_normally(
-                        &mut case_statements,
-                        group,
-                        cfg,
-                        block_converter,
-                        switch_info,
-                    )?;
+                    // Check if the target block has PHI nodes
+                    let has_phi = block_converter
+                        .ssa_analysis()
+                        .and_then(|ssa| ssa.phi_functions.get(&group.target_block))
+                        .map(|phis| !phis.is_empty())
+                        .unwrap_or(false);
+
+                    if has_phi {
+                        // Generate PHI assignments before converting the target block
+                        self.generate_case_body_with_phi_assignments(
+                            &mut case_statements,
+                            group,
+                            cfg,
+                            block_converter,
+                        )?;
+                    } else {
+                        // Normal case: generate setup instructions then convert target block
+                        self.generate_setup_instructions(
+                            &mut case_statements,
+                            group,
+                            block_converter,
+                            cfg,
+                        )?;
+                        self.convert_target_block_normally(
+                            &mut case_statements,
+                            group,
+                            cfg,
+                            block_converter,
+                            switch_info,
+                        )?;
+                    }
                 }
+            } else {
+                // No shared tail - generate setup and convert target block normally
+                self.generate_setup_instructions(
+                    &mut case_statements,
+                    group,
+                    block_converter,
+                    cfg,
+                )?;
+                self.convert_target_block_normally(
+                    &mut case_statements,
+                    group,
+                    cfg,
+                    block_converter,
+                    switch_info,
+                )?;
             }
-        } else {
-            // No shared tail - generate setup and convert target block normally
-            self.generate_setup_instructions(&mut case_statements, group, block_converter, cfg)?;
-            self.convert_target_block_normally(
-                &mut case_statements,
-                group,
-                cfg,
-                block_converter,
-                switch_info,
-            )?;
         }
 
         // Check if we need to duplicate the next case's code due to fallthrough
+        let mut has_duplicated_terminator = false;
         if let Some(next_group) =
-            self.needs_fallthrough_duplication(group, group_index, all_groups, cfg)
+            self.needs_fallthrough_duplication(group, group_index, all_groups, cfg, switch_info)
         {
             // Clone the next group to avoid borrow checker issues
             let next_group_clone = next_group.clone();
+            // Check if the next group's target block contains a terminator
+            let next_target_block = &cfg.graph()[next_group_clone.target_block];
+            has_duplicated_terminator = next_target_block.instructions().iter().any(|instr| {
+                matches!(
+                    &instr.instruction,
+                    UnifiedInstruction::Ret { .. }
+                        | UnifiedInstruction::Throw { .. }
+                        | UnifiedInstruction::ThrowIfUndefinedInst { .. }
+                )
+            });
+
             // Duplicate the next case's target block code instead of falling through
             // This avoids conflicts with setup instructions
             // Don't mark instructions as rendered since they'll be converted again for the actual case
@@ -415,7 +555,18 @@ impl<'a> SwitchConverter<'a> {
         }
 
         // Check if we need to add a break statement
-        if self.should_add_break_for_group(group, group_index, all_groups, switch_info) {
+        // Always add break for post-switch shared blocks
+        // Don't add break if we duplicated code that contains a terminator
+        if !has_duplicated_terminator
+            && (is_post_switch_shared
+                || self.should_add_break_for_group(
+                    group,
+                    group_index,
+                    all_groups,
+                    switch_info,
+                    cfg,
+                ))
+        {
             let break_stmt = self.ast_builder.break_statement(Span::default(), None);
             case_statements.push(Statement::BreakStatement(
                 self.ast_builder.alloc(break_stmt),
@@ -427,6 +578,40 @@ impl<'a> SwitchConverter<'a> {
                 .switch_case(Span::default(), Some(test_expr), case_statements);
 
         Ok(switch_case)
+    }
+
+    /// Identify blocks that are shared by multiple cases
+    fn identify_shared_target_blocks(
+        &self,
+        case_groups: &[CaseGroup],
+        cfg: &Cfg<'a>,
+    ) -> HashSet<NodeIndex> {
+        let mut shared_blocks = HashSet::new();
+        let mut block_references: HashMap<NodeIndex, usize> = HashMap::new();
+
+        // Count direct targets
+        for group in case_groups {
+            *block_references.entry(group.target_block).or_insert(0) += 1;
+        }
+
+        // Also check indirect targets (blocks reachable from case targets)
+        for group in case_groups {
+            for edge in cfg.graph().edges(group.target_block) {
+                let successor = edge.target();
+                if !cfg.graph()[successor].is_exit() {
+                    *block_references.entry(successor).or_insert(0) += 1;
+                }
+            }
+        }
+
+        // Mark blocks referenced by multiple paths as shared
+        for (block_id, count) in block_references {
+            if count > 1 {
+                shared_blocks.insert(block_id);
+            }
+        }
+
+        shared_blocks
     }
 
     /// Check if all keys in a group would generate the same code after optimization
@@ -486,11 +671,16 @@ impl<'a> SwitchConverter<'a> {
         group_index: usize,
         all_groups: &[CaseGroup],
         switch_info: &SwitchInfo,
+        _cfg: &Cfg<'a>,
     ) -> bool {
         // Don't add break if the case always terminates
         if group.always_terminates {
             return false;
         }
+
+        // For all other cases, we need to check if a break is needed
+        // Even if a case physically falls through to the shared tail in the bytecode,
+        // we still need a break in the switch to prevent fallthrough to the next case
 
         // Check if this is the last group
         let is_last_group = group_index == all_groups.len() - 1;
@@ -515,6 +705,7 @@ impl<'a> SwitchConverter<'a> {
         group_index: usize,
         all_groups: &'b [CaseGroup],
         cfg: &Cfg<'a>,
+        switch_info: &SwitchInfo,
     ) -> Option<&'b CaseGroup> {
         // Check if this group's target block has no terminating instruction
         let current_target = &cfg.graph()[group.target_block];
@@ -536,6 +727,14 @@ impl<'a> SwitchConverter<'a> {
         for (i, other_group) in all_groups.iter().enumerate() {
             if i == group_index {
                 continue;
+            }
+
+            // Skip if the other group targets the shared tail
+            // (falling through to shared tail is normal and doesn't need duplication)
+            if let Some(shared_tail) = &switch_info.shared_tail {
+                if other_group.target_block == shared_tail.block_id {
+                    continue;
+                }
             }
 
             // Check if control flow goes from our target to this group's target
@@ -782,6 +981,8 @@ impl<'a> SwitchConverter<'a> {
                 .target
             {
                 if mov_only_sources.contains(&target_reg) {
+                    // Mark this SSA value as eliminated
+                    block_converter.mark_ssa_value_eliminated(setup_instr.ssa_value.clone());
                     continue;
                 }
             }
@@ -896,18 +1097,21 @@ impl<'a> SwitchConverter<'a> {
                 )
             };
 
-            // Check if this variable has already been declared
-            // If it's contributing to a PHI at the switch's shared tail, it should already be declared
-            let should_declare = if let Some(mapping) = block_converter
+            // Check if this variable has already been declared at function scope
+            // If it's a function-scope variable, we should only assign, not declare
+            let is_function_scoped = if let Some(mapping) = block_converter
                 .instruction_converter()
                 .register_manager()
                 .variable_mapping()
             {
-                // Check if this variable has been declared already
-                !mapping.function_scope_vars.contains(&var_name.to_string())
+                // Check if this variable is marked as function-scoped
+                mapping.function_scope_vars.contains(&var_name.to_string())
             } else {
-                true // Default to declaring if we can't check
+                false // Default to not function-scoped if we can't check
             };
+
+            // We should declare if it's NOT function-scoped (i.e., it's a local variable)
+            let should_declare = !is_function_scoped;
 
             let stmt = if should_declare {
                 // Create variable declaration

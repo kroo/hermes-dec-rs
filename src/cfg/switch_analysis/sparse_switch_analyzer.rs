@@ -391,7 +391,8 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 // Convert block-relative instruction index to absolute instruction index
                 let block = &cfg.graph()[block_id];
                 let instr_idx = InstructionIndex::new(block.start_pc().value() + i);
-                if let Some(ssa_value) = ssa.get_value_at(target_reg, instr_idx) {
+                // Use get_value_after_instruction since we want the SSA value produced by this instruction
+                if let Some(ssa_value) = ssa.get_value_after_instruction(target_reg, instr_idx) {
                     // Extract constant value if this is a constant load
                     let const_value = if i < comparison_idx {
                         self.extract_constant_value_from_instruction(&instr.instruction)
@@ -543,7 +544,6 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         if let Some(default) = default_case {
             target_blocks.push(default.target_block);
         }
-
         // Find common post-dominator
         let shared_tail = self.find_common_postdominator(&target_blocks, postdom)?;
 
@@ -741,7 +741,8 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         // Look up the value in the block-specific SSA analysis
         let block = &cfg.graph()[block_id];
         let instr_idx = InstructionIndex::new(block.start_pc().value() + instruction_idx);
-        ssa.get_value_at(register, instr_idx)
+        // Use get_value_before_instruction since we're looking up operand values
+        ssa.get_value_before_instruction(register, instr_idx)
     }
 
     /// Fold an Add operation on constant values

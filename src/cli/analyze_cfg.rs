@@ -371,16 +371,35 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                                 String::new()
                             };
 
-                        if let Some(phi) = phi_functions.iter().find(|p| p.register == def.register)
+                        // Get the actual variable name from the mapping
+                        let var_name_info = if let Some(ref mapping) = var_mapping {
+                            mapping
+                                .ssa_to_var
+                                .get(ssa_value)
+                                .map(|name| format!(" [{}]", name))
+                                .unwrap_or_else(|| " [unmapped]".to_string())
+                        } else {
+                            String::new()
+                        };
+
+                        if let Some(phi) = phi_functions
+                            .iter()
+                            .find(|p| p.register == def.register && p.result.def_site == *def)
                         {
                             println!(
-                                "    Defines {}{}: {})",
+                                "    Defines {}{}: {}{}",
                                 ssa_value.name(),
                                 coalesced_info,
-                                phi.format_phi_function()
+                                phi.format_phi_function(),
+                                var_name_info
                             );
                         } else {
-                            println!("    Defines {}{}", ssa_value.name(), coalesced_info);
+                            println!(
+                                "    Defines {}{}{}",
+                                ssa_value.name(),
+                                coalesced_info,
+                                var_name_info
+                            );
                         }
                     } else {
                         println!(
@@ -410,18 +429,35 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                                 String::new()
                             };
 
+                            // Get the actual variable name from the mapping
+                            let var_name_info = if let Some(ref mapping) = var_mapping {
+                                mapping
+                                    .ssa_to_var
+                                    .get(reg_use_def_value)
+                                    .map(|name| format!(" [{}]", name))
+                                    .unwrap_or_else(|| " [unmapped]".to_string())
+                            } else {
+                                String::new()
+                            };
+
                             if let Some(phi) = phi_functions
                                 .iter()
-                                .find(|phi| phi.register == reg_use_def.register)
+                                .find(|phi| phi.result.def_site == *reg_use_def)
                             {
                                 println!(
-                                    "    Uses {}{}: {}",
+                                    "    Uses {}{}: {}{}",
                                     reg_use_def_value.name(),
                                     coalesced_info,
-                                    phi.format_phi_function()
+                                    phi.format_phi_function(),
+                                    var_name_info
                                 );
                             } else {
-                                println!("    Uses {}{}", reg_use_def_value.name(), coalesced_info);
+                                println!(
+                                    "    Uses {}{}{}",
+                                    reg_use_def_value.name(),
+                                    coalesced_info,
+                                    var_name_info
+                                );
                             }
                         } else {
                             println!(
