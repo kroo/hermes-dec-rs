@@ -512,66 +512,14 @@ impl<'a> SwitchConverter<'a> {
                             cfg,
                         )?;
 
-                        // Check if this case contains a nested switch
-                        let mut converted_nested = false;
-
-                        if let Some(full_cfg) = block_converter.get_full_cfg() {
-                            let switch_analysis = if let Some(ssa) = block_converter.ssa_analysis()
-                            {
-                                full_cfg.analyze_switch_regions(ssa)
-                            } else {
-                                None
-                            };
-
-                            if let Some(switch_analysis) = switch_analysis {
-                                // Check if any switch region starts at or after our target block
-                                for (_idx, region) in switch_analysis.regions.iter().enumerate() {
-                                    if self.is_switch_in_case_body(group.target_block, region, cfg)
-                                    {
-                                        // Check if the case target IS the dispatch block
-                                        if group.target_block == region.dispatch {
-                                            // The case jumps directly to a nested switch
-
-                                            // Mark all blocks in the nested switch region as rendered
-                                            // to prevent them from being converted again later
-                                            self.mark_switch_region_as_rendered(
-                                                region,
-                                                block_converter,
-                                                cfg,
-                                            );
-
-                                            // Convert the nested switch
-                                            let mut nested_converter =
-                                                SwitchConverter::new(self.ast_builder);
-                                            match nested_converter.convert_switch_region(
-                                                region,
-                                                full_cfg,
-                                                block_converter,
-                                            ) {
-                                                Ok(nested_stmts) => {
-                                                    case_statements.extend(nested_stmts);
-                                                    converted_nested = true;
-                                                    break;
-                                                }
-                                                Err(e) => {
-                                                    log::error!(
-                                                        "Failed to convert nested switch: {:?}",
-                                                        e
-                                                    );
-                                                    // Fall back to normal conversion
-                                                }
-                                            }
-                                        } else {
-                                            // The nested switch is somewhere within the case body
-                                            // For now, we'll handle this in the normal block conversion
-                                            // TODO: Handle nested switches within case bodies
-                                        }
-                                    }
-                                }
-                            } else {
-                            }
-                        } else {
-                        }
+                        // Check if this case contains nested control flow and convert it
+                        let converted_nested = self.convert_nested_control_flow(
+                            &mut case_statements,
+                            group,
+                            cfg,
+                            block_converter,
+                            switch_info,
+                        )?;
 
                         if !converted_nested {
                             self.convert_target_block_normally(
@@ -581,7 +529,6 @@ impl<'a> SwitchConverter<'a> {
                                 block_converter,
                                 switch_info,
                             )?;
-                        } else {
                         }
                     }
                 }
@@ -594,45 +541,14 @@ impl<'a> SwitchConverter<'a> {
                     cfg,
                 )?;
 
-                // Check if this case contains a nested switch
-                let mut converted_nested = false;
-
-                if let Some(full_cfg) = block_converter.get_full_cfg() {
-                    let switch_analysis = if let Some(ssa) = block_converter.ssa_analysis() {
-                        full_cfg.analyze_switch_regions(ssa)
-                    } else {
-                        None
-                    };
-
-                    if let Some(switch_analysis) = switch_analysis {
-                        for region in switch_analysis.regions.iter() {
-                            if group.target_block == region.dispatch {
-                                // The case jumps directly to a nested switch
-
-                                // Mark all blocks in the nested switch region as rendered
-                                self.mark_switch_region_as_rendered(region, block_converter, cfg);
-
-                                // Convert the nested switch
-                                let mut nested_converter = SwitchConverter::new(self.ast_builder);
-                                match nested_converter.convert_switch_region(
-                                    region,
-                                    full_cfg,
-                                    block_converter,
-                                ) {
-                                    Ok(nested_stmts) => {
-                                        case_statements.extend(nested_stmts);
-                                        converted_nested = true;
-                                        break;
-                                    }
-                                    Err(e) => {
-                                        log::error!("Failed to convert nested switch: {:?}", e);
-                                        // Fall back to normal conversion
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                // Check if this case contains nested control flow and convert it
+                let converted_nested = self.convert_nested_control_flow(
+                    &mut case_statements,
+                    group,
+                    cfg,
+                    block_converter,
+                    switch_info,
+                )?;
 
                 if !converted_nested {
                     self.convert_target_block_normally(
@@ -2241,6 +2157,171 @@ impl<'a> SwitchConverter<'a> {
         }
 
         false
+    }
+
+    /// Convert nested control flow within a case body
+    /// This method detects and converts any type of nested control structure:
+    /// - Nested switches
+    /// - Conditional chains (if/else-if/else)
+    /// - Loops (for/while/do-while)
+    /// - Any combination of the above
+    fn convert_nested_control_flow(
+        &mut self,
+        case_statements: &mut ArenaVec<'a, Statement<'a>>,
+        group: &CaseGroup,
+        cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+        _switch_info: &SwitchInfo,
+    ) -> Result<bool, SwitchConversionError> {
+        let Some(full_cfg) = block_converter.get_full_cfg() else {
+            return Ok(false);
+        };
+
+        // 1. Check for nested switches first (highest priority)
+        if let Some(ssa) = block_converter.ssa_analysis() {
+            if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
+                for region in &switch_analysis.regions {
+                    if self.is_switch_in_case_body(group.target_block, region, cfg) {
+                        if group.target_block == region.dispatch {
+                            // Case jumps directly to a nested switch
+                            self.mark_switch_region_as_rendered(region, block_converter, cfg);
+                            let mut nested_converter = SwitchConverter::new(self.ast_builder);
+                            match nested_converter.convert_switch_region(
+                                region,
+                                full_cfg,
+                                block_converter,
+                            ) {
+                                Ok(nested_stmts) => {
+                                    case_statements.extend(nested_stmts);
+                                    return Ok(true);
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to convert nested switch: {:?}", e);
+                                    // Continue to try other types
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Check for conditional chains (if/else-if/else)
+        if let Some(conditional_analysis) = full_cfg.analyze_conditional_chains() {
+            log::debug!("Checking for conditional chains starting at block {:?}", group.target_block);
+            log::debug!("Available chains: {:?}", conditional_analysis.chains.len());
+            for (i, chain) in conditional_analysis.chains.iter().enumerate() {
+                log::debug!("Chain {}: {:?} branches", i, chain.branches.len());
+                for (j, branch) in chain.branches.iter().enumerate() {
+                    log::debug!("  Branch {}: condition_block={:?}, branch_entry={:?}", j, branch.condition_block, branch.branch_entry);
+                }
+            }
+            
+            if let Some(chain) = self.find_chain_starting_at_recursive(group.target_block, &conditional_analysis) {
+                log::debug!("Found conditional chain starting at block {:?}: {:?}", group.target_block, chain.chain_type);
+                return self.convert_conditional_chain_in_case(
+                    case_statements,
+                    chain,
+                    cfg,
+                    block_converter,
+                );
+            } else {
+                log::debug!("No conditional chain found starting at block {:?}", group.target_block);
+            }
+        }
+
+        // 3. Check for loops (for/while/do-while)
+        // TODO: Implement loop conversion when LoopConverter is available
+        let loop_analysis = full_cfg.analyze_loops();
+        if let Some(_loop_info) = self.find_loop_starting_at(group.target_block, &loop_analysis) {
+            log::debug!("Found loop in case body starting at block {:?}, but loop conversion not yet implemented", group.target_block);
+            // For now, fall back to normal block conversion
+            // return self.convert_loop_in_case(case_statements, loop_info, cfg, block_converter);
+        }
+
+        // 4. Check for other complex control flow patterns
+        // (This can be extended in the future for specific patterns)
+
+        Ok(false) // No nested control flow found
+    }
+
+    /// Convert a conditional chain within a case
+    fn convert_conditional_chain_in_case(
+        &mut self,
+        case_statements: &mut ArenaVec<'a, Statement<'a>>,
+        chain: &crate::cfg::analysis::ConditionalChain,
+        cfg: &Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<bool, SwitchConversionError> {
+        let mut conditional_converter =
+            super::conditional_converter::ConditionalConverter::new(self.ast_builder);
+
+        // Convert the conditional chain FIRST, before marking blocks as rendered
+        match conditional_converter.convert_chain(chain, cfg, block_converter) {
+            Ok(chain_statements) => {
+                case_statements.extend(chain_statements);
+                
+                // AFTER successful conversion, mark all blocks in the conditional chain as rendered
+                let all_chain_blocks =
+                    super::conditional_converter::ConditionalConverter::get_all_chain_blocks(chain);
+                
+                for &block_id in &all_chain_blocks {
+                    let block = &cfg.graph()[block_id];
+                    for instruction in block.instructions() {
+                        block_converter.mark_instruction_rendered(instruction);
+                    }
+                }
+                
+                Ok(true)
+            }
+            Err(e) => {
+                log::error!("Failed to convert conditional chain in case: {:?}", e);
+                Ok(false) // Fall back to normal conversion
+            }
+        }
+    }
+
+    /// Find a conditional chain starting at the given block, searching recursively through nested chains
+    fn find_chain_starting_at_recursive<'b>(
+        &self,
+        start_block: NodeIndex,
+        analysis: &'b crate::cfg::analysis::ConditionalAnalysis,
+    ) -> Option<&'b crate::cfg::analysis::ConditionalChain> {
+        // Search through all chains (top-level and nested)
+        self.search_chain_recursive(start_block, &analysis.chains)
+    }
+
+    /// Recursive helper to search through chains and their nested chains
+    fn search_chain_recursive<'b>(
+        &self,
+        start_block: NodeIndex,
+        chains: &'b [crate::cfg::analysis::ConditionalChain],
+    ) -> Option<&'b crate::cfg::analysis::ConditionalChain> {
+        for chain in chains {
+            // Check if this chain starts at the target block
+            if !chain.branches.is_empty() && chain.branches[0].condition_block == start_block {
+                return Some(chain);
+            }
+            
+            // Search nested chains
+            if let Some(nested_chain) = self.search_chain_recursive(start_block, &chain.nested_chains) {
+                return Some(nested_chain);
+            }
+        }
+        None
+    }
+
+    /// Find a loop starting at the given block
+    fn find_loop_starting_at<'b>(
+        &self,
+        start_block: NodeIndex,
+        loop_analysis: &'b crate::cfg::analysis::LoopAnalysis,
+    ) -> Option<&'b crate::cfg::analysis::Loop> {
+        // Find a loop where start_block is a header
+        loop_analysis
+            .loops
+            .iter()
+            .find(move |loop_info| loop_info.is_header(start_block))
     }
 
     /// Mark all blocks in a switch region as rendered to prevent double conversion
