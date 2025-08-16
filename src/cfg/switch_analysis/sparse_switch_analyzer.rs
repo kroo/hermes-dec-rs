@@ -4,10 +4,10 @@
 //! where switches are implemented as chains of JStrictEqual comparisons
 
 use super::switch_info::*;
+use crate::analysis::value_tracker::{ConstantValue, TrackedValue, ValueTracker};
 use crate::cfg::analysis::PostDominatorAnalysis;
 use crate::cfg::ssa::SSAAnalysis;
 use crate::cfg::{Cfg, EdgeKind};
-use crate::generated::instruction_analysis::analyze_register_usage;
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
 use crate::hbc::InstructionIndex;
@@ -91,7 +91,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
     ) -> Option<SwitchInfo> {
         // Quick check: does this block load a parameter or have a comparison?
         let first_block = &cfg.graph()[start_block];
-        let discriminator = self.find_discriminator(first_block)?;
+        let discriminator = self.find_discriminator_with_ssa(first_block, start_block, ssa, cfg)?;
 
         // Safety checker for setup instructions
         let safety_checker = SetupSafetyChecker::new(cfg, ssa, postdom);
@@ -222,8 +222,14 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         })
     }
 
-    /// Find what register is being used as discriminator
-    fn find_discriminator(&self, block: &crate::cfg::Block) -> Option<u8> {
+    /// Find what register is being used as discriminator using SSA analysis
+    fn find_discriminator_with_ssa(
+        &self,
+        block: &crate::cfg::Block,
+        block_id: NodeIndex,
+        ssa: &SSAAnalysis,
+        cfg: &Cfg<'a>,
+    ) -> Option<u8> {
         // Look for LoadParam as first instruction
         if let Some(first) = block.instructions().first() {
             if let UnifiedInstruction::LoadParam { operand_0, .. } = &first.instruction {
@@ -231,14 +237,48 @@ impl<'a> SparseSwitchAnalyzer<'a> {
             }
         }
 
-        // Look for a pattern like LoadParam -> ... -> comparison
-        for instr in block.instructions() {
-            match &instr.instruction {
-                UnifiedInstruction::JStrictEqual { operand_1, .. }
-                | UnifiedInstruction::JStrictEqualLong { operand_1, .. } => {
-                    return Some(*operand_1);
+        // Look for comparison instruction and use ValueTracker to determine discriminator
+        if let Some(hbc_file) = self.hbc_file {
+            let value_tracker = ValueTracker::new(cfg, ssa, hbc_file);
+
+            for instr in block.instructions() {
+                match &instr.instruction {
+                    UnifiedInstruction::JStrictEqual {
+                        operand_1,
+                        operand_2,
+                        ..
+                    }
+                    | UnifiedInstruction::JStrictEqualLong {
+                        operand_1,
+                        operand_2,
+                        ..
+                    } => {
+                        let pc = instr.instruction_index;
+
+                        // Use ValueTracker to analyze what each operand contains
+                        let op1_value = value_tracker.get_value_at_point(*operand_1, block_id, pc);
+                        let op2_value = value_tracker.get_value_at_point(*operand_2, block_id, pc);
+
+                        // The discriminator is the one that contains a parameter or unknown value
+                        // (not a constant)
+                        let op1_is_constant = matches!(op1_value, TrackedValue::Constant(_));
+                        let op2_is_constant = matches!(op2_value, TrackedValue::Constant(_));
+
+                        if !op1_is_constant && op2_is_constant {
+                            return Some(*operand_1);
+                        } else if op1_is_constant && !op2_is_constant {
+                            return Some(*operand_2);
+                        } else if matches!(op1_value, TrackedValue::Parameter { .. }) {
+                            return Some(*operand_1);
+                        } else if matches!(op2_value, TrackedValue::Parameter { .. }) {
+                            return Some(*operand_2);
+                        } else {
+                            // Fallback to operand_1 if both are non-constants
+                            return Some(*operand_1);
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
@@ -300,18 +340,25 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                         comparison_const_reg = Some(const_reg);
                         _source_pc = instr.instruction_index;
 
-                        // Extract the constant value for the case key
-                        if let Some(constant_value) =
-                            self.get_constant_value_at(block_id, i, const_reg, cfg)
-                        {
-                            let case_key = match constant_value {
-                                ConstantValue::Number(n) => CaseKey::Number(OrderedFloat(n)),
-                                ConstantValue::String(s) => CaseKey::String(s),
-                                ConstantValue::Boolean(b) => CaseKey::Boolean(b),
-                                ConstantValue::Null => CaseKey::Null,
-                                ConstantValue::Undefined => CaseKey::Undefined,
-                            };
-                            keys.push(case_key);
+                        // Extract the constant value for the case key using ValueTracker
+                        if let Some(hbc_file) = self.hbc_file {
+                            let value_tracker = ValueTracker::new(cfg, ssa, hbc_file);
+                            let tracked_value = value_tracker.get_value_at_point(
+                                const_reg,
+                                block_id,
+                                instr.instruction_index,
+                            );
+
+                            if let TrackedValue::Constant(constant_value) = tracked_value {
+                                let case_key = match constant_value {
+                                    ConstantValue::Number(n) => CaseKey::Number(OrderedFloat(n)),
+                                    ConstantValue::String(s) => CaseKey::String(s),
+                                    ConstantValue::Boolean(b) => CaseKey::Boolean(b),
+                                    ConstantValue::Null => CaseKey::Null,
+                                    ConstantValue::Undefined => CaseKey::Undefined,
+                                };
+                                keys.push(case_key);
+                            }
                         }
 
                         // Find the target block
@@ -395,7 +442,16 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 if let Some(ssa_value) = ssa.get_value_after_instruction(target_reg, instr_idx) {
                     // Extract constant value if this is a constant load
                     let const_value = if i < comparison_idx {
-                        self.extract_constant_value_from_instruction(&instr.instruction)
+                        if let Some(hbc_file) = self.hbc_file {
+                            let value_tracker = ValueTracker::new(cfg, ssa, hbc_file);
+                            if let TrackedValue::Constant(c) = value_tracker.get_value(ssa_value) {
+                                Some(c)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     };
@@ -430,78 +486,6 @@ impl<'a> SparseSwitchAnalyzer<'a> {
             always_terminates,
             execution_order: 0, // Will be set by caller
         })
-    }
-
-    /// Get the constant value at a specific instruction
-    fn get_constant_value_at(
-        &self,
-        block_id: NodeIndex,
-        instruction_idx: usize,
-        register: u8,
-        cfg: &Cfg<'a>,
-    ) -> Option<ConstantValue> {
-        let block = &cfg.graph()[block_id];
-        let instructions = block.instructions();
-
-        // Look backwards from the instruction to find where this register was defined
-        for i in (0..=instruction_idx).rev() {
-            if let Some(instr) = instructions.get(i) {
-                let usage = analyze_register_usage(&instr.instruction);
-                if usage.target == Some(register) {
-                    // This instruction defines our register
-                    if let Some(value) =
-                        self.extract_constant_value_from_instruction(&instr.instruction)
-                    {
-                        return Some(value);
-                    }
-                    // If it's not a constant load, we can't determine the value
-                    return None;
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Extract constant value from an instruction that defines a register
-    fn extract_constant_value_from_instruction(
-        &self,
-        instr: &UnifiedInstruction,
-    ) -> Option<ConstantValue> {
-        match instr {
-            UnifiedInstruction::LoadConstString { operand_1, .. } => {
-                // Get the actual string from the HBC file
-                if let Some(hbc_file) = self.hbc_file {
-                    if let Ok(string) = hbc_file.strings.get((*operand_1).into()) {
-                        return Some(ConstantValue::String(string.clone()));
-                    }
-                }
-                None
-            }
-            UnifiedInstruction::LoadConstStringLongIndex { operand_1, .. } => {
-                if let Some(hbc_file) = self.hbc_file {
-                    if let Ok(string) = hbc_file.strings.get((*operand_1).into()) {
-                        return Some(ConstantValue::String(string.clone()));
-                    }
-                }
-                None
-            }
-            UnifiedInstruction::LoadConstUInt8 { operand_1, .. } => {
-                Some(ConstantValue::Number(*operand_1 as f64))
-            }
-            UnifiedInstruction::LoadConstInt { operand_1, .. } => {
-                Some(ConstantValue::Number(*operand_1 as f64))
-            }
-            UnifiedInstruction::LoadConstDouble { operand_1, .. } => {
-                Some(ConstantValue::Number(*operand_1))
-            }
-            UnifiedInstruction::LoadConstZero { .. } => Some(ConstantValue::Number(0.0)),
-            UnifiedInstruction::LoadConstTrue { .. } => Some(ConstantValue::Boolean(true)),
-            UnifiedInstruction::LoadConstFalse { .. } => Some(ConstantValue::Boolean(false)),
-            UnifiedInstruction::LoadConstNull { .. } => Some(ConstantValue::Null),
-            UnifiedInstruction::LoadConstUndefined { .. } => Some(ConstantValue::Undefined),
-            _ => None,
-        }
     }
 
     /// Get the true successor of a conditional jump
@@ -640,124 +624,39 @@ impl<'a> SparseSwitchAnalyzer<'a> {
             .map(|phis| phis.as_slice())
             .unwrap_or(&[]);
 
-        // Convert existing PHI functions to our PhiNode representation
-        for phi_func in existing_phis {
-            let mut values = HashMap::new();
+        // Create ValueTracker if we have HBC file
+        if let Some(hbc_file) = self.hbc_file {
+            let value_tracker = ValueTracker::new(cfg, ssa, hbc_file);
 
-            // Extract constant values from each PHI operand
-            for (pred_block, ssa_value) in &phi_func.operands {
-                // Find which instruction defined this SSA value and extract its constant
-                if let Some(value) = self.extract_constant_from_ssa_value(ssa_value, cfg, ssa) {
-                    values.insert(*pred_block, value);
+            // Convert existing PHI functions to our PhiNode representation
+            for phi_func in existing_phis {
+                let mut values = HashMap::new();
+
+                // Extract constant values from each PHI operand
+                for (pred_block, ssa_value) in &phi_func.operands {
+                    // Use ValueTracker to get the value
+                    if let TrackedValue::Constant(constant_value) =
+                        value_tracker.get_value(ssa_value)
+                    {
+                        values.insert(*pred_block, constant_value);
+                    }
                 }
-            }
 
-            // Only create our PhiNode if we have values to track
-            if !values.is_empty() {
-                phi_nodes.insert(
-                    phi_func.register,
-                    PhiNode {
-                        register: phi_func.register,
-                        values,
-                        ssa_phi_value: Some(phi_func.result.clone()),
-                    },
-                );
+                // Only create our PhiNode if we have values to track
+                if !values.is_empty() {
+                    phi_nodes.insert(
+                        phi_func.register,
+                        PhiNode {
+                            register: phi_func.register,
+                            values,
+                            ssa_phi_value: Some(phi_func.result.clone()),
+                        },
+                    );
+                }
             }
         }
 
         phi_nodes
-    }
-
-    /// Extract constant value from an SSA value
-    fn extract_constant_from_ssa_value(
-        &self,
-        ssa_value: &crate::cfg::ssa::types::SSAValue,
-        cfg: &Cfg<'a>,
-        ssa: &SSAAnalysis,
-    ) -> Option<ConstantValue> {
-        // Look up the instruction that defined this SSA value
-        let def_site = &ssa_value.def_site;
-        let block = &cfg.graph()[def_site.block_id];
-
-        if def_site.instruction_idx.value() as usize >= block.instructions().len() {
-            return None;
-        }
-
-        let instr = &block.instructions()[def_site.instruction_idx.value() as usize];
-
-        // Check if this is a constant-loading instruction
-        if let Some(value) = self.extract_constant_value_from_instruction(&instr.instruction) {
-            return Some(value);
-        }
-
-        // Check if this is an Add instruction that adds constants
-        if let UnifiedInstruction::Add {
-            operand_0: target,
-            operand_1,
-            operand_2,
-        } = &instr.instruction
-        {
-            if *target == ssa_value.register {
-                // Try to get constant values for both operands
-                if let (Some(val1), Some(val2)) = (
-                    self.find_ssa_value_for_use(
-                        def_site.block_id,
-                        def_site.instruction_idx.value() as usize,
-                        *operand_1,
-                        cfg,
-                        ssa,
-                    )
-                    .and_then(|ssa_val| self.extract_constant_from_ssa_value(ssa_val, cfg, ssa)),
-                    self.find_ssa_value_for_use(
-                        def_site.block_id,
-                        def_site.instruction_idx.value() as usize,
-                        *operand_2,
-                        cfg,
-                        ssa,
-                    )
-                    .and_then(|ssa_val| self.extract_constant_from_ssa_value(ssa_val, cfg, ssa)),
-                ) {
-                    // Perform the addition if both are numbers
-                    if let Some(result) = self.fold_add_operation(&val1, &val2) {
-                        return Some(result);
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
-    /// Find SSA value for a register use at a specific location
-    fn find_ssa_value_for_use<'b>(
-        &self,
-        block_id: NodeIndex,
-        instruction_idx: usize,
-        register: u8,
-        cfg: &Cfg<'a>,
-        ssa: &'b SSAAnalysis,
-    ) -> Option<&'b crate::cfg::ssa::types::SSAValue> {
-        // Get the reaching definition for this register at this point
-        // Look up the value in the block-specific SSA analysis
-        let block = &cfg.graph()[block_id];
-        let instr_idx = InstructionIndex::new(block.start_pc().value() + instruction_idx);
-        // Use get_value_before_instruction since we're looking up operand values
-        ssa.get_value_before_instruction(register, instr_idx)
-    }
-
-    /// Fold an Add operation on constant values
-    fn fold_add_operation(
-        &self,
-        val1: &ConstantValue,
-        val2: &ConstantValue,
-    ) -> Option<ConstantValue> {
-        match (val1, val2) {
-            (ConstantValue::Number(n1), ConstantValue::Number(n2)) => {
-                Some(ConstantValue::Number(n1 + n2))
-            }
-            // String concatenation could be supported here if needed
-            _ => None,
-        }
     }
 
     /// Check if we should bail out for PHI scenarios

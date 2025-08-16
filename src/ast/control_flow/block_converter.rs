@@ -129,6 +129,8 @@ pub struct BlockToStatementConverter<'a> {
     comment_manager: Option<AddressCommentManager>,
     /// Track SSA values that are eliminated during switch conversion
     eliminated_ssa_values: HashSet<SSAValue>,
+    /// Full CFG for nested control flow detection
+    full_cfg: Option<&'a crate::cfg::Cfg<'a>>,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
@@ -156,6 +158,7 @@ impl<'a> BlockToStatementConverter<'a> {
                 None
             },
             eliminated_ssa_values: HashSet::new(),
+            full_cfg: None,
         }
     }
 
@@ -195,6 +198,7 @@ impl<'a> BlockToStatementConverter<'a> {
                 None
             },
             eliminated_ssa_values: HashSet::new(),
+            full_cfg: None,
         }
     }
 
@@ -238,6 +242,7 @@ impl<'a> BlockToStatementConverter<'a> {
                 None
             },
             eliminated_ssa_values: HashSet::new(),
+            full_cfg: None,
         }
     }
 
@@ -271,6 +276,7 @@ impl<'a> BlockToStatementConverter<'a> {
                 None
             },
             eliminated_ssa_values: HashSet::new(),
+            full_cfg: None,
         }
     }
 
@@ -280,6 +286,19 @@ impl<'a> BlockToStatementConverter<'a> {
         &mut self,
         cfg: &'a crate::cfg::Cfg<'a>,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
+        self.convert_blocks_from_cfg_with_options(cfg, false)
+    }
+
+    /// Convert multiple blocks from a CFG into a sequence of JavaScript statements
+    /// This method handles proper block ordering and labeling
+    pub fn convert_blocks_from_cfg_with_options(
+        &mut self,
+        cfg: &'a crate::cfg::Cfg<'a>,
+        skip_validation: bool,
+    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
+        // Store the full CFG for nested control flow detection
+        self.set_full_cfg(cfg);
+
         let mut all_statements =
             ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
 
@@ -290,7 +309,37 @@ impl<'a> BlockToStatementConverter<'a> {
         // Check if CFG has conditional analysis
         let conditional_analysis = cfg.analyze_conditional_chains();
         // Check if CFG has switch analysis
-        let switch_analysis = cfg.analyze_switch_regions();
+        let switch_analysis = if let Some(ssa) = &self.ssa_analysis {
+            cfg.analyze_switch_regions(ssa)
+        } else {
+            // SSA analysis is required for switch detection
+            None
+        };
+
+        // Identify which switches are nested inside other switches
+        let mut nested_switches = HashSet::new();
+        if let Some(ref analysis) = switch_analysis {
+            // Check which switches are nested
+            for (i, outer_region) in analysis.regions.iter().enumerate() {
+                for (j, inner_region) in analysis.regions.iter().enumerate() {
+                    if i != j {
+                        // Check if inner_region's dispatch is a case target of outer_region
+                        for case in &outer_region.cases {
+                            if case.case_head == inner_region.dispatch {
+                                nested_switches.insert(j);
+                            }
+                        }
+                        // Also check default case
+                        if let Some(default_head) = outer_region.default_head {
+                            if default_head == inner_region.dispatch {
+                                nested_switches.insert(j);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let mut processed_blocks: HashSet<NodeIndex> = HashSet::new();
 
         for (_order_idx, block_id) in block_order.iter().enumerate() {
@@ -309,7 +358,19 @@ impl<'a> BlockToStatementConverter<'a> {
             // Check if this block is the start of a switch region BEFORE checking conditionals
             // This ensures sparse switches are detected before being converted to if-else chains
             if let Some(ref analysis) = switch_analysis {
-                if let Some(region) = self.find_switch_starting_at(*block_id, analysis) {
+                if let Some((region_idx, region)) =
+                    self.find_switch_starting_at_indexed(*block_id, analysis)
+                {
+                    // Skip if this is a nested switch - it will be converted by its parent
+                    if nested_switches.contains(&region_idx) {
+                        // Mark the infrastructure blocks as processed since they'll be handled by the parent switch
+                        let nested_infrastructure =
+                            super::switch_converter::get_switch_infrastructure_blocks(&[
+                                region.clone()
+                            ]);
+                        processed_blocks.extend(&nested_infrastructure);
+                        continue;
+                    }
                     // Convert the entire switch region
                     // Initially mark only switch infrastructure blocks as processed
                     // to allow nested control flow detection in case bodies
@@ -327,14 +388,9 @@ impl<'a> BlockToStatementConverter<'a> {
                         Ok(switch_statements) => {
                             all_statements.extend(switch_statements);
 
-                            // After conversion, mark ALL blocks that were part of the switch
-                            // including case bodies to prevent duplicate processing
-                            let all_switch_blocks =
-                                super::switch_converter::get_all_switch_blocks_with_bodies(
-                                    &[region.clone()],
-                                    cfg,
-                                );
-                            processed_blocks.extend(&all_switch_blocks);
+                            // Mark only the switch infrastructure blocks as processed
+                            // Don't mark case bodies yet - they might contain nested switches
+                            processed_blocks.extend(&switch_infrastructure);
 
                             // After converting a switch, we need to ensure the join block is processed
                             // if it hasn't been already (it contains code after the switch)
@@ -463,7 +519,14 @@ impl<'a> BlockToStatementConverter<'a> {
         }
 
         // Verify all blocks and instructions were rendered
-        self.verify_all_rendered(cfg, &processed_blocks)?;
+        if !skip_validation {
+            self.verify_all_rendered(cfg, &processed_blocks)?;
+        } else {
+            // Still run verification but only warn instead of failing
+            if let Err(e) = self.verify_all_rendered(cfg, &processed_blocks) {
+                eprintln!("WARNING: Block conversion validation failed (ignored due to --skip-validation): {}", e);
+            }
+        }
 
         // Generate function-scoped variable declarations AFTER processing blocks
         // This allows us to filter out eliminated SSA values
@@ -482,6 +545,8 @@ impl<'a> BlockToStatementConverter<'a> {
         cfg: &'a crate::cfg::Cfg<'a>,
         processed_blocks: &HashSet<NodeIndex>,
     ) -> Result<(), BlockConversionError> {
+        let mut unprocessed_blocks = Vec::new();
+
         // Check all blocks (except EXIT blocks)
         for node in cfg.graph().node_indices() {
             let block = &cfg.graph()[node];
@@ -493,15 +558,26 @@ impl<'a> BlockToStatementConverter<'a> {
 
             // Check if block was processed
             if !processed_blocks.contains(&node) {
-                return Err(BlockConversionError::InvalidBlock(format!(
-                    "Block {} (PC {}-{}) was not processed during decompilation",
+                unprocessed_blocks.push(format!(
+                    "Block {} (PC {}-{})",
                     node.index(),
                     block.start_pc(),
                     block.end_pc()
-                )));
+                ));
             }
+        }
 
-            // Check all instructions in the block
+        if !unprocessed_blocks.is_empty() {
+            return Err(BlockConversionError::InvalidBlock(format!(
+                "{} blocks were not processed during decompilation: {}",
+                unprocessed_blocks.len(),
+                unprocessed_blocks.join(", ")
+            )));
+        }
+
+        // Check all instructions in all processed blocks
+        for node in processed_blocks {
+            let block = &cfg.graph()[*node];
             for (idx, instruction) in block.instructions().iter().enumerate() {
                 if !self
                     .rendered_instructions
@@ -570,6 +646,21 @@ impl<'a> BlockToStatementConverter<'a> {
         for region in &analysis.regions {
             if region.dispatch == block_id {
                 return Some(region);
+            }
+        }
+        None
+    }
+
+    /// Find a switch region that starts at the given block, returning its index
+    fn find_switch_starting_at_indexed<'b>(
+        &self,
+        block_id: NodeIndex,
+        analysis: &'b crate::cfg::analysis::SwitchAnalysis,
+    ) -> Option<(usize, &'b crate::cfg::analysis::SwitchRegion)> {
+        // Check if this block is the dispatch block of any switch region
+        for (idx, region) in analysis.regions.iter().enumerate() {
+            if region.dispatch == block_id {
+                return Some((idx, region));
             }
         }
         None
@@ -1304,6 +1395,16 @@ impl<'a> BlockToStatementConverter<'a> {
     /// Mark an SSA value as eliminated
     pub fn mark_ssa_value_eliminated(&mut self, ssa_value: SSAValue) {
         self.eliminated_ssa_values.insert(ssa_value);
+    }
+
+    /// Get the full CFG if available
+    pub fn get_full_cfg(&self) -> Option<&'a crate::cfg::Cfg<'a>> {
+        self.full_cfg
+    }
+
+    /// Set the full CFG for nested control flow detection
+    pub fn set_full_cfg(&mut self, cfg: &'a crate::cfg::Cfg<'a>) {
+        self.full_cfg = Some(cfg);
     }
 
     /// Generate function-scoped variable declarations

@@ -81,6 +81,17 @@ impl Decompiler {
         function_index: u32,
         comments: &str,
     ) -> DecompilerResult<String> {
+        self.decompile_function_with_full_options(hbc_file, function_index, comments, false)
+    }
+
+    /// Decompile a single function with full options
+    pub fn decompile_function_with_full_options(
+        &mut self,
+        hbc_file: &HbcFile,
+        function_index: u32,
+        comments: &str,
+        skip_validation: bool,
+    ) -> DecompilerResult<String> {
         // Ensure global analysis is run
         if self.global_analysis.is_none() {
             let global_result = match GlobalSSAAnalyzer::analyze(hbc_file) {
@@ -170,7 +181,9 @@ impl Decompiler {
         }
 
         // Process all blocks in the CFG with proper ordering and labeling
-        let all_statements = match converter.convert_blocks_from_cfg(&transformed_cfg) {
+        let all_statements = match converter
+            .convert_blocks_from_cfg_with_options(&transformed_cfg, skip_validation)
+        {
             Ok(statements) => statements,
             Err(e) => {
                 return Err(DecompilerError::Internal {

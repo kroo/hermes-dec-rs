@@ -92,7 +92,7 @@ impl Cli {
                 output,
                 comments,
             } => {
-                decompile::decompile(&input, function, output.as_deref(), &comments)?;
+                decompile::decompile(&input, function, output.as_deref(), &comments, false)?;
             }
             Commands::Disasm { input } => {
                 disasm::disasm(&input)?;

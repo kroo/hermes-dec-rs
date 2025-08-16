@@ -247,9 +247,20 @@ impl<'a> Cfg<'a> {
     }
 
     /// Analyze switch regions in the CFG
-    pub fn analyze_switch_regions(&self) -> Option<analysis::SwitchAnalysis> {
+    /// Requires SSA analysis for accurate constant propagation
+    pub fn analyze_switch_regions(
+        &self,
+        ssa_analysis: &ssa::SSAAnalysis,
+    ) -> Option<analysis::SwitchAnalysis> {
         let post_doms = self.analyze_post_dominators()?;
-        Some(analysis::find_switch_regions(&self.graph, &post_doms))
+        Some(analysis::find_switch_regions_with_ssa(
+            &self.graph,
+            &post_doms,
+            self.hbc_file(),
+            &ssa_analysis.ssa_values,
+            self,
+            ssa_analysis,
+        ))
     }
 
     /// Get blocks that need labels (are targets of jumps that aren't simple fall-through)

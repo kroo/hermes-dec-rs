@@ -2,6 +2,7 @@
 //!
 //! This module contains types used by both sparse and dense switch analysis
 
+use crate::analysis::value_tracker::ConstantValue;
 use crate::cfg::ssa::SSAValue;
 use crate::hbc::function_table::HbcFunctionInstruction;
 use ordered_float::OrderedFloat;
@@ -133,16 +134,6 @@ impl CaseKey {
             _ => self.clone(),
         }
     }
-}
-
-/// Constant value that can be used in switch cases
-#[derive(Debug, Clone, PartialEq)]
-pub enum ConstantValue {
-    Number(f64),
-    String(String),
-    Boolean(bool),
-    Null,
-    Undefined,
 }
 
 /// Context for comparison instruction analysis

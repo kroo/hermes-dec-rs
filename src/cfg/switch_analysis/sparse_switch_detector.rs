@@ -14,7 +14,10 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
+use crate::analysis::value_tracker::{TrackedValue, ValueTracker};
 use crate::cfg::analysis::{PostDominatorAnalysis, SwitchCase, SwitchRegion};
+use crate::cfg::ssa::RegisterUse;
+use crate::hbc::HbcFile;
 
 /// Information about a sparse switch candidate
 #[derive(Debug, Clone)]
@@ -47,6 +50,10 @@ pub fn find_sparse_switch_patterns(
     graph: &DiGraph<Block, EdgeKind>,
     post_doms: &PostDominatorAnalysis,
     globally_processed: &mut HashSet<NodeIndex>,
+    hbc_file: &HbcFile,
+    ssa_values: &std::collections::HashMap<crate::cfg::ssa::RegisterDef, crate::cfg::ssa::SSAValue>,
+    cfg: &crate::cfg::Cfg,
+    ssa_analysis: &crate::cfg::ssa::SSAAnalysis,
 ) -> Vec<SparseSwitchCandidate> {
     let mut candidates = Vec::new();
     let mut processed = HashSet::new();
@@ -65,8 +72,16 @@ pub fn find_sparse_switch_patterns(
         }
         log::trace!("Checking node {:?} for sparse switch pattern", node);
 
-        if let Some(candidate) = detect_sparse_switch_chain(graph, post_doms, node, &mut processed)
-        {
+        if let Some(candidate) = detect_sparse_switch_chain(
+            graph,
+            post_doms,
+            node,
+            &mut processed,
+            hbc_file,
+            ssa_values,
+            cfg,
+            ssa_analysis,
+        ) {
             // Mark only comparison blocks as globally processed
             // Don't mark target blocks (case heads) as they might contain inner switches
             log::trace!(
@@ -99,6 +114,10 @@ fn detect_sparse_switch_chain(
     post_doms: &PostDominatorAnalysis,
     start_node: NodeIndex,
     processed: &mut HashSet<NodeIndex>,
+    hbc_file: &HbcFile,
+    ssa_values: &std::collections::HashMap<crate::cfg::ssa::RegisterDef, crate::cfg::ssa::SSAValue>,
+    cfg: &crate::cfg::Cfg,
+    ssa_analysis: &crate::cfg::ssa::SSAAnalysis,
 ) -> Option<SparseSwitchCandidate> {
     // If this node has already been processed, skip it
     if processed.contains(&start_node) {
@@ -108,7 +127,15 @@ fn detect_sparse_switch_chain(
     let block = &graph[start_node];
 
     // Check if this block contains a JStrictEqual comparison
-    let comp_info = extract_comparison_info(block, graph, start_node);
+    let comp_info = extract_comparison_info(
+        block,
+        graph,
+        start_node,
+        hbc_file,
+        ssa_values,
+        cfg,
+        ssa_analysis,
+    );
     if comp_info.is_none() {
         return None;
     }
@@ -143,7 +170,15 @@ fn detect_sparse_switch_chain(
         }
 
         let block = &graph[current_node];
-        let (reg, value, is_not_equal) = extract_comparison_info(block, graph, current_node)?;
+        let (reg, value, is_not_equal) = extract_comparison_info(
+            block,
+            graph,
+            current_node,
+            hbc_file,
+            ssa_values,
+            cfg,
+            ssa_analysis,
+        )?;
 
         // Must be comparing the same register
         if reg != compared_register {
@@ -177,7 +212,15 @@ fn detect_sparse_switch_chain(
 
         // Check if the next target is another comparison
         let next_block = &graph[next_target];
-        if let Some((next_reg, _, _)) = extract_comparison_info(next_block, graph, next_target) {
+        if let Some((next_reg, _, _)) = extract_comparison_info(
+            next_block,
+            graph,
+            next_target,
+            hbc_file,
+            ssa_values,
+            cfg,
+            ssa_analysis,
+        ) {
             if next_reg == compared_register {
                 current_node = next_target;
                 continue;
@@ -236,6 +279,183 @@ pub fn extract_comparison_info(
     block: &Block,
     graph: &DiGraph<Block, EdgeKind>,
     node: NodeIndex,
+    hbc_file: &HbcFile,
+    _ssa_values: &std::collections::HashMap<
+        crate::cfg::ssa::RegisterDef,
+        crate::cfg::ssa::SSAValue,
+    >,
+    cfg: &crate::cfg::Cfg,
+    ssa_analysis: &crate::cfg::ssa::SSAAnalysis,
+) -> Option<(u8, i32, bool)> {
+    log::trace!("extract_comparison_info for block {:?}", node);
+
+    // Always use ValueTracker since all parameters are now required
+    let result =
+        extract_comparison_info_with_value_tracker(block, node, hbc_file, cfg, ssa_analysis);
+    if result.is_some() {
+        log::trace!("  Found comparison with ValueTracker: {:?}", result);
+        return result;
+    }
+
+    // Fall back to legacy behavior if ValueTracker didn't find anything
+    let result = extract_comparison_info_legacy(block, graph, node);
+
+    if result.is_none() {
+        log::trace!("  No comparison found in block {:?}", node);
+        // Log the actual instructions to debug
+        for instr in block.instructions() {
+            log::trace!("    Instruction: {:?}", instr.instruction);
+        }
+    } else {
+        log::trace!("  Found comparison: {:?}", result);
+    }
+
+    result
+}
+
+/// Extract comparison information using ValueTracker
+fn extract_comparison_info_with_value_tracker(
+    block: &Block,
+    node: NodeIndex,
+    hbc_file: &HbcFile,
+    cfg: &crate::cfg::Cfg,
+    ssa_analysis: &crate::cfg::ssa::SSAAnalysis,
+) -> Option<(u8, i32, bool)> {
+    let value_tracker = ValueTracker::new(cfg, ssa_analysis, hbc_file);
+
+    // Look for JStrictEqual or JStrictNotEqual instructions
+    for (idx, instr) in block.instructions().iter().enumerate() {
+        match &instr.instruction {
+            UnifiedInstruction::JStrictEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JStrictEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            } => {
+                // Get the instruction location
+                let pc = block.start_pc + idx;
+
+                // Look up SSA values for both operands
+                let use1 = RegisterUse {
+                    register: *operand_1,
+                    block_id: node,
+                    instruction_idx: pc,
+                };
+                let use2 = RegisterUse {
+                    register: *operand_2,
+                    block_id: node,
+                    instruction_idx: pc,
+                };
+
+                // Try to find SSA values for these registers at this point
+                let ssa_value1 = ssa_analysis
+                    .use_def_chains
+                    .get(&use1)
+                    .and_then(|def| ssa_analysis.ssa_values.get(def));
+                let ssa_value2 = ssa_analysis
+                    .use_def_chains
+                    .get(&use2)
+                    .and_then(|def| ssa_analysis.ssa_values.get(def));
+
+                // Track values for both operands
+                if let Some(ssa1) = ssa_value1 {
+                    let tracked1 = value_tracker.get_value(ssa1);
+                    if let TrackedValue::Constant(const_val) = tracked1 {
+                        if let Some(int_val) = const_val.as_i32() {
+                            log::trace!(
+                                "  Found constant {} in r{} via SSA tracking",
+                                int_val,
+                                operand_1
+                            );
+                            return Some((*operand_2, int_val, false));
+                        }
+                    }
+                }
+
+                if let Some(ssa2) = ssa_value2 {
+                    let tracked2 = value_tracker.get_value(ssa2);
+                    if let TrackedValue::Constant(const_val) = tracked2 {
+                        if let Some(int_val) = const_val.as_i32() {
+                            log::trace!(
+                                "  Found constant {} in r{} via SSA tracking",
+                                int_val,
+                                operand_2
+                            );
+                            return Some((*operand_1, int_val, false));
+                        }
+                    }
+                }
+            }
+            UnifiedInstruction::JStrictNotEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JStrictNotEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            } => {
+                // Get the instruction location
+                let pc = block.start_pc + idx;
+
+                // Look up SSA values for both operands
+                let use1 = RegisterUse {
+                    register: *operand_1,
+                    block_id: node,
+                    instruction_idx: pc,
+                };
+                let use2 = RegisterUse {
+                    register: *operand_2,
+                    block_id: node,
+                    instruction_idx: pc,
+                };
+
+                // Try to find SSA values for these registers at this point
+                let ssa_value1 = ssa_analysis
+                    .use_def_chains
+                    .get(&use1)
+                    .and_then(|def| ssa_analysis.ssa_values.get(def));
+                let ssa_value2 = ssa_analysis
+                    .use_def_chains
+                    .get(&use2)
+                    .and_then(|def| ssa_analysis.ssa_values.get(def));
+
+                // Track values for both operands
+                if let Some(ssa1) = ssa_value1 {
+                    let tracked1 = value_tracker.get_value(ssa1);
+                    if let TrackedValue::Constant(const_val) = tracked1 {
+                        if let Some(int_val) = const_val.as_i32() {
+                            return Some((*operand_2, int_val, true));
+                        }
+                    }
+                }
+
+                if let Some(ssa2) = ssa_value2 {
+                    let tracked2 = value_tracker.get_value(ssa2);
+                    if let TrackedValue::Constant(const_val) = tracked2 {
+                        if let Some(int_val) = const_val.as_i32() {
+                            return Some((*operand_1, int_val, true));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// Legacy version of extract_comparison_info without ValueTracker
+fn extract_comparison_info_legacy(
+    block: &Block,
+    graph: &DiGraph<Block, EdgeKind>,
+    node: NodeIndex,
 ) -> Option<(u8, i32, bool)> {
     // Look for JStrictEqual or JStrictNotEqual with a constant value
     for (idx, instr) in block.instructions().iter().enumerate() {
@@ -261,15 +481,6 @@ pub fn extract_comparison_info(
                 {
                     return Some((*operand_2, const_val, false));
                 }
-
-                // If not, check if this looks like a switch pattern where one register
-                // is being compared against different values across blocks
-                // For now, we'll assume operand_1 is the constant and operand_2 is the variable
-                // This is a heuristic that might need refinement
-
-                // Try to extract the constant value from the register
-                // This requires looking at the overall pattern
-                // For now, return None to indicate we need a different approach
             }
             UnifiedInstruction::JStrictNotEqual {
                 operand_1,

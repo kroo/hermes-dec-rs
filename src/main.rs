@@ -67,6 +67,10 @@ enum Commands {
         /// HBC version (auto-detected if not specified)
         #[arg(long)]
         hbc_version: Option<u32>,
+
+        /// Skip validation of block processing
+        #[arg(long)]
+        skip_validation: bool,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -127,9 +131,16 @@ fn main() -> Result<()> {
             function,
             output,
             comments,
+            skip_validation,
             ..
-        } => cli::decompile::decompile(&input, function, output.as_ref().map(|v| &**v), &comments)
-            .map_err(|e| miette!("{}", e)),
+        } => cli::decompile::decompile(
+            &input,
+            function,
+            output.as_ref().map(|v| &**v),
+            &comments,
+            skip_validation,
+        )
+        .map_err(|e| miette!("{}", e)),
         Commands::Generate { force: _ } => {
             cli::generate::generate_instructions().map_err(|e| miette!("{}", e))
         }

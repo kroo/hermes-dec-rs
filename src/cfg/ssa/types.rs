@@ -205,22 +205,11 @@ pub struct SSAAnalysis {
     pub phi_functions: HashMap<NodeIndex, Vec<PhiFunction>>,
     pub ssa_values: HashMap<RegisterDef, SSAValue>,
 
-    // NEW: Environment analysis
     pub environment_info: EnvironmentInfo,
-
-    // NEW: Captured variable accesses
     pub captured_variable_accesses: Vec<CapturedVarAccess>,
-
-    // NEW: Variables that need to be in scope for closures
     pub required_closure_variables: HashSet<String>,
-
-    // NEW: Closure variable declarations
     pub closure_variable_declarations: Vec<ClosureVarDecl>,
-
-    // NEW: Variable analysis (coalescing, scopes, lookups)
     pub variable_analysis: Option<super::variable_analysis::VariableAnalysis>,
-
-    // NEW: Phi variable declarations needed at specific blocks
     pub phi_variable_declarations: HashMap<NodeIndex, Vec<PhiRegisterDeclaration>>,
 }
 

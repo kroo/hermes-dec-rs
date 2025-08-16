@@ -36,18 +36,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut cfg = Cfg::new(&hbc_file, func_idx);
         cfg.build();
 
-        // Analyze switch regions
-        if let Some(postdom_analysis) = cfg.builder().analyze_post_dominators(cfg.graph()) {
-            let switch_regions =
-                hermes_dec_rs::cfg::analysis::find_switch_regions(cfg.graph(), &postdom_analysis);
+        // Try SSA construction first (required for switch analysis)
+        match hermes_dec_rs::cfg::ssa::construct_ssa(&cfg, func_idx) {
+            Ok(ssa_analysis) => {
+                println!("SSA analysis successful");
 
-            if !switch_regions.regions.is_empty() {
-                println!("Found {} switch regions", switch_regions.regions.len());
-
-                // Try SSA construction
-                match hermes_dec_rs::cfg::ssa::construct_ssa(&cfg, func_idx) {
-                    Ok(ssa_analysis) => {
-                        println!("SSA analysis successful");
+                // Analyze switch regions with SSA
+                if let Some(switch_regions) = cfg.analyze_switch_regions(&ssa_analysis) {
+                    if !switch_regions.regions.is_empty() {
+                        println!("Found {} switch regions", switch_regions.regions.len());
 
                         // Test sparse switch detection on each region
                         for (i, region) in switch_regions.regions.iter().enumerate() {
@@ -61,106 +58,123 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let analyzer =
                                 hermes_dec_rs::cfg::switch_analysis::SparseSwitchAnalyzer::new();
 
-                            // Try to detect sparse switch pattern
-                            match analyzer.detect_switch_pattern(
-                                region.dispatch,
-                                &cfg,
-                                &ssa_analysis,
-                                &postdom_analysis,
-                            ) {
-                                Some(switch_info) => {
-                                    println!("    ✅ Sparse switch pattern detected!");
-                                    println!("    Discriminator: r{}", switch_info.discriminator);
-                                    println!("    Cases detected: {}", switch_info.cases.len());
-
-                                    for (j, case) in switch_info.cases.iter().enumerate() {
-                                        println!("\n      Case {}:", j);
-                                        println!("        Keys: {:?}", case.keys);
-                                        println!("        Target: Block {:?}", case.target_block);
+                            // Get post-dominator analysis
+                            if let Some(postdom_analysis) = cfg.analyze_post_dominators() {
+                                // Try to detect sparse switch pattern
+                                match analyzer.detect_switch_pattern(
+                                    region.dispatch,
+                                    &cfg,
+                                    &ssa_analysis,
+                                    &postdom_analysis,
+                                ) {
+                                    Some(switch_info) => {
+                                        println!("    ✅ Sparse switch pattern detected!");
                                         println!(
-                                            "        Always terminates: {}",
-                                            case.always_terminates
+                                            "    Discriminator: r{}",
+                                            switch_info.discriminator
                                         );
-                                        // Source PC was removed from CaseInfo
-                                        if !case.setup.is_empty() {
+                                        println!("    Cases detected: {}", switch_info.cases.len());
+
+                                        for (j, case) in switch_info.cases.iter().enumerate() {
+                                            println!("\n      Case {}:", j);
+                                            println!("        Keys: {:?}", case.keys);
                                             println!(
-                                                "        Setup instructions: {}",
-                                                case.setup.len()
+                                                "        Target: Block {:?}",
+                                                case.target_block
                                             );
-                                            for (k, setup) in case.setup.iter().enumerate() {
+                                            println!(
+                                                "        Always terminates: {}",
+                                                case.always_terminates
+                                            );
+                                            // Source PC was removed from CaseInfo
+                                            if !case.setup.is_empty() {
                                                 println!(
-                                                    "          {}: {} = {:?}",
-                                                    k,
-                                                    setup.ssa_value.name(),
-                                                    setup.value
+                                                    "        Setup instructions: {}",
+                                                    case.setup.len()
+                                                );
+                                                for (k, setup) in case.setup.iter().enumerate() {
+                                                    println!(
+                                                        "          {}: {} = {:?}",
+                                                        k,
+                                                        setup.ssa_value.name(),
+                                                        setup.value
+                                                    );
+                                                }
+                                            }
+                                        }
+
+                                        if let Some(default) = &switch_info.default_case {
+                                            println!("\n    Default case:");
+                                            println!(
+                                                "      Target: Block {:?}",
+                                                default.target_block
+                                            );
+                                            if !default.setup.is_empty() {
+                                                println!(
+                                                    "      Setup instructions: {}",
+                                                    default.setup.len()
+                                                );
+                                            }
+                                        }
+
+                                        if let Some(shared_tail) = &switch_info.shared_tail {
+                                            println!("\n    Shared tail:");
+                                            println!("      Block: {:?}", shared_tail.block_id);
+                                            if !shared_tail.phi_nodes.is_empty() {
+                                                println!(
+                                                    "      PHI nodes: {:?}",
+                                                    shared_tail.phi_nodes
+                                                );
+                                            }
+                                        }
+
+                                        // Try to convert to AST to see the actual switch statement
+                                        println!("\n    Attempting AST conversion...");
+
+                                        // We need a mock block converter for this test
+                                        // For now, just indicate success
+                                        println!("    AST conversion would generate switch statement with {} cases", 
+                                        switch_info.cases.len());
+                                    }
+                                    None => {
+                                        println!("    ❌ No sparse switch pattern detected (likely dense switch)");
+
+                                        // Let's see what's in the dispatch block to understand why
+                                        if let Some(dispatch_block) =
+                                            cfg.graph().node_weight(region.dispatch)
+                                        {
+                                            println!("    Dispatch block instructions:");
+                                            for (idx, instr) in dispatch_block
+                                                .instructions()
+                                                .iter()
+                                                .take(5)
+                                                .enumerate()
+                                            {
+                                                println!("      {}: {:?}", idx, instr.instruction);
+                                            }
+                                            if dispatch_block.instructions().len() > 5 {
+                                                println!(
+                                                    "      ... and {} more",
+                                                    dispatch_block.instructions().len() - 5
                                                 );
                                             }
                                         }
                                     }
-
-                                    if let Some(default) = &switch_info.default_case {
-                                        println!("\n    Default case:");
-                                        println!("      Target: Block {:?}", default.target_block);
-                                        if !default.setup.is_empty() {
-                                            println!(
-                                                "      Setup instructions: {}",
-                                                default.setup.len()
-                                            );
-                                        }
-                                    }
-
-                                    if let Some(shared_tail) = &switch_info.shared_tail {
-                                        println!("\n    Shared tail:");
-                                        println!("      Block: {:?}", shared_tail.block_id);
-                                        if !shared_tail.phi_nodes.is_empty() {
-                                            println!(
-                                                "      PHI nodes: {:?}",
-                                                shared_tail.phi_nodes
-                                            );
-                                        }
-                                    }
-
-                                    // Try to convert to AST to see the actual switch statement
-                                    println!("\n    Attempting AST conversion...");
-
-                                    // We need a mock block converter for this test
-                                    // For now, just indicate success
-                                    println!("    AST conversion would generate switch statement with {} cases", 
-                                        switch_info.cases.len());
                                 }
-                                None => {
-                                    println!("    ❌ No sparse switch pattern detected (likely dense switch)");
-
-                                    // Let's see what's in the dispatch block to understand why
-                                    if let Some(dispatch_block) =
-                                        cfg.graph().node_weight(region.dispatch)
-                                    {
-                                        println!("    Dispatch block instructions:");
-                                        for (idx, instr) in
-                                            dispatch_block.instructions().iter().take(5).enumerate()
-                                        {
-                                            println!("      {}: {:?}", idx, instr.instruction);
-                                        }
-                                        if dispatch_block.instructions().len() > 5 {
-                                            println!(
-                                                "      ... and {} more",
-                                                dispatch_block.instructions().len() - 5
-                                            );
-                                        }
-                                    }
-                                }
+                            } else {
+                                println!("    Post-dominator analysis failed");
                             }
                         }
+                    } else {
+                        println!("No switch regions found in this function");
                     }
-                    Err(e) => {
-                        println!("SSA construction failed: {}", e);
-                    }
+                } else {
+                    println!("Switch region analysis failed");
                 }
-            } else {
-                println!("No switch regions found in this function");
             }
-        } else {
-            println!("Post-dominator analysis failed");
+            Err(e) => {
+                println!("SSA construction failed: {}", e);
+            }
         }
     }
 

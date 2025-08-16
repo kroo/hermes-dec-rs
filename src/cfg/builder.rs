@@ -1580,17 +1580,16 @@ impl<'a> CfgBuilder<'a> {
     }
 
     /// Analyze switch regions in the CFG
+    /// Note: This always returns an empty analysis because switch detection requires SSA analysis
+    /// which is not available during CFG building. Use Cfg::analyze_switch_regions() instead.
     pub fn analyze_switch_regions(
         &self,
-        graph: &DiGraph<Block, EdgeKind>,
+        _graph: &DiGraph<Block, EdgeKind>,
     ) -> crate::cfg::analysis::SwitchAnalysis {
-        if let Some(post_doms) = self.analyze_post_dominators(graph) {
-            crate::cfg::analysis::find_switch_regions(graph, &post_doms)
-        } else {
-            crate::cfg::analysis::SwitchAnalysis {
-                regions: Vec::new(),
-                node_to_regions: HashMap::new(),
-            }
+        // Switch detection requires SSA analysis, so we return empty analysis here
+        crate::cfg::analysis::SwitchAnalysis {
+            regions: Vec::new(),
+            node_to_regions: HashMap::new(),
         }
     }
 

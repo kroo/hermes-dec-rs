@@ -74,7 +74,11 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
     }
 
     // Analyze switch patterns
-    let switch_analysis = cfg.analyze_switch_regions();
+    let switch_analysis = if let Some(fn_ssa) = &fn_ssa {
+        cfg.analyze_switch_regions(fn_ssa)
+    } else {
+        None
+    };
     if let Some(ref analysis) = switch_analysis {
         println!("\nSwitch Analysis:");
         println!("  Total switch regions: {}", analysis.regions.len());
@@ -784,11 +788,8 @@ fn print_switch_region(
 }
 
 /// Format a ConstantValue for display
-fn format_constant_value(
-    value: &crate::cfg::switch_analysis::ConstantValue,
-    _hbc_file: &HbcFile,
-) -> String {
-    use crate::cfg::switch_analysis::ConstantValue;
+fn format_constant_value(value: &crate::analysis::ConstantValue, _hbc_file: &HbcFile) -> String {
+    use crate::analysis::ConstantValue;
 
     match value {
         ConstantValue::Number(n) => format!("Number({})", n),
