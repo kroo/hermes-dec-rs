@@ -2079,6 +2079,19 @@ impl<'a> SwitchConverter<'a> {
         // Mark the const load as rendered if we found one
         if let Some(idx) = const_load_idx {
             block_converter.mark_instruction_rendered(&dispatch_instructions[idx]);
+            
+            // Also mark its SSA value as eliminated
+            if let Some(ssa_analysis) = block_converter.ssa_analysis() {
+                let instr = &dispatch_instructions[idx];
+                let reg_def = crate::cfg::ssa::RegisterDef {
+                    register: const_reg,
+                    block_id: region.dispatch,
+                    instruction_idx: instr.instruction_index,
+                };
+                if let Some(ssa_value) = ssa_analysis.ssa_values.get(&reg_def) {
+                    block_converter.mark_ssa_value_eliminated(ssa_value.clone());
+                }
+            }
         }
 
         // Also mark any dispatch block instructions that are setup instructions for case 0
@@ -2090,6 +2103,9 @@ impl<'a> SwitchConverter<'a> {
                     for (i, instr) in dispatch_instructions.iter().enumerate() {
                         if instr.offset == setup_instr.instruction.offset {
                             block_converter.mark_instruction_rendered(&dispatch_instructions[i]);
+                            
+                            // Also mark its SSA value as eliminated
+                            block_converter.mark_ssa_value_eliminated(setup_instr.ssa_value.clone());
                             break;
                         }
                     }
@@ -2127,6 +2143,35 @@ impl<'a> SwitchConverter<'a> {
                 let block = &cfg.graph()[current];
                 for instruction in block.instructions() {
                     block_converter.mark_instruction_rendered(instruction);
+                    
+                    // Also mark SSA values from const loads as eliminated
+                    if let Some(ssa_analysis) = block_converter.ssa_analysis() {
+                        let usage = crate::generated::instruction_analysis::analyze_register_usage(&instruction.instruction);
+                        if let Some(target_reg) = usage.target {
+                            // Check if this is a const load instruction
+                            if matches!(instruction.instruction, 
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstZero { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstUInt8 { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstInt { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstDouble { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstString { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstStringLongIndex { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstTrue { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstFalse { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstNull { .. } |
+                                crate::generated::unified_instructions::UnifiedInstruction::LoadConstUndefined { .. }
+                            ) {
+                                let reg_def = crate::cfg::ssa::RegisterDef {
+                                    register: target_reg,
+                                    block_id: current,
+                                    instruction_idx: instruction.instruction_index,
+                                };
+                                if let Some(ssa_value) = ssa_analysis.ssa_values.get(&reg_def) {
+                                    block_converter.mark_ssa_value_eliminated(ssa_value.clone());
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

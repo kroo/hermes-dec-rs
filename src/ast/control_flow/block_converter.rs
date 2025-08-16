@@ -1394,6 +1394,7 @@ impl<'a> BlockToStatementConverter<'a> {
 
     /// Mark an SSA value as eliminated
     pub fn mark_ssa_value_eliminated(&mut self, ssa_value: SSAValue) {
+        log::debug!("Marking SSA value as eliminated: {:?}", ssa_value);
         self.eliminated_ssa_values.insert(ssa_value);
     }
 
@@ -1426,6 +1427,21 @@ impl<'a> BlockToStatementConverter<'a> {
                         && var_ssa_values
                             .iter()
                             .all(|ssa| self.eliminated_ssa_values.contains(ssa));
+
+                    if all_eliminated {
+                        log::debug!(
+                            "Variable {} has all SSA values eliminated: {:?}",
+                            var_name,
+                            var_ssa_values
+                        );
+                    } else {
+                        log::debug!(
+                            "Variable {} has non-eliminated SSA values: {:?} (eliminated: {:?})",
+                            var_name,
+                            var_ssa_values.iter().filter(|ssa| !self.eliminated_ssa_values.contains(ssa)).collect::<Vec<_>>(),
+                            var_ssa_values.iter().filter(|ssa| self.eliminated_ssa_values.contains(ssa)).collect::<Vec<_>>()
+                        );
+                    }
 
                     // Keep the variable if at least one SSA value is not eliminated
                     // OR if there are no SSA values for this variable (shouldn't happen)
