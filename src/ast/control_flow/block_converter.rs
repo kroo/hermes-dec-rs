@@ -1438,8 +1438,14 @@ impl<'a> BlockToStatementConverter<'a> {
                         log::debug!(
                             "Variable {} has non-eliminated SSA values: {:?} (eliminated: {:?})",
                             var_name,
-                            var_ssa_values.iter().filter(|ssa| !self.eliminated_ssa_values.contains(ssa)).collect::<Vec<_>>(),
-                            var_ssa_values.iter().filter(|ssa| self.eliminated_ssa_values.contains(ssa)).collect::<Vec<_>>()
+                            var_ssa_values
+                                .iter()
+                                .filter(|ssa| !self.eliminated_ssa_values.contains(ssa))
+                                .collect::<Vec<_>>(),
+                            var_ssa_values
+                                .iter()
+                                .filter(|ssa| self.eliminated_ssa_values.contains(ssa))
+                                .collect::<Vec<_>>()
                         );
                     }
 

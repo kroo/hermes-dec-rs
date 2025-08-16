@@ -554,7 +554,10 @@ impl<'a> SwitchConverter<'a> {
                                                     break;
                                                 }
                                                 Err(e) => {
-                                                    log::error!("Failed to convert nested switch: {:?}", e);
+                                                    log::error!(
+                                                        "Failed to convert nested switch: {:?}",
+                                                        e
+                                                    );
                                                     // Fall back to normal conversion
                                                 }
                                             }
@@ -1630,8 +1633,8 @@ impl<'a> SwitchConverter<'a> {
                                             break;
                                         }
                                         Err(e) => {
-                                                log::error!("Failed to convert nested switch in default case: {:?}", e);
-                                            }
+                                            log::error!("Failed to convert nested switch in default case: {:?}", e);
+                                        }
                                     }
                                 }
                             }
@@ -1708,8 +1711,11 @@ impl<'a> SwitchConverter<'a> {
                                         break;
                                     }
                                     Err(e) => {
-                                                log::error!("Failed to convert nested switch in default case: {:?}", e);
-                                            }
+                                        log::error!(
+                                            "Failed to convert nested switch in default case: {:?}",
+                                            e
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -2079,7 +2085,7 @@ impl<'a> SwitchConverter<'a> {
         // Mark the const load as rendered if we found one
         if let Some(idx) = const_load_idx {
             block_converter.mark_instruction_rendered(&dispatch_instructions[idx]);
-            
+
             // Also mark its SSA value as eliminated
             if let Some(ssa_analysis) = block_converter.ssa_analysis() {
                 let instr = &dispatch_instructions[idx];
@@ -2103,9 +2109,10 @@ impl<'a> SwitchConverter<'a> {
                     for (i, instr) in dispatch_instructions.iter().enumerate() {
                         if instr.offset == setup_instr.instruction.offset {
                             block_converter.mark_instruction_rendered(&dispatch_instructions[i]);
-                            
+
                             // Also mark its SSA value as eliminated
-                            block_converter.mark_ssa_value_eliminated(setup_instr.ssa_value.clone());
+                            block_converter
+                                .mark_ssa_value_eliminated(setup_instr.ssa_value.clone());
                             break;
                         }
                     }
@@ -2143,13 +2150,15 @@ impl<'a> SwitchConverter<'a> {
                 let block = &cfg.graph()[current];
                 for instruction in block.instructions() {
                     block_converter.mark_instruction_rendered(instruction);
-                    
+
                     // Also mark SSA values from const loads as eliminated
                     if let Some(ssa_analysis) = block_converter.ssa_analysis() {
-                        let usage = crate::generated::instruction_analysis::analyze_register_usage(&instruction.instruction);
+                        let usage = crate::generated::instruction_analysis::analyze_register_usage(
+                            &instruction.instruction,
+                        );
                         if let Some(target_reg) = usage.target {
                             // Check if this is a const load instruction
-                            if matches!(instruction.instruction, 
+                            if matches!(instruction.instruction,
                                 crate::generated::unified_instructions::UnifiedInstruction::LoadConstZero { .. } |
                                 crate::generated::unified_instructions::UnifiedInstruction::LoadConstUInt8 { .. } |
                                 crate::generated::unified_instructions::UnifiedInstruction::LoadConstInt { .. } |

@@ -14,10 +14,46 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
-use crate::analysis::value_tracker::{TrackedValue, ValueTracker};
+use super::switch_info::CaseKey;
+use crate::analysis::value_tracker::{ConstantValue, TrackedValue, ValueTracker};
 use crate::cfg::analysis::{PostDominatorAnalysis, SwitchCase, SwitchRegion};
 use crate::cfg::ssa::RegisterUse;
 use crate::hbc::HbcFile;
+use ordered_float::OrderedFloat;
+
+/// Represents a comparison value that can be of various types
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ComparisonValue {
+    Number(ordered_float::OrderedFloat<f64>),
+    String(String),
+    Boolean(bool),
+    Null,
+    Undefined,
+}
+
+impl ComparisonValue {
+    /// Convert to a CaseKey for switch analysis
+    pub fn to_case_key(&self) -> CaseKey {
+        match self {
+            ComparisonValue::Number(n) => CaseKey::Number(*n),
+            ComparisonValue::String(s) => CaseKey::String(s.clone()),
+            ComparisonValue::Boolean(b) => CaseKey::Boolean(*b),
+            ComparisonValue::Null => CaseKey::Null,
+            ComparisonValue::Undefined => CaseKey::Undefined,
+        }
+    }
+
+    /// Create from a ConstantValue
+    pub fn from_constant(value: &ConstantValue) -> Self {
+        match value {
+            ConstantValue::Number(n) => ComparisonValue::Number(OrderedFloat(*n)),
+            ConstantValue::String(s) => ComparisonValue::String(s.clone()),
+            ConstantValue::Boolean(b) => ComparisonValue::Boolean(*b),
+            ConstantValue::Null => ComparisonValue::Null,
+            ConstantValue::Undefined => ComparisonValue::Undefined,
+        }
+    }
+}
 
 /// Information about a sparse switch candidate
 #[derive(Debug, Clone)]
@@ -38,7 +74,7 @@ pub struct ComparisonBlock {
     /// The block containing the comparison
     pub block_index: NodeIndex,
     /// The value being compared against
-    pub compared_value: i32,
+    pub compared_value: ComparisonValue,
     /// The target block if comparison succeeds
     pub target_block: NodeIndex,
     /// The next comparison block if this fails
@@ -153,7 +189,7 @@ fn detect_sparse_switch_chain(
     // Initialize tracking
     let mut comparison_blocks = Vec::new();
     let mut current_node = start_node;
-    let mut seen_values = HashSet::new();
+    let mut seen_values = HashSet::<ComparisonValue>::new();
     let mut chain_blocks = Vec::new(); // Track all blocks in this chain
 
     // Follow the chain of comparisons
@@ -186,7 +222,7 @@ fn detect_sparse_switch_chain(
         }
 
         // Check for duplicate values
-        if !seen_values.insert(value) {
+        if !seen_values.insert(value.clone()) {
             break;
         }
 
@@ -286,7 +322,7 @@ pub fn extract_comparison_info(
     >,
     cfg: &crate::cfg::Cfg,
     ssa_analysis: &crate::cfg::ssa::SSAAnalysis,
-) -> Option<(u8, i32, bool)> {
+) -> Option<(u8, ComparisonValue, bool)> {
     log::trace!("extract_comparison_info for block {:?}", node);
 
     // Always use ValueTracker since all parameters are now required
@@ -320,7 +356,7 @@ fn extract_comparison_info_with_value_tracker(
     hbc_file: &HbcFile,
     cfg: &crate::cfg::Cfg,
     ssa_analysis: &crate::cfg::ssa::SSAAnalysis,
-) -> Option<(u8, i32, bool)> {
+) -> Option<(u8, ComparisonValue, bool)> {
     let value_tracker = ValueTracker::new(cfg, ssa_analysis, hbc_file);
 
     // Look for JStrictEqual or JStrictNotEqual instructions
@@ -365,28 +401,26 @@ fn extract_comparison_info_with_value_tracker(
                 if let Some(ssa1) = ssa_value1 {
                     let tracked1 = value_tracker.get_value(ssa1);
                     if let TrackedValue::Constant(const_val) = tracked1 {
-                        if let Some(int_val) = const_val.as_i32() {
-                            log::trace!(
-                                "  Found constant {} in r{} via SSA tracking",
-                                int_val,
-                                operand_1
-                            );
-                            return Some((*operand_2, int_val, false));
-                        }
+                        let comp_val = ComparisonValue::from_constant(&const_val);
+                        log::trace!(
+                            "  Found constant {:?} in r{} via SSA tracking",
+                            comp_val,
+                            operand_1
+                        );
+                        return Some((*operand_2, comp_val, false));
                     }
                 }
 
                 if let Some(ssa2) = ssa_value2 {
                     let tracked2 = value_tracker.get_value(ssa2);
                     if let TrackedValue::Constant(const_val) = tracked2 {
-                        if let Some(int_val) = const_val.as_i32() {
-                            log::trace!(
-                                "  Found constant {} in r{} via SSA tracking",
-                                int_val,
-                                operand_2
-                            );
-                            return Some((*operand_1, int_val, false));
-                        }
+                        let comp_val = ComparisonValue::from_constant(&const_val);
+                        log::trace!(
+                            "  Found constant {:?} in r{} via SSA tracking",
+                            comp_val,
+                            operand_2
+                        );
+                        return Some((*operand_1, comp_val, false));
                     }
                 }
             }
@@ -429,18 +463,16 @@ fn extract_comparison_info_with_value_tracker(
                 if let Some(ssa1) = ssa_value1 {
                     let tracked1 = value_tracker.get_value(ssa1);
                     if let TrackedValue::Constant(const_val) = tracked1 {
-                        if let Some(int_val) = const_val.as_i32() {
-                            return Some((*operand_2, int_val, true));
-                        }
+                        let comp_val = ComparisonValue::from_constant(&const_val);
+                        return Some((*operand_2, comp_val, true));
                     }
                 }
 
                 if let Some(ssa2) = ssa_value2 {
                     let tracked2 = value_tracker.get_value(ssa2);
                     if let TrackedValue::Constant(const_val) = tracked2 {
-                        if let Some(int_val) = const_val.as_i32() {
-                            return Some((*operand_1, int_val, true));
-                        }
+                        let comp_val = ComparisonValue::from_constant(&const_val);
+                        return Some((*operand_1, comp_val, true));
                     }
                 }
             }
@@ -456,7 +488,7 @@ fn extract_comparison_info_legacy(
     block: &Block,
     graph: &DiGraph<Block, EdgeKind>,
     node: NodeIndex,
-) -> Option<(u8, i32, bool)> {
+) -> Option<(u8, ComparisonValue, bool)> {
     // Look for JStrictEqual or JStrictNotEqual with a constant value
     for (idx, instr) in block.instructions().iter().enumerate() {
         match &instr.instruction {
@@ -474,12 +506,20 @@ fn extract_comparison_info_legacy(
                 if let Some(const_val) =
                     find_constant_load_before(block, idx, *operand_2, graph, node)
                 {
-                    return Some((*operand_1, const_val, false));
+                    return Some((
+                        *operand_1,
+                        ComparisonValue::Number(OrderedFloat(const_val as f64)),
+                        false,
+                    ));
                 }
                 if let Some(const_val) =
                     find_constant_load_before(block, idx, *operand_1, graph, node)
                 {
-                    return Some((*operand_2, const_val, false));
+                    return Some((
+                        *operand_2,
+                        ComparisonValue::Number(OrderedFloat(const_val as f64)),
+                        false,
+                    ));
                 }
             }
             UnifiedInstruction::JStrictNotEqual {
@@ -496,13 +536,21 @@ fn extract_comparison_info_legacy(
                 if let Some(const_val) =
                     find_constant_load_before(block, idx, *operand_2, graph, node)
                 {
-                    return Some((*operand_1, const_val, true));
+                    return Some((
+                        *operand_1,
+                        ComparisonValue::Number(OrderedFloat(const_val as f64)),
+                        true,
+                    ));
                 }
                 // Try the other operand
                 if let Some(const_val) =
                     find_constant_load_before(block, idx, *operand_1, graph, node)
                 {
-                    return Some((*operand_2, const_val, true));
+                    return Some((
+                        *operand_2,
+                        ComparisonValue::Number(OrderedFloat(const_val as f64)),
+                        true,
+                    ));
                 }
             }
             _ => {}
