@@ -556,9 +556,9 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             // 1. Getting the HBC file reference
             // 2. Creating a new decompiler instance
             // 3. Recursively decompiling the nested function
-            // For now, still use placeholder
-            let body_comment = "/* Nested function - decompilation not yet implemented */";
-            let comment_atom = self.ast_builder.allocator.alloc_str(body_comment);
+            // For now, show that nested decompilation is enabled
+            let body_comment = format!("/* Nested function {} - decompilation enabled but not yet implemented */", func_idx);
+            let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
             let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
             let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
 
@@ -640,7 +640,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             String::new()
         };
 
-        let body_comment = "/* Nested async function - body not yet decompiled */";
+        let body_comment = if self.decompile_nested {
+            format!("/* Nested async function {} - decompilation enabled but not yet implemented */", func_idx)
+        } else {
+            "/* Nested async function - body not yet decompiled */".to_string()
+        };
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
@@ -923,7 +927,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             String::new()
         };
 
-        let body_comment = "/* Nested async function - body not yet decompiled */";
+        let body_comment = if self.decompile_nested {
+            format!("/* Nested async function {} - decompilation enabled but not yet implemented */", func_idx)
+        } else {
+            "/* Nested async function - body not yet decompiled */".to_string()
+        };
         let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
         let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
         let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
