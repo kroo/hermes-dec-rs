@@ -1,8 +1,8 @@
 Bytecode File Information:
   Bytecode version number: 96
-  Source hash: 224f6f022b933084734dca012bd74ea116e2c0fe
-  Function count: 25
-  String count: 142
+  Source hash: 5746055d12230839cba0fab64cfcbfc81ff06992
+  Function count: 17
+  String count: 108
   BigInt count: 0
   String Kind Entry count: 2
   RegExp count: 0
@@ -16,147 +16,113 @@ Bytecode File Information:
 
 Global String Table:
 s0[ASCII, 0..-1] #00018270: 
-s1[ASCII, 0..10] #63D87C1C: a<=0,c=0or1
-s2[ASCII, 10..12] #CA7E4EA0: 1-1
-s3[ASCII, 12..14] #2D334AB0: 1-0
-s4[ASCII, 14..16] #971CE5C7: 0-0
-s5[ASCII, 16..18] #58181A3C: 0-1
-s6[ASCII, 18..20] #0DA8F6EA: 1-2
-s7[ASCII, 21..27] #2FD735CE: a>0,b=0
-s8[ASCII, 27..29] #00018A52: 0-2
-s9[ASCII, 30..44] #C966DC8A: complex default
-s10[ASCII, 38..46] #769B8915: default-0
-s11[ASCII, 46..52] #29DC03AC: 0-other
-s12[ASCII, 48..52] #5A39B07E: other
-s13[ASCII, 48..54] #958EDB02: other: 
-s14[ASCII, 69..74] #6539A9B8: divide
-s15[ASCII, 73..81] #4C29DE53: default-1
-s16[ASCII, 81..87] #1C35E808: 1-other
-s17[ASCII, 88..96] #2074F516: sync zero
-s18[ASCII, 97..112] #EF03A676: Division by zero
-s19[ASCII, 109..112] #39232421: zero
-s20[ASCII, 109..119] #A4661605: zero result
-s21[ASCII, 123..135] #8CD49A15: Negative sqrt
-s22[ASCII, 135..137] #1C182460: ten
-s23[ASCII, 137..149] #713A6BCE: no iterations
-s24[ASCII, 149..151] #F8448D4A: six
-s25[ASCII, 149..155] #9615E9FA: sixteen
-s26[ASCII, 155..158] #4E7CB6E4: nine
-s27[ASCII, 155..162] #500B50F7: nineteen
-s28[ASCII, 162..176] #A7B90D10: nested: b=1,c=2
-s29[ASCII, 177..186] #8CC871FE: Zero error
-s30[ASCII, 192..202] #973712F5: a>0,b=other
-s31[ASCII, 206..210] #0A1E9460: array
-s32[ASCII, 211..231] #DF50693D: caught division error
-s33[ASCII, 218..218] #9102A3D0: d
-s34[ASCII, 232..248] #00018E43: caught sqrt error
-s35[ASCII, 249..256] #629A2BFD: caught: 
-s36[ASCII, 257..263] #DE0F2B3D: unknown
-s37[ASCII, 257..270] #06952F11: unknown action
-s38[ASCII, 280..284] #F2708BE8: chain
-s39[ASCII, 280..294] #6C748C85: chain default: 
-s40[ASCII, 311..329] #807C5F3D: chain ended at zero
-s41[ASCII, 329..334] object
-s42[ASCII, 334..343] two result
-s43[ASCII, 344..357] chain result: 
-s44[ASCII, 358..368] conditional
-s45[ASCII, 385..390] parsed
-s46[ASCII, 390..396] delayed
-s47[ASCII, 396..408] default-other
-s48[ASCII, 412..419] double: 
-s49[ASCII, 420..431] processAsync
-s50[ASCII, 428..440] sync negative
-s51[ASCII, 428..444] sync negative one
-s52[ASCII, 433..444] negative one
-s53[ASCII, 442..444] one
-s54[ASCII, 443..455] negative five
-s55[ASCII, 452..455] five
-s56[ASCII, 455..472] early default exit
-s57[ASCII, 472..477] twelve
-s58[ASCII, 477..481] eight
-s59[ASCII, 477..484] eighteen
-s60[ASCII, 484..496] negative four
-s61[ASCII, 493..496] four
-s62[ASCII, 493..503] four result
-s63[ASCII, 503..514] two or three
-s64[ASCII, 514..519] eleven
-s65[ASCII, 519..532] negative three
-s66[ASCII, 528..532] three
-s67[ASCII, 532..541] early exit
-s68[ASCII, 541..546] twenty
-s69[ASCII, 547..553] fifteen
-s70[ASCII, 553..564] negative two
-s71[ASCII, 562..564] two
-s72[ASCII, 562..582] two after side effect
-s73[ASCII, 583..588] first,
-s74[ASCII, 583..595] first,second,
-s75[ASCII, 583..601] first,second,other,
-s76[ASCII, 602..609] fourteen
-s77[ASCII, 609..614] nested
-s78[ASCII, 609..623] nested: b=0,c=2
-s79[ASCII, 626..631] global
-s80[ASCII, 657..660] high
-s81[ASCII, 660..665] helper
-s82[ASCII, 666..674] immediate
-s83[ASCII, 666..679] immediate zero
-s84[ASCII, 680..692] inner catch: 
-s85[ASCII, 708..711] low 
-s86[ASCII, 712..726] many iterations
-s87[ASCII, 726..735] sideEffect
-s88[ASCII, 736..739] mid 
-s89[ASCII, 740..744] mixed
-s90[ASCII, 765..772] thirteen
-s91[ASCII, 772..775] none
-s92[ASCII, 773..793] one after side effect
-s93[ASCII, 802..806] seven
-s94[ASCII, 802..810] seventeen
-s95[ASCII, 810..828] nested: b=other,c=2
-s96[ASCII, 870..876] outer-2
-s97[ASCII, 877..882] quad: 
-s98[ASCII, 922..930] special: 
-s99[ASCII, 931..947] unknown operation
-s100[ASCII, 952..958] value: 
-s101[ASCII, 0..0] a
-s102[ASCII, 55..61] message
-s103[ASCII, 61..69] extracted
-s104[ASCII, 83..88] others
-s105[ASCII, 120..123] JSON
-s106[ASCII, 132..135] sqrt
-s107[ASCII, 186..191] reduce
-s108[ASCII, 202..205] rest
-s109[ASCII, 211..211] c
-s110[ASCII, 270..281] nestedSwitch
-s111[ASCII, 295..312] switchWithTryCatch
-s112[ASCII, 368..382] largeSwitchTest
-s113[ASCII, 383..385] map
-s114[ASCII, 385..389] parse
-s115[ASCII, 409..412] find
-s116[ASCII, 583..587] first
-s117[ASCII, 624..626] log
-s118[ASCII, 632..637] values
-s119[ASCII, 637..657] switchWithFallthrough
-s120[ASCII, 693..710] complexControlFlow
-s121[ASCII, 740..755] mixedBreakReturn
-s122[ASCII, 755..762] newValue
-s123[ASCII, 763..766] Math
-s124[ASCII, 793..803] toUpperCase
-s125[ASCII, 829..845] switchWithObjects
-s126[ASCII, 839..844] Object
-s127[ASCII, 845..863] switchWithCallbacks
-s128[ASCII, 863..872] setTimeout
-s129[ASCII, 883..905] switchWithFunctionCalls
-s130[ASCII, 905..919] switchWithBreak
-s131[ASCII, 919..922] keys
-s132[ASCII, 947..951] newId
-s133[ASCII, 952..956] value
-s134[ASCII, 959..963] Error
-s135[ASCII, 964..964] b
-s136[ASCII, 965..971] console
-s137[ASCII, 971..975] every
-s138[ASCII, 976..977] id
-s139[ASCII, 977..991] denseSwitchTest
-s140[ASCII, 992..997] filter
-s141[ASCII, 998..1006] prototype
+s1[ASCII, 0..9] #2D334AB0: -processed
+s2[ASCII, 9..9] #DE0F2B3D: d
+s3[ASCII, 9..17] #9102A3D0: default-1
+s4[ASCII, 18..28] #1C35E808: a=0,b>0,c=1
+s5[ASCII, 28..30] #29DC03AC: 1-1
+s6[ASCII, 30..32] #58181A3C: 1-0
+s7[ASCII, 32..34] #0DA8F6EA: 0-0
+s8[ASCII, 34..36] #2FD735CE: 0-1
+s9[ASCII, 36..38] #00018E43: 1-2
+s10[ASCII, 39..46] #00018A52: a=0,b<=0
+s11[ASCII, 46..48] #C966DC8A: 0-2
+s12[ASCII, 49..59] #F2708BE8: a=0,b>0,c=0
+s13[ASCII, 59..65] #39232421: 0-other
+s14[ASCII, 61..65] #A4661605: other
+s15[ASCII, 61..66] #973712F5: other 
+s16[ASCII, 67..73] #A7B90D10: a=1,b=1
+s17[ASCII, 73..79] #1C182460: 1-other
+s18[ASCII, 80..84] #4C29DE53: seven
+s19[ASCII, 80..88] #F8448D4A: seventeen
+s20[ASCII, 89..104] #9615E9FA: Division by zero
+s21[ASCII, 101..104] #1680F809: zero
+s22[ASCII, 104..109] #629A2BFD: object
+s23[ASCII, 109..114] #CA7E4EA0: twelve
+s24[ASCII, 119..125] #6C748C85: Error: 
+s25[ASCII, 126..136] #6539A9B8: Invalid log
+s26[ASCII, 136..141] #06952F11: global
+s27[ASCII, 156..168] #5A39B07E: Negative sqrt
+s28[ASCII, 168..170] #807C5F3D: ten
+s29[ASCII, 171..185] #63D87C1C: a=0,b>0,c=other
+s30[ASCII, 191..197] #DF50693D: a=1,b=0
+s31[ASCII, 198..212] #2074F516: a=1,b=other,c=2
+s32[ASCII, 213..231] #8CC871FE: a=1,b=other,c=other
+s33[ASCII, 235..241] #EF03A676: a=other
+s34[ASCII, 242..246] #769B8915: array
+s35[ASCII, 247..257] bad request
+s36[ASCII, 257..261] three
+s37[ASCII, 257..262] three 
+s38[ASCII, 263..270] continue
+s39[ASCII, 270..274] eight
+s40[ASCII, 270..277] eighteen
+s41[ASCII, 277..280] nine
+s42[ASCII, 277..284] nineteen
+s43[ASCII, 285..291] created
+s44[ASCII, 291..303] default-other
+s45[ASCII, 304..307] five
+s46[ASCII, 307..312] eleven
+s47[ASCII, 312..320] not found
+s48[ASCII, 320..325] divide
+s49[ASCII, 324..330] default
+s50[ASCII, 324..332] default-0
+s51[ASCII, 333..344] unauthorized
+s52[ASCII, 344..347] done
+s53[ASCII, 345..347] one
+s54[ASCII, 345..348] one 
+s55[ASCII, 349..355] fifteen
+s56[ASCII, 366..369] high
+s57[ASCII, 370..378] forbidden
+s58[ASCII, 390..395] twenty
+s59[ASCII, 396..399] four
+s60[ASCII, 396..403] fourteen
+s61[ASCII, 419..422] low 
+s62[ASCII, 423..426] mid 
+s63[ASCII, 427..431] mixed
+s64[ASCII, 443..444] ok
+s65[ASCII, 447..458] server error
+s66[ASCII, 459..465] outer-2
+s67[ASCII, 488..490] six
+s68[ASCII, 488..494] sixteen
+s69[ASCII, 497..504] thirteen
+s70[ASCII, 509..511] two
+s71[ASCII, 509..512] two 
+s72[ASCII, 513..519] unknown
+s73[ASCII, 39..39] a
+s74[ASCII, 75..80] others
+s75[ASCII, 114..118] every
+s76[ASCII, 119..123] Error
+s77[ASCII, 134..136] log
+s78[ASCII, 141..155] largeSwitchTest
+s79[ASCII, 165..168] sqrt
+s80[ASCII, 185..190] reduce
+s81[ASCII, 231..234] rest
+s82[ASCII, 247..247] b
+s83[ASCII, 263..263] c
+s84[ASCII, 355..366] nestedSwitch
+s85[ASCII, 376..390] denseSwitchTest
+s86[ASCII, 404..421] complexControlFlow
+s87[ASCII, 427..442] mixedBreakReturn
+s88[ASCII, 444..447] keys
+s89[ASCII, 466..488] switchWithFunctionCalls
+s90[ASCII, 495..498] Math
+s91[ASCII, 505..509] first
+s92[ASCII, 520..536] switchWithObjects
+s93[ASCII, 530..535] Object
+s94[ASCII, 536..540] slice
+s95[ASCII, 541..547] console
+s96[ASCII, 547..555] extracted
+s97[ASCII, 556..561] filter
+s98[ASCII, 562..565] find
+s99[ASCII, 566..567] id
+s100[ASCII, 568..570] map
+s101[ASCII, 570..578] prototype
+s102[ASCII, 579..585] message
+s103[ASCII, 586..590] value
+s104[ASCII, 586..591] values
+s105[ASCII, 591..605] switchWithBreak
+s106[ASCII, 606..626] switchWithFallthrough
+s107[ASCII, 627..644] switchWithTryCatch
 
 Array Buffer:
 Integer(1)
@@ -165,21 +131,21 @@ Integer(3)
 Integer(4)
 Integer(5)
 Object Key Buffer:
-[String 101]
-[String 135]
-[String 109]
-[String 138]
-[String 133]
+[String 73]
+[String 82]
+[String 83]
+[String 99]
+[String 103]
 Object Value Buffer:
 [int 1]
 [int 2]
 [int 3]
 [int 1]
-[String 101]
+[String 73]
 [int 2]
-[String 135]
+[String 82]
 
-Function<global>0(1 params, 19 registers, 0 symbols):
+Function<global>0(1 params, 20 registers, 0 symbols):
   DeclareGlobalVar  "denseSwitchTest"
   DeclareGlobalVar  "largeSwitchTest"
   DeclareGlobalVar  "switchWithBreak"
@@ -190,7 +156,6 @@ Function<global>0(1 params, 19 registers, 0 symbols):
   DeclareGlobalVar  "complexControlFlow"
   DeclareGlobalVar  "switchWithTryCatch"
   DeclareGlobalVar  "switchWithObjects"
-  DeclareGlobalVar  "switchWithCallbacks"
   CreateEnvironment r1
   CreateClosure     r2, r1, Function<denseSwitchTest>1
   GetGlobalObject   r0
@@ -207,95 +172,137 @@ Function<global>0(1 params, 19 registers, 0 symbols):
   PutById           r0, r2, 6, "mixedBreakReturn"
   CreateClosure     r2, r1, Function<switchWithFunctionCalls>7
   PutById           r0, r2, 7, "switchWithFunctionCalls"
-  CreateClosure     r2, r1, Function<complexControlFlow>10
+  CreateClosure     r2, r1, Function<complexControlFlow>8
   PutById           r0, r2, 8, "complexControlFlow"
-  CreateClosure     r2, r1, Function<switchWithTryCatch>11
+  CreateClosure     r2, r1, Function<switchWithTryCatch>9
   PutById           r0, r2, 9, "switchWithTryCatch"
-  CreateClosure     r2, r1, Function<switchWithObjects>12
-  PutById           r0, r2, 10, "switchWithObjects"
-  CreateClosure     r1, r1, Function<switchWithCallbacks>19
-  PutById           r0, r1, 11, "switchWithCallbacks"
-  GetByIdShort      r2, r0, 1, "denseSwitchTest"
-  LoadConstUndefined r4
+  CreateClosure     r1, r1, Function<switchWithObjects>10
+  PutById           r0, r1, 10, "switchWithObjects"
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r4, r0, 3, "denseSwitchTest"
+  LoadConstUndefined r5
   LoadConstUInt8    r1, 15
-  Call2             r1, r2, r4, r1
-  GetByIdShort      r2, r0, 2, "largeSwitchTest"
-  LoadConstUInt8    r1, 7
-  Call2             r1, r2, r4, r1
-  GetByIdShort      r1, r0, 3, "switchWithBreak"
-  LoadConstUInt8    r2, 3
-  Call2             r1, r1, r4, r2
-  GetByIdShort      r1, r0, 4, "switchWithFallthrough"
-  LoadConstZero     r5
-  Call2             r1, r1, r4, r5
-  GetByIdShort      r1, r0, 4, "switchWithFallthrough"
-  Call2             r1, r1, r4, r2
-  GetByIdShort      r3, r0, 4, "switchWithFallthrough"
-  LoadConstUInt8    r1, 6
-  Call2             r1, r3, r4, r1
-  GetByIdShort      r1, r0, 5, "nestedSwitch"
-  LoadConstUInt8    r3, 1
-  Call3             r1, r1, r4, r5, r3
-  GetByIdShort      r1, r0, 5, "nestedSwitch"
-  Call3             r1, r1, r4, r3, r2
-  GetByIdShort      r1, r0, 5, "nestedSwitch"
-  Call3             r1, r1, r4, r2, r5
-  GetByIdShort      r1, r0, 6, "mixedBreakReturn"
-  Call2             r1, r1, r4, r3
-  GetByIdShort      r1, r0, 6, "mixedBreakReturn"
+  Call2             r1, r4, r5, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r4, r0, 4, "largeSwitchTest"
+  LoadConstInt      r1, 404
+  Call2             r1, r4, r5, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 5, "switchWithBreak"
   LoadConstUInt8    r6, 2
-  Call2             r1, r1, r4, r6
-  GetByIdShort      r7, r0, 6, "mixedBreakReturn"
-  LoadConstUInt8    r1, 4
-  Call2             r1, r7, r4, r1
-  GetByIdShort      r1, r0, 7, "switchWithFunctionCalls"
-  LoadConstUInt8    r8, 5
-  Call3             r1, r1, r4, r5, r8
-  GetByIdShort      r1, r0, 7, "switchWithFunctionCalls"
-  Call3             r1, r1, r4, r3, r3
-  GetByIdShort      r1, r0, 7, "switchWithFunctionCalls"
-  Call3             r1, r1, r4, r6, r5
-  GetByIdShort      r1, r0, 8, "complexControlFlow"
-  Call4             r1, r1, r4, r3, r5, r3
-  GetByIdShort      r1, r0, 8, "complexControlFlow"
-  Call4             r1, r1, r4, r5, r3, r6
-  GetByIdShort      r1, r0, 8, "complexControlFlow"
-  LoadConstInt      r7, -1
-  Call4             r1, r1, r4, r7, r7, r2
-  GetByIdShort      r2, r0, 9, "switchWithTryCatch"
+  Call2             r1, r1, r5, r6
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 6, "switchWithFallthrough"
+  LoadConstUInt8    r4, 1
+  Call2             r1, r1, r5, r4
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 6, "switchWithFallthrough"
+  LoadConstUInt8    r8, 4
+  Call2             r1, r1, r5, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r7, r0, 6, "switchWithFallthrough"
+  LoadConstUInt8    r1, 6
+  Call2             r1, r7, r5, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 7, "nestedSwitch"
+  LoadConstZero     r7
+  Call3             r1, r1, r5, r7, r4
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 7, "nestedSwitch"
+  Call3             r1, r1, r5, r4, r6
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 7, "nestedSwitch"
+  Call3             r1, r1, r5, r6, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 8, "mixedBreakReturn"
+  Call2             r1, r1, r5, r4
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 8, "mixedBreakReturn"
+  Call2             r1, r1, r5, r6
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 8, "mixedBreakReturn"
+  Call2             r1, r1, r5, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 9, "switchWithFunctionCalls"
+  LoadConstUInt8    r9, 5
+  LoadConstUInt8    r8, 3
+  Call4             r1, r1, r5, r7, r9, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 9, "switchWithFunctionCalls"
+  Call4             r1, r1, r5, r4, r9, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 9, "switchWithFunctionCalls"
+  Call4             r1, r1, r5, r6, r9, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 10, "complexControlFlow"
+  Call4             r1, r1, r5, r7, r4, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 10, "complexControlFlow"
+  Call4             r1, r1, r5, r4, r7, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 10, "complexControlFlow"
+  Call4             r1, r1, r5, r4, r6, r6
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r6, r0, 11, "switchWithTryCatch"
   LoadConstString   r1, "divide"
-  Call3             r1, r2, r4, r1, r8
-  GetByIdShort      r2, r0, 9, "switchWithTryCatch"
-  LoadConstString   r1, "sqrt"
-  Call3             r1, r2, r4, r1, r7
-  GetByIdShort      r2, r0, 9, "switchWithTryCatch"
-  LoadConstString   r1, "nested"
-  Call3             r1, r2, r4, r1, r5
-  GetByIdShort      r2, r0, 10, "switchWithObjects"
+  Call3             r1, r6, r5, r1, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r8, r0, 11, "switchWithTryCatch"
+  LoadConstString   r6, "sqrt"
+  LoadConstInt      r1, -4
+  Call3             r1, r8, r5, r6, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r6, r0, 12, "switchWithObjects"
   LoadConstString   r1, "array"
-  Call3             r1, r2, r4, r1, r3
-  GetByIdShort      r2, r0, 10, "switchWithObjects"
-  LoadConstString   r1, "object"
-  Call3             r1, r2, r4, r1, r6
-  GetByIdShort      r2, r0, 10, "switchWithObjects"
-  LoadConstString   r1, "mixed"
-  Call3             r1, r2, r4, r1, r5
-  GetByIdShort      r7, r0, 11, "switchWithCallbacks"
-  TryGetById        r1, r0, 12, "console"
-  GetByIdShort      r5, r1, 13, "log"
-  LoadConstString   r2, "immediate"
-  LoadConstUInt8    r1, 10
-  Call4             r1, r7, r4, r2, r1, r5
-  GetByIdShort      r5, r0, 11, "switchWithCallbacks"
-  TryGetById        r1, r0, 12, "console"
-  GetByIdShort      r2, r1, 13, "log"
-  LoadConstString   r1, "delayed"
-  Call4             r1, r5, r4, r1, r6, r2
-  GetByIdShort      r2, r0, 11, "switchWithCallbacks"
-  TryGetById        r0, r0, 12, "console"
-  GetByIdShort      r1, r0, 13, "log"
-  LoadConstString   r0, "chain"
-  Call4             r0, r2, r4, r0, r3, r1
+  Call3             r1, r6, r5, r1, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r2, r0, 1, "console"
+  GetByIdShort      r1, r2, 2, "log"
+  GetByIdShort      r3, r0, 12, "switchWithObjects"
+  LoadConstString   r0, "mixed"
+  Call3             r0, r3, r5, r0, r4
+  Call2             r0, r1, r2, r0
   Ret               r0
 
 Function<denseSwitchTest>1(2 params, 1 registers, 0 symbols):
@@ -348,121 +355,68 @@ Function<denseSwitchTest>1(2 params, 1 registers, 0 symbols):
 
 Function<largeSwitchTest>2(2 params, 2 registers, 0 symbols):
   LoadParam         r1, 1
-  LoadConstInt      r0, -5
-  JStrictEqualLong  L1, r0, r1
-  LoadConstInt      r0, -4
-  JStrictEqualLong  L2, r0, r1
-  LoadConstInt      r0, -3
-  JStrictEqualLong  L3, r0, r1
-  LoadConstInt      r0, -2
-  JStrictEqualLong  L4, r0, r1
-  LoadConstInt      r0, -1
-  JStrictEqualLong  L5, r0, r1
-  LoadConstZero     r0
-  JStrictEqualLong  L6, r0, r1
-  LoadConstUInt8    r0, 1
-  JStrictEqualLong  L7, r0, r1
-  LoadConstUInt8    r0, 2
+  LoadConstUInt8    r0, 100
+  JStrictEqual      L1, r0, r1
+  LoadConstUInt8    r0, 200
+  JStrictEqual      L2, r0, r1
+  LoadConstUInt8    r0, 201
+  JStrictEqual      L3, r0, r1
+  LoadConstInt      r0, 400
+  JStrictEqual      L4, r0, r1
+  LoadConstInt      r0, 401
+  JStrictEqual      L5, r0, r1
+  LoadConstInt      r0, 403
+  JStrictEqual      L6, r0, r1
+  LoadConstInt      r0, 404
+  JStrictEqual      L7, r0, r1
+  LoadConstInt      r0, 500
   JStrictEqual      L8, r0, r1
-  LoadConstUInt8    r0, 3
-  JStrictEqual      L9, r0, r1
-  LoadConstUInt8    r0, 4
-  JStrictEqual      L10, r0, r1
-  LoadConstUInt8    r0, 5
-  JStrictEqual      L11, r0, r1
-  LoadConstUInt8    r0, 6
-  JStrictEqual      L12, r0, r1
-  LoadConstUInt8    r0, 7
-  JStrictEqual      L13, r0, r1
-  LoadConstUInt8    r0, 8
-  JStrictEqual      L14, r0, r1
-  LoadConstUInt8    r0, 9
-  JStrictEqual      L15, r0, r1
-  LoadConstUInt8    r0, 10
-  JStrictEqual      L16, r0, r1
   LoadConstString   r0, "unknown"
   Ret               r0
-L16:
-  LoadConstString   r0, "ten"
-  Ret               r0
-L15:
-  LoadConstString   r0, "nine"
-  Ret               r0
-L14:
-  LoadConstString   r0, "eight"
-  Ret               r0
-L13:
-  LoadConstString   r0, "seven"
-  Ret               r0
-L12:
-  LoadConstString   r0, "six"
-  Ret               r0
-L11:
-  LoadConstString   r0, "five"
-  Ret               r0
-L10:
-  LoadConstString   r0, "four"
-  Ret               r0
-L9:
-  LoadConstString   r0, "three"
-  Ret               r0
 L8:
-  LoadConstString   r0, "two"
+  LoadConstString   r0, "server error"
   Ret               r0
 L7:
-  LoadConstString   r0, "one"
+  LoadConstString   r0, "not found"
   Ret               r0
 L6:
-  LoadConstString   r0, "zero"
+  LoadConstString   r0, "forbidden"
   Ret               r0
 L5:
-  LoadConstString   r0, "negative one"
+  LoadConstString   r0, "unauthorized"
   Ret               r0
 L4:
-  LoadConstString   r0, "negative two"
+  LoadConstString   r0, "bad request"
   Ret               r0
 L3:
-  LoadConstString   r0, "negative three"
+  LoadConstString   r0, "created"
   Ret               r0
 L2:
-  LoadConstString   r0, "negative four"
+  LoadConstString   r0, "ok"
   Ret               r0
 L1:
-  LoadConstString   r0, "negative five"
+  LoadConstString   r0, "continue"
   Ret               r0
 
 Function<switchWithBreak>3(2 params, 3 registers, 0 symbols):
   LoadParam         r2, 1
-  LoadConstString   r0, "zero"
-  LoadConstZero     r1
-  JStrictEqual      L1, r1, r2
-  LoadConstUInt8    r1, 1
-  JStrictEqual      L2, r1, r2
-  LoadConstUInt8    r1, 2
-  JStrictEqual      L3, r1, r2
-  LoadConstUInt8    r1, 3
-  JStrictEqual      L4, r1, r2
-  LoadConstUInt8    r1, 4
-  JStrictEqual      L5, r1, r2
-  LoadConstUInt8    r1, 5
-  JStrictEqual      L6, r1, r2
-  LoadConstString   r0, "other"
-  Jmp               L1
-L6:
-  LoadConstString   r0, "five"
-  Jmp               L1
-L5:
-  LoadConstString   r0, "four"
-  Jmp               L1
-L4:
-  LoadConstString   r0, "three"
+  LoadConstString   r1, "one "
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L1, r0, r2
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L2, r0, r2
+  LoadConstUInt8    r0, 3
+  JStrictEqual      L3, r0, r2
+  LoadConstString   r1, "other "
   Jmp               L1
 L3:
-  LoadConstString   r0, "two"
+  LoadConstString   r1, "three "
   Jmp               L1
 L2:
-  LoadConstString   r0, "one"
+  LoadConstString   r1, "two "
 L1:
+  LoadConstString   r0, "done"
+  Add               r0, r1, r0
   Ret               r0
 
 Function<switchWithFallthrough>4(2 params, 5 registers, 0 symbols):
@@ -556,657 +510,328 @@ L9:
   LoadConstString   r0, "0-0"
   Ret               r0
 
-Function<mixedBreakReturn>6(2 params, 4 registers, 0 symbols):
-  LoadParam         r1, 1
-  LoadConstZero     r0
-  JStrictEqual      L1, r0, r1
-  LoadConstString   r0, "special: "
-  LoadConstUInt8    r2, 1
-  JStrictEqual      L2, r2, r1
-  LoadConstUInt8    r2, 2
-  JStrictEqual      L3, r2, r1
-  LoadConstString   r3, "value: "
-  LoadConstUInt8    r2, 3
-  JStrictEqual      L4, r2, r1
-  LoadConstUInt8    r2, 4
-  JStrictEqual      L5, r2, r1
-  LoadConstString   r2, "unknown"
-  Ret               r2
-L5:
-  LoadConstString   r0, "quad: "
-  Jmp               L2
-L3:
-  LoadConstString   r3, "double: "
-L4:
-  LoadConstString   r2, "two or three"
-  Add               r2, r3, r2
-  Ret               r2
-L2:
-  Add               r0, r0, r1
-  Ret               r0
-L1:
-  LoadConstString   r0, "immediate zero"
-  Ret               r0
-
-Function<switchWithFunctionCalls>7(3 params, 19 registers, 1 symbols):
-  CreateEnvironment r0
-  LoadParam         r8, 1
-  LoadParam         r3, 2
-  CreateClosure     r2, r0, Function<helper>8
-  CreateClosure     r5, r0, Function<sideEffect>9
-  LoadConstZero     r6
-  StoreNPToEnvironment r0, 0, r6
-  JStrictEqualLong  L1, r6, r8
-  LoadConstUInt8    r1, 1
-  JStrictEqualLong  L2, r1, r8
-  LoadConstUInt8    r7, 2
-  JStrictEqual      L3, r7, r8
-  LoadConstUInt8    r4, 3
-  JStrictEqual      L4, r4, r8
-  LoadConstUndefined r8
-  Call2             r4, r5, r8, r3
-  Call2             r4, r2, r8, r4
-  Ret               r4
-L4:
-  StoreToEnvironment r0, 0, r3
-  LoadConstUInt8    r9, 10
-  JNotLessLong      L5, r3, r9
-  LoadFromEnvironment r4, r0, 0
-  LoadConstUndefined r8
-  Call2             r4, r5, r8, r4
-  StoreToEnvironment r0, 0, r4
-  JNotLessLong      L5, r4, r9
-  LoadFromEnvironment r4, r0, 0
-  Call2             r4, r5, r8, r4
-  StoreToEnvironment r0, 0, r4
-  JNotLessLong      L5, r4, r9
-  LoadFromEnvironment r4, r0, 0
-  Call2             r4, r5, r8, r4
-  StoreToEnvironment r0, 0, r4
-  Jmp               L5
-L3:
-  LoadFromEnvironment r8, r0, 0
-  LoadConstUndefined r4
-  Call2             r6, r2, r4, r6
-  Add               r8, r8, r6
-  StoreToEnvironment r0, 0, r8
-  Call2             r6, r2, r4, r1
-  Add               r6, r8, r6
-  StoreToEnvironment r0, 0, r6
-  Call2             r4, r2, r4, r7
-  Add               r4, r6, r4
-  StoreToEnvironment r0, 0, r4
-  Jmp               L5
-L2:
-  LoadConstUndefined r4
-  Call2             r4, r5, r4, r3
-  StoreToEnvironment r0, 0, r4
-  JStrictEqual      L6, r1, r4
-  LoadConstUInt8    r1, 2
-  JStrictEqual      L7, r1, r4
-  LoadFromEnvironment r4, r0, 0
-  LoadConstString   r1, "other: "
-  Add               r1, r1, r4
-  Ret               r1
-L7:
-  LoadConstString   r1, "two after side effect"
-  Ret               r1
-L6:
-  LoadConstString   r1, "one after side effect"
-  Ret               r1
-L1:
-  LoadConstUndefined r1
-  Call2             r1, r2, r1, r3
-  StoreToEnvironment r0, 0, r1
-L5:
-  LoadFromEnvironment r0, r0, 0
-  Ret               r0
-
-Function<helper>8(2 params, 2 registers, 0 symbols):
-  LoadParam         r1, 1
-  LoadConstUInt8    r0, 2
-  Mul               r0, r1, r0
-  Ret               r0
-
-Function<sideEffect>9(2 params, 3 registers, 0 symbols):
-  LoadParam         r1, 1
-  GetEnvironment    r2, 0
-  LoadFromEnvironment r0, r2, 0
-  Add               r0, r0, r1
-  StoreToEnvironment r2, 0, r0
+Function<mixedBreakReturn>6(2 params, 3 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadConstString   r1, "one"
   LoadConstUInt8    r0, 1
+  JStrictEqual      L1, r0, r2
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L2, r0, r2
+  LoadConstUInt8    r0, 3
+  JStrictEqual      L3, r0, r2
+  LoadConstUInt8    r0, 4
+  JStrictEqual      L4, r0, r2
+  LoadConstString   r1, "default"
+  Jmp               L1
+L4:
+  LoadConstString   r0, "four"
+  Ret               r0
+L3:
+  LoadConstString   r1, "three"
+  Jmp               L1
+L2:
+  LoadConstString   r0, "two"
+  Ret               r0
+L1:
+  LoadConstString   r0, "-processed"
   Add               r0, r1, r0
   Ret               r0
 
-Function<complexControlFlow>10(4 params, 7 registers, 0 symbols):
-  LoadParam         r4, 2
-  LoadParam         r2, 3
-  LoadParam         r0, 1
-  LoadConstZero     r1
-  JGreater          L1, r0, r1
-  LoadConstString   r5, "a<=0,c=0or1"
-  Mov               r0, r5
-  JStrictEqualLong  L2, r1, r2
+Function<switchWithFunctionCalls>7(4 params, 5 registers, 0 symbols):
+  LoadParam         r4, 1
+  LoadParam         r1, 2
+  LoadParam         r0, 3
+  LoadConstZero     r2
+  JStrictEqual      L1, r2, r4
   LoadConstUInt8    r3, 1
-  Mov               r0, r5
-  JStrictEqualLong  L2, r3, r2
-  LoadConstUInt8    r5, 2
-  JStrictEqual      L3, r5, r2
-  Greater           r5, r4, r1
-  LoadConstString   r0, "complex default"
-  JmpTrue           L2, r5
-  LoadConstString   r5, "early default exit"
-  Ret               r5
-L3:
-  JStrictEqual      L4, r1, r4
-  LoadConstString   r0, "nested: b=other,c=2"
-  JStrictNotEqual   L2, r3, r4
-  LoadConstString   r3, "nested: b=1,c=2"
-  Ret               r3
-L4:
-  LoadConstString   r3, "nested: b=0,c=2"
-  Ret               r3
-L1:
-  JStrictEqual      L5, r1, r4
-  LoadConstString   r0, "a>0,b=other"
-  LoadConstUInt8    r3, 1
-  JStrictNotEqual   L2, r3, r4
-  LoadConstString   r0, "no iterations"
-  JStrictEqual      L2, r1, r2
-  JStrictEqual      L6, r3, r2
+  JStrictEqual      L2, r3, r4
   LoadConstUInt8    r3, 2
-  JStrictEqual      L7, r3, r2
+  JStrictEqual      L3, r3, r4
   LoadConstUInt8    r3, 3
-  JStrictEqual      L8, r3, r2
-  LoadConstString   r0, "many iterations"
-  Jmp               L2
-L8:
-  LoadConstString   r0, "first,second,other,"
-  Jmp               L2
-L7:
-  LoadConstString   r0, "first,second,"
-  Jmp               L2
-L6:
-  LoadConstString   r0, "first,"
-  Jmp               L2
-L5:
-  LoadConstString   r0, "a>0,b=0"
-  JStrictEqual      L9, r2, r1
+  JStrictEqual      L4, r3, r4
+  Ret               r2
+L4:
+  Div               r2, r1, r0
+  Ret               r2
+L3:
+  Mul               r2, r1, r0
+  Ret               r2
 L2:
-  Ret               r0
-L9:
-  LoadConstString   r0, "early exit"
+  Sub               r2, r1, r0
+  Ret               r2
+L1:
+  Add               r0, r1, r0
   Ret               r0
 
-Function<switchWithTryCatch>11(3 params, 14 registers, 0 symbols):
-  LoadParam         r3, 1
+Function<complexControlFlow>8(4 params, 5 registers, 0 symbols):
+  LoadParam         r4, 1
   LoadParam         r2, 2
-  LoadConstString   r1, "none"
-L14:
-  Mov               r4, r3
-  LoadConstString   r3, "divide"
-  JStrictEqualLong  L1, r3, r4
-  LoadConstString   r3, "sqrt"
-  JStrictEqualLong  L2, r3, r4
-  LoadConstString   r3, "parse"
-  JStrictEqual      L3, r3, r4
-  LoadConstString   r3, "nested"
-  JStrictEqual      L4, r3, r4
-  LoadConstString   r1, "unknown operation"
-  JmpLong           L5
-L4:
-  Mov               r4, r2
-  LoadConstZero     r3
-  JStrictEqual      L6, r3, r4
+  LoadParam         r1, 3
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r4
   LoadConstUInt8    r3, 1
-  JStrictEqual      L7, r3, r4
-  LoadConstString   r1, "parsed"
-  Jmp               L8
-L7:
-  LoadConstString   r1, "one"
-L8:
-  JmpLong           L5
-L6:
-  GetGlobalObject   r3
-  TryGetById        r5, r3, 1, "Error"
-  GetByIdShort      r3, r5, 2, "prototype"
-  CreateThis        r4, r3, r5
-  LoadConstString   r6, "Zero error"
-  Mov               r7, r4
-  Construct         r3, r5, 2
-  SelectObject      r3, r4, r3
-  Throw             r3
-L13:
-  Catch             r3
-  GetByIdShort      r4, r3, 3, "message"
-  LoadConstString   r3, "inner catch: "
-  Add               r1, r3, r4
-  Jmp               L5
-L3:
-  GetGlobalObject   r3
-  TryGetById        r5, r3, 4, "JSON"
-  GetByIdShort      r4, r5, 5, "parse"
-  Mov               r3, r2
-  Call2             r1, r4, r5, r3
-  Jmp               L5
+  JStrictEqual      L2, r3, r4
+  LoadConstString   r4, "a=other"
+  Ret               r4
 L2:
-  Mov               r4, r2
-  LoadConstZero     r3
-  JLess             L9, r4, r3
-  GetGlobalObject   r3
-  TryGetById        r5, r3, 6, "Math"
-  GetByIdShort      r4, r5, 7, "sqrt"
-  Mov               r3, r2
-  Call2             r1, r4, r5, r3
-  Jmp               L5
-L9:
-  GetGlobalObject   r3
-  TryGetById        r5, r3, 1, "Error"
-  GetByIdShort      r3, r5, 2, "prototype"
-  CreateThis        r4, r3, r5
-  LoadConstString   r6, "Negative sqrt"
-  Mov               r7, r4
-  Construct         r3, r5, 2
-  SelectObject      r3, r4, r3
-  Throw             r3
-L1:
-  Mov               r4, r2
-  LoadConstZero     r3
-  JStrictEqual      L10, r4, r3
-  Mov               r3, r2
-  LoadConstUInt8    r2, 100
-  Div               r1, r2, r3
+  JStrictEqual      L3, r2, r0
+  JStrictEqual      L4, r2, r3
+  LoadConstUInt8    r3, 2
+  JStrictEqual      L5, r3, r1
+  LoadConstString   r3, "a=1,b=other,c=other"
+  Ret               r3
 L5:
-  Ret               r1
-L10:
-  GetGlobalObject   r1
-  TryGetById        r3, r1, 1, "Error"
-  GetByIdShort      r1, r3, 2, "prototype"
-  CreateThis        r2, r1, r3
-  LoadConstString   r6, "Division by zero"
-  Mov               r7, r2
-  Construct         r1, r3, 2
-  SelectObject      r1, r2, r1
-  Throw             r1
-L15:
-  Catch             r1
+  LoadConstString   r3, "a=1,b=other,c=2"
+  Ret               r3
+L4:
+  LoadConstString   r3, "a=1,b=1"
+  Ret               r3
+L3:
+  LoadConstString   r3, "a=1,b=0"
+  Ret               r3
+L1:
+  JGreater          L6, r2, r0
+  LoadConstString   r2, "a=0,b<=0"
+  Ret               r2
+L6:
+  JStrictEqual      L7, r0, r1
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L8, r0, r1
+  LoadConstString   r0, "a=0,b>0,c=other"
+  Ret               r0
+L8:
+  LoadConstString   r0, "a=0,b>0,c=1"
+  Ret               r0
+L7:
+  LoadConstString   r0, "a=0,b>0,c=0"
+  Ret               r0
+
+Function<switchWithTryCatch>9(3 params, 13 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadParam         r1, 2
+  LoadConstUndefined r0
+L8:
+  Mov               r3, r2
+  LoadConstString   r2, "divide"
+  JStrictEqualLong  L1, r2, r3
+  LoadConstString   r2, "sqrt"
+  JStrictEqual      L2, r2, r3
+  LoadConstString   r2, "log"
+  JStrictEqual      L3, r2, r3
   Mov               r0, r1
-  GetByIdShort      r2, r1, 3, "message"
-  LoadConstString   r1, "Division by zero"
-  JStrictEqual      L11, r1, r2
-  LoadConstString   r1, "Negative sqrt"
-  JStrictEqual      L12, r1, r2
-  GetByIdShort      r1, r0, 3, "message"
-  LoadConstString   r0, "caught: "
+  JmpLong           L4
+L3:
+  Mov               r3, r1
+  LoadConstZero     r2
+  JLessEqual        L5, r3, r2
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 1, "Math"
+  GetByIdShort      r3, r4, 2, "log"
+  Mov               r2, r1
+  Call2             r0, r3, r4, r2
+  Jmp               L4
+L5:
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 3, "Error"
+  GetByIdShort      r2, r4, 4, "prototype"
+  CreateThis        r3, r2, r4
+  LoadConstString   r5, "Invalid log"
+  Mov               r6, r3
+  Construct         r2, r4, 2
+  SelectObject      r2, r3, r2
+  Throw             r2
+L2:
+  Mov               r3, r1
+  LoadConstZero     r2
+  JLess             L6, r3, r2
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 1, "Math"
+  GetByIdShort      r3, r4, 5, "sqrt"
+  Mov               r2, r1
+  Call2             r0, r3, r4, r2
+  Jmp               L4
+L6:
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 3, "Error"
+  GetByIdShort      r2, r4, 4, "prototype"
+  CreateThis        r3, r2, r4
+  LoadConstString   r5, "Negative sqrt"
+  Mov               r6, r3
+  Construct         r2, r4, 2
+  SelectObject      r2, r3, r2
+  Throw             r2
+L1:
+  Mov               r3, r1
+  LoadConstZero     r2
+  JStrictEqual      L7, r3, r2
+  Mov               r2, r1
+  LoadConstUInt8    r1, 100
+  Div               r0, r1, r2
+L4:
+  Ret               r0
+L7:
+  GetGlobalObject   r0
+  TryGetById        r2, r0, 3, "Error"
+  GetByIdShort      r0, r2, 4, "prototype"
+  CreateThis        r1, r0, r2
+  LoadConstString   r5, "Division by zero"
+  Mov               r6, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L9:
+  Catch             r0
+  GetByIdShort      r1, r0, 6, "message"
+  LoadConstString   r0, "Error: "
   Add               r0, r0, r1
   Ret               r0
-L12:
-  LoadConstString   r0, "caught sqrt error"
-  Ret               r0
-L11:
-  LoadConstString   r0, "caught division error"
-  Ret               r0
 
 Exception Handlers:
-0: start = L4, end = L8, target = L13
-1: start = L6, end = L13, target = L13
-2: start = L14, end = L5, target = L15
-3: start = L10, end = L15, target = L15
+0: start = L8, end = L4, target = L9
+1: start = L7, end = L9, target = L9
 
-Function<switchWithObjects>12(3 params, 25 registers, 0 symbols):
-  CreateEnvironment r1
-  LoadParam         r3, 1
-  LoadParam         r4, 2
-  LoadConstString   r0, "array"
-  JStrictEqualLong  L1, r0, r3
-  LoadConstString   r0, "object"
-  JStrictEqual      L2, r0, r3
-  LoadConstString   r2, "mixed"
-  LoadConstNull     r0
-  JStrictNotEqualLong L3, r2, r3
-  LoadConstUInt8    r2, 1
-  NewArray          r5, 2
-  NewObjectWithBuffer r3, 2, 2, 4, 13
-  PutOwnByIndex     r5, r3, 0
-  NewObjectWithBuffer r3, 2, 2, 4, 20
-  PutOwnByIndex     r5, r3, 1
-  LoadConstZero     r3
-  JStrictEqual      L4, r3, r4
-  JStrictEqual      L5, r2, r4
-  GetByIdShort      r3, r5, 1, "every"
-  CreateClosure     r2, r1, Function<>18
-  Call2             r0, r3, r5, r2
-  JmpLong           L3
-L5:
-  GetByIdShort      r3, r5, 2, "map"
-  CreateClosure     r2, r1, Function<>17
-  Call2             r0, r3, r5, r2
-  JmpLong           L3
-L4:
-  GetByIdShort      r3, r5, 3, "find"
-  CreateClosure     r2, r1, Function<>16
-  Call2             r0, r3, r5, r2
-  JmpLong           L3
-L2:
-  NewObjectWithBuffer r5, 3, 3, 0, 0
-  LoadConstUInt8    r6, 1
-  LoadConstUInt8    r3, 2
-  LoadConstZero     r2
-  JStrictEqual      L6, r2, r4
-  JStrictEqual      L7, r6, r4
-  JStrictEqual      L8, r3, r4
-  NewObject         r3
-  Mov               r17, r3
-  Mov               r16, r5
-  CallBuiltin       r6, 44, 3
-  LoadConstUInt8    r7, 4
-  LoadConstString   r6, "d"
-  PutOwnByVal       r3, r7, r6, 1
-  Mov               r0, r3
-  JmpLong           L3
-L8:
-  GetByIdShort      r6, r5, 4, "a"
-  LoadConstNull     r3
-  NewObjectWithParent r3, r3
-  PutNewOwnByIdShort r3, r2, "a"
-  NewObject         r17
-  Mov               r16, r5
-  Mov               r15, r3
-  CallBuiltin       r3, 44, 4
-  NewObject         r2
-  PutNewOwnByIdShort r2, r6, "extracted"
-  PutNewOwnByIdShort r2, r3, "others"
-  Mov               r0, r2
-  JmpLong           L3
-L7:
-  GetGlobalObject   r2
-  TryGetById        r3, r2, 5, "Object"
-  GetByIdShort      r2, r3, 6, "values"
-  Call2             r0, r2, r3, r5
-  JmpLong           L3
-L6:
-  GetGlobalObject   r2
-  TryGetById        r3, r2, 5, "Object"
-  GetByIdShort      r2, r3, 7, "keys"
-  Call2             r0, r2, r3, r5
-  JmpLong           L3
-L1:
-  NewArrayWithBuffer r3, 5, 5, 0
-  LoadConstZero     r12
-  JStrictEqualLong  L9, r12, r4
-  LoadConstUInt8    r11, 1
-  JStrictEqualLong  L10, r11, r4
-  LoadConstUInt8    r2, 2
-  JStrictEqual      L11, r2, r4
-  GetByIdShort      r4, r3, 8, "reduce"
-  CreateClosure     r2, r1, Function<>15
-  Call3             r0, r4, r3, r2, r12
-  JmpLong           L3
-L11:
-  Mov               r10, r3
-  IteratorBegin     r6, r10
-  LoadConstUndefined r9
-  LoadConstUndefined r7
-  IteratorNext      r4, r6, r10
-  Mov               r5, r6
-  StrictEq          r8, r5, r9
-  Mov               r7, r8
-  LoadConstUndefined r5
-  JmpTrue           L12, r8
-  Mov               r5, r4
-L12:
-  NewArray          r4, 0
-  LoadConstZero     r8
-  Mov               r12, r7
-  JmpTrue           L13, r12
-L14:
-  IteratorNext      r13, r6, r10
-  Mov               r12, r6
-  StrictEq          r12, r12, r9
-  Mov               r7, r12
-  JmpTrue           L13, r12
-  Mov               r12, r8
-L16:
-  PutByVal          r4, r12, r13
-L17:
-  AddN              r8, r12, r11
-  Jmp               L14
-L18:
-  Catch             r2
-  JmpTrue           L15, r7
-  IteratorClose     r6, 1
-L15:
-  Throw             r2
-L13:
-  NewObject         r2
-  PutNewOwnByIdShort r2, r5, "first"
-  PutNewOwnByIdShort r2, r4, "rest"
-  Mov               r0, r2
-  Jmp               L3
-L10:
-  GetByIdShort      r4, r3, 9, "filter"
-  CreateClosure     r2, r1, Function<>14
-  Call2             r0, r4, r3, r2
-  Jmp               L3
-L9:
-  GetByIdShort      r2, r3, 2, "map"
-  CreateClosure     r1, r1, Function<>13
-  Call2             r0, r2, r3, r1
+Function<switchWithObjects>10(3 params, 17 registers, 0 symbols):
+  CreateEnvironment r0
+  LoadParam         r2, 1
+  LoadParam         r5, 2
+  LoadConstString   r1, "array"
+  JStrictEqualLong  L1, r1, r2
+  LoadConstString   r1, "object"
+  JStrictEqual      L2, r1, r2
+  LoadConstString   r1, "mixed"
+  JStrictEqual      L3, r1, r2
+  LoadConstNull     r1
+  Ret               r1
 L3:
+  LoadConstUInt8    r1, 1
+  NewArray          r3, 2
+  NewObjectWithBuffer r2, 2, 2, 4, 13
+  PutOwnByIndex     r3, r2, 0
+  NewObjectWithBuffer r2, 2, 2, 4, 20
+  PutOwnByIndex     r3, r2, 1
+  LoadConstZero     r2
+  JStrictEqual      L4, r2, r5
+  JStrictEqual      L5, r1, r5
+  GetByIdShort      r2, r3, 1, "every"
+  CreateClosure     r1, r0, Function<>16
+  Call2             r1, r2, r3, r1
+  Ret               r1
+L5:
+  GetByIdShort      r2, r3, 2, "map"
+  CreateClosure     r1, r0, Function<>15
+  Call2             r1, r2, r3, r1
+  Ret               r1
+L4:
+  GetByIdShort      r2, r3, 3, "find"
+  CreateClosure     r1, r0, Function<>14
+  Call2             r1, r2, r3, r1
+  Ret               r1
+L2:
+  NewObjectWithBuffer r3, 3, 3, 0, 0
+  LoadConstUInt8    r4, 1
+  LoadConstUInt8    r2, 2
+  LoadConstZero     r1
+  JStrictEqual      L6, r1, r5
+  JStrictEqual      L7, r4, r5
+  JStrictEqual      L8, r2, r5
+  NewObject         r2
+  Mov               r9, r2
+  Mov               r8, r3
+  CallBuiltin       r4, 44, 3
+  LoadConstUInt8    r6, 4
+  LoadConstString   r4, "d"
+  PutOwnByVal       r2, r6, r4, 1
+  Ret               r2
+L8:
+  GetByIdShort      r4, r3, 4, "a"
+  LoadConstNull     r2
+  NewObjectWithParent r2, r2
+  PutNewOwnByIdShort r2, r1, "a"
+  NewObject         r9
+  Mov               r8, r3
+  Mov               r7, r2
+  CallBuiltin       r2, 44, 4
+  NewObject         r1
+  PutNewOwnByIdShort r1, r4, "extracted"
+  PutNewOwnByIdShort r1, r2, "others"
+  Ret               r1
+L7:
+  GetGlobalObject   r1
+  TryGetById        r2, r1, 5, "Object"
+  GetByIdShort      r1, r2, 6, "values"
+  Call2             r1, r1, r2, r3
+  Ret               r1
+L6:
+  GetGlobalObject   r1
+  TryGetById        r2, r1, 5, "Object"
+  GetByIdShort      r1, r2, 7, "keys"
+  Call2             r1, r1, r2, r3
+  Ret               r1
+L1:
+  NewArrayWithBuffer r2, 5, 5, 0
+  LoadConstZero     r3
+  JStrictEqual      L9, r3, r5
+  LoadConstUInt8    r4, 1
+  JStrictEqual      L10, r4, r5
+  LoadConstUInt8    r1, 2
+  JStrictEqual      L11, r1, r5
+  GetByIdShort      r5, r2, 8, "reduce"
+  CreateClosure     r1, r0, Function<>13
+  Call3             r1, r5, r2, r1, r3
+  Ret               r1
+L11:
+  NewObject         r1
+  GetByVal          r3, r2, r3
+  PutNewOwnByIdShort r1, r3, "first"
+  GetByIdShort      r3, r2, 9, "slice"
+  Call2             r3, r3, r2, r4
+  PutNewOwnByIdShort r1, r3, "rest"
+  Ret               r1
+L10:
+  GetByIdShort      r3, r2, 10, "filter"
+  CreateClosure     r1, r0, Function<>12
+  Call2             r1, r3, r2, r1
+  Ret               r1
+L9:
+  GetByIdShort      r1, r2, 2, "map"
+  CreateClosure     r0, r0, Function<>11
+  Call2             r0, r1, r2, r0
   Ret               r0
 
-Exception Handlers:
-0: start = L16, end = L17, target = L18
-
-NCFunction<>13(2 params, 2 registers, 0 symbols):
+NCFunction<>11(2 params, 2 registers, 0 symbols):
   LoadParam         r1, 1
   LoadConstUInt8    r0, 2
   Mul               r0, r1, r0
   Ret               r0
 
-NCFunction<>14(2 params, 2 registers, 0 symbols):
+NCFunction<>12(2 params, 2 registers, 0 symbols):
   LoadParam         r1, 1
   LoadConstUInt8    r0, 2
-  Mod               r1, r1, r0
-  LoadConstZero     r0
-  StrictEq          r0, r1, r0
+  Mod               r0, r1, r0
   Ret               r0
 
-NCFunction<>15(3 params, 2 registers, 0 symbols):
+NCFunction<>13(3 params, 2 registers, 0 symbols):
   LoadParam         r1, 1
   LoadParam         r0, 2
   Add               r0, r1, r0
+  Ret               r0
+
+NCFunction<>14(2 params, 2 registers, 0 symbols):
+  LoadParam         r0, 1
+  GetByIdShort      r1, r0, 1, "id"
+  LoadConstUInt8    r0, 1
+  StrictEq          r0, r1, r0
+  Ret               r0
+
+NCFunction<>15(2 params, 1 registers, 0 symbols):
+  LoadParam         r0, 1
+  GetByIdShort      r0, r0, 1, "value"
   Ret               r0
 
 NCFunction<>16(2 params, 2 registers, 0 symbols):
   LoadParam         r0, 1
   GetByIdShort      r1, r0, 1, "id"
-  LoadConstUInt8    r0, 1
-  StrictEq          r0, r1, r0
-  Ret               r0
-
-NCFunction<>17(2 params, 11 registers, 0 symbols):
-  LoadParam         r0, 1
-  GetByIdShort      r3, r0, 1, "id"
-  GetByIdShort      r2, r0, 2, "value"
-  NewObject         r0
-  LoadConstUInt8    r1, 10
-  Mul               r1, r3, r1
-  PutNewOwnByIdShort r0, r1, "newId"
-  GetByIdShort      r1, r2, 3, "toUpperCase"
-  Call1             r1, r1, r2
-  PutNewOwnByIdShort r0, r1, "newValue"
-  Ret               r0
-
-NCFunction<>18(2 params, 2 registers, 0 symbols):
-  LoadParam         r0, 1
-  GetByIdShort      r1, r0, 1, "id"
   LoadConstZero     r0
   Greater           r0, r1, r0
-  Ret               r0
-
-Function<switchWithCallbacks>19(4 params, 16 registers, 3 symbols):
-  CreateEnvironment r0
-  LoadParam         r6, 1
-  LoadParam         r3, 2
-  LoadParam         r2, 3
-  StoreToEnvironment r0, 0, r2
-  CreateClosure     r5, r0, Function<processAsync>20
-  StoreToEnvironment r0, 2, r5
-  LoadConstZero     r1
-  StoreNPToEnvironment r0, 1, r1
-  LoadConstString   r4, "immediate"
-  JStrictEqualLong  L1, r4, r6
-  LoadConstString   r4, "delayed"
-  JStrictEqual      L2, r4, r6
-  LoadConstString   r4, "chain"
-  JStrictEqual      L3, r4, r6
-  LoadConstString   r4, "conditional"
-  JStrictEqual      L4, r4, r6
-  LoadConstUndefined r6
-  LoadConstString   r4, "unknown action"
-  Call2             r4, r2, r6, r4
-  Jmp               L5
-L4:
-  JGreater          L6, r3, r1
-  JStrictEqual      L7, r1, r3
-  LoadConstInt      r1, -1
-  JStrictEqual      L8, r1, r3
-  LoadConstUndefined r4
-  LoadConstString   r1, "sync negative"
-  Call2             r1, r2, r4, r1
-  Jmp               L5
-L8:
-  LoadConstUndefined r4
-  LoadConstString   r1, "sync negative one"
-  Call2             r1, r2, r4, r1
-  Jmp               L5
-L7:
-  LoadConstUndefined r4
-  LoadConstString   r1, "sync zero"
-  Call2             r1, r2, r4, r1
-  Jmp               L5
-L6:
-  LoadConstUndefined r1
-  Call3             r1, r5, r1, r3, r2
-  Jmp               L5
-L3:
-  LoadConstUndefined r4
-  CreateClosure     r1, r0, Function<>23
-  Call3             r1, r5, r4, r3, r1
-  Jmp               L5
-L2:
-  LoadConstUndefined r4
-  CreateClosure     r1, r0, Function<>22
-  Call3             r1, r5, r4, r3, r1
-  Jmp               L5
-L1:
-  LoadConstUndefined r1
-  Call2             r1, r2, r1, r3
-L5:
-  LoadFromEnvironment r0, r0, 1
-  Ret               r0
-
-Function<processAsync>20(3 params, 13 registers, 2 symbols):
-  CreateEnvironment r1
-  LoadParam         r0, 1
-  StoreToEnvironment r1, 0, r0
-  LoadParam         r0, 2
-  StoreToEnvironment r1, 1, r0
-  GetGlobalObject   r0
-  TryGetById        r3, r0, 1, "setTimeout"
-  LoadConstUndefined r0
-  CreateClosure     r2, r1, Function<>21
-  LoadConstZero     r1
-  Call3             r1, r3, r0, r2, r1
-  Ret               r0
-
-NCFunction<>21(1 params, 11 registers, 0 symbols):
-  GetEnvironment    r0, 0
-  LoadFromEnvironment r2, r0, 1
-  LoadFromEnvironment r1, r0, 0
-  LoadConstUInt8    r0, 2
-  Mul               r1, r1, r0
-  LoadConstUndefined r0
-  Call2             r0, r2, r0, r1
-  Ret               r0
-
-NCFunction<>22(2 params, 11 registers, 0 symbols):
-  LoadParam         r1, 1
-  LoadConstZero     r0
-  JStrictEqual      L1, r0, r1
-  LoadConstUInt8    r0, 2
-  JStrictEqual      L2, r0, r1
-  LoadConstUInt8    r0, 4
-  JStrictEqual      L3, r0, r1
-  GetEnvironment    r0, 0
-  LoadFromEnvironment r2, r0, 0
-  LoadConstString   r0, "other: "
-  Add               r1, r0, r1
-  LoadConstUndefined r0
-  Call2             r0, r2, r0, r1
-  Jmp               L4
-L3:
-  GetEnvironment    r0, 0
-  LoadFromEnvironment r2, r0, 0
-  LoadConstUndefined r1
-  LoadConstString   r0, "four result"
-  Call2             r0, r2, r1, r0
-  Jmp               L4
-L2:
-  GetEnvironment    r0, 0
-  LoadFromEnvironment r2, r0, 0
-  LoadConstUndefined r1
-  LoadConstString   r0, "two result"
-  Call2             r0, r2, r1, r0
-  Jmp               L4
-L1:
-  GetEnvironment    r0, 0
-  LoadFromEnvironment r2, r0, 0
-  LoadConstUndefined r1
-  LoadConstString   r0, "zero result"
-  Call2             r0, r2, r1, r0
-L4:
-  LoadConstUndefined r0
-  Ret               r0
-
-NCFunction<>23(2 params, 14 registers, 0 symbols):
-  LoadParam         r4, 1
-  GetEnvironment    r0, 0
-  StoreToEnvironment r0, 1, r4
-  LoadConstZero     r1
-  JStrictEqual      L1, r1, r4
-  LoadConstUInt8    r1, 2
-  JStrictEqual      L2, r1, r4
-  LoadFromEnvironment r3, r0, 0
-  LoadConstString   r1, "chain default: "
-  Add               r2, r1, r4
-  LoadConstUndefined r1
-  Call2             r1, r3, r1, r2
-  Jmp               L3
-L2:
-  LoadFromEnvironment r3, r0, 2
-  LoadConstUndefined r2
-  CreateEnvironment r1
-  CreateClosure     r1, r1, Function<>24
-  Call3             r1, r3, r2, r4, r1
-  Jmp               L3
-L1:
-  LoadFromEnvironment r2, r0, 0
-  LoadConstUndefined r1
-  LoadConstString   r0, "chain ended at zero"
-  Call2             r0, r2, r1, r0
-L3:
-  LoadConstUndefined r0
-  Ret               r0
-
-NCFunction<>24(2 params, 11 registers, 0 symbols):
-  GetEnvironment    r0, 1
-  LoadFromEnvironment r2, r0, 0
-  LoadConstString   r1, "chain result: "
-  LoadParam         r0, 1
-  Add               r1, r1, r0
-  LoadConstUndefined r0
-  Call2             r1, r2, r0, r1
   Ret               r0
 

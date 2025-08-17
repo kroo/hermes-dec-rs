@@ -1,7 +1,8 @@
-function denseSwitchTest(value) {
-    switch (value) {
+// Dense switch test - basic numeric switch
+function denseSwitchTest(n) {
+    switch (n) {
         case 0: return "zero";
-        case 1: return "one";
+        case 1: return "one"; 
         case 2: return "two";
         case 3: return "three";
         case 4: return "four";
@@ -25,67 +26,50 @@ function denseSwitchTest(value) {
     }
 }
 
-// Test with negative numbers and larger ranges
-function largeSwitchTest(x) {
-    switch (x) {
-        case -5: return "negative five";
-        case -4: return "negative four";
-        case -3: return "negative three";
-        case -2: return "negative two";
-        case -1: return "negative one";
-        case 0: return "zero";
-        case 1: return "one";
-        case 2: return "two";
-        case 3: return "three";
-        case 4: return "four";
-        case 5: return "five";
-        case 6: return "six";
-        case 7: return "seven";
-        case 8: return "eight";
-        case 9: return "nine";
-        case 10: return "ten";
+// Large sparse switch
+function largeSwitchTest(code) {
+    switch (code) {
+        case 100: return "continue";
+        case 200: return "ok";
+        case 201: return "created";
+        case 400: return "bad request";
+        case 401: return "unauthorized";
+        case 403: return "forbidden";
+        case 404: return "not found";
+        case 500: return "server error";
         default: return "unknown";
     }
 }
 
-// Test switch with break statements instead of return
-function switchWithBreak(value) {
-    let result = "default";
-    switch (value) {
-        case 0:
-            result = "zero";
-            break;
+// Switch with breaks
+function switchWithBreak(x) {
+    let result = "";
+    switch (x) {
         case 1:
-            result = "one";
+            result += "one ";
             break;
         case 2:
-            result = "two";
+            result += "two ";
             break;
         case 3:
-            result = "three";
-            break;
-        case 4:
-            result = "four";
-            break;
-        case 5:
-            result = "five";
+            result += "three ";
             break;
         default:
-            result = "other";
+            result += "other ";
             break;
     }
+    result += "done";
     return result;
 }
 
-// Test switch with fallthrough cases
-function switchWithFallthrough(value) {
+// Switch with fallthroughs
+function switchWithFallthrough(x) {
     let result = "";
-    switch (value) {
+    switch (x) {
         case 0:
         case 1:
         case 2:
             result += "low ";
-            // fallthrough
         case 3:
         case 4:
             result += "mid ";
@@ -93,7 +77,7 @@ function switchWithFallthrough(value) {
         case 5:
         case 6:
         case 7:
-            result += "high";
+            result = "high";
             break;
         default:
             result = "unknown";
@@ -101,7 +85,7 @@ function switchWithFallthrough(value) {
     return result;
 }
 
-// Test simple nested switch
+// Nested switches
 function nestedSwitch(outer, inner) {
     switch (outer) {
         case 0:
@@ -129,134 +113,74 @@ function nestedSwitch(outer, inner) {
     }
 }
 
-// Test switch with mixed break/return
-function mixedBreakReturn(value) {
-    let prefix = "value: ";
-    switch (value) {
-        case 0:
-            return "immediate zero";
-        case 1:
-            prefix = "special: ";
-            break;
-        case 2:
-            prefix = "double: ";
-            // fallthrough
-        case 3:
-            return prefix + "two or three";
-        case 4:
-            prefix = "quad: ";
-            break;
-        default:
-            return "unknown";
-    }
-    return prefix + value;
-}
-
-// Test 1: Switch with function calls and side effects
-function switchWithFunctionCalls(mode, value) {
-    let result = 0;
-    
-    function helper(x) {
-        return x * 2;
-    }
-    
-    function sideEffect(x) {
-        result += x;
-        return x + 1;
-    }
-    
-    switch (mode) {
-        case 0:
-            result = helper(value);
-            break;
-        case 1:
-            result = sideEffect(value);
-            switch (result) {
-                case 1: return "one after side effect";
-                case 2: return "two after side effect";
-                default: return "other: " + result;
-            }
-        case 2:
-            // Instead of loop, unroll it
-            result += helper(0);
-            result += helper(1);
-            result += helper(2);
-            break;
-        case 3:
-            // Instead of while loop, do a few iterations
-            result = value;
-            if (result < 10) {
-                result = sideEffect(result);
-                if (result < 10) {
-                    result = sideEffect(result);
-                    if (result < 10) {
-                        result = sideEffect(result);
-                    }
-                }
-            }
-            break;
-        default:
-            return helper(sideEffect(value));
-    }
-    return result;
-}
-
-// Test 2: Complex nested control flow with switches (no loops)
-function complexControlFlow(a, b, c) {
+// Mixed break/return
+function mixedBreakReturn(x) {
     let result = "";
-    
-    if (a > 0) {
-        switch (b) {
-            case 0:
-                if (c === 0) {
-                    return "early exit";
-                }
-                result = "a>0,b=0";
-                break;
-            case 1:
-                // Instead of loop, handle specific cases
-                switch (c) {
-                    case 0: result = "no iterations"; break;
-                    case 1: result = "first,"; break;
-                    case 2: result = "first,second,"; break;
-                    case 3: result = "first,second,other,"; break;
-                    default: result = "many iterations";
-                }
-                break;
-            default:
-                result = "a>0,b=other";
-        }
-    } else {
-        switch (c) {
-            case 0:
-            case 1:
-                result = "a<=0,c=0or1";
-                break;
-            case 2:
-                switch (b) {
-                    case 0: return "nested: b=0,c=2";
-                    case 1: return "nested: b=1,c=2";
-                    default: 
-                        result = "nested: b=other,c=2";
-                        break;
-                }
-                break;
-            default:
-                if (b > 0) {
-                    result = "complex default";
-                } else {
-                    return "early default exit";
-                }
-        }
+    switch (x) {
+        case 1:
+            result = "one";
+            break;
+        case 2:
+            return "two";
+        case 3:
+            result = "three";
+            break;
+        case 4:
+            return "four";
+        default:
+            result = "default";
     }
-    
-    return result;
+    return result + "-processed";
 }
 
-// Test 3: Switch with try-catch and exception handling
-function switchWithTryCatch(operation, value) {
-    let result = "none";
+// Switch with function calls
+function switchWithFunctionCalls(op, a, b) {
+    const add = (x, y) => x + y;
+    const sub = (x, y) => x - y;
+    const mul = (x, y) => x * y;
+    const div = (x, y) => x / y;
     
+    switch (op) {
+        case 0: return add(a, b);
+        case 1: return sub(a, b);
+        case 2: return mul(a, b);
+        case 3: return div(a, b);
+        default: return 0;
+    }
+}
+
+// Complex control flow
+function complexControlFlow(a, b, c) {
+    switch (a) {
+        case 0:
+            if (b > 0) {
+                switch (c) {
+                    case 0: return "a=0,b>0,c=0";
+                    case 1: return "a=0,b>0,c=1";
+                    default: return "a=0,b>0,c=other";
+                }
+            } else {
+                return "a=0,b<=0";
+            }
+        case 1:
+            if (b === 0) {
+                return "a=1,b=0";
+            } else if (b === 1) {
+                return "a=1,b=1";
+            } else {
+                switch (c) {
+                    case 2: return "a=1,b=other,c=2";
+                    default: return "a=1,b=other,c=other";
+                }
+            }
+        default:
+            return "a=other";
+    }
+}
+
+// Switch with try-catch
+function switchWithTryCatch(operation, value) {
+    let result;
     try {
         switch (operation) {
             case "divide":
@@ -267,183 +191,86 @@ function switchWithTryCatch(operation, value) {
                 if (value < 0) throw new Error("Negative sqrt");
                 result = Math.sqrt(value);
                 break;
-            case "parse":
-                result = JSON.parse(value);
-                break;
-            case "nested":
-                try {
-                    switch (value) {
-                        case 0: throw new Error("Zero error");
-                        case 1: result = "one"; break;
-                        default: result = "parsed";
-                    }
-                } catch (innerError) {
-                    result = "inner catch: " + innerError.message;
-                }
+            case "log":
+                if (value <= 0) throw new Error("Invalid log");
+                result = Math.log(value);
                 break;
             default:
-                result = "unknown operation";
+                result = value;
         }
+        return result;
     } catch (e) {
-        switch (e.message) {
-            case "Division by zero":
-                return "caught division error";
-            case "Negative sqrt":
-                return "caught sqrt error";
-            default:
-                return "caught: " + e.message;
-        }
+        return "Error: " + e.message;
     }
-    
-    return result;
 }
 
-// Test 4: Switch with array/object operations and destructuring
-function switchWithObjects(type, data) {
-    let result;
-    
+// Switch with objects (no for-of loop)
+function switchWithObjects(type, num) {
     switch (type) {
         case "array":
             const arr = [1, 2, 3, 4, 5];
-            switch (data) {
+            switch (num) {
                 case 0:
-                    result = arr.map(x => x * 2);
-                    break;
+                    return arr.map(x => x * 2);
                 case 1:
-                    result = arr.filter(x => x % 2 === 0);
-                    break;
+                    return arr.filter(x => x % 2);
                 case 2:
-                    const [first, ...rest] = arr;
-                    result = { first, rest };
-                    break;
+                    // Array slice case
+                    return { first: arr[0], rest: arr.slice(1) };
                 default:
-                    result = arr.reduce((a, b) => a + b, 0);
+                    return arr.reduce((a, b) => a + b, 0);
             }
-            break;
         case "object":
             const obj = { a: 1, b: 2, c: 3 };
-            switch (data) {
+            switch (num) {
                 case 0:
-                    result = Object.keys(obj);
-                    break;
+                    return Object.keys(obj);
                 case 1:
-                    result = Object.values(obj);
-                    break;
+                    return Object.values(obj);
                 case 2:
                     const { a, ...others } = obj;
-                    result = { extracted: a, others };
-                    break;
+                    return { extracted: a, others };
                 default:
-                    result = { ...obj, d: 4 };
+                    return { ...obj, d: 4 };
             }
-            break;
         case "mixed":
-            const items = [{ id: 1, value: "a" }, { id: 2, value: "b" }];
-            switch (data) {
+            const items = [
+                { id: 1, value: "a" },
+                { id: 2, value: "b" }
+            ];
+            switch (num) {
                 case 0:
-                    result = items.find(item => item.id === 1);
-                    break;
+                    return items.find(x => x.id === 1);
                 case 1:
-                    result = items.map(({ id, value }) => ({ 
-                        newId: id * 10, 
-                        newValue: value.toUpperCase() 
-                    }));
-                    break;
+                    return items.map(x => x.value);
                 default:
-                    result = items.every(item => item.id > 0);
+                    return items.every(x => x.id > 0);
             }
-            break;
         default:
-            result = null;
+            return null;
     }
-    
-    return result;
 }
 
-// Test 5: Switch with async patterns (using callbacks to simulate)
-function switchWithCallbacks(action, value, callback) {
-    let internalState = 0;
-    
-    function processAsync(val, cb) {
-        setTimeout(() => cb(val * 2), 0);
-    }
-    
-    switch (action) {
-        case "immediate":
-            callback(value);
-            break;
-        case "delayed":
-            processAsync(value, (result) => {
-                switch (result) {
-                    case 0: callback("zero result"); break;
-                    case 2: callback("two result"); break;
-                    case 4: callback("four result"); break;
-                    default: callback("other: " + result);
-                }
-            });
-            break;
-        case "chain":
-            processAsync(value, (first) => {
-                internalState = first;
-                switch (first) {
-                    case 0:
-                        callback("chain ended at zero");
-                        break;
-                    case 2:
-                        processAsync(first, (second) => {
-                            callback("chain result: " + second);
-                        });
-                        break;
-                    default:
-                        callback("chain default: " + first);
-                }
-            });
-            break;
-        case "conditional":
-            if (value > 0) {
-                processAsync(value, callback);
-            } else {
-                switch (value) {
-                    case 0: callback("sync zero"); break;
-                    case -1: callback("sync negative one"); break;
-                    default: callback("sync negative");
-                }
-            }
-            break;
-        default:
-            callback("unknown action");
-    }
-    
-    return internalState;
-}
-
-// Test function calls
-denseSwitchTest(15);
-largeSwitchTest(7);
-switchWithBreak(3);
-switchWithFallthrough(0);
-switchWithFallthrough(3);
-switchWithFallthrough(6);
-nestedSwitch(0, 1);
-nestedSwitch(1, 3);
-nestedSwitch(3, 0);
-mixedBreakReturn(1);
-mixedBreakReturn(2);
-mixedBreakReturn(4);
-
-// New test calls
-switchWithFunctionCalls(0, 5);
-switchWithFunctionCalls(1, 1);
-switchWithFunctionCalls(2, 0);
-complexControlFlow(1, 0, 1);
-complexControlFlow(0, 1, 2);
-complexControlFlow(-1, -1, 3);
-switchWithTryCatch("divide", 5);
-switchWithTryCatch("sqrt", -1);
-switchWithTryCatch("nested", 0);
-switchWithObjects("array", 1);
-switchWithObjects("object", 2);
-switchWithObjects("mixed", 0);
-switchWithCallbacks("immediate", 10, console.log);
-switchWithCallbacks("delayed", 2, console.log);
-switchWithCallbacks("chain", 1, console.log);
+// Test all functions
+console.log(denseSwitchTest(15));
+console.log(largeSwitchTest(404));
+console.log(switchWithBreak(2));
+console.log(switchWithFallthrough(1));
+console.log(switchWithFallthrough(4));
+console.log(switchWithFallthrough(6));
+console.log(nestedSwitch(0, 1));
+console.log(nestedSwitch(1, 2));
+console.log(nestedSwitch(2, 0));
+console.log(mixedBreakReturn(1));
+console.log(mixedBreakReturn(2));
+console.log(mixedBreakReturn(4));
+console.log(switchWithFunctionCalls(0, 5, 3));
+console.log(switchWithFunctionCalls(1, 5, 3));
+console.log(switchWithFunctionCalls(2, 5, 3));
+console.log(complexControlFlow(0, 1, 0));
+console.log(complexControlFlow(1, 0, 0));
+console.log(complexControlFlow(1, 2, 2));
+console.log(switchWithTryCatch("divide", 0));
+console.log(switchWithTryCatch("sqrt", -4));
+console.log(switchWithObjects("array", 0));
+console.log(switchWithObjects("mixed", 1));

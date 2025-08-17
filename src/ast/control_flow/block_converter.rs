@@ -364,13 +364,44 @@ impl<'a> BlockToStatementConverter<'a> {
                 {
                     // Skip if this is a nested switch - it will be converted by its parent
                     if nested_switches.contains(&region_idx) {
-                        // Mark the infrastructure blocks as processed since they'll be handled by the parent switch
-                        let nested_infrastructure =
-                            super::switch_converter::get_switch_infrastructure_blocks(&[
-                                region.clone()
-                            ]);
-                        processed_blocks.extend(&nested_infrastructure);
-                        continue;
+                        // Check if this dispatch block has any unrendered instructions before the switch
+                        let dispatch_block = &cfg.graph()[region.dispatch];
+                        let dispatch_instructions = dispatch_block.instructions();
+
+                        // Find the first comparison instruction
+                        let first_comparison_idx = dispatch_instructions.iter().position(|instr| {
+                            matches!(
+                                &instr.instruction,
+                                UnifiedInstruction::JStrictEqual { .. }
+                                    | UnifiedInstruction::JStrictEqualLong { .. }
+                                    | UnifiedInstruction::JStrictNotEqual { .. }
+                                    | UnifiedInstruction::JStrictNotEqualLong { .. }
+                            )
+                        });
+
+                        // Check if there are unrendered instructions before the comparison
+                        let has_unrendered_before_comparison =
+                            if let Some(idx) = first_comparison_idx {
+                                dispatch_instructions
+                                    .iter()
+                                    .take(idx)
+                                    .any(|instr| !self.is_instruction_rendered(instr))
+                            } else {
+                                false
+                            };
+
+                        if has_unrendered_before_comparison {
+                            // Don't skip this block - let it be processed normally
+                            // The switch converter will handle converting only the case body part
+                        } else {
+                            // Mark the infrastructure blocks as processed since they'll be handled by the parent switch
+                            let nested_infrastructure =
+                                super::switch_converter::get_switch_infrastructure_blocks(&[
+                                    region.clone(),
+                                ]);
+                            processed_blocks.extend(&nested_infrastructure);
+                            continue;
+                        }
                     }
                     // Convert the entire switch region
                     // Initially mark only switch infrastructure blocks as processed
@@ -1240,7 +1271,8 @@ impl<'a> BlockToStatementConverter<'a> {
 
     /// Set whether to decompile nested function bodies
     pub fn set_decompile_nested(&mut self, decompile_nested: bool) {
-        self.instruction_converter.set_decompile_nested(decompile_nested);
+        self.instruction_converter
+            .set_decompile_nested(decompile_nested);
     }
 
     /// Take the comment manager (transfers ownership)

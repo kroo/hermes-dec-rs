@@ -96,7 +96,14 @@ impl Cli {
                 comments,
                 decompile_nested,
             } => {
-                decompile::decompile(&input, function, output.as_deref(), &comments, false, decompile_nested)?;
+                decompile::decompile(
+                    &input,
+                    function,
+                    output.as_deref(),
+                    &comments,
+                    false,
+                    decompile_nested,
+                )?;
             }
             Commands::Disasm { input } => {
                 disasm::disasm(&input)?;

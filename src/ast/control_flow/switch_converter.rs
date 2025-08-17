@@ -177,6 +177,7 @@ impl<'a> SwitchConverter<'a> {
             let default_switch_case = self.convert_default_case(
                 default_case,
                 cfg,
+                cfg, // Pass the same cfg as full_cfg
                 block_converter,
                 switch_info.shared_tail.as_ref(),
                 &empty_phi_nodes,
@@ -517,6 +518,7 @@ impl<'a> SwitchConverter<'a> {
                             &mut case_statements,
                             group,
                             cfg,
+                            cfg, // Pass the same cfg as full_cfg
                             block_converter,
                             switch_info,
                         )?;
@@ -546,6 +548,7 @@ impl<'a> SwitchConverter<'a> {
                     &mut case_statements,
                     group,
                     cfg,
+                    cfg, // Pass the same cfg as full_cfg
                     block_converter,
                     switch_info,
                 )?;
@@ -1292,6 +1295,81 @@ impl<'a> SwitchConverter<'a> {
         }
 
         let target_block = &cfg.graph()[group.target_block];
+
+        // Check if this target block is also a switch dispatch block
+        // by looking for switch comparison instructions at the start
+        let target_instructions = target_block.instructions();
+        let has_switch_comparison = target_instructions.iter().any(|instr| {
+            matches!(
+                &instr.instruction,
+                UnifiedInstruction::JStrictEqual { .. }
+                    | UnifiedInstruction::JStrictEqualLong { .. }
+                    | UnifiedInstruction::JStrictNotEqual { .. }
+                    | UnifiedInstruction::JStrictNotEqualLong { .. }
+            )
+        });
+
+        // Also check if there are any non-comparison instructions before the first comparison
+        let first_comparison_idx = if has_switch_comparison {
+            target_instructions.iter().position(|instr| {
+                matches!(
+                    &instr.instruction,
+                    UnifiedInstruction::JStrictEqual { .. }
+                        | UnifiedInstruction::JStrictEqualLong { .. }
+                        | UnifiedInstruction::JStrictNotEqual { .. }
+                        | UnifiedInstruction::JStrictNotEqualLong { .. }
+                )
+            })
+        } else {
+            None
+        };
+
+        let is_also_switch_dispatch =
+            has_switch_comparison && first_comparison_idx.map(|idx| idx > 0).unwrap_or(false);
+
+        if is_also_switch_dispatch {
+            // This block is both a case target and a switch dispatch
+            // We need to convert only the case body instructions (before the switch dispatch)
+
+            if let Some(comparison_idx) = first_comparison_idx {
+                // Convert only instructions before the switch comparison
+                let mut case_body_instructions = Vec::new();
+                for i in 0..comparison_idx {
+                    let instr = &target_instructions[i];
+                    // Skip if already marked as rendered
+                    if !block_converter.is_instruction_rendered(instr) {
+                        case_body_instructions.push(instr.clone());
+                    }
+                }
+
+                if !case_body_instructions.is_empty() {
+                    // Create a temporary block with just these instructions
+                    let temp_block =
+                        crate::cfg::Block::new(target_block.start_pc(), case_body_instructions);
+
+                    match block_converter.convert_block_with_marking_control(
+                        &temp_block,
+                        group.target_block,
+                        cfg.graph(),
+                        None::<fn(&HbcFunctionInstruction, bool) -> bool>,
+                        false,
+                        mark_as_rendered,
+                    ) {
+                        Ok(stmts) => case_statements.extend(stmts),
+                        Err(e) => {
+                            return Err(SwitchConversionError::BlockConversionError(format!(
+                                "Failed to convert case body in dispatch block: {}",
+                                e
+                            )))
+                        }
+                    }
+                }
+                // The switch dispatch part will be handled when the nested switch is processed
+                return Ok(());
+            }
+        }
+
+        // Normal case: convert the entire block
         match block_converter.convert_block_with_marking_control(
             target_block,
             group.target_block,
@@ -1401,6 +1479,7 @@ impl<'a> SwitchConverter<'a> {
         &mut self,
         default_case: &DefaultCase,
         cfg: &Cfg<'a>,
+        full_cfg: &Cfg<'a>,
         block_converter: &mut super::BlockToStatementConverter<'a>,
         shared_tail: Option<&SharedTailInfo>,
         _all_phi_nodes: &HashMap<u8, PhiNode>,
@@ -1435,34 +1514,32 @@ impl<'a> SwitchConverter<'a> {
                     // Check if the default target is a nested switch
                     let mut converted_nested = false;
 
-                    if let Some(full_cfg) = block_converter.get_full_cfg() {
-                        if let Some(ssa) = block_converter.ssa_analysis() {
-                            if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
-                                for region in &switch_analysis.regions {
-                                    if region.dispatch == default_case.target_block {
-                                        // Mark all blocks in the nested switch region as rendered
-                                        self.mark_switch_region_as_rendered(
-                                            region,
-                                            block_converter,
-                                            cfg,
-                                        );
+                    if let Some(ssa) = block_converter.ssa_analysis() {
+                        if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
+                            for region in &switch_analysis.regions {
+                                if region.dispatch == default_case.target_block {
+                                    // Mark all blocks in the nested switch region as rendered
+                                    self.mark_switch_region_as_rendered(
+                                        region,
+                                        block_converter,
+                                        cfg,
+                                    );
 
-                                        // Convert the nested switch
-                                        let mut nested_converter =
-                                            SwitchConverter::new(self.ast_builder);
-                                        match nested_converter.convert_switch_region(
-                                            region,
-                                            full_cfg,
-                                            block_converter,
-                                        ) {
-                                            Ok(nested_stmts) => {
-                                                case_statements.extend(nested_stmts);
-                                                converted_nested = true;
-                                                break;
-                                            }
-                                            Err(e) => {
-                                                log::error!("Failed to convert nested switch in default case: {:?}", e);
-                                            }
+                                    // Convert the nested switch
+                                    let mut nested_converter =
+                                        SwitchConverter::new(self.ast_builder);
+                                    match nested_converter.convert_switch_region(
+                                        region,
+                                        full_cfg,
+                                        block_converter,
+                                    ) {
+                                        Ok(nested_stmts) => {
+                                            case_statements.extend(nested_stmts);
+                                            converted_nested = true;
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            log::error!("Failed to convert nested switch in default case: {:?}", e);
                                         }
                                     }
                                 }
@@ -1523,34 +1600,30 @@ impl<'a> SwitchConverter<'a> {
                 // Check if the default target is a nested switch
                 let mut converted_nested = false;
 
-                if let Some(full_cfg) = block_converter.get_full_cfg() {
-                    if let Some(ssa) = block_converter.ssa_analysis() {
-                        if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
-                            for region in &switch_analysis.regions {
-                                if region.dispatch == default_case.target_block {
-                                    // Mark all blocks in the nested switch region as rendered
-                                    self.mark_switch_region_as_rendered(
-                                        region,
-                                        block_converter,
-                                        cfg,
-                                    );
+                if let Some(ssa) = block_converter.ssa_analysis() {
+                    if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
+                        for region in &switch_analysis.regions {
+                            if region.dispatch == default_case.target_block {
+                                // Don't mark the dispatch block as rendered yet - let the nested
+                                // switch converter handle it, as it needs to process setup instructions
 
-                                    // Convert the nested switch
-                                    let mut nested_converter =
-                                        SwitchConverter::new(self.ast_builder);
-                                    match nested_converter.convert_switch_region(
-                                        region,
-                                        full_cfg,
-                                        block_converter,
-                                    ) {
-                                        Ok(nested_stmts) => {
-                                            case_statements.extend(nested_stmts);
-                                            converted_nested = true;
-                                            break;
-                                        }
-                                        Err(e) => {
-                                            log::error!("Failed to convert nested switch in default case: {:?}", e);
-                                        }
+                                // Convert the nested switch
+                                let mut nested_converter = SwitchConverter::new(self.ast_builder);
+                                match nested_converter.convert_switch_region(
+                                    region,
+                                    full_cfg,
+                                    block_converter,
+                                ) {
+                                    Ok(nested_stmts) => {
+                                        case_statements.extend(nested_stmts);
+                                        converted_nested = true;
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        log::error!(
+                                            "Failed to convert nested switch in default case: {:?}",
+                                            e
+                                        );
                                     }
                                 }
                             }
@@ -1606,32 +1679,30 @@ impl<'a> SwitchConverter<'a> {
             // Check if the default target is a nested switch
             let mut converted_nested = false;
 
-            if let Some(full_cfg) = block_converter.get_full_cfg() {
-                if let Some(ssa) = block_converter.ssa_analysis() {
-                    if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
-                        for region in &switch_analysis.regions {
-                            if region.dispatch == default_case.target_block {
-                                // Mark all blocks in the nested switch region as rendered
-                                self.mark_switch_region_as_rendered(region, block_converter, cfg);
+            if let Some(ssa) = block_converter.ssa_analysis() {
+                if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
+                    for region in &switch_analysis.regions {
+                        if region.dispatch == default_case.target_block {
+                            // Mark all blocks in the nested switch region as rendered
+                            self.mark_switch_region_as_rendered(region, block_converter, cfg);
 
-                                // Convert the nested switch
-                                let mut nested_converter = SwitchConverter::new(self.ast_builder);
-                                match nested_converter.convert_switch_region(
-                                    region,
-                                    full_cfg,
-                                    block_converter,
-                                ) {
-                                    Ok(nested_stmts) => {
-                                        case_statements.extend(nested_stmts);
-                                        converted_nested = true;
-                                        break;
-                                    }
-                                    Err(e) => {
-                                        log::error!(
-                                            "Failed to convert nested switch in default case: {:?}",
-                                            e
-                                        );
-                                    }
+                            // Convert the nested switch
+                            let mut nested_converter = SwitchConverter::new(self.ast_builder);
+                            match nested_converter.convert_switch_region(
+                                region,
+                                full_cfg,
+                                block_converter,
+                            ) {
+                                Ok(nested_stmts) => {
+                                    case_statements.extend(nested_stmts);
+                                    converted_nested = true;
+                                    break;
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "Failed to convert nested switch in default case: {:?}",
+                                        e
+                                    );
                                 }
                             }
                         }
@@ -2170,13 +2241,10 @@ impl<'a> SwitchConverter<'a> {
         case_statements: &mut ArenaVec<'a, Statement<'a>>,
         group: &CaseGroup,
         cfg: &Cfg<'a>,
+        full_cfg: &Cfg<'a>,
         block_converter: &mut super::BlockToStatementConverter<'a>,
         _switch_info: &SwitchInfo,
     ) -> Result<bool, SwitchConversionError> {
-        let Some(full_cfg) = block_converter.get_full_cfg() else {
-            return Ok(false);
-        };
-
         // 1. Check for nested switches first (highest priority)
         if let Some(ssa) = block_converter.ssa_analysis() {
             if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
@@ -2184,7 +2252,8 @@ impl<'a> SwitchConverter<'a> {
                     if self.is_switch_in_case_body(group.target_block, region, cfg) {
                         if group.target_block == region.dispatch {
                             // Case jumps directly to a nested switch
-                            self.mark_switch_region_as_rendered(region, block_converter, cfg);
+                            // Don't mark the dispatch block as rendered yet - let the nested
+                            // switch converter handle it, as it needs to process setup instructions
                             let mut nested_converter = SwitchConverter::new(self.ast_builder);
                             match nested_converter.convert_switch_region(
                                 region,
@@ -2208,17 +2277,31 @@ impl<'a> SwitchConverter<'a> {
 
         // 2. Check for conditional chains (if/else-if/else)
         if let Some(conditional_analysis) = full_cfg.analyze_conditional_chains() {
-            log::debug!("Checking for conditional chains starting at block {:?}", group.target_block);
+            log::debug!(
+                "Checking for conditional chains starting at block {:?}",
+                group.target_block
+            );
             log::debug!("Available chains: {:?}", conditional_analysis.chains.len());
             for (i, chain) in conditional_analysis.chains.iter().enumerate() {
                 log::debug!("Chain {}: {:?} branches", i, chain.branches.len());
                 for (j, branch) in chain.branches.iter().enumerate() {
-                    log::debug!("  Branch {}: condition_block={:?}, branch_entry={:?}", j, branch.condition_block, branch.branch_entry);
+                    log::debug!(
+                        "  Branch {}: condition_block={:?}, branch_entry={:?}",
+                        j,
+                        branch.condition_block,
+                        branch.branch_entry
+                    );
                 }
             }
-            
-            if let Some(chain) = self.find_chain_starting_at_recursive(group.target_block, &conditional_analysis) {
-                log::debug!("Found conditional chain starting at block {:?}: {:?}", group.target_block, chain.chain_type);
+
+            if let Some(chain) =
+                self.find_chain_starting_at_recursive(group.target_block, &conditional_analysis)
+            {
+                log::debug!(
+                    "Found conditional chain starting at block {:?}: {:?}",
+                    group.target_block,
+                    chain.chain_type
+                );
                 return self.convert_conditional_chain_in_case(
                     case_statements,
                     chain,
@@ -2226,7 +2309,10 @@ impl<'a> SwitchConverter<'a> {
                     block_converter,
                 );
             } else {
-                log::debug!("No conditional chain found starting at block {:?}", group.target_block);
+                log::debug!(
+                    "No conditional chain found starting at block {:?}",
+                    group.target_block
+                );
             }
         }
 
@@ -2260,18 +2346,18 @@ impl<'a> SwitchConverter<'a> {
         match conditional_converter.convert_chain(chain, cfg, block_converter) {
             Ok(chain_statements) => {
                 case_statements.extend(chain_statements);
-                
+
                 // AFTER successful conversion, mark all blocks in the conditional chain as rendered
                 let all_chain_blocks =
                     super::conditional_converter::ConditionalConverter::get_all_chain_blocks(chain);
-                
+
                 for &block_id in &all_chain_blocks {
                     let block = &cfg.graph()[block_id];
                     for instruction in block.instructions() {
                         block_converter.mark_instruction_rendered(instruction);
                     }
                 }
-                
+
                 Ok(true)
             }
             Err(e) => {
@@ -2302,9 +2388,11 @@ impl<'a> SwitchConverter<'a> {
             if !chain.branches.is_empty() && chain.branches[0].condition_block == start_block {
                 return Some(chain);
             }
-            
+
             // Search nested chains
-            if let Some(nested_chain) = self.search_chain_recursive(start_block, &chain.nested_chains) {
+            if let Some(nested_chain) =
+                self.search_chain_recursive(start_block, &chain.nested_chains)
+            {
                 return Some(nested_chain);
             }
         }
@@ -2331,15 +2419,34 @@ impl<'a> SwitchConverter<'a> {
         block_converter: &mut super::BlockToStatementConverter<'a>,
         cfg: &Cfg<'a>,
     ) {
-        // Mark the dispatch block
+        // For the dispatch block, we need to be careful:
+        // If the dispatch block is also a case target, it may contain setup instructions
+        // that should be processed before the switch. We should only mark the switch
+        // comparison instructions as rendered.
+
         let dispatch_block = &cfg.graph()[region.dispatch];
+
+        // Find the first comparison instruction (JStrictEqual or similar)
+        let mut found_comparison = false;
         for instr in dispatch_block.instructions() {
-            block_converter.mark_instruction_rendered(instr);
+            match &instr.instruction {
+                UnifiedInstruction::JStrictEqual { .. }
+                | UnifiedInstruction::JStrictEqualLong { .. }
+                | UnifiedInstruction::JStrictNotEqual { .. }
+                | UnifiedInstruction::JStrictNotEqualLong { .. } => {
+                    found_comparison = true;
+                }
+                _ => {}
+            }
+
+            // Only mark instructions from the first comparison onward
+            if found_comparison {
+                block_converter.mark_instruction_rendered(instr);
+            }
         }
 
         // NOTE: We do NOT mark case target blocks as rendered here!
         // The case bodies need to be converted when we actually process the nested switch.
-        // Only the dispatch block (and potentially other infrastructure blocks) should be marked.
     }
 }
 

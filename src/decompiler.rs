@@ -225,7 +225,8 @@ impl Decompiler {
         _function_index: u32,
     ) -> DecompilerResult<String> {
         // Convert default_params to the format expected by build_function_program
-        let default_params_strings: HashMap<u32, String> = result.default_params
+        let default_params_strings: HashMap<u32, String> = result
+            .default_params
             .into_iter()
             .map(|(k, v)| {
                 // Extract the default value from the instruction
@@ -238,44 +239,32 @@ impl Decompiler {
                             .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
                             .unwrap_or_else(|_| "\"default\"".to_string())
                     }
-                    UnifiedInstruction::LoadConstStringLongIndex { operand_1, .. } => {
-                        hbc_file
-                            .strings
-                            .get(*operand_1)
-                            .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
-                            .unwrap_or_else(|_| "\"default\"".to_string())
-                    }
+                    UnifiedInstruction::LoadConstStringLongIndex { operand_1, .. } => hbc_file
+                        .strings
+                        .get(*operand_1)
+                        .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
+                        .unwrap_or_else(|_| "\"default\"".to_string()),
                     UnifiedInstruction::LoadConstZero { .. } => "0".to_string(),
-                    UnifiedInstruction::LoadConstUInt8 { operand_1, .. } => {
-                        operand_1.to_string()
-                    }
-                    UnifiedInstruction::LoadConstInt { operand_1, .. } => {
-                        operand_1.to_string()
-                    }
+                    UnifiedInstruction::LoadConstUInt8 { operand_1, .. } => operand_1.to_string(),
+                    UnifiedInstruction::LoadConstInt { operand_1, .. } => operand_1.to_string(),
                     UnifiedInstruction::LoadConstDouble { operand_1, .. } => {
                         format!("{}", operand_1)
                     }
                     UnifiedInstruction::LoadConstTrue { .. } => "true".to_string(),
                     UnifiedInstruction::LoadConstFalse { .. } => "false".to_string(),
                     UnifiedInstruction::LoadConstNull { .. } => "null".to_string(),
-                    UnifiedInstruction::LoadConstUndefined { .. } => {
-                        "undefined".to_string()
-                    }
+                    UnifiedInstruction::LoadConstUndefined { .. } => "undefined".to_string(),
                     UnifiedInstruction::LoadConstEmpty { .. } => "/* empty */".to_string(),
-                    UnifiedInstruction::LoadConstBigInt { operand_1, .. } => {
-                        hbc_file
-                            .bigints
-                            .get(*operand_1 as u32)
-                            .map(|bi| format!("{}n", bi))
-                            .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1))
-                    }
-                    UnifiedInstruction::LoadConstBigIntLongIndex { operand_1, .. } => {
-                        hbc_file
-                            .bigints
-                            .get(*operand_1)
-                            .map(|bi| format!("{}n", bi))
-                            .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1))
-                    }
+                    UnifiedInstruction::LoadConstBigInt { operand_1, .. } => hbc_file
+                        .bigints
+                        .get(*operand_1 as u32)
+                        .map(|bi| format!("{}n", bi))
+                        .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1)),
+                    UnifiedInstruction::LoadConstBigIntLongIndex { operand_1, .. } => hbc_file
+                        .bigints
+                        .get(*operand_1)
+                        .map(|bi| format!("{}n", bi))
+                        .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1)),
                     UnifiedInstruction::NewObject { .. } => "{}".to_string(),
                     UnifiedInstruction::NewArray { .. } => "[]".to_string(),
                     UnifiedInstruction::NewArrayWithBuffer { .. } => "[]".to_string(),
@@ -389,46 +378,48 @@ impl<'a> FunctionDecompiler<'a> {
         // TODO: Fix lifetime issue with storing CFG reference in converter
         // For now, we'll skip setting the full CFG which means nested control flow
         // detection won't work optimally
-        let all_statements = match converter
-            .convert_blocks_from_cfg(&cfg)
-        {
-            Ok(statements) => statements,
-            Err(e) => {
-                return Err(DecompilerError::Internal {
-                    message: format!("Failed to convert blocks: {}", e),
-                });
-            }
-        };
+        let all_statements =
+            match converter.convert_blocks_from_cfg_with_options(&cfg, self.skip_validation) {
+                Ok(statements) => statements,
+                Err(e) => {
+                    return Err(DecompilerError::Internal {
+                        message: format!("Failed to convert blocks: {}", e),
+                    });
+                }
+            };
 
         // Take the comment manager back from the converter
         let comment_manager = converter.take_comment_manager();
 
         // Analyze the function for patterns
-        let (default_params, function_type) =
-            match self.hbc_file.functions.get(self.function_index, self.hbc_file) {
-                Ok(func) => {
-                    // Extract UnifiedInstruction from HbcFunctionInstruction
-                    let unified_instructions: Vec<UnifiedInstruction> = func
-                        .instructions
-                        .iter()
-                        .map(|instr| instr.instruction.clone())
-                        .collect();
+        let (default_params, function_type) = match self
+            .hbc_file
+            .functions
+            .get(self.function_index, self.hbc_file)
+        {
+            Ok(func) => {
+                // Extract UnifiedInstruction from HbcFunctionInstruction
+                let unified_instructions: Vec<UnifiedInstruction> = func
+                    .instructions
+                    .iter()
+                    .map(|instr| instr.instruction.clone())
+                    .collect();
 
-                    let defaults = DefaultParameterAnalyzer::analyze(&unified_instructions);
+                let defaults = DefaultParameterAnalyzer::analyze(&unified_instructions);
 
-                    let func_type = FunctionClassifier::classify(
-                        self.function_index,
-                        &unified_instructions,
-                        self.hbc_file,
-                        &self.global_analysis,
-                    );
-                    (defaults, func_type)
-                }
-                Err(_) => {
-                    // No function found, return empty results
-                    (std::collections::HashMap::new(), FunctionType::Standalone)
-                }
-            };
+                let func_type = FunctionClassifier::classify(
+                    self.function_index,
+                    &unified_instructions,
+                    self.hbc_file,
+                    &self.global_analysis,
+                );
+                (defaults, func_type)
+            }
+            Err(_) => {
+                // No function found, return empty results
+                (std::collections::HashMap::new(), FunctionType::Standalone)
+            }
+        };
 
         // Subtract 1 to account for implicit 'this' parameter
         let metadata_param_count = if param_count > 0 { param_count - 1 } else { 0 };
@@ -498,13 +489,12 @@ impl<'a> FunctionDecompiler<'a> {
                                     .map(|bi| format!("{}n", bi))
                                     .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1))
                             }
-                            UnifiedInstruction::LoadConstBigIntLongIndex { operand_1, .. } => {
-                                self.hbc_file
-                                    .bigints
-                                    .get(*operand_1)
-                                    .map(|bi| format!("{}n", bi))
-                                    .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1))
-                            }
+                            UnifiedInstruction::LoadConstBigIntLongIndex { operand_1, .. } => self
+                                .hbc_file
+                                .bigints
+                                .get(*operand_1)
+                                .map(|bi| format!("{}n", bi))
+                                .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1)),
                             UnifiedInstruction::NewObject { .. } => "{}".to_string(),
                             UnifiedInstruction::NewArray { .. } => "[]".to_string(),
                             UnifiedInstruction::NewArrayWithBuffer { .. } => "[]".to_string(),
@@ -535,5 +525,4 @@ impl<'a> FunctionDecompiler<'a> {
             nested_functions: Vec::new(), // TODO: Collect from converter
         })
     }
-
 }

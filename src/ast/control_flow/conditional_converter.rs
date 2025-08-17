@@ -190,24 +190,30 @@ impl<'a> ConditionalConverter<'a> {
             None
         };
 
-        // Check for conditional inversion: if the consequent (if-branch) is empty 
+        // Check for conditional inversion: if the consequent (if-branch) is empty
         // but the alternate (else-branch) has content, invert the condition
-        let (final_test, final_consequent, final_alternate) = 
-            if let Some(ref alt) = alternate {
-                if self.is_statement_empty(&consequent) && !self.is_statement_empty(alt) {
-                    // Invert the condition and swap branches
-                    let inverted_test = self.invert_condition_expression(test)?;
-                    (inverted_test, alt.clone_in(self.ast_builder.allocator), None)
-                } else {
-                    (test, consequent, alternate)
-                }
+        let (final_test, final_consequent, final_alternate) = if let Some(ref alt) = alternate {
+            if self.is_statement_empty(&consequent) && !self.is_statement_empty(alt) {
+                // Invert the condition and swap branches
+                let inverted_test = self.invert_condition_expression(test)?;
+                (
+                    inverted_test,
+                    alt.clone_in(self.ast_builder.allocator),
+                    None,
+                )
             } else {
                 (test, consequent, alternate)
-            };
+            }
+        } else {
+            (test, consequent, alternate)
+        };
 
-        let if_stmt = self
-            .ast_builder
-            .statement_if(Span::default(), final_test, final_consequent, final_alternate);
+        let if_stmt = self.ast_builder.statement_if(
+            Span::default(),
+            final_test,
+            final_consequent,
+            final_alternate,
+        );
 
         Ok(if_stmt)
     }
@@ -867,7 +873,7 @@ impl<'a> ConditionalConverter<'a> {
                         BinaryOperator::StrictEquality,
                         bin_expr.right.clone_in(self.ast_builder.allocator),
                     )),
-                    
+
                     // Comparison operators
                     BinaryOperator::LessThan => Ok(self.ast_builder.expression_binary(
                         bin_expr.span,
@@ -893,7 +899,7 @@ impl<'a> ConditionalConverter<'a> {
                         BinaryOperator::LessThan,
                         bin_expr.right.clone_in(self.ast_builder.allocator),
                     )),
-                    
+
                     // For other operators, fall back to logical NOT
                     _ => Ok(self.ast_builder.expression_unary(
                         Span::default(),
@@ -902,7 +908,7 @@ impl<'a> ConditionalConverter<'a> {
                     )),
                 }
             }
-            
+
             // For unary NOT expressions, remove the NOT
             Expression::UnaryExpression(ref unary_expr) => {
                 if unary_expr.operator == UnaryOperator::LogicalNot {
@@ -916,7 +922,7 @@ impl<'a> ConditionalConverter<'a> {
                     ))
                 }
             }
-            
+
             // For all other expressions, wrap in logical NOT
             _ => Ok(self.ast_builder.expression_unary(
                 Span::default(),
