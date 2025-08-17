@@ -1311,8 +1311,9 @@ impl<'a> InstructionToStatementConverter<'a> {
             nested_context.clone(),
         );
 
-        // Set decompile_nested to false to avoid infinite recursion
-        nested_converter.set_decompile_nested(false);
+        // Keep the same decompile_nested setting for nested functions
+        // This allows deeply nested functions to be decompiled
+        nested_converter.set_decompile_nested(self.decompile_nested);
 
         // If we have a global analyzer, share it
         if let Some(ref analyzer) = self.global_analyzer {
@@ -1329,7 +1330,7 @@ impl<'a> InstructionToStatementConverter<'a> {
 
         // Create block converter for the nested function
         let mut block_converter = if let Some(ssa) = ssa_analysis {
-            crate::ast::control_flow::BlockToStatementConverter::with_ssa_and_global_analysis(
+            let mut converter = crate::ast::control_flow::BlockToStatementConverter::with_ssa_and_global_analysis(
                 self.ast_builder,
                 nested_context,
                 false, // no instruction comments in nested functions
@@ -1343,13 +1344,17 @@ impl<'a> InstructionToStatementConverter<'a> {
                         Err(_) => panic!("Failed to create global analyzer for nested function"),
                     }
                 }),
-            )
+            );
+            converter.set_decompile_nested(self.decompile_nested);
+            converter
         } else {
-            crate::ast::control_flow::BlockToStatementConverter::new(
+            let mut converter = crate::ast::control_flow::BlockToStatementConverter::new(
                 self.ast_builder,
                 nested_context,
                 false, // no instruction comments in nested functions
-            )
+            );
+            converter.set_decompile_nested(self.decompile_nested);
+            converter
         };
 
         // Convert the nested function's blocks to statements
