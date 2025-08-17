@@ -4,7 +4,11 @@
 //! These handle function calls, returns, and parameter loading operations.
 
 use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
+use crate::ast::context::ExpressionContext;
+use crate::hbc::InstructionIndex;
+use oxc_ast::ast::Statement;
 use oxc_span::Span;
+use std::sync::Arc;
 
 /// Trait providing function operation helper methods
 pub trait FunctionHelpers<'a> {
@@ -551,22 +555,26 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Create function body
         let body = if self.decompile_nested {
-            // TODO: Implement nested function decompilation
-            // This would require:
-            // 1. Getting the HBC file reference
-            // 2. Creating a new decompiler instance
-            // 3. Recursively decompiling the nested function
-            // For now, show that nested decompilation is enabled
-            let body_comment = format!("/* Nested function {} - decompilation enabled but not yet implemented */", func_idx);
-            let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
-            let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
-            let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+            // Decompile the nested function
+            match self.decompile_nested_function_body(func_idx as u32) {
+                Ok(body_stmts) => {
+                    self.ast_builder
+                        .function_body(span, self.ast_builder.vec(), body_stmts)
+                }
+                Err(e) => {
+                    // On error, create a comment with the error message
+                    let body_comment = format!("/* Nested function {} - decompilation failed: {} */", func_idx, e);
+                    let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
+                    let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
+                    let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
 
-            let mut body_stmts = self.ast_builder.vec();
-            body_stmts.push(comment_stmt);
+                    let mut body_stmts = self.ast_builder.vec();
+                    body_stmts.push(comment_stmt);
 
-            self.ast_builder
-                .function_body(span, self.ast_builder.vec(), body_stmts)
+                    self.ast_builder
+                        .function_body(span, self.ast_builder.vec(), body_stmts)
+                }
+            }
         } else {
             // Create placeholder body when not decompiling nested functions
             let body_comment = "/* Nested function - body not yet decompiled */";
@@ -640,21 +648,39 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             String::new()
         };
 
-        let body_comment = if self.decompile_nested {
-            format!("/* Nested async function {} - decompilation enabled but not yet implemented */", func_idx)
+        let body = if self.decompile_nested {
+            // Decompile the nested async function
+            match self.decompile_nested_function_body(func_idx as u32) {
+                Ok(body_stmts) => {
+                    self.ast_builder
+                        .function_body(span, self.ast_builder.vec(), body_stmts)
+                }
+                Err(e) => {
+                    // On error, create a comment with the error message
+                    let body_comment = format!("/* Nested async function {} - decompilation failed: {} */", func_idx, e);
+                    let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
+                    let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
+                    let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+
+                    let mut body_stmts = self.ast_builder.vec();
+                    body_stmts.push(comment_stmt);
+
+                    self.ast_builder
+                        .function_body(span, self.ast_builder.vec(), body_stmts)
+                }
+            }
         } else {
-            "/* Nested async function - body not yet decompiled */".to_string()
+            let body_comment = "/* Nested async function - body not yet decompiled */";
+            let comment_atom = self.ast_builder.allocator.alloc_str(body_comment);
+            let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
+            let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+
+            let mut body_stmts = self.ast_builder.vec();
+            body_stmts.push(comment_stmt);
+
+            self.ast_builder
+                .function_body(span, self.ast_builder.vec(), body_stmts)
         };
-        let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
-        let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
-        let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
-
-        let mut body_stmts = self.ast_builder.vec();
-        body_stmts.push(comment_stmt);
-
-        let body = self
-            .ast_builder
-            .function_body(span, self.ast_builder.vec(), body_stmts);
 
         // Create async function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
@@ -927,21 +953,39 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             String::new()
         };
 
-        let body_comment = if self.decompile_nested {
-            format!("/* Nested async function {} - decompilation enabled but not yet implemented */", func_idx)
+        let body = if self.decompile_nested {
+            // Decompile the nested async function
+            match self.decompile_nested_function_body(func_idx as u32) {
+                Ok(body_stmts) => {
+                    self.ast_builder
+                        .function_body(span, self.ast_builder.vec(), body_stmts)
+                }
+                Err(e) => {
+                    // On error, create a comment with the error message
+                    let body_comment = format!("/* Nested async function {} - decompilation failed: {} */", func_idx, e);
+                    let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
+                    let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
+                    let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+
+                    let mut body_stmts = self.ast_builder.vec();
+                    body_stmts.push(comment_stmt);
+
+                    self.ast_builder
+                        .function_body(span, self.ast_builder.vec(), body_stmts)
+                }
+            }
         } else {
-            "/* Nested async function - body not yet decompiled */".to_string()
+            let body_comment = "/* Nested async function - body not yet decompiled */";
+            let comment_atom = self.ast_builder.allocator.alloc_str(body_comment);
+            let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
+            let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+
+            let mut body_stmts = self.ast_builder.vec();
+            body_stmts.push(comment_stmt);
+
+            self.ast_builder
+                .function_body(span, self.ast_builder.vec(), body_stmts)
         };
-        let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
-        let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
-        let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
-
-        let mut body_stmts = self.ast_builder.vec();
-        body_stmts.push(comment_stmt);
-
-        let body = self
-            .ast_builder
-            .function_body(span, self.ast_builder.vec(), body_stmts);
 
         // Create async function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
@@ -1235,5 +1279,83 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(comment_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
+    }
+}
+
+impl<'a> InstructionToStatementConverter<'a> {
+    /// Decompile a nested function body
+    fn decompile_nested_function_body(
+        &self,
+        function_index: u32,
+    ) -> Result<oxc_allocator::Vec<'a, Statement<'a>>, StatementConversionError> {
+        // Get HBC file reference from expression context
+        let hbc_file = self.expression_context.hbc_file
+            .ok_or_else(|| StatementConversionError::UnsupportedInstruction(
+                "No HBC file available for nested function decompilation".to_string()
+            ))?;
+
+        // Build CFG for the nested function
+        let mut cfg = crate::cfg::Cfg::new(hbc_file, function_index);
+        cfg.build();
+
+        // Create a new expression context for the nested function
+        let nested_context = ExpressionContext::with_context(
+            hbc_file,
+            function_index,
+            InstructionIndex::zero(),
+        );
+
+        // Create a new instruction converter for the nested function
+        let mut nested_converter = InstructionToStatementConverter::new(
+            self.ast_builder,
+            nested_context.clone(),
+        );
+
+        // Set decompile_nested to false to avoid infinite recursion
+        nested_converter.set_decompile_nested(false);
+
+        // If we have a global analyzer, share it
+        if let Some(ref analyzer) = self.global_analyzer {
+            nested_converter.set_global_analyzer(Some(analyzer.clone()));
+        }
+
+        // Get SSA analysis for the nested function if available
+        let ssa_analysis = if let Some(ref analyzer) = self.global_analyzer {
+            analyzer.analyzer().get_function_analysis(function_index).cloned()
+        } else {
+            // Fallback: run local SSA analysis
+            crate::cfg::ssa::construct_ssa(&cfg, function_index).ok()
+        };
+
+        // Create block converter for the nested function
+        let mut block_converter = if let Some(ssa) = ssa_analysis {
+            crate::ast::control_flow::BlockToStatementConverter::with_ssa_and_global_analysis(
+                self.ast_builder,
+                nested_context,
+                false, // no instruction comments in nested functions
+                false, // no SSA comments in nested functions
+                ssa,
+                &cfg,
+                self.global_analyzer.clone().unwrap_or_else(|| {
+                    // Create a dummy global analyzer if none exists
+                    match crate::analysis::GlobalSSAAnalyzer::analyze(hbc_file) {
+                        Ok(result) => Arc::new(result),
+                        Err(_) => panic!("Failed to create global analyzer for nested function"),
+                    }
+                }),
+            )
+        } else {
+            crate::ast::control_flow::BlockToStatementConverter::new(
+                self.ast_builder,
+                nested_context,
+                false, // no instruction comments in nested functions
+            )
+        };
+
+        // Convert the nested function's blocks to statements
+        block_converter.convert_blocks_from_cfg(&cfg)
+            .map_err(|e| StatementConversionError::UnsupportedInstruction(
+                format!("Failed to convert nested function blocks: {}", e)
+            ))
     }
 }

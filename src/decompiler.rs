@@ -42,6 +42,8 @@ pub struct FunctionDecompilationResult<'a> {
     pub param_names: Vec<String>,
     /// Comment manager for the function
     pub comment_manager: Option<AddressCommentManager>,
+    /// Nested function indices found during decompilation
+    pub nested_functions: Vec<u32>,
 }
 
 /// Decompiler for a single function
@@ -530,6 +532,7 @@ impl<'a> FunctionDecompiler<'a> {
             default_params,
             param_names,
             comment_manager,
+            nested_functions: Vec::new(), // TODO: Collect from converter
         })
     }
 
