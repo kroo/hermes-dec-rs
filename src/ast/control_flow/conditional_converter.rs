@@ -7,7 +7,7 @@ use crate::cfg::analysis::{BranchType, ChainType, ConditionalBranch, Conditional
 use crate::cfg::{Cfg, EdgeKind};
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::InstructionIndex;
-use oxc_allocator::Vec as AllocVec;
+use oxc_allocator::{CloneIn, Vec as AllocVec};
 use oxc_ast::{ast::*, AstBuilder};
 use oxc_span::Span;
 use petgraph::graph::NodeIndex;
@@ -190,9 +190,24 @@ impl<'a> ConditionalConverter<'a> {
             None
         };
 
+        // Check for conditional inversion: if the consequent (if-branch) is empty 
+        // but the alternate (else-branch) has content, invert the condition
+        let (final_test, final_consequent, final_alternate) = 
+            if let Some(ref alt) = alternate {
+                if self.is_statement_empty(&consequent) && !self.is_statement_empty(alt) {
+                    // Invert the condition and swap branches
+                    let inverted_test = self.invert_condition_expression(test)?;
+                    (inverted_test, alt.clone_in(self.ast_builder.allocator), None)
+                } else {
+                    (test, consequent, alternate)
+                }
+            } else {
+                (test, consequent, alternate)
+            };
+
         let if_stmt = self
             .ast_builder
-            .statement_if(Span::default(), test, consequent, alternate);
+            .statement_if(Span::default(), final_test, final_consequent, final_alternate);
 
         Ok(if_stmt)
     }
@@ -810,6 +825,105 @@ impl<'a> ConditionalConverter<'a> {
         Ok(self
             .ast_builder
             .expression_identifier(Span::default(), self.ast_builder.atom(&var_name)))
+    }
+
+    /// Check if a statement is empty (has no meaningful content)
+    fn is_statement_empty(&self, stmt: &Statement<'a>) -> bool {
+        match stmt {
+            Statement::BlockStatement(block) => block.body.is_empty(),
+            Statement::EmptyStatement(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Invert a condition expression by wrapping it in a logical NOT or by inverting comparison operators
+    fn invert_condition_expression(&self, expr: Expression<'a>) -> Result<Expression<'a>, String> {
+        match expr {
+            // For binary expressions, try to invert the operator directly
+            Expression::BinaryExpression(ref bin_expr) => {
+                match bin_expr.operator {
+                    // Equality operators
+                    BinaryOperator::Equality => Ok(self.ast_builder.expression_binary(
+                        bin_expr.span,
+                        bin_expr.left.clone_in(self.ast_builder.allocator),
+                        BinaryOperator::Inequality,
+                        bin_expr.right.clone_in(self.ast_builder.allocator),
+                    )),
+                    BinaryOperator::Inequality => Ok(self.ast_builder.expression_binary(
+                        bin_expr.span,
+                        bin_expr.left.clone_in(self.ast_builder.allocator),
+                        BinaryOperator::Equality,
+                        bin_expr.right.clone_in(self.ast_builder.allocator),
+                    )),
+                    BinaryOperator::StrictEquality => Ok(self.ast_builder.expression_binary(
+                        bin_expr.span,
+                        bin_expr.left.clone_in(self.ast_builder.allocator),
+                        BinaryOperator::StrictInequality,
+                        bin_expr.right.clone_in(self.ast_builder.allocator),
+                    )),
+                    BinaryOperator::StrictInequality => Ok(self.ast_builder.expression_binary(
+                        bin_expr.span,
+                        bin_expr.left.clone_in(self.ast_builder.allocator),
+                        BinaryOperator::StrictEquality,
+                        bin_expr.right.clone_in(self.ast_builder.allocator),
+                    )),
+                    
+                    // Comparison operators
+                    BinaryOperator::LessThan => Ok(self.ast_builder.expression_binary(
+                        bin_expr.span,
+                        bin_expr.left.clone_in(self.ast_builder.allocator),
+                        BinaryOperator::GreaterEqualThan,
+                        bin_expr.right.clone_in(self.ast_builder.allocator),
+                    )),
+                    BinaryOperator::LessEqualThan => Ok(self.ast_builder.expression_binary(
+                        bin_expr.span,
+                        bin_expr.left.clone_in(self.ast_builder.allocator),
+                        BinaryOperator::GreaterThan,
+                        bin_expr.right.clone_in(self.ast_builder.allocator),
+                    )),
+                    BinaryOperator::GreaterThan => Ok(self.ast_builder.expression_binary(
+                        bin_expr.span,
+                        bin_expr.left.clone_in(self.ast_builder.allocator),
+                        BinaryOperator::LessEqualThan,
+                        bin_expr.right.clone_in(self.ast_builder.allocator),
+                    )),
+                    BinaryOperator::GreaterEqualThan => Ok(self.ast_builder.expression_binary(
+                        bin_expr.span,
+                        bin_expr.left.clone_in(self.ast_builder.allocator),
+                        BinaryOperator::LessThan,
+                        bin_expr.right.clone_in(self.ast_builder.allocator),
+                    )),
+                    
+                    // For other operators, fall back to logical NOT
+                    _ => Ok(self.ast_builder.expression_unary(
+                        Span::default(),
+                        UnaryOperator::LogicalNot,
+                        expr,
+                    )),
+                }
+            }
+            
+            // For unary NOT expressions, remove the NOT
+            Expression::UnaryExpression(ref unary_expr) => {
+                if unary_expr.operator == UnaryOperator::LogicalNot {
+                    Ok(unary_expr.argument.clone_in(self.ast_builder.allocator))
+                } else {
+                    // Wrap other unary expressions in NOT
+                    Ok(self.ast_builder.expression_unary(
+                        Span::default(),
+                        UnaryOperator::LogicalNot,
+                        expr,
+                    ))
+                }
+            }
+            
+            // For all other expressions, wrap in logical NOT
+            _ => Ok(self.ast_builder.expression_unary(
+                Span::default(),
+                UnaryOperator::LogicalNot,
+                expr,
+            )),
+        }
     }
 }
 
