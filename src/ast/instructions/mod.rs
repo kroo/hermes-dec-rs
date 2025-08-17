@@ -93,6 +93,8 @@ pub struct InstructionToStatementConverter<'a> {
     register_manager: RegisterManager,
     /// Optional global analyzer for cross-function variable resolution
     global_analyzer: Option<Arc<GlobalAnalysisResult>>,
+    /// Whether to decompile nested function bodies
+    decompile_nested: bool,
 }
 
 impl<'a> InstructionToStatementConverter<'a> {
@@ -106,6 +108,7 @@ impl<'a> InstructionToStatementConverter<'a> {
             expression_context,
             register_manager: RegisterManager::new(),
             global_analyzer: None,
+            decompile_nested: false,
         }
     }
 
@@ -114,6 +117,11 @@ impl<'a> InstructionToStatementConverter<'a> {
         let idx = InstructionIndex(pc as usize);
         self.expression_context.set_current_pc(idx);
         self.register_manager.set_current_pc(idx);
+    }
+
+    /// Set whether to decompile nested function bodies
+    pub fn set_decompile_nested(&mut self, decompile_nested: bool) {
+        self.decompile_nested = decompile_nested;
     }
 
     /// Get mutable reference to register manager

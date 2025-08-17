@@ -34,6 +34,9 @@ pub enum Commands {
         /// Include comments (comma-separated: ssa, instructions, none)
         #[arg(long, default_value = "none")]
         comments: String,
+        /// Decompile nested function definitions (experimental)
+        #[arg(long)]
+        decompile_nested: bool,
     },
     /// Disassemble Hermes bytecode to assembly-like format
     Disasm {
@@ -91,8 +94,9 @@ impl Cli {
                 function,
                 output,
                 comments,
+                decompile_nested,
             } => {
-                decompile::decompile(&input, function, output.as_deref(), &comments, false)?;
+                decompile::decompile(&input, function, output.as_deref(), &comments, false, decompile_nested)?;
             }
             Commands::Disasm { input } => {
                 disasm::disasm(&input)?;

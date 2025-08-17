@@ -549,19 +549,37 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let params = self.create_function_parameters(param_count, func_idx as u32);
 
-        // For now, create a placeholder body
-        // In a full implementation, we would recursively decompile the function body
-        let body_comment = "/* Nested function - body not yet decompiled */";
-        let comment_atom = self.ast_builder.allocator.alloc_str(body_comment);
-        let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
-        let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+        // Create function body
+        let body = if self.decompile_nested {
+            // TODO: Implement nested function decompilation
+            // This would require:
+            // 1. Getting the HBC file reference
+            // 2. Creating a new decompiler instance
+            // 3. Recursively decompiling the nested function
+            // For now, still use placeholder
+            let body_comment = "/* Nested function - decompilation not yet implemented */";
+            let comment_atom = self.ast_builder.allocator.alloc_str(body_comment);
+            let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
+            let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
 
-        let mut body_stmts = self.ast_builder.vec();
-        body_stmts.push(comment_stmt);
+            let mut body_stmts = self.ast_builder.vec();
+            body_stmts.push(comment_stmt);
 
-        let body = self
-            .ast_builder
-            .function_body(span, self.ast_builder.vec(), body_stmts);
+            self.ast_builder
+                .function_body(span, self.ast_builder.vec(), body_stmts)
+        } else {
+            // Create placeholder body when not decompiling nested functions
+            let body_comment = "/* Nested function - body not yet decompiled */";
+            let comment_atom = self.ast_builder.allocator.alloc_str(body_comment);
+            let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
+            let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+
+            let mut body_stmts = self.ast_builder.vec();
+            body_stmts.push(comment_stmt);
+
+            self.ast_builder
+                .function_body(span, self.ast_builder.vec(), body_stmts)
+        };
 
         // Create function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);

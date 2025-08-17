@@ -71,6 +71,10 @@ enum Commands {
         /// Skip validation of block processing
         #[arg(long)]
         skip_validation: bool,
+
+        /// Decompile nested function definitions (experimental)
+        #[arg(long)]
+        decompile_nested: bool,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -132,13 +136,17 @@ fn main() -> Result<()> {
             output,
             comments,
             skip_validation,
-            ..
+            decompile_nested,
+            format: _,
+            minify: _,
+            hbc_version: _,
         } => cli::decompile::decompile(
             &input,
             function,
             output.as_ref().map(|v| &**v),
             &comments,
             skip_validation,
+            decompile_nested,
         )
         .map_err(|e| miette!("{}", e)),
         Commands::Generate { force: _ } => {

@@ -284,7 +284,7 @@ impl<'a> BlockToStatementConverter<'a> {
     /// This method handles proper block ordering and labeling
     pub fn convert_blocks_from_cfg(
         &mut self,
-        cfg: &'a crate::cfg::Cfg<'a>,
+        cfg: &crate::cfg::Cfg<'a>,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
         self.convert_blocks_from_cfg_with_options(cfg, false)
     }
@@ -293,11 +293,12 @@ impl<'a> BlockToStatementConverter<'a> {
     /// This method handles proper block ordering and labeling
     pub fn convert_blocks_from_cfg_with_options(
         &mut self,
-        cfg: &'a crate::cfg::Cfg<'a>,
+        cfg: &crate::cfg::Cfg<'a>,
         skip_validation: bool,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
-        // Store the full CFG for nested control flow detection
-        self.set_full_cfg(cfg);
+        // TODO: Fix lifetime issue - can't store reference to locally created CFG
+        // For now, nested control flow detection won't work optimally
+        // self.set_full_cfg(cfg);
 
         let mut all_statements =
             ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
@@ -1235,6 +1236,11 @@ impl<'a> BlockToStatementConverter<'a> {
     /// Set the comment manager (useful when building from external context)
     pub fn set_comment_manager(&mut self, comment_manager: AddressCommentManager) {
         self.comment_manager = Some(comment_manager);
+    }
+
+    /// Set whether to decompile nested function bodies
+    pub fn set_decompile_nested(&mut self, decompile_nested: bool) {
+        self.instruction_converter.set_decompile_nested(decompile_nested);
     }
 
     /// Take the comment manager (transfers ownership)
