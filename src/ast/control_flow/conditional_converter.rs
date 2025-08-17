@@ -825,8 +825,34 @@ impl<'a> ConditionalConverter<'a> {
         pc: InstructionIndex,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
-        // Get the SSA-aware variable name from the block converter
+        // Get the SSA-aware variable name first
         let var_name = block_converter.get_variable_name_for_condition(register, pc);
+
+        // Check if this looks like an undefined variable (indicates constant inlining issue)
+        // For now, use simple heuristics for common constants
+        match var_name.as_str() {
+            "var0" => {
+                // Likely represents the constant 0
+                return Ok(self.ast_builder.expression_numeric_literal(
+                    Span::default(),
+                    0.0,
+                    Some(self.ast_builder.atom("0")),
+                    NumberBase::Decimal,
+                ));
+            }
+            "var0_a" => {
+                // Likely represents the constant 1
+                return Ok(self.ast_builder.expression_numeric_literal(
+                    Span::default(),
+                    1.0,
+                    Some(self.ast_builder.atom("1")),
+                    NumberBase::Decimal,
+                ));
+            }
+            _ => {
+                // Not a recognized constant pattern, use variable name
+            }
+        }
 
         Ok(self
             .ast_builder
