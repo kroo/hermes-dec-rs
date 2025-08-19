@@ -6,7 +6,7 @@
 use super::switch_info::*;
 use crate::analysis::value_tracker::{ConstantValue, TrackedValue, ValueTracker};
 use crate::cfg::analysis::PostDominatorAnalysis;
-use crate::cfg::ssa::SSAAnalysis;
+use crate::cfg::ssa::{SSAAnalysis, SSAValue};
 use crate::cfg::{Cfg, EdgeKind};
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
@@ -81,6 +81,169 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         }
     }
 
+    /// Build the entry path from the start block to a specific case
+    fn build_entry_path(
+        &self,
+        start_block: NodeIndex,
+        target_case_block: NodeIndex,
+        cfg: &Cfg<'a>,
+    ) -> Vec<NodeIndex> {
+        let mut path = vec![start_block];
+        let mut current = start_block;
+        let mut visited = HashSet::new();
+        
+        while current != target_case_block && visited.insert(current) {
+            // For sparse switches, we follow the false branch until we reach our target
+            if let Some(false_successor) = self.get_false_successor(current, cfg) {
+                path.push(false_successor);
+                current = false_successor;
+            } else {
+                break;
+            }
+        }
+        
+        path
+    }
+
+    /// Collect setup instructions along an entry path
+    fn collect_setup_along_path(
+        &self,
+        path: &[NodeIndex],
+        target_block: NodeIndex,
+        discriminator: u8,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+    ) -> SmallVec<[SetupInstruction; 4]> {
+        let mut setup = SmallVec::new();
+        let mut seen_registers = HashSet::new();
+        
+        // Process each block in the path
+        for &block_id in path {
+            let block = &cfg.graph()[block_id];
+            
+            for instr in block.instructions() {
+                let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+                
+                if let Some(target_reg) = usage.target {
+                    // Skip if we've already seen this register (later definitions override)
+                    if seen_registers.contains(&target_reg) {
+                        continue;
+                    }
+                    
+                    // Skip the discriminator register itself
+                    if target_reg == discriminator {
+                        continue;
+                    }
+                    
+                    // Check if this value is used in the target block before being redefined
+                    let instr_idx = instr.instruction_index;
+                    if let Some(ssa_value) = ssa.get_value_after_instruction(target_reg, instr_idx) {
+                        // Check if this SSA value is used in the target block before redefinition
+                        if self.is_value_used_before_redefinition(ssa_value, target_block, cfg, ssa) {
+                            // Extract constant value if this is a constant load
+                            let const_value = if let Some(hbc_file) = self.hbc_file {
+                                let value_tracker = ValueTracker::new(cfg, ssa, hbc_file);
+                                if let TrackedValue::Constant(c) = value_tracker.get_value(ssa_value) {
+                                    Some(c)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+                            
+                            setup.push(SetupInstruction {
+                                instruction: std::rc::Rc::new(instr.clone()),
+                                ssa_value: ssa_value.clone(),
+                                value: const_value,
+                            });
+                            
+                            seen_registers.insert(target_reg);
+                        }
+                    }
+                }
+            }
+        }
+        
+        setup
+    }
+    
+    /// Check if an SSA value is used in a block before being redefined
+    fn is_value_used_before_redefinition(
+        &self,
+        ssa_value: &SSAValue,
+        block_id: NodeIndex,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+    ) -> bool {
+        let register = ssa_value.register;
+        let block = &cfg.graph()[block_id];
+        
+        // Check each instruction in order
+        for instr in block.instructions() {
+            let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+            
+            // First check if this instruction uses the register
+            for src_reg in usage.sources {
+                if src_reg == register {
+                    // Check if it's using our specific SSA value
+                    if let Some(src_value) = ssa.get_value_before_instruction(src_reg, instr.instruction_index) {
+                        if src_value == ssa_value {
+                            // The value is used before any redefinition
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            // Then check if this instruction redefines the register
+            if let Some(target_reg) = usage.target {
+                if target_reg == register {
+                    // The register is redefined, our value is no longer live
+                    return false;
+                }
+            }
+        }
+        
+        // Check PHI functions at this block
+        if let Some(phis) = ssa.phi_functions.get(&block_id) {
+            for phi in phis {
+                // PHI functions conceptually execute at the beginning of the block
+                // so they would use values before any instruction redefines them
+                for (_, operand_value) in &phi.operands {
+                    if operand_value == ssa_value {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        // Check if the value flows to successor blocks
+        // Only if the register wasn't redefined in this block
+        let register_redefined_in_block = block.instructions().iter().any(|instr| {
+            let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+            usage.target == Some(register)
+        });
+        
+        if !register_redefined_in_block {
+            // Check immediate successors for PHI functions that might use this value
+            for edge in cfg.graph().edges(block_id) {
+                let successor = edge.target();
+                if let Some(successor_phis) = ssa.phi_functions.get(&successor) {
+                    for phi in successor_phis {
+                        if let Some((_, operand_value)) = phi.operands.iter().find(|(pred, _)| **pred == block_id) {
+                            if operand_value == ssa_value {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        false
+    }
+
     /// Detect a switch pattern starting from a given block
     pub fn detect_switch_pattern(
         &self,
@@ -96,14 +259,12 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         // Safety checker for setup instructions
         let safety_checker = SetupSafetyChecker::new(cfg, ssa, postdom);
 
-        // Collect all cases
+        // First pass: collect all cases and their comparison blocks
         let mut cases = Vec::new();
+        let mut case_blocks = Vec::new(); // Track comparison blocks for entry path building
         let mut current_block = start_block;
         let mut visited = HashSet::new();
         let mut execution_order = 0;
-
-        // Track which registers are live across false edges
-        let _live_across_false: HashSet<u8> = HashSet::new();
 
         loop {
             if !visited.insert(current_block) {
@@ -118,21 +279,9 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 ssa,
                 Some(start_block),
             ) {
-                // Create compare context for anchored safety checks
-                let true_successor = case_info.target_block;
-                let false_successor = self.get_false_successor(current_block, cfg)?;
-                let _compare_ctx = CompareContext {
-                    compare_block: current_block,
-                    true_successor,
-                    false_successor,
-                    discriminator,
-                };
-
-                // Filter setup instructions by safety
-                case_info
-                    .setup
-                    .retain(|setup_instr| safety_checker.is_case_localizable(setup_instr));
-
+                // Store the comparison block for this case
+                case_blocks.push((case_info.comparison_block, case_info.target_block));
+                
                 // Set execution order
                 case_info.execution_order = execution_order;
                 execution_order += 1;
@@ -148,6 +297,27 @@ impl<'a> SparseSwitchAnalyzer<'a> {
             } else {
                 break;
             }
+        }
+        
+        // Second pass: build entry paths and collect setup instructions
+        for case in cases.iter_mut() {
+            // Build entry path from start to this case's comparison block
+            let entry_path = self.build_entry_path(start_block, case.comparison_block, cfg);
+            
+            // Collect all setup instructions along the path
+            let path_setup = self.collect_setup_along_path(
+                &entry_path,
+                case.target_block,
+                discriminator,
+                cfg,
+                ssa,
+            );
+            
+            // Replace the case's setup with our path-based setup
+            case.setup = path_setup;
+            
+            // Filter setup instructions by safety
+            case.setup.retain(|setup_instr| safety_checker.is_case_localizable(setup_instr));
         }
 
         // If we didn't find any cases, this isn't a switch pattern
@@ -293,7 +463,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         discriminator: u8,
         cfg: &Cfg<'a>,
         ssa: &SSAAnalysis,
-        dispatch_block: Option<NodeIndex>,
+        _dispatch_block: Option<NodeIndex>,
     ) -> Option<CaseInfo> {
         let block = &cfg.graph()[block_id];
         let instructions = block.instructions();
@@ -303,7 +473,6 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         let mut keys = Vec::new();
         let mut target_block = None;
         let mut _source_pc = InstructionIndex::new(0);
-        let mut comparison_const_reg = None;
 
         // First pass: find the comparison instruction and extract case key
         for (i, instr) in instructions.iter().enumerate() {
@@ -337,7 +506,6 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                         }
 
                         comparison_index = Some(i);
-                        comparison_const_reg = Some(const_reg);
                         _source_pc = instr.instruction_index;
 
                         // Extract the constant value for the case key using ValueTracker
@@ -371,99 +539,12 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         }
 
         // Bail if we didn't find a comparison
-        let comparison_idx = comparison_index?;
-        let const_reg = comparison_const_reg?;
+        let _comparison_idx = comparison_index?;
         let target = target_block?;
 
-        // Second pass: collect all setup instructions
-        // These are all instructions except:
-        // 1. The LoadConst that loads the comparison value
-        // 2. The comparison itself
-        let mut setup = SmallVec::new();
-
-        for (i, instr) in instructions.iter().enumerate() {
-            if i == comparison_idx {
-                continue;
-            }
-
-            // Check if this instruction defines a register
-            let usage =
-                crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
-            if let Some(target_reg) = usage.target {
-                // Skip if this is loading the constant for comparison
-                let loads_comparison_const = target_reg == const_reg
-                    && i < comparison_idx
-                    && match &instr.instruction {
-                        UnifiedInstruction::LoadConstZero { .. }
-                        | UnifiedInstruction::LoadConstUInt8 { .. }
-                        | UnifiedInstruction::LoadConstInt { .. }
-                        | UnifiedInstruction::LoadConstDouble { .. }
-                        | UnifiedInstruction::LoadConstString { .. }
-                        | UnifiedInstruction::LoadConstStringLongIndex { .. }
-                        | UnifiedInstruction::LoadConstTrue { .. }
-                        | UnifiedInstruction::LoadConstFalse { .. }
-                        | UnifiedInstruction::LoadConstNull { .. }
-                        | UnifiedInstruction::LoadConstUndefined { .. } => true,
-                        _ => false,
-                    };
-
-                if loads_comparison_const {
-                    continue;
-                }
-
-                // For dispatch block instructions, check if this should be treated as case 0's setup
-                let is_dispatch_block = Some(block_id) == dispatch_block;
-                if is_dispatch_block && i < comparison_idx {
-                    // Check if this register contributes to a PHI function at the target block
-                    // that also receives values from other cases
-                    let contributes_to_switch_phi = if let Some(target_block_phi) = ssa
-                        .phi_functions
-                        .get(&target)
-                        .and_then(|phis| phis.iter().find(|phi| phi.register == target_reg))
-                    {
-                        // Check if other cases also contribute to this PHI
-                        // This would indicate this is a case-specific value, not a pre-switch value
-                        target_block_phi.operands.len() > 1
-                    } else {
-                        false
-                    };
-
-                    if !contributes_to_switch_phi {
-                        // This is a pre-switch instruction, not case 0's setup
-                        continue;
-                    }
-                }
-
-                // This is a setup instruction
-                // Convert block-relative instruction index to absolute instruction index
-                let block = &cfg.graph()[block_id];
-                let instr_idx = InstructionIndex::new(block.start_pc().value() + i);
-                // Use get_value_after_instruction since we want the SSA value produced by this instruction
-                if let Some(ssa_value) = ssa.get_value_after_instruction(target_reg, instr_idx) {
-                    // Extract constant value if this is a constant load
-                    let const_value = if i < comparison_idx {
-                        if let Some(hbc_file) = self.hbc_file {
-                            let value_tracker = ValueTracker::new(cfg, ssa, hbc_file);
-                            if let TrackedValue::Constant(c) = value_tracker.get_value(ssa_value) {
-                                Some(c)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-
-                    setup.push(SetupInstruction {
-                        instruction: std::rc::Rc::new(instr.clone()),
-                        ssa_value: ssa_value.clone(),
-                        value: const_value,
-                    });
-                }
-            }
-        }
+        // For the initial extraction, we'll return an empty setup list
+        // The actual setup instructions will be collected by the entry path algorithm
+        let setup = SmallVec::new();
 
         // Check if this case always terminates by looking at the target block
         let always_terminates = {
