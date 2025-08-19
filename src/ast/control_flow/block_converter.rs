@@ -1632,7 +1632,7 @@ impl<'a> BlockToStatementConverter<'a> {
 
         // Then add function scope variables from mapping
         if let Some(mapping) = self.instruction_converter.get_variable_mapping() {
-            let mut function_vars: Vec<_> = mapping
+            let function_vars: Vec<_> = mapping
                 .function_scope_vars
                 .iter()
                 .filter(|var_name| {
