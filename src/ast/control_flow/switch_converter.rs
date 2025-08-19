@@ -4,7 +4,8 @@
 
 use crate::analysis::value_tracker::ConstantValue;
 use crate::cfg::switch_analysis::{
-    CaseGroup, CaseInfo, CaseKey, DefaultCase, PhiNode, SharedTailInfo, SwitchInfo,
+    sparse_switch_analyzer::SparseSwitchAnalyzer, CaseGroup, CaseInfo, CaseKey, DefaultCase,
+    PhiNode, SharedTailInfo, SwitchInfo,
 };
 use crate::cfg::{analysis::SwitchRegion, ssa::SSAValue, Cfg};
 use crate::generated::unified_instructions::UnifiedInstruction;
@@ -1016,6 +1017,15 @@ impl<'a> SwitchConverter<'a> {
         };
 
         for setup_instr in &group.setup {
+            // Check if this SSA value has already been marked as eliminated
+            if block_converter.get_eliminated_ssa_values().contains(&setup_instr.ssa_value) {
+                log::debug!(
+                    "Skipping setup instruction for eliminated SSA value: {:?}",
+                    setup_instr.ssa_value
+                );
+                continue;
+            }
+            
             // Smart temporary instruction skipping
             // Skip LoadConst instructions if:
             // 1. They are immediately followed by a Ret instruction that uses the loaded value
@@ -2541,6 +2551,12 @@ impl<'a> SwitchConverter<'a> {
                         // Case jumps directly to a nested switch
                         // Don't mark the dispatch block as rendered yet - let the nested
                         // switch converter handle it, as it needs to process setup instructions
+                        
+                        // Before converting, check if any of this case's setup instructions
+                        // are only used by the nested switch comparisons
+                        log::debug!("Checking setup instructions for nested switch elimination in case {:?}", group.keys);
+                        self.mark_nested_switch_setup_eliminated(group, region, block_converter, full_cfg);
+                        
                         let mut nested_converter = SwitchConverter::new(self.ast_builder);
                         match nested_converter.convert_switch_region(
                             region,
@@ -2751,6 +2767,109 @@ impl<'a> SwitchConverter<'a> {
             .loops
             .iter()
             .find(move |loop_info| loop_info.is_header(start_block))
+    }
+
+    /// Mark setup instructions as eliminated if they're only used by nested switch comparisons
+    fn mark_nested_switch_setup_eliminated(
+        &self,
+        group: &CaseGroup,
+        nested_region: &SwitchRegion,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+        cfg: &'a Cfg<'a>,
+    ) {
+        // Check each setup instruction in the case group
+        log::debug!("Case group has {} setup instructions", group.setup.len());
+        for setup_instr in &group.setup {
+            let register = setup_instr.ssa_value.register;
+            log::debug!("Checking setup instruction for register {}: {:?}", register, setup_instr.value);
+            
+            // Check if this register is used in the nested switch comparisons
+            let mut only_used_in_comparisons = true;
+            let mut used_in_comparisons = false;
+            
+            // Get all uses of this SSA value
+            let ssa = block_converter.ssa_analysis();
+            
+            // Check the dispatch block of the nested switch
+            let dispatch_block = &cfg.graph()[nested_region.dispatch];
+            for instr in dispatch_block.instructions() {
+                let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+                
+                // Check if this instruction uses our register
+                for src_reg in usage.sources {
+                    if src_reg == register {
+                        // Check if this is using our specific SSA value
+                        if let Some(src_value) = ssa.get_value_before_instruction(src_reg, instr.instruction_index) {
+                            if src_value == &setup_instr.ssa_value {
+                                // This instruction uses our value
+                                match &instr.instruction {
+                                    crate::generated::unified_instructions::UnifiedInstruction::JStrictEqual { .. }
+                                    | crate::generated::unified_instructions::UnifiedInstruction::JStrictEqualLong { .. } => {
+                                        used_in_comparisons = true;
+                                    }
+                                    _ => {
+                                        // Non-comparison use found
+                                        only_used_in_comparisons = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Also check comparison blocks for each case
+            for _case in &nested_region.cases {
+                // Skip if we already found non-comparison use
+                if !only_used_in_comparisons {
+                    break;
+                }
+                
+                // For sparse switches, we need to detect the pattern to find comparison blocks
+                if let Some(hbc_file) = block_converter.hbc_file() {
+                    if let Some(postdom) = cfg.analyze_post_dominators() {
+                        let analyzer = SparseSwitchAnalyzer::with_hbc_file(hbc_file);
+                        
+                        if let Some(switch_info) = analyzer.detect_switch_pattern(nested_region.dispatch, cfg, ssa, &postdom) {
+                        for case_info in &switch_info.cases {
+                            let comp_block = &cfg.graph()[case_info.comparison_block];
+                            for instr in comp_block.instructions() {
+                                let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+                                
+                                for src_reg in usage.sources {
+                                    if src_reg == register {
+                                        if let Some(src_value) = ssa.get_value_before_instruction(src_reg, instr.instruction_index) {
+                                            if src_value == &setup_instr.ssa_value {
+                                                match &instr.instruction {
+                                                    crate::generated::unified_instructions::UnifiedInstruction::JStrictEqual { .. }
+                                                    | crate::generated::unified_instructions::UnifiedInstruction::JStrictEqualLong { .. } => {
+                                                        used_in_comparisons = true;
+                                                    }
+                                                    _ => {
+                                                        only_used_in_comparisons = false;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    }
+                }
+            }
+            
+            // If the value is only used in comparisons that will be inlined as switch statements,
+            // mark it as eliminated
+            if used_in_comparisons && only_used_in_comparisons {
+                log::debug!(
+                    "Marking setup instruction as eliminated: register {} only used in nested switch comparisons",
+                    register
+                );
+                block_converter.mark_ssa_value_eliminated(setup_instr.ssa_value.clone());
+            }
+        }
     }
 
     /// Mark all blocks in a switch region as rendered to prevent double conversion
