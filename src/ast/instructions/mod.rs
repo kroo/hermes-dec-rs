@@ -11,6 +11,7 @@ use crate::ast::{
 use crate::hbc::InstructionIndex;
 use crate::{analysis::GlobalAnalysisResult, generated::unified_instructions::UnifiedInstruction};
 use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 mod arithmetic;
@@ -91,25 +92,38 @@ pub struct InstructionToStatementConverter<'a> {
     expression_context: ExpressionContext<'a>,
     /// Register manager for variable naming and lifetime tracking
     register_manager: RegisterManager,
-    /// Optional global analyzer for cross-function variable resolution
-    global_analyzer: Option<Arc<GlobalAnalysisResult>>,
+    /// HBC analysis containing global analysis and other data
+    hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
     /// Whether to decompile nested function bodies
     decompile_nested: bool,
+    /// Track variables that were used but not declared
+    undeclared_variables: HashSet<String>,
 }
 
 impl<'a> InstructionToStatementConverter<'a> {
-    /// Create a new instruction-to-statement converter
-    pub fn new(
+    /// Create a new instruction-to-statement converter with analysis
+    pub fn new_with_analysis(
         ast_builder: &'a OxcAstBuilder<'a>,
         expression_context: ExpressionContext<'a>,
+        hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
     ) -> Self {
         Self {
             ast_builder,
             expression_context,
             register_manager: RegisterManager::new(),
-            global_analyzer: None,
+            hbc_analysis,
             decompile_nested: false,
+            undeclared_variables: HashSet::new(),
         }
+    }
+    
+    /// Create a new instruction-to-statement converter (legacy - DEPRECATED)
+    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
+    pub fn new(
+        _ast_builder: &'a OxcAstBuilder<'a>,
+        _expression_context: ExpressionContext<'a>,
+    ) -> Self {
+        panic!("Legacy constructor is deprecated. Use new_with_analysis with HbcAnalysis instead.");
     }
 
     /// Set the current program counter for context-aware operations
@@ -122,6 +136,11 @@ impl<'a> InstructionToStatementConverter<'a> {
     /// Set whether to decompile nested function bodies
     pub fn set_decompile_nested(&mut self, decompile_nested: bool) {
         self.decompile_nested = decompile_nested;
+    }
+    
+    /// Get the set of undeclared variables
+    pub fn get_undeclared_variables(&self) -> &HashSet<String> {
+        &self.undeclared_variables
     }
 
     /// Get mutable reference to register manager
@@ -149,9 +168,9 @@ impl<'a> InstructionToStatementConverter<'a> {
         &mut self.expression_context
     }
 
-    /// Set the global analyzer for cross-function variable resolution
-    pub fn set_global_analyzer(&mut self, analyzer: Option<Arc<GlobalAnalysisResult>>) {
-        self.global_analyzer = analyzer;
+    /// Get the global analyzer from HBC analysis
+    pub fn global_analyzer(&self) -> &Arc<GlobalAnalysisResult> {
+        &self.hbc_analysis.global_analysis
     }
 
     /// Get the variable mapping from the register manager
@@ -1716,6 +1735,9 @@ impl<'a> InstructionToStatementConverter<'a> {
             // Create declaration: let/const variable_name = init_expression
             self.create_variable_declaration(variable_name, init_expression, declaration_kind)
         } else {
+            // Track that this variable was used without declaration
+            self.undeclared_variables.insert(variable_name.to_string());
+            
             // Create assignment: variable_name = init_expression
             if let Some(init_expr) = init_expression {
                 let span = oxc_span::Span::default();

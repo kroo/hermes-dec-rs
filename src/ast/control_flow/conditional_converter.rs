@@ -29,7 +29,7 @@ impl<'a> ConditionalConverter<'a> {
     pub fn convert_chain(
         &mut self,
         chain: &ConditionalChain,
-        cfg: &Cfg<'a>,
+        cfg: &'a Cfg<'a>,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<AllocVec<'a, Statement<'a>>, String> {
         let mut statements = AllocVec::new_in(self.ast_builder.allocator);
@@ -99,7 +99,7 @@ impl<'a> ConditionalConverter<'a> {
     fn convert_simple_if_else(
         &mut self,
         chain: &ConditionalChain,
-        cfg: &Cfg<'a>,
+        cfg: &'a Cfg<'a>,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Statement<'a>, String> {
         if chain.branches.is_empty() {
@@ -222,7 +222,7 @@ impl<'a> ConditionalConverter<'a> {
     fn convert_else_if_chain(
         &mut self,
         chain: &ConditionalChain,
-        cfg: &Cfg<'a>,
+        cfg: &'a Cfg<'a>,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Statement<'a>, String> {
         if chain.branches.is_empty() {
@@ -368,7 +368,7 @@ impl<'a> ConditionalConverter<'a> {
     fn convert_guard_clauses(
         &mut self,
         chain: &ConditionalChain,
-        cfg: &Cfg<'a>,
+        cfg: &'a Cfg<'a>,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Statement<'a>, String> {
         // Guard clauses are typically just simple if statements with early returns
@@ -381,7 +381,7 @@ impl<'a> ConditionalConverter<'a> {
     fn build_condition_expression(
         &mut self,
         branch: &ConditionalBranch,
-        cfg: &Cfg<'a>,
+        cfg: &'a Cfg<'a>,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
         let condition_block = &cfg.graph()[branch.condition_block];
@@ -685,15 +685,16 @@ impl<'a> ConditionalConverter<'a> {
     fn convert_branch_blocks(
         &mut self,
         block_indices: &[NodeIndex],
-        cfg: &Cfg<'a>,
+        cfg: &'a Cfg<'a>,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<AllocVec<'a, Statement<'a>>, String> {
         let mut statements = AllocVec::new_in(self.ast_builder.allocator);
 
         for &block_idx in block_indices {
             let block = &cfg.graph()[block_idx];
+            // Use convert_block_with_nested_control_flow to properly handle nested switches
             let block_statements = block_converter
-                .convert_block(block, block_idx, cfg.graph())
+                .convert_block_with_nested_control_flow(block, block_idx, cfg)
                 .map_err(|e| format!("Failed to convert block {}: {:?}", block_idx.index(), e))?;
             statements.extend(block_statements);
         }
@@ -825,39 +826,74 @@ impl<'a> ConditionalConverter<'a> {
         pc: InstructionIndex,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
-        // Get the SSA-aware variable name first
-        let var_name = block_converter.get_variable_name_for_condition(register, pc);
-
-        // Check if this looks like an undefined variable (indicates constant inlining issue)
-        // For now, use simple heuristics for common constants
-        match var_name.as_str() {
-            "var0" => {
-                // Likely represents the constant 0
-                return Ok(self.ast_builder.expression_numeric_literal(
-                    Span::default(),
-                    0.0,
-                    Some(self.ast_builder.atom("0")),
-                    NumberBase::Decimal,
-                ));
-            }
-            "var0_a" => {
-                // Likely represents the constant 1
-                return Ok(self.ast_builder.expression_numeric_literal(
-                    Span::default(),
-                    1.0,
-                    Some(self.ast_builder.atom("1")),
-                    NumberBase::Decimal,
-                ));
-            }
-            _ => {
-                // Not a recognized constant pattern, use variable name
+        log::debug!("create_register_expression: register={}, pc={}", register, pc.value());
+        
+        // Try to get constant value using ValueTracker
+        // We now always have function analysis
+        let fa = block_converter.function_analysis();
+        log::debug!("Got function analysis");
+        // Create a ValueTracker to analyze this register
+        let value_tracker = fa.value_tracker();
+        
+        // Find the block containing this PC
+        if let Some(block_idx) = fa.cfg.graph().node_indices().find(|&idx| {
+            let block = &fa.cfg.graph()[idx];
+            let block_start = block.start_pc();
+            let block_end = block_start + block.instructions().len() as u32;
+            pc.value() >= block_start.value() && pc.value() < block_end.value()
+        }) {
+            // Get the tracked value for this register at this point
+            let tracked_value = value_tracker.get_value_at_point(register, block_idx, pc);
+            log::debug!("ValueTracker result for r{} at pc {}: {:?}", register, pc.value(), tracked_value);
+            
+            // If it's a constant, inline it
+            if let crate::analysis::value_tracker::TrackedValue::Constant(constant) = tracked_value {
+                match constant {
+                    crate::analysis::value_tracker::ConstantValue::Number(n) => {
+                        // Format number appropriately
+                        let value_str = if n.fract() == 0.0 && n >= 0.0 && n <= u32::MAX as f64 {
+                            format!("{}", n as u32)
+                        } else {
+                            n.to_string()
+                        };
+                        return Ok(self.ast_builder.expression_numeric_literal(
+                            Span::default(),
+                            n,
+                            Some(self.ast_builder.atom(&value_str)),
+                            NumberBase::Decimal,
+                        ));
+                    }
+                    crate::analysis::value_tracker::ConstantValue::Boolean(b) => {
+                        return Ok(self.ast_builder.expression_boolean_literal(Span::default(), b));
+                    }
+                    crate::analysis::value_tracker::ConstantValue::Null => {
+                        return Ok(self.ast_builder.expression_null_literal(Span::default()));
+                    }
+                    crate::analysis::value_tracker::ConstantValue::Undefined => {
+                        return Ok(self.ast_builder.expression_identifier(
+                            Span::default(),
+                            self.ast_builder.atom("undefined"),
+                        ));
+                    }
+                    crate::analysis::value_tracker::ConstantValue::String(s) => {
+                        return Ok(self.ast_builder.expression_string_literal(
+                            Span::default(),
+                            self.ast_builder.atom(&s),
+                            None,
+                        ));
+                    }
+                }
             }
         }
+        
+        // Fall back to using the SSA-aware variable name
+        let var_name = block_converter.get_variable_name_for_condition(register, pc);
 
         Ok(self
             .ast_builder
             .expression_identifier(Span::default(), self.ast_builder.atom(&var_name)))
     }
+
 
     /// Check if a statement is empty (has no meaningful content)
     fn is_statement_empty(&self, stmt: &Statement<'a>) -> bool {

@@ -11,7 +11,6 @@ use crate::ast::{
     build_function_program, generate_code_with_comments, AddressCommentManager,
     BlockToStatementConverter, ExpressionContext, InstructionIndex,
 };
-use crate::cfg::Cfg;
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
 use crate::{DecompilerError, DecompilerResult};
@@ -190,8 +189,14 @@ impl Decompiler {
             decompile_nested,
         };
 
+        // Create HBC analysis for this file
+        let mut hbc_analysis = crate::analysis::HbcAnalysis::analyze(hbc_file)
+            .map_err(|e| DecompilerError::Internal {
+                message: format!("Failed to analyze HBC file: {}", e),
+            })?;
+
         // Decompile the function to AST
-        let decompilation_result = function_decompiler.decompile(&allocator, &ast_builder)?;
+        let decompilation_result = function_decompiler.decompile(&allocator, &ast_builder, &mut hbc_analysis)?;
 
         // Convert AST to string
         let result = self.ast_to_string(
@@ -303,13 +308,13 @@ impl<'a> FunctionDecompiler<'a> {
         &self,
         _allocator: &'a Allocator,
         ast_builder: &'a OxcAstBuilder<'a>,
+        hbc_analysis: &'a mut crate::analysis::HbcAnalysis<'a>,
     ) -> DecompilerResult<FunctionDecompilationResult<'a>> {
-        // Build CFG from instructions
-        let cfg = {
-            let mut cfg = Cfg::new(self.hbc_file, self.function_index);
-            cfg.build();
-            cfg
-        };
+        // First ensure the function analysis exists
+        hbc_analysis.get_function_analysis(self.function_index)
+            .map_err(|e| DecompilerError::Internal {
+                message: format!("Failed to get function analysis: {}", e),
+            })?;
 
         // Create expression context with HBC file access
         let expression_context = ExpressionContext::with_context(
@@ -328,58 +333,27 @@ impl<'a> FunctionDecompiler<'a> {
             .lookup_function_param_count(self.function_index)
             .unwrap_or(0);
 
-        // Get the SSA analysis from global analyzer
-        let ssa_analysis = match self
-            .global_analysis
-            .analyzer()
-            .get_function_analysis(self.function_index)
-        {
-            Some(analysis) => analysis.clone(),
-            None => {
-                // Fallback: run local SSA if not found in global analysis
-                match crate::cfg::ssa::construct_ssa(&cfg, self.function_index) {
-                    Ok(analysis) => analysis,
-                    Err(e) => {
-                        return Err(DecompilerError::Internal {
-                            message: format!("SSA analysis failed: {}", e),
-                        });
-                    }
-                }
-            }
-        };
+        // Now get the function analysis reference (guaranteed to exist)
+        let function_analysis = hbc_analysis.get_function_analysis_ref(self.function_index)
+            .ok_or_else(|| DecompilerError::Internal {
+                message: format!("Function analysis not found after creation"),
+            })?;
 
-        // Create comment manager if comments are enabled
-        let comment_manager = if self.include_instruction_comments || self.include_ssa_comments {
-            Some(AddressCommentManager::new())
-        } else {
-            None
-        };
-
-        // Create block-to-statement converter with SSA analysis and global analyzer
-        let mut converter = BlockToStatementConverter::with_ssa_and_global_analysis(
+        // Create block-to-statement converter with function analysis
+        let mut converter = BlockToStatementConverter::new_with_analysis(
             ast_builder,
-            expression_context,
+            function_analysis,
+            hbc_analysis,
             self.include_instruction_comments,
             self.include_ssa_comments,
-            ssa_analysis,
-            &cfg,
-            self.global_analysis.clone(),
         );
-
-        // Set the comment manager if we have one
-        if let Some(cm) = comment_manager {
-            converter.set_comment_manager(cm);
-        }
 
         // Set whether to decompile nested functions
         converter.set_decompile_nested(self.decompile_nested);
 
         // Process all blocks in the CFG with proper ordering and labeling
-        // TODO: Fix lifetime issue with storing CFG reference in converter
-        // For now, we'll skip setting the full CFG which means nested control flow
-        // detection won't work optimally
         let all_statements =
-            match converter.convert_blocks_from_cfg_with_options(&cfg, self.skip_validation) {
+            match converter.convert_blocks_from_cfg_with_options(&function_analysis.cfg, self.skip_validation) {
                 Ok(statements) => statements,
                 Err(e) => {
                     return Err(DecompilerError::Internal {

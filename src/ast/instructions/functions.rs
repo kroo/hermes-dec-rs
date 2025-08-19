@@ -8,7 +8,6 @@ use crate::ast::context::ExpressionContext;
 use crate::hbc::InstructionIndex;
 use oxc_ast::ast::Statement;
 use oxc_span::Span;
-use std::sync::Arc;
 
 /// Trait providing function operation helper methods
 pub trait FunctionHelpers<'a> {
@@ -1304,9 +1303,7 @@ impl<'a> InstructionToStatementConverter<'a> {
             )
         })?;
 
-        // Build CFG for the nested function
-        let mut cfg = crate::cfg::Cfg::new(hbc_file, function_index);
-        cfg.build();
+        // No need to build CFG - it's already in the function analysis
 
         // Create a new expression context for the nested function
         let nested_context =
@@ -1314,62 +1311,34 @@ impl<'a> InstructionToStatementConverter<'a> {
 
         // Create a new instruction converter for the nested function
         let mut nested_converter =
-            InstructionToStatementConverter::new(self.ast_builder, nested_context.clone());
+            InstructionToStatementConverter::new_with_analysis(self.ast_builder, nested_context.clone(), self.hbc_analysis);
 
         // Keep the same decompile_nested setting for nested functions
         // This allows deeply nested functions to be decompiled
         nested_converter.set_decompile_nested(self.decompile_nested);
 
         // If we have a global analyzer, share it
-        if let Some(ref analyzer) = self.global_analyzer {
-            nested_converter.set_global_analyzer(Some(analyzer.clone()));
-        }
+        // Global analyzer is now accessed through hbc_analysis
+        // No need to set it separately
 
-        // Get SSA analysis for the nested function if available
-        let ssa_analysis = if let Some(ref analyzer) = self.global_analyzer {
-            analyzer
-                .analyzer()
-                .get_function_analysis(function_index)
-                .cloned()
-        } else {
-            // Fallback: run local SSA analysis
-            crate::cfg::ssa::construct_ssa(&cfg, function_index).ok()
-        };
+        // Get function analysis for the nested function
+        let nested_function_analysis = self.hbc_analysis.get_function_analysis_ref(function_index)
+            .ok_or_else(|| StatementConversionError::UnsupportedInstruction(
+                format!("Function analysis not available for nested function {}", function_index)
+            ))?;
 
         // Create block converter for the nested function
-        let mut block_converter = if let Some(ssa) = ssa_analysis {
-            let mut converter =
-                crate::ast::control_flow::BlockToStatementConverter::with_ssa_and_global_analysis(
-                    self.ast_builder,
-                    nested_context,
-                    false, // no instruction comments in nested functions
-                    false, // no SSA comments in nested functions
-                    ssa,
-                    &cfg,
-                    self.global_analyzer.clone().unwrap_or_else(|| {
-                        // Create a dummy global analyzer if none exists
-                        match crate::analysis::GlobalSSAAnalyzer::analyze(hbc_file) {
-                            Ok(result) => Arc::new(result),
-                            Err(_) => {
-                                panic!("Failed to create global analyzer for nested function")
-                            }
-                        }
-                    }),
-                );
-            converter.set_decompile_nested(self.decompile_nested);
-            converter
-        } else {
-            let mut converter = crate::ast::control_flow::BlockToStatementConverter::new(
-                self.ast_builder,
-                nested_context,
-                false, // no instruction comments in nested functions
-            );
-            converter.set_decompile_nested(self.decompile_nested);
-            converter
-        };
+        let mut block_converter = crate::ast::control_flow::BlockToStatementConverter::new_with_analysis(
+            self.ast_builder,
+            nested_function_analysis,
+            self.hbc_analysis,
+            false, // no instruction comments in nested functions
+            false, // no SSA comments in nested functions
+        );
+        block_converter.set_decompile_nested(self.decompile_nested);
 
         // Convert the nested function's blocks to statements
-        block_converter.convert_blocks_from_cfg(&cfg).map_err(|e| {
+        block_converter.convert_blocks_from_cfg(&nested_function_analysis.cfg).map_err(|e| {
             StatementConversionError::UnsupportedInstruction(format!(
                 "Failed to convert nested function blocks: {}",
                 e

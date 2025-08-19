@@ -334,65 +334,63 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
             .set_variable_name(env_reg, format!("_func_env"));
 
         // Get all environment variables for this function
-        if let Some(ref global_analyzer) = self.global_analyzer {
-            if let Some(function_index) = self.expression_context.function_index() {
-                let env_vars = global_analyzer
-                    .analyzer()
-                    .get_function_environment_variables(function_index);
+        if let Some(function_index) = self.expression_context.function_index() {
+            let env_vars = self.global_analyzer()
+                .analyzer()
+                .get_function_environment_variables(function_index);
 
-                if !env_vars.is_empty() {
-                    // Create a single let declaration with multiple variables
-                    let span = Span::default();
-                    let mut declarators = self.ast_builder.vec();
+            if !env_vars.is_empty() {
+                // Create a single let declaration with multiple variables
+                let span = Span::default();
+                let mut declarators = self.ast_builder.vec();
 
-                    for (_slot, var_name) in env_vars {
-                        // Create declarator for each environment variable, initialized to undefined
-                        let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+                for (_slot, var_name) in env_vars {
+                    // Create declarator for each environment variable, initialized to undefined
+                    let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
 
-                        // Create binding identifier
-                        let binding_identifier = oxc_ast::ast::BindingIdentifier {
-                            span,
-                            name: oxc_span::Atom::from(var_atom),
-                            symbol_id: std::cell::Cell::new(None),
-                        };
-
-                        // Create binding pattern
-                        let binding_pattern = oxc_ast::ast::BindingPattern {
-                            kind: oxc_ast::ast::BindingPatternKind::BindingIdentifier(
-                                self.ast_builder.alloc(binding_identifier),
-                            ),
-                            type_annotation: None,
-                            optional: false,
-                        };
-
-                        // Initialize to undefined
-                        let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
-                        let undefined_expr =
-                            self.ast_builder.expression_identifier(span, undefined_atom);
-
-                        let declarator = oxc_ast::ast::VariableDeclarator {
-                            span,
-                            kind: VariableDeclarationKind::Let,
-                            id: binding_pattern,
-                            init: Some(undefined_expr),
-                            definite: false,
-                        };
-
-                        declarators.push(declarator);
-                    }
-
-                    let declaration = oxc_ast::ast::VariableDeclaration {
+                    // Create binding identifier
+                    let binding_identifier = oxc_ast::ast::BindingIdentifier {
                         span,
-                        kind: VariableDeclarationKind::Let,
-                        declarations: declarators,
-                        declare: false,
+                        name: oxc_span::Atom::from(var_atom),
+                        symbol_id: std::cell::Cell::new(None),
                     };
 
-                    let stmt = oxc_ast::ast::Statement::VariableDeclaration(
-                        self.ast_builder.alloc(declaration),
-                    );
-                    return Ok(InstructionResult::Statement(stmt));
+                    // Create binding pattern
+                    let binding_pattern = oxc_ast::ast::BindingPattern {
+                        kind: oxc_ast::ast::BindingPatternKind::BindingIdentifier(
+                            self.ast_builder.alloc(binding_identifier),
+                        ),
+                        type_annotation: None,
+                        optional: false,
+                    };
+
+                    // Initialize to undefined
+                    let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                    let undefined_expr =
+                        self.ast_builder.expression_identifier(span, undefined_atom);
+
+                    let declarator = oxc_ast::ast::VariableDeclarator {
+                        span,
+                        kind: VariableDeclarationKind::Let,
+                        id: binding_pattern,
+                        init: Some(undefined_expr),
+                        definite: false,
+                    };
+
+                    declarators.push(declarator);
                 }
+
+                let declaration = oxc_ast::ast::VariableDeclaration {
+                    span,
+                    kind: VariableDeclarationKind::Let,
+                    declarations: declarators,
+                    declare: false,
+                };
+
+                let stmt = oxc_ast::ast::Statement::VariableDeclaration(
+                    self.ast_builder.alloc(declaration),
+                );
+                return Ok(InstructionResult::Statement(stmt));
             }
         }
 
@@ -411,37 +409,35 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         let span = Span::default();
 
         // Try to resolve the actual variable name using global analyzer
-        if let Some(ref global_analyzer) = self.global_analyzer {
-            if let Some(function_index) = self.expression_context.function_index() {
-                let var_name = global_analyzer.analyzer().resolve_variable_name(
-                    function_index,
-                    env_reg,
-                    index,
+        if let Some(function_index) = self.expression_context.function_index() {
+            let var_name = self.global_analyzer().analyzer().resolve_variable_name(
+                function_index,
+                env_reg,
+                index,
+            );
+
+            // If we have a resolved name, use it directly
+            if !var_name.starts_with("env") {
+                let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+
+                let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
+                let value_expr = self.ast_builder.expression_identifier(span, value_atom);
+
+                // Create assignment: varName = value
+                let ident_ref = self.ast_builder.alloc_identifier_reference(span, var_atom);
+                let simple_target =
+                    oxc_ast::ast::SimpleAssignmentTarget::AssignmentTargetIdentifier(ident_ref);
+                let assignment_target = oxc_ast::ast::AssignmentTarget::from(simple_target);
+
+                let assignment_expr = self.ast_builder.expression_assignment(
+                    span,
+                    oxc_ast::ast::AssignmentOperator::Assign,
+                    assignment_target,
+                    value_expr,
                 );
 
-                // If we have a resolved name, use it directly
-                if !var_name.starts_with("env") {
-                    let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-
-                    let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
-                    let value_expr = self.ast_builder.expression_identifier(span, value_atom);
-
-                    // Create assignment: varName = value
-                    let ident_ref = self.ast_builder.alloc_identifier_reference(span, var_atom);
-                    let simple_target =
-                        oxc_ast::ast::SimpleAssignmentTarget::AssignmentTargetIdentifier(ident_ref);
-                    let assignment_target = oxc_ast::ast::AssignmentTarget::from(simple_target);
-
-                    let assignment_expr = self.ast_builder.expression_assignment(
-                        span,
-                        oxc_ast::ast::AssignmentOperator::Assign,
-                        assignment_target,
-                        value_expr,
-                    );
-
-                    let stmt = self.ast_builder.statement_expression(span, assignment_expr);
-                    return Ok(InstructionResult::Statement(stmt));
-                }
+                let stmt = self.ast_builder.statement_expression(span, assignment_expr);
+                return Ok(InstructionResult::Statement(stmt));
             }
         }
 
@@ -540,8 +536,7 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         let is_from_get_env = env_var_name.starts_with("_env");
 
         // Try to resolve the actual variable name using global analyzer
-        if let Some(ref global_analyzer) = self.global_analyzer {
-            if let Some(function_index) = self.expression_context.function_index() {
+        if let Some(function_index) = self.expression_context.function_index() {
                 // If loading from GetEnvironment result, we need to handle it specially
                 let var_name = if is_from_get_env {
                     // Extract the environment level from _env0, _env1, etc.
@@ -552,22 +547,22 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
                     // In nested functions, level 0 means the captured parent environment
                     // So we need to go up one level from the current function
-                    let actual_level = if global_analyzer
-                        .analyzer()
-                        .is_nested_function(function_index)
-                    {
-                        level + 1
-                    } else {
-                        level
-                    };
+                let actual_level = if self.global_analyzer()
+                    .analyzer()
+                    .is_nested_function(function_index)
+                {
+                    level + 1
+                } else {
+                    level
+                };
 
                     // Resolve from parent function at that level
-                    if let Some(parent_func) = global_analyzer
-                        .analyzer()
-                        .resolve_function_at_level(function_index, actual_level)
-                    {
-                        // We're accessing a parent environment
-                        global_analyzer.analyzer().resolve_variable_name(
+                if let Some(parent_func) = self.global_analyzer()
+                    .analyzer()
+                    .resolve_function_at_level(function_index, actual_level)
+                {
+                    // We're accessing a parent environment
+                    self.global_analyzer().analyzer().resolve_variable_name(
                             parent_func,
                             0, // Parent's main environment register
                             index,
@@ -575,23 +570,22 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
                     } else {
                         format!("local{}", index)
                     }
-                } else {
-                    // Normal environment access
-                    global_analyzer
-                        .analyzer()
-                        .resolve_variable_name(function_index, env_reg, index)
-                };
+            } else {
+                // Normal environment access
+                self.global_analyzer()
+                    .analyzer()
+                    .resolve_variable_name(function_index, env_reg, index)
+            };
 
-                // If we have a resolved name, use it directly
-                if !var_name.starts_with("env") && !var_name.starts_with("_env") {
-                    let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-                    let var_expr = self.ast_builder.expression_identifier(span, var_atom);
+            // If we have a resolved name, use it directly
+            if !var_name.starts_with("env") && !var_name.starts_with("_env") {
+                let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+                let var_expr = self.ast_builder.expression_identifier(span, var_atom);
 
-                    let stmt =
-                        self.create_variable_declaration_or_assignment(&dest_var, Some(var_expr))?;
+                let stmt =
+                    self.create_variable_declaration_or_assignment(&dest_var, Some(var_expr))?;
 
-                    return Ok(InstructionResult::Statement(stmt));
-                }
+                return Ok(InstructionResult::Statement(stmt));
             }
         }
 
@@ -651,8 +645,7 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         let is_from_get_env = env_var_name.starts_with("_env");
 
         // Try to resolve the actual variable name using global analyzer
-        if let Some(ref global_analyzer) = self.global_analyzer {
-            if let Some(function_index) = self.expression_context.function_index() {
+        if let Some(function_index) = self.expression_context.function_index() {
                 // If loading from GetEnvironment result, we need to handle it specially
                 let var_name = if is_from_get_env {
                     // Extract the environment level from _env0, _env1, etc.
@@ -663,22 +656,22 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
                     // In nested functions, level 0 means the captured parent environment
                     // So we need to go up one level from the current function
-                    let actual_level = if global_analyzer
-                        .analyzer()
-                        .is_nested_function(function_index)
-                    {
-                        level + 1
-                    } else {
-                        level
-                    };
+                let actual_level = if self.global_analyzer()
+                    .analyzer()
+                    .is_nested_function(function_index)
+                {
+                    level + 1
+                } else {
+                    level
+                };
 
                     // Resolve from parent function at that level
-                    if let Some(parent_func) = global_analyzer
-                        .analyzer()
-                        .resolve_function_at_level(function_index, actual_level)
-                    {
-                        // We're accessing a parent environment
-                        global_analyzer.analyzer().resolve_variable_name(
+                if let Some(parent_func) = self.global_analyzer()
+                    .analyzer()
+                    .resolve_function_at_level(function_index, actual_level)
+                {
+                    // We're accessing a parent environment
+                    self.global_analyzer().analyzer().resolve_variable_name(
                             parent_func,
                             0, // Parent's main environment register
                             index as u8,
@@ -686,25 +679,24 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
                     } else {
                         format!("local{}", index)
                     }
-                } else {
-                    // Normal environment access
-                    global_analyzer.analyzer().resolve_variable_name(
-                        function_index,
-                        env_reg,
-                        index as u8,
-                    )
-                };
+            } else {
+                // Normal environment access
+                self.global_analyzer().analyzer().resolve_variable_name(
+                    function_index,
+                    env_reg,
+                    index as u8,
+                )
+            };
 
-                // If we have a resolved name, use it directly
-                if !var_name.starts_with("env") && !var_name.starts_with("_env") {
-                    let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-                    let var_expr = self.ast_builder.expression_identifier(span, var_atom);
+            // If we have a resolved name, use it directly
+            if !var_name.starts_with("env") && !var_name.starts_with("_env") {
+                let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+                let var_expr = self.ast_builder.expression_identifier(span, var_atom);
 
-                    let stmt =
-                        self.create_variable_declaration_or_assignment(&dest_var, Some(var_expr))?;
+                let stmt =
+                    self.create_variable_declaration_or_assignment(&dest_var, Some(var_expr))?;
 
-                    return Ok(InstructionResult::Statement(stmt));
-                }
+                return Ok(InstructionResult::Statement(stmt));
             }
         }
 

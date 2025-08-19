@@ -15,6 +15,7 @@ use crate::{
     cfg::{block::Block, ssa::SSAAnalysis, EdgeKind},
     generated::unified_instructions::UnifiedInstruction,
     hbc::{function_table::HbcFunctionInstruction, InstructionIndex},
+    HbcFile,
 };
 use oxc_allocator::Vec as ArenaVec;
 use oxc_ast::{
@@ -117,66 +118,48 @@ pub struct BlockToStatementConverter<'a> {
     stats: BlockConversionStats,
     /// Whether to include instruction-level comments
     include_instruction_comments: bool,
-    /// Optional SSA analysis for generating SSA comments
-    ssa_analysis: Option<SSAAnalysis>,
     /// Whether to include SSA comments
     include_ssa_comments: bool,
-    /// Optional global analysis for cross-function variable resolution
-    _global_analysis: Option<Arc<GlobalAnalysisResult>>,
     /// Track which instructions have been rendered by their absolute offset
     rendered_instructions: HashSet<InstructionIndex>,
     /// Address-based comment manager for collecting comments
     comment_manager: Option<AddressCommentManager>,
     /// Track SSA values that are eliminated during switch conversion
     eliminated_ssa_values: HashSet<SSAValue>,
-    /// Full CFG for nested control flow detection
-    full_cfg: Option<&'a crate::cfg::Cfg<'a>>,
+    /// Function analysis containing all analysis data
+    function_analysis: &'a crate::analysis::FunctionAnalysis<'a>,
+    /// Track variables that were used but not declared
+    undeclared_variables: HashSet<String>,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
-    /// Create a new block-to-statement converter
-    pub fn new(
+    /// Create a new block-to-statement converter with function analysis
+    pub fn new_with_analysis(
         ast_builder: &'a OxcAstBuilder<'a>,
-        expression_context: ExpressionContext<'a>,
-        include_instruction_comments: bool,
-    ) -> Self {
-        let instruction_converter =
-            InstructionToStatementConverter::new(ast_builder, expression_context.clone());
-
-        Self {
-            instruction_converter,
-            scope_manager: BlockScopeManager::new(),
-            stats: BlockConversionStats::default(),
-            include_instruction_comments,
-            ssa_analysis: None,
-            include_ssa_comments: false,
-            _global_analysis: None,
-            rendered_instructions: HashSet::new(),
-            comment_manager: if include_instruction_comments {
-                Some(AddressCommentManager::new())
-            } else {
-                None
-            },
-            eliminated_ssa_values: HashSet::new(),
-            full_cfg: None,
-        }
-    }
-
-    /// Create a new block-to-statement converter with SSA analysis
-    pub fn with_ssa_analysis(
-        ast_builder: &'a OxcAstBuilder<'a>,
-        expression_context: ExpressionContext<'a>,
+        function_analysis: &'a crate::analysis::FunctionAnalysis<'a>,
+        hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
         include_instruction_comments: bool,
         include_ssa_comments: bool,
-        ssa_analysis: SSAAnalysis,
-        cfg: &crate::cfg::Cfg,
     ) -> Self {
-        let mut instruction_converter =
-            InstructionToStatementConverter::new(ast_builder, expression_context.clone());
+        // Create expression context from function analysis
+        let expression_context = ExpressionContext {
+            current_block: None,
+            current_pc: InstructionIndex(0),
+            hbc_file: Some(function_analysis.hbc_file),
+            function_index: Some(function_analysis.function_index),
+        };
+
+        let mut instruction_converter = InstructionToStatementConverter::new_with_analysis(
+            ast_builder,
+            expression_context,
+            hbc_analysis,
+        );
 
         // Generate variable mapping from SSA analysis
         let mut variable_mapper = crate::ast::variables::VariableMapper::new();
-        if let Ok(variable_mapping) = variable_mapper.generate_mapping(&ssa_analysis, cfg) {
+        if let Ok(variable_mapping) =
+            variable_mapper.generate_mapping(&function_analysis.ssa, &function_analysis.cfg)
+        {
             // Set the SSA-based variable mapping in the register manager
             instruction_converter
                 .register_manager_mut()
@@ -188,9 +171,7 @@ impl<'a> BlockToStatementConverter<'a> {
             scope_manager: BlockScopeManager::new(),
             stats: BlockConversionStats::default(),
             include_instruction_comments,
-            ssa_analysis: Some(ssa_analysis),
             include_ssa_comments,
-            _global_analysis: None,
             rendered_instructions: HashSet::new(),
             comment_manager: if include_instruction_comments || include_ssa_comments {
                 Some(AddressCommentManager::new())
@@ -198,93 +179,64 @@ impl<'a> BlockToStatementConverter<'a> {
                 None
             },
             eliminated_ssa_values: HashSet::new(),
-            full_cfg: None,
+            function_analysis,
+            undeclared_variables: HashSet::new(),
         }
     }
 
-    /// Create a new block-to-statement converter with SSA and global analysis
+    /// Create a new block-to-statement converter (legacy - DEPRECATED)
+    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
+    pub fn new(
+        _ast_builder: &'a OxcAstBuilder<'a>,
+        _expression_context: ExpressionContext<'a>,
+        _include_instruction_comments: bool,
+    ) -> Self {
+        panic!("Legacy constructor is deprecated. Use new_with_analysis with FunctionAnalysis instead.");
+    }
+
+    /// Create a new block-to-statement converter with SSA analysis (legacy - DEPRECATED)
+    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
+    pub fn with_ssa_analysis(
+        _ast_builder: &'a OxcAstBuilder<'a>,
+        _expression_context: ExpressionContext<'a>,
+        _include_instruction_comments: bool,
+        _include_ssa_comments: bool,
+        _ssa_analysis: SSAAnalysis,
+        _cfg: &crate::cfg::Cfg,
+    ) -> Self {
+        panic!("Legacy constructor is deprecated. Use new_with_analysis with FunctionAnalysis instead.");
+    }
+
+    /// Create a new block-to-statement converter with SSA and global analysis (legacy - DEPRECATED)
+    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
     pub fn with_ssa_and_global_analysis(
-        ast_builder: &'a OxcAstBuilder<'a>,
-        expression_context: ExpressionContext<'a>,
-        include_instruction_comments: bool,
-        include_ssa_comments: bool,
-        ssa_analysis: SSAAnalysis,
-        cfg: &crate::cfg::Cfg,
+        _ast_builder: &'a OxcAstBuilder<'a>,
+        _expression_context: ExpressionContext<'a>,
+        _include_instruction_comments: bool,
+        _include_ssa_comments: bool,
+        _ssa_analysis: SSAAnalysis,
+        _cfg: &crate::cfg::Cfg,
         _global_analysis: Arc<GlobalAnalysisResult>,
     ) -> Self {
-        let mut instruction_converter =
-            InstructionToStatementConverter::new(ast_builder, expression_context.clone());
-
-        // Generate variable mapping from SSA analysis
-        let mut variable_mapper = crate::ast::variables::VariableMapper::new();
-        if let Ok(variable_mapping) = variable_mapper.generate_mapping(&ssa_analysis, cfg) {
-            // Set the SSA-based variable mapping in the register manager
-            instruction_converter
-                .register_manager_mut()
-                .set_variable_mapping(variable_mapping);
-        }
-
-        // Pass global analyzer to instruction converter for environment variable resolution
-        instruction_converter.set_global_analyzer(Some(_global_analysis.clone()));
-
-        Self {
-            instruction_converter,
-            scope_manager: BlockScopeManager::new(),
-            stats: BlockConversionStats::default(),
-            include_instruction_comments,
-            ssa_analysis: Some(ssa_analysis),
-            include_ssa_comments,
-            _global_analysis: Some(_global_analysis),
-            rendered_instructions: HashSet::new(),
-            comment_manager: if include_instruction_comments || include_ssa_comments {
-                Some(AddressCommentManager::new())
-            } else {
-                None
-            },
-            eliminated_ssa_values: HashSet::new(),
-            full_cfg: None,
-        }
+        panic!("Legacy constructor is deprecated. Use new_with_analysis with FunctionAnalysis instead.");
     }
 
-    /// Create a new block-to-statement converter with fallback variable mapping
+    /// Create a new block-to-statement converter with fallback variable mapping (legacy - DEPRECATED)
+    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
     pub fn with_fallback_mapping(
-        ast_builder: &'a OxcAstBuilder<'a>,
-        expression_context: ExpressionContext<'a>,
-        include_instruction_comments: bool,
-        variable_mapping: crate::ast::variables::VariableMapping,
+        _ast_builder: &'a OxcAstBuilder<'a>,
+        _expression_context: ExpressionContext<'a>,
+        _include_instruction_comments: bool,
+        _variable_mapping: crate::ast::variables::VariableMapping,
     ) -> Self {
-        let mut instruction_converter =
-            InstructionToStatementConverter::new(ast_builder, expression_context.clone());
-
-        // Set the fallback variable mapping in the register manager
-        instruction_converter
-            .register_manager_mut()
-            .set_variable_mapping(variable_mapping);
-
-        Self {
-            instruction_converter,
-            scope_manager: BlockScopeManager::new(),
-            stats: BlockConversionStats::default(),
-            include_instruction_comments,
-            ssa_analysis: None,
-            include_ssa_comments: false,
-            _global_analysis: None,
-            rendered_instructions: HashSet::new(),
-            comment_manager: if include_instruction_comments {
-                Some(AddressCommentManager::new())
-            } else {
-                None
-            },
-            eliminated_ssa_values: HashSet::new(),
-            full_cfg: None,
-        }
+        panic!("Legacy constructor is deprecated. Use new_with_analysis with FunctionAnalysis instead.");
     }
 
     /// Convert multiple blocks from a CFG into a sequence of JavaScript statements
     /// This method handles proper block ordering and labeling
     pub fn convert_blocks_from_cfg(
         &mut self,
-        cfg: &crate::cfg::Cfg<'a>,
+        cfg: &'a crate::cfg::Cfg<'a>,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
         self.convert_blocks_from_cfg_with_options(cfg, false)
     }
@@ -293,7 +245,7 @@ impl<'a> BlockToStatementConverter<'a> {
     /// This method handles proper block ordering and labeling
     pub fn convert_blocks_from_cfg_with_options(
         &mut self,
-        cfg: &crate::cfg::Cfg<'a>,
+        cfg: &'a crate::cfg::Cfg<'a>,
         skip_validation: bool,
     ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
         // TODO: Fix lifetime issue - can't store reference to locally created CFG
@@ -310,12 +262,7 @@ impl<'a> BlockToStatementConverter<'a> {
         // Check if CFG has conditional analysis
         let conditional_analysis = cfg.analyze_conditional_chains();
         // Check if CFG has switch analysis
-        let switch_analysis = if let Some(ssa) = &self.ssa_analysis {
-            cfg.analyze_switch_regions(ssa)
-        } else {
-            // SSA analysis is required for switch detection
-            None
-        };
+        let switch_analysis = cfg.analyze_switch_regions(&self.function_analysis.ssa);
 
         // Identify which switches are nested inside other switches
         let mut nested_switches = HashSet::new();
@@ -324,16 +271,11 @@ impl<'a> BlockToStatementConverter<'a> {
             for (i, outer_region) in analysis.regions.iter().enumerate() {
                 for (j, inner_region) in analysis.regions.iter().enumerate() {
                     if i != j {
-                        // Check if inner_region's dispatch is a case target of outer_region
-                        for case in &outer_region.cases {
-                            if case.case_head == inner_region.dispatch {
+                        // Check if inner_region's dispatch is within any case body of outer_region
+                        for (_, case_analysis) in &outer_region.case_analyses {
+                            if case_analysis.blocks.contains(&inner_region.dispatch) {
                                 nested_switches.insert(j);
-                            }
-                        }
-                        // Also check default case
-                        if let Some(default_head) = outer_region.default_head {
-                            if default_head == inner_region.dispatch {
-                                nested_switches.insert(j);
+                                break;
                             }
                         }
                     }
@@ -479,6 +421,38 @@ impl<'a> BlockToStatementConverter<'a> {
             // Check if this block is the start of a conditional chain
             if let Some(ref analysis) = conditional_analysis {
                 if let Some(chain) = self.find_chain_starting_at(*block_id, analysis) {
+                    // IMPORTANT: Check if this conditional chain is actually part of a switch
+                    // This prevents switch comparison chains from being converted as if-else chains
+                    let mut is_switch_comparison_chain = false;
+                    if let Some(ref switch_analysis) = switch_analysis {
+                        // Check if any of the chain's condition blocks are switch dispatch blocks
+                        for switch_region in &switch_analysis.regions {
+                            // Check if the chain starts at a switch dispatch block
+                            if switch_region.dispatch == *block_id {
+                                is_switch_comparison_chain = true;
+                                break;
+                            }
+                            // Also check if any blocks in the chain are part of switch comparison logic
+                            for branch in &chain.branches {
+                                if switch_region.dispatch == branch.condition_block {
+                                    is_switch_comparison_chain = true;
+                                    break;
+                                }
+                            }
+                            if is_switch_comparison_chain {
+                                break;
+                            }
+                        }
+                    }
+
+                    if is_switch_comparison_chain {
+                        log::debug!("Skipping conditional chain at block {:?} - it contains switch dispatch blocks", block_id);
+                        // Skip conditional chain conversion - this will be handled as a switch
+                        continue;
+                    } else {
+                        log::debug!("Processing conditional chain at block {:?} - no switch dispatch blocks found", block_id);
+                    }
+
                     // Convert the entire conditional chain
                     // Mark ALL blocks in the chain (including nested) as processed
                     let all_chain_blocks =
@@ -558,6 +532,15 @@ impl<'a> BlockToStatementConverter<'a> {
             if let Err(e) = self.verify_all_rendered(cfg, &processed_blocks) {
                 eprintln!("WARNING: Block conversion validation failed (ignored due to --skip-validation): {}", e);
             }
+        }
+
+        // Copy undeclared variables from instruction converter
+        for var_name in self
+            .instruction_converter
+            .get_undeclared_variables()
+            .clone()
+        {
+            self.undeclared_variables.insert(var_name);
         }
 
         // Generate function-scoped variable declarations AFTER processing blocks
@@ -652,6 +635,128 @@ impl<'a> BlockToStatementConverter<'a> {
         Ok(())
     }
 
+    /// Convert an analyzed case body region with nested control flow
+    pub fn convert_analyzed_region(
+        &mut self,
+        analysis: &crate::cfg::analysis::CaseBodyAnalysis,
+        cfg: &'a crate::cfg::Cfg<'a>,
+        entry_block: NodeIndex,
+    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
+        let mut statements = ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
+        let mut processed_blocks = HashSet::new();
+
+        // Process nested switches first
+        for nested_switch in &analysis.nested_switches {
+            log::debug!(
+                "Converting nested switch with dispatch block {}",
+                nested_switch.dispatch.index()
+            );
+            let mut switch_converter = super::switch_converter::SwitchConverter::new(
+                self.instruction_converter.ast_builder(),
+            );
+            match switch_converter.convert_switch_region(nested_switch, cfg, self) {
+                Ok(switch_statements) => {
+                    statements.extend(switch_statements);
+                    // Mark the switch region as rendered to prevent double conversion
+                    log::debug!("Marking nested switch region as rendered");
+                    switch_converter.mark_switch_region_as_rendered(nested_switch, self, cfg);
+                    // Mark all blocks in the switch as processed
+                    processed_blocks.insert(nested_switch.dispatch);
+                    for case in &nested_switch.cases {
+                        processed_blocks.insert(case.case_head);
+                    }
+                    if let Some(default) = nested_switch.default_head {
+                        processed_blocks.insert(default);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to convert nested switch: {}", e);
+                }
+            }
+        }
+
+        // Process loops
+        for loop_info in &analysis.loops.loops {
+            if !processed_blocks.contains(&loop_info.primary_header()) {
+                // TODO: Implement loop conversion
+                // For now, just mark as processed
+                for &block in &loop_info.body_nodes {
+                    processed_blocks.insert(block);
+                }
+            }
+        }
+
+        // Process conditional chains
+        for chain in &analysis.conditionals.chains {
+            let entry = chain
+                .branches
+                .first()
+                .map(|b| b.condition_block)
+                .unwrap_or(entry_block);
+
+            if !processed_blocks.contains(&entry) {
+                // Check if any of the chain blocks are already rendered
+                let any_rendered = chain.branches.iter().any(|branch| {
+                    let block = &cfg.graph()[branch.condition_block];
+                    block
+                        .instructions()
+                        .iter()
+                        .all(|instr| self.is_instruction_rendered(instr))
+                });
+
+                if any_rendered {
+                    log::debug!(
+                        "Skipping conditional chain starting at {} - already rendered",
+                        entry.index()
+                    );
+                    continue;
+                }
+
+                let mut conditional_converter =
+                    super::conditional_converter::ConditionalConverter::new(
+                        self.instruction_converter.ast_builder(),
+                    );
+                match conditional_converter.convert_chain(chain, cfg, self) {
+                    Ok(cond_statements) => {
+                        statements.extend(cond_statements);
+                        // Mark all blocks in the chain as processed
+                        for branch in &chain.branches {
+                            processed_blocks.insert(branch.condition_block);
+                            for &block in &branch.branch_blocks {
+                                processed_blocks.insert(block);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to convert conditional chain: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Process remaining blocks in order
+        let mut remaining_blocks: Vec<_> = analysis
+            .blocks
+            .iter()
+            .filter(|&&b| !processed_blocks.contains(&b))
+            .copied()
+            .collect();
+        remaining_blocks.sort_by_key(|&b| b.index());
+
+        for &block_id in &remaining_blocks {
+            if let Some(block) = cfg.graph().node_weight(block_id) {
+                match self.convert_block(block, block_id, cfg.graph()) {
+                    Ok(block_stmts) => statements.extend(block_stmts),
+                    Err(e) => {
+                        log::warn!("Failed to convert block {}: {}", block_id.index(), e);
+                    }
+                }
+            }
+        }
+
+        Ok(statements)
+    }
+
     /// Find a conditional chain that starts at the given block
     pub fn find_chain_starting_at<'b>(
         &self,
@@ -739,6 +844,69 @@ impl<'a> BlockToStatementConverter<'a> {
         )
     }
 
+    /// Convert a block with nested control flow detection (switches before conditionals)
+    pub fn convert_block_with_nested_control_flow(
+        &mut self,
+        block: &Block,
+        block_id: NodeIndex,
+        cfg: &'a crate::cfg::Cfg<'a>,
+    ) -> Result<ArenaVec<'a, Statement<'a>>, BlockConversionError> {
+        let mut statements = ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
+
+        // First check if this block is the start of a switch region
+        let ssa = &self.function_analysis.ssa;
+        if let Some(switch_analysis) = cfg.analyze_switch_regions(ssa) {
+            for region in &switch_analysis.regions {
+                if region.dispatch == block_id {
+                    // This is a switch dispatch block - convert it as a switch
+                    let mut switch_converter = super::switch_converter::SwitchConverter::new(
+                        self.instruction_converter.ast_builder(),
+                    );
+                    match switch_converter.convert_switch_region(region, cfg, self) {
+                        Ok(switch_statements) => {
+                            statements.extend(switch_statements);
+                            return Ok(statements);
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to convert switch at block {}: {}",
+                                block_id.index(),
+                                e
+                            );
+                            // Fall through to regular conversion
+                        }
+                    }
+                }
+            }
+        }
+
+        // Then check for conditional chains
+        if let Some(conditional_analysis) = cfg.analyze_conditional_chains() {
+            if let Some(chain) = self.find_chain_starting_at(block_id, &conditional_analysis) {
+                // Convert as conditional chain
+                let mut conditional_converter =
+                    super::conditional_converter::ConditionalConverter::new(
+                        self.instruction_converter.ast_builder(),
+                    );
+                match conditional_converter.convert_chain(chain, cfg, self) {
+                    Ok(chain_statements) => {
+                        statements.extend(chain_statements);
+                        return Ok(statements);
+                    }
+                    Err(e) => {
+                        return Err(BlockConversionError::InvalidBlock(format!(
+                            "Failed to convert conditional chain: {:?}",
+                            e
+                        )));
+                    }
+                }
+            }
+        }
+
+        // Otherwise, just convert the block normally
+        self.convert_block(block, block_id, cfg.graph())
+    }
+
     /// Convert a basic block into a sequence of JavaScript statements with options
     ///
     /// # Arguments
@@ -793,9 +961,10 @@ impl<'a> BlockToStatementConverter<'a> {
         // Check if this block needs any phi variable declarations
         if !skip_phi_declarations {
             let phi_declarations = self
-                .ssa_analysis
-                .as_ref()
-                .and_then(|ssa| ssa.phi_variable_declarations.get(&block_id))
+                .function_analysis
+                .ssa
+                .phi_variable_declarations
+                .get(&block_id)
                 .cloned();
 
             if let Some(phi_declarations) = phi_declarations {
@@ -834,16 +1003,12 @@ impl<'a> BlockToStatementConverter<'a> {
             if self.comment_manager.is_some() && !instruction_statements.is_empty() {
                 // Get the SSA info first (if needed) to avoid borrowing conflicts
                 let ssa_info = if self.include_ssa_comments {
-                    if let Some(ref ssa_analysis) = self.ssa_analysis {
-                        let info = self.format_ssa_info(
-                            block_id,
-                            instruction.instruction_index,
-                            ssa_analysis,
-                        );
-                        info
-                    } else {
-                        None
-                    }
+                    let info = self.format_ssa_info(
+                        block_id,
+                        instruction.instruction_index,
+                        &self.function_analysis.ssa,
+                    );
+                    info
                 } else {
                     None
                 };
@@ -1245,8 +1410,8 @@ impl<'a> BlockToStatementConverter<'a> {
     }
 
     /// Get a reference to the SSA analysis
-    pub fn ssa_analysis(&self) -> Option<&SSAAnalysis> {
-        self.ssa_analysis.as_ref()
+    pub fn ssa_analysis(&self) -> &SSAAnalysis {
+        &self.function_analysis.ssa
     }
 
     /// Get access to the underlying instruction converter
@@ -1438,16 +1603,34 @@ impl<'a> BlockToStatementConverter<'a> {
 
     /// Get the full CFG if available
     pub fn get_full_cfg(&self) -> Option<&'a crate::cfg::Cfg<'a>> {
-        self.full_cfg
+        Some(&self.function_analysis.cfg)
     }
 
-    /// Set the full CFG for nested control flow detection
-    pub fn set_full_cfg(&mut self, cfg: &'a crate::cfg::Cfg<'a>) {
-        self.full_cfg = Some(cfg);
+    /// Get the HBC file reference if available
+    pub fn hbc_file(&self) -> Option<&'a HbcFile<'a>> {
+        Some(self.function_analysis.hbc_file)
+    }
+
+    /// Get the function analysis
+    pub fn function_analysis(&self) -> &'a crate::analysis::FunctionAnalysis<'a> {
+        self.function_analysis
+    }
+
+    /// Track an undeclared variable
+    pub fn track_undeclared_variable(&mut self, var_name: String) {
+        self.undeclared_variables.insert(var_name);
     }
 
     /// Generate function-scoped variable declarations
     fn generate_function_declarations(&self) -> Option<Statement<'a>> {
+        let mut all_vars = HashSet::new();
+
+        // Add undeclared variables first
+        for var_name in &self.undeclared_variables {
+            all_vars.insert(var_name.clone());
+        }
+
+        // Then add function scope variables from mapping
         if let Some(mapping) = self.instruction_converter.get_variable_mapping() {
             let mut function_vars: Vec<_> = mapping
                 .function_scope_vars
@@ -1487,57 +1670,67 @@ impl<'a> BlockToStatementConverter<'a> {
                         );
                     }
 
-                    // Keep the variable if at least one SSA value is not eliminated
-                    // OR if there are no SSA values for this variable (shouldn't happen)
-                    !all_eliminated
+                    // Keep the variable if:
+                    // 1. At least one SSA value is not eliminated
+                    // 2. OR if there are no SSA values for this variable (shouldn't happen)
+                    // 3. OR if it's in the undeclared variables set (used but not declared)
+                    !all_eliminated || self.undeclared_variables.contains(*var_name)
                 })
                 .collect();
-            function_vars.sort(); // Sort for deterministic output
 
-            if !function_vars.is_empty() {
-                // Create a single let declaration with all function-scoped variables
-                let mut declarators =
-                    ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
+            // Add filtered function vars to all_vars
+            for var in function_vars {
+                all_vars.insert(var.clone());
+            }
+        }
 
-                for var_name in function_vars {
-                    let id = self.instruction_converter.ast_builder().binding_identifier(
-                        Span::default(),
-                        self.instruction_converter.ast_builder().atom(var_name),
-                    );
-                    let pattern = self.instruction_converter.ast_builder().binding_pattern(
-                        BindingPatternKind::BindingIdentifier(
-                            self.instruction_converter.ast_builder().alloc(id),
-                        ),
-                        None::<oxc_ast::ast::TSTypeAnnotation>,
-                        false,
-                    );
-                    let declarator = self
-                        .instruction_converter
-                        .ast_builder()
-                        .variable_declarator(
-                            Span::default(),
-                            VariableDeclarationKind::Let,
-                            pattern,
-                            None, // No initializer
-                            false,
-                        );
-                    declarators.push(declarator);
-                }
+        // Convert to sorted vector for deterministic output
+        let mut all_vars_vec: Vec<_> = all_vars.into_iter().collect();
+        all_vars_vec.sort();
 
-                let var_decl = self
+        if !all_vars_vec.is_empty() {
+            // Create a single let declaration with all function-scoped variables
+            let mut declarators =
+                ArenaVec::new_in(self.instruction_converter.ast_builder().allocator);
+
+            for var_name in all_vars_vec {
+                let id = self.instruction_converter.ast_builder().binding_identifier(
+                    Span::default(),
+                    self.instruction_converter.ast_builder().atom(&var_name),
+                );
+                let pattern = self.instruction_converter.ast_builder().binding_pattern(
+                    BindingPatternKind::BindingIdentifier(
+                        self.instruction_converter.ast_builder().alloc(id),
+                    ),
+                    None::<oxc_ast::ast::TSTypeAnnotation>,
+                    false,
+                );
+                let declarator = self
                     .instruction_converter
                     .ast_builder()
-                    .variable_declaration(
+                    .variable_declarator(
                         Span::default(),
                         VariableDeclarationKind::Let,
-                        declarators,
+                        pattern,
+                        None, // No initializer
                         false,
                     );
-
-                return Some(Statement::VariableDeclaration(
-                    self.instruction_converter.ast_builder().alloc(var_decl),
-                ));
+                declarators.push(declarator);
             }
+
+            let var_decl = self
+                .instruction_converter
+                .ast_builder()
+                .variable_declaration(
+                    Span::default(),
+                    VariableDeclarationKind::Let,
+                    declarators,
+                    false,
+                );
+
+            return Some(Statement::VariableDeclaration(
+                self.instruction_converter.ast_builder().alloc(var_decl),
+            ));
         }
         None
     }

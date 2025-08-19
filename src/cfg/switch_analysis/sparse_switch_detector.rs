@@ -735,5 +735,6 @@ pub fn sparse_candidate_to_switch_region(candidate: &SparseSwitchCandidate) -> S
         cases,
         default_head: candidate.default_block,
         join_block: candidate.join_block,
+        case_analyses: std::collections::HashMap::new(),
     }
 }

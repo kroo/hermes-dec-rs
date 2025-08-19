@@ -6,7 +6,7 @@ use crate::cfg::{Block, EdgeKind};
 
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Post-dominator analysis results
 #[derive(Debug, Clone)]
@@ -171,6 +171,16 @@ pub struct SwitchRegion {
     pub cases: Vec<SwitchCase>,
     pub default_head: Option<NodeIndex>, // Default case head (if any)
     pub join_block: NodeIndex,           // Common post-dominator of all cases
+    pub case_analyses: HashMap<usize, CaseBodyAnalysis>, // Analysis of each case body
+}
+
+/// Analysis results for a switch case body
+#[derive(Debug, Clone)]
+pub struct CaseBodyAnalysis {
+    pub blocks: HashSet<NodeIndex>,      // All blocks in this case body
+    pub conditionals: ConditionalAnalysis, // Conditional chains within the case
+    pub loops: LoopAnalysis,             // Loops within the case
+    pub nested_switches: Vec<SwitchRegion>, // Nested switches within the case
 }
 
 /// Switch analysis results
@@ -200,6 +210,558 @@ impl SwitchAnalysis {
             .get(&dispatch)
             .and_then(|indices| indices.first())
             .map(|&idx| &self.regions[idx])
+    }
+}
+
+/// Analyze conditionals within a specific set of blocks
+fn analyze_conditionals_in_blocks(
+    graph: &DiGraph<Block, EdgeKind>,
+    blocks: &HashSet<NodeIndex>,
+) -> ConditionalAnalysis {
+    // Create a restricted conditional detector that only considers nodes within blocks
+    let mut chains = Vec::new();
+    let mut node_to_chains = HashMap::new();
+    let mut processed = HashSet::new();
+    
+    // Find conditional nodes within the blocks
+    let mut conditional_nodes = Vec::new();
+    for &node in blocks {
+        if is_conditional_node(graph, node) {
+            conditional_nodes.push(node);
+        }
+    }
+    
+    // Sort for deterministic processing
+    conditional_nodes.sort_by_key(|n| n.index());
+    
+    // Process each conditional
+    for (idx, &cond_node) in conditional_nodes.iter().enumerate() {
+        if processed.contains(&cond_node) {
+            continue;
+        }
+        
+        // Build a simple conditional chain
+        if let Some((true_target, false_target)) = get_conditional_targets(graph, cond_node) {
+            // Only include targets that are within our blocks
+            let true_blocks: Vec<NodeIndex> = if blocks.contains(&true_target) {
+                vec![true_target]
+            } else {
+                vec![]
+            };
+            
+            let false_blocks: Vec<NodeIndex> = if blocks.contains(&false_target) {
+                vec![false_target]
+            } else {
+                vec![]
+            };
+            
+            let branches = vec![
+                ConditionalBranch {
+                    condition_source: cond_node,
+                    branch_type: BranchType::If,
+                    condition_block: cond_node,
+                    branch_entry: true_target,
+                    branch_blocks: true_blocks,
+                },
+                ConditionalBranch {
+                    condition_source: cond_node,
+                    branch_type: BranchType::Else,
+                    condition_block: cond_node,
+                    branch_entry: false_target,
+                    branch_blocks: false_blocks,
+                },
+            ];
+            
+            // Find a simple join block (common successor)
+            let join_block = find_immediate_convergence(graph, true_target, false_target)
+                .unwrap_or(false_target); // Fallback to false target
+            
+            let chain = ConditionalChain {
+                chain_id: idx,
+                branches,
+                join_block,
+                chain_type: ChainType::SimpleIfElse,
+                nesting_depth: 1,
+                nested_chains: vec![],
+            };
+            
+            // Add to node mappings
+            node_to_chains.entry(cond_node).or_insert_with(Vec::new).push(idx);
+            chains.push(chain);
+            processed.insert(cond_node);
+        }
+    }
+    
+    // Compute basic statistics
+    let chain_statistics = ChainStatistics {
+        total_chains: chains.len(),
+        simple_if_else_count: chains.len(),
+        else_if_chain_count: 0,
+        max_chain_length: if chains.is_empty() { 0 } else { 2 },
+        max_nesting_depth: 1,
+    };
+    
+    ConditionalAnalysis {
+        chains,
+        node_to_chains,
+        chain_statistics,
+    }
+}
+
+/// Find nested switches within a specific set of blocks
+fn find_nested_switches_in_blocks(
+    graph: &DiGraph<Block, EdgeKind>,
+    blocks: &HashSet<NodeIndex>,
+) -> Vec<SwitchRegion> {
+    let mut nested_switches = Vec::new();
+    
+    // Find switch dispatch blocks within the given blocks
+    for &node in blocks {
+        if is_switch_dispatch(graph, node) {
+            // Try to build a switch region starting from this dispatch
+            // Note: We need to be careful that the switch region is contained within blocks
+            if let Some(region) = try_build_switch_region(graph, node, blocks) {
+                nested_switches.push(region);
+            }
+        }
+    }
+    
+    nested_switches
+}
+
+/// Check if a node is a switch dispatch block
+fn is_switch_dispatch(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) -> bool {
+    let mut has_switch_edges = false;
+    let mut other_edges = 0;
+    
+    for edge in graph.edges(node) {
+        match edge.weight() {
+            EdgeKind::Switch(_) => has_switch_edges = true,
+            EdgeKind::Default => {}, // Default is part of switch
+            _ => other_edges += 1,
+        }
+    }
+    
+    has_switch_edges && other_edges == 0
+}
+
+/// Try to build a switch region that is contained within the given blocks
+fn try_build_switch_region(
+    graph: &DiGraph<Block, EdgeKind>,
+    dispatch: NodeIndex,
+    allowed_blocks: &HashSet<NodeIndex>,
+) -> Option<SwitchRegion> {
+    // Collect switch cases that are within allowed blocks
+    let mut cases = Vec::new();
+    let mut default_head = None;
+    
+    for edge in graph.edges(dispatch) {
+        match edge.weight() {
+            EdgeKind::Switch(case_index) => {
+                let target = edge.target();
+                if allowed_blocks.contains(&target) {
+                    cases.push(SwitchCase {
+                        case_index: *case_index,
+                        case_head: target,
+                    });
+                }
+            }
+            EdgeKind::Default => {
+                let target = edge.target();
+                if allowed_blocks.contains(&target) {
+                    default_head = Some(target);
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    if cases.is_empty() {
+        return None;
+    }
+    
+    // Sort cases by index
+    cases.sort_by_key(|c| c.case_index);
+    
+    // Find a reasonable join block (simplified for nested switches)
+    let case_heads: Vec<NodeIndex> = cases.iter().map(|c| c.case_head).collect();
+    let join_block = find_common_successor(graph, &case_heads, allowed_blocks)?;
+    
+    Some(SwitchRegion {
+        dispatch,
+        cases,
+        default_head,
+        join_block,
+        case_analyses: HashMap::new(),
+    })
+}
+
+/// Helper functions for conditional analysis
+fn is_conditional_node(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) -> bool {
+    let mut has_true = false;
+    let mut has_false = false;
+    
+    for edge in graph.edges(node) {
+        match edge.weight() {
+            EdgeKind::True => has_true = true,
+            EdgeKind::False => has_false = true,
+            _ => {}
+        }
+    }
+    
+    has_true && has_false
+}
+
+fn get_conditional_targets(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) -> Option<(NodeIndex, NodeIndex)> {
+    let mut true_target = None;
+    let mut false_target = None;
+    
+    for edge in graph.edges(node) {
+        match edge.weight() {
+            EdgeKind::True => true_target = Some(edge.target()),
+            EdgeKind::False => false_target = Some(edge.target()),
+            _ => {}
+        }
+    }
+    
+    match (true_target, false_target) {
+        (Some(t), Some(f)) => Some((t, f)),
+        _ => None,
+    }
+}
+
+fn find_immediate_convergence(
+    graph: &DiGraph<Block, EdgeKind>,
+    node1: NodeIndex,
+    node2: NodeIndex,
+) -> Option<NodeIndex> {
+    // Get immediate successors
+    let succs1: HashSet<_> = graph.edges(node1).map(|e| e.target()).collect();
+    let succs2: HashSet<_> = graph.edges(node2).map(|e| e.target()).collect();
+    
+    // Find common immediate successors
+    let common: Vec<_> = succs1.intersection(&succs2).copied().collect();
+    
+    if common.len() == 1 {
+        Some(common[0])
+    } else {
+        None
+    }
+}
+
+fn find_common_successor(
+    graph: &DiGraph<Block, EdgeKind>,
+    nodes: &[NodeIndex],
+    allowed_blocks: &HashSet<NodeIndex>,
+) -> Option<NodeIndex> {
+    if nodes.is_empty() {
+        return None;
+    }
+    
+    // Use BFS to find reachable nodes from each starting node
+    let mut reachable_from_all = None;
+    
+    for (i, &node) in nodes.iter().enumerate() {
+        let mut reachable = HashSet::new();
+        let mut queue = VecDeque::new();
+        queue.push_back(node);
+        
+        while let Some(current) = queue.pop_front() {
+            if !reachable.insert(current) {
+                continue;
+            }
+            
+            for edge in graph.edges(current) {
+                let target = edge.target();
+                if allowed_blocks.contains(&target) && !reachable.contains(&target) {
+                    queue.push_back(target);
+                }
+            }
+        }
+        
+        if i == 0 {
+            reachable_from_all = Some(reachable);
+        } else if let Some(ref mut common) = reachable_from_all {
+            *common = common.intersection(&reachable).copied().collect();
+        }
+    }
+    
+    // Find the first common node (simplified heuristic)
+    reachable_from_all.and_then(|common| common.into_iter().next())
+}
+
+/// Extract a subgraph containing only the specified blocks
+fn extract_subgraph(
+    graph: &DiGraph<Block, EdgeKind>,
+    blocks: &HashSet<NodeIndex>,
+) -> DiGraph<Block, EdgeKind> {
+    let mut subgraph = DiGraph::new();
+    let mut node_map = HashMap::new();
+    
+    // Add nodes
+    for &node in blocks {
+        if let Some(block) = graph.node_weight(node) {
+            let new_node = subgraph.add_node(block.clone());
+            node_map.insert(node, new_node);
+        }
+    }
+    
+    // Add edges between blocks in the subgraph
+    let mut edge_count = 0;
+    for &node in blocks {
+        if let Some(&new_src) = node_map.get(&node) {
+            for edge in graph.edges(node) {
+                let target = edge.target();
+                if let Some(&new_tgt) = node_map.get(&target) {
+                    subgraph.add_edge(new_src, new_tgt, edge.weight().clone());
+                    edge_count += 1;
+                    log::trace!("Added edge {} -> {} ({:?})", node.index(), target.index(), edge.weight());
+                }
+            }
+        }
+    }
+    
+    log::trace!("Extracted subgraph with {} nodes and {} edges from {} blocks", 
+        subgraph.node_count(), edge_count, blocks.len());
+    
+    subgraph
+}
+
+/// Compute post-dominators for a subgraph
+fn compute_subgraph_post_dominators(subgraph: &DiGraph<Block, EdgeKind>) -> Option<PostDominatorAnalysis> {
+    use petgraph::algo::tarjan_scc;
+    
+    if subgraph.node_count() == 0 {
+        return None;
+    }
+    
+    let mut post_dominators = HashMap::new();
+    let mut immediate_post_dominators = HashMap::new();
+    
+    // Find all exit nodes (nodes with no successors)
+    let exit_nodes: Vec<NodeIndex> = subgraph
+        .node_indices()
+        .filter(|&node| subgraph.edges(node).count() == 0)
+        .collect();
+    
+    if exit_nodes.is_empty() {
+        // No exit nodes, use strongly connected components to find cycles
+        let sccs = tarjan_scc(&subgraph);
+        // For now, just return None if we have cycles
+        if sccs.iter().any(|scc| scc.len() > 1) {
+            return None;
+        }
+    }
+    
+    // Initialize: every node post-dominates itself
+    for node in subgraph.node_indices() {
+        let mut doms = HashSet::new();
+        doms.insert(node);
+        post_dominators.insert(node, doms);
+    }
+    
+    // Exit nodes post-dominate only themselves
+    for &exit in &exit_nodes {
+        let mut doms = HashSet::new();
+        doms.insert(exit);
+        post_dominators.insert(exit, doms);
+    }
+    
+    // Iteratively compute post-dominators
+    let mut changed = true;
+    while changed {
+        changed = false;
+        
+        for node in subgraph.node_indices() {
+            if exit_nodes.contains(&node) {
+                continue;
+            }
+            
+            let successors: Vec<NodeIndex> = subgraph.edges(node).map(|e| e.target()).collect();
+            
+            if successors.is_empty() {
+                continue;
+            }
+            
+            // Post-dominators = intersection of successors' post-dominators + self
+            let mut new_doms = if let Some(first_succ) = successors.first() {
+                post_dominators.get(first_succ).cloned().unwrap_or_default()
+            } else {
+                HashSet::new()
+            };
+            
+            for &succ in successors.iter().skip(1) {
+                if let Some(succ_doms) = post_dominators.get(&succ) {
+                    new_doms = new_doms.intersection(succ_doms).cloned().collect();
+                }
+            }
+            
+            new_doms.insert(node);
+            
+            if let Some(current_doms) = post_dominators.get(&node) {
+                if &new_doms != current_doms {
+                    changed = true;
+                    post_dominators.insert(node, new_doms);
+                }
+            }
+        }
+    }
+    
+    // Compute immediate post-dominators
+    for node in subgraph.node_indices() {
+        if let Some(doms) = post_dominators.get(&node) {
+            let candidates: Vec<_> = doms.iter().filter(|&&d| d != node).cloned().collect();
+            
+            // Find the immediate post-dominator (closest one)
+            let mut immediate = None;
+            for &candidate in &candidates {
+                let mut is_immediate = true;
+                for &other in &candidates {
+                    if candidate != other {
+                        if let Some(other_doms) = post_dominators.get(&other) {
+                            if other_doms.contains(&candidate) {
+                                is_immediate = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if is_immediate {
+                    immediate = Some(candidate);
+                    break;
+                }
+            }
+            
+            immediate_post_dominators.insert(node, immediate);
+        }
+    }
+    
+    Some(PostDominatorAnalysis {
+        post_dominators,
+        immediate_post_dominators,
+    })
+}
+
+impl SwitchRegion {
+    /// Trace all blocks belonging to a switch case body
+    pub fn trace_case_blocks(
+        &self,
+        graph: &DiGraph<Block, EdgeKind>,
+        case_head: NodeIndex,
+        join_block: NodeIndex,
+    ) -> HashSet<NodeIndex> {
+        let mut case_blocks = HashSet::new();
+        let mut work_list = vec![case_head];
+        let mut visited = HashSet::new();
+        
+        // Collect all case heads to avoid crossing into other cases
+        let mut other_case_heads = HashSet::new();
+        for case in &self.cases {
+            if case.case_head != case_head {
+                other_case_heads.insert(case.case_head);
+            }
+        }
+        if let Some(default) = self.default_head {
+            if default != case_head {
+                other_case_heads.insert(default);
+            }
+        }
+        
+        while let Some(current) = work_list.pop() {
+            // Skip if we've already visited this block
+            if !visited.insert(current) {
+                continue;
+            }
+            
+            // Stop if we've reached the join block or another case head
+            if current == join_block || (current != case_head && other_case_heads.contains(&current)) {
+                continue;
+            }
+            
+            // Add this block to the case body
+            case_blocks.insert(current);
+            
+            // Add all successors to work list
+            for edge in graph.edges(current) {
+                let target = edge.target();
+                if !visited.contains(&target) {
+                    work_list.push(target);
+                }
+            }
+        }
+        
+        case_blocks
+    }
+    
+    /// Analyze the body of each case to find nested control structures
+    pub fn analyze_case_bodies(
+        &mut self,
+        graph: &DiGraph<Block, EdgeKind>,
+        _cfg: &crate::cfg::Cfg,
+    ) {
+        // Clear any existing analyses
+        self.case_analyses.clear();
+        
+        // Analyze each case
+        for (idx, case) in self.cases.iter().enumerate() {
+            let case_blocks = self.trace_case_blocks(graph, case.case_head, self.join_block);
+            
+            log::debug!("Case {} (head block {}): traced {} blocks: {:?}", 
+                idx, case.case_head.index(), case_blocks.len(), 
+                case_blocks.iter().map(|b| b.index()).collect::<Vec<_>>());
+            
+            if case_blocks.is_empty() {
+                continue;
+            }
+            
+            // Analyze conditionals within case blocks directly on the original graph
+            let conditionals = analyze_conditionals_in_blocks(graph, &case_blocks);
+            
+            // Analyze loops in the case blocks
+            // TODO: Implement loop analysis for case blocks
+            let loops = LoopAnalysis {
+                loops: vec![],
+                node_to_loops: HashMap::new(),
+            };
+            
+            // Find nested switches within case blocks
+            let nested_switches = find_nested_switches_in_blocks(graph, &case_blocks);
+            
+            self.case_analyses.insert(idx, CaseBodyAnalysis {
+                blocks: case_blocks,
+                conditionals,
+                loops,
+                nested_switches,
+            });
+        }
+        
+        // Also analyze default case if present
+        if let Some(default_head) = self.default_head {
+            let default_blocks = self.trace_case_blocks(graph, default_head, self.join_block);
+            
+            if !default_blocks.is_empty() {
+                // Analyze conditionals within default blocks
+                let conditionals = analyze_conditionals_in_blocks(graph, &default_blocks);
+                
+                // Analyze loops
+                // TODO: Implement loop analysis for default blocks
+                let loops = LoopAnalysis {
+                    loops: vec![],
+                    node_to_loops: HashMap::new(),
+                };
+                
+                // Find nested switches
+                let nested_switches = find_nested_switches_in_blocks(graph, &default_blocks);
+                
+                // Use a special index for default case (usize::MAX)
+                self.case_analyses.insert(usize::MAX, CaseBodyAnalysis {
+                    blocks: default_blocks,
+                    conditionals,
+                    loops,
+                    nested_switches,
+                });
+            }
+        }
     }
 }
 
@@ -266,7 +828,10 @@ pub fn find_switch_regions_with_ssa(
 
     // Step 2: Detect dense switch regions for each dispatch
     for dispatch in switch_dispatches {
-        if let Some(region) = detect_switch_region(graph, post_doms, dispatch) {
+        if let Some(mut region) = detect_switch_region(graph, post_doms, dispatch) {
+            // Analyze case bodies
+            region.analyze_case_bodies(graph, cfg);
+            
             let region_idx = regions.len();
 
             // Add region to list
@@ -274,6 +839,14 @@ pub fn find_switch_regions_with_ssa(
 
             // Build node-to-region mapping
             add_nodes_to_switch_region_mapping(&mut node_to_regions, &region, region_idx);
+            
+            // Mark all case blocks as globally processed to avoid detecting them as new switches
+            for case in &region.cases {
+                globally_processed_nodes.insert(case.case_head);
+            }
+            if let Some(default) = region.default_head {
+                globally_processed_nodes.insert(default);
+            }
         }
     }
 
@@ -288,7 +861,11 @@ pub fn find_switch_regions_with_ssa(
         ssa_analysis,
     );
     for candidate in sparse_candidates {
-        let region = super::switch_analysis::sparse_candidate_to_switch_region(&candidate);
+        let mut region = super::switch_analysis::sparse_candidate_to_switch_region(&candidate);
+        
+        // Analyze case bodies
+        region.analyze_case_bodies(graph, cfg);
+        
         let region_idx = regions.len();
 
         // Add region to list
@@ -296,6 +873,14 @@ pub fn find_switch_regions_with_ssa(
 
         // Build node-to-region mapping
         add_nodes_to_switch_region_mapping(&mut node_to_regions, &region, region_idx);
+        
+        // Mark all case blocks as globally processed to avoid detecting them as new switches
+        for case in &region.cases {
+            globally_processed_nodes.insert(case.case_head);
+        }
+        if let Some(default) = region.default_head {
+            globally_processed_nodes.insert(default);
+        }
     }
 
     SwitchAnalysis {
@@ -360,6 +945,7 @@ fn detect_switch_region(
             cases,
             default_head,
             join_block,
+            case_analyses: HashMap::new(),
         });
     }
 
