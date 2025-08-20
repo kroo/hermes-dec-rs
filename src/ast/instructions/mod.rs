@@ -8,6 +8,8 @@ use crate::ast::{
     context::{ExpressionContext, ExpressionContextError},
     variables::RegisterManager,
 };
+use crate::cfg::ssa::DuplicationContext;
+use crate::cfg::switch_analysis::switch_info::CaseGroup;
 use crate::hbc::InstructionIndex;
 use crate::{analysis::GlobalAnalysisResult, generated::unified_instructions::UnifiedInstruction};
 use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
@@ -98,6 +100,8 @@ pub struct InstructionToStatementConverter<'a> {
     decompile_nested: bool,
     /// Track variables that were used but not declared
     undeclared_variables: HashSet<String>,
+    /// Current duplication context for switch case processing
+    current_duplication_context: Option<DuplicationContext>,
 }
 
 impl<'a> InstructionToStatementConverter<'a> {
@@ -114,6 +118,7 @@ impl<'a> InstructionToStatementConverter<'a> {
             hbc_analysis,
             decompile_nested: false,
             undeclared_variables: HashSet::new(),
+            current_duplication_context: None,
         }
     }
 
@@ -128,6 +133,27 @@ impl<'a> InstructionToStatementConverter<'a> {
     pub fn set_decompile_nested(&mut self, decompile_nested: bool) {
         self.decompile_nested = decompile_nested;
     }
+
+    /// Set the current duplication context for switch case processing
+    pub fn set_duplication_context_for_case_group(&mut self, case_group: &CaseGroup) {
+        self.current_duplication_context = Some(DuplicationContext::SwitchBlockDuplication {
+            case_group_keys: case_group.keys.clone(),
+        });
+        // Also set it in the register manager so it can use duplicated names
+        self.register_manager.set_duplication_context(Some(
+            DuplicationContext::SwitchBlockDuplication {
+                case_group_keys: case_group.keys.clone(),
+            },
+        ));
+    }
+
+    /// Clear the current duplication context
+    pub fn clear_duplication_context(&mut self) {
+        self.current_duplication_context = None;
+        // Also clear it in the register manager
+        self.register_manager.set_duplication_context(None);
+    }
+
 
     /// Get the set of undeclared variables
     pub fn get_undeclared_variables(&self) -> &HashSet<String> {

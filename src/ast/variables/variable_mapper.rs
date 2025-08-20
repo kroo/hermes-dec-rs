@@ -1,5 +1,6 @@
 use crate::cfg::ssa::variable_analysis::{VariableScope, VariableUsage};
-use crate::cfg::ssa::{SSAAnalysis, SSAValue};
+use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext, SSAAnalysis, SSAValue};
+use crate::cfg::switch_analysis::switch_info::CaseKey;
 use crate::cfg::Cfg;
 use crate::hbc::InstructionIndex;
 use petgraph::graph::NodeIndex;
@@ -166,6 +167,41 @@ impl VariableMapping {
     /// Get variable usage information
     pub fn get_variable_usage(&self, var_name: &str) -> Option<&VariableUsage> {
         self.variable_usage.get(var_name)
+    }
+
+    /// Get variable name for a duplicated SSA value
+    pub fn get_variable_name_for_duplicated(&self, dup_ssa: &DuplicatedSSAValue) -> String {
+        // Get base name from original SSA value
+        let base_name = self
+            .ssa_to_var
+            .get(&dup_ssa.original)
+            .cloned()
+            .unwrap_or_else(|| format!("var{}", dup_ssa.original.register));
+
+        match &dup_ssa.duplication_context {
+            None => base_name,
+            Some(DuplicationContext::SwitchBlockDuplication { case_group_keys }) => {
+                // Create suffix from case group to ensure unique names
+                let suffix = Self::case_group_to_id(case_group_keys);
+                format!("{}_{}", base_name, suffix)
+            }
+        }
+    }
+
+    /// Convert case group keys to a stable, short identifier
+    fn case_group_to_id(case_keys: &[CaseKey]) -> String {
+        case_keys
+            .iter()
+            .map(|k| match k {
+                CaseKey::Number(n) => (n.0 as i32).to_string(),
+                CaseKey::String(s) => format!("s{}", s.len()), // "s" + length to avoid long names
+                CaseKey::Boolean(true) => "t".to_string(),
+                CaseKey::Boolean(false) => "f".to_string(),
+                CaseKey::Null => "n".to_string(),
+                CaseKey::Undefined => "u".to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join("_")
     }
 }
 
@@ -519,6 +555,11 @@ impl VariableMapper {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext, RegisterDef, SSAValue};
+    use crate::cfg::switch_analysis::switch_info::CaseKey;
+    use crate::hbc::InstructionIndex;
+    use ordered_float::OrderedFloat;
+    use petgraph::graph::NodeIndex;
 
     #[test]
     fn test_version_to_letters() {
@@ -539,6 +580,108 @@ mod tests {
         // Triple letters
         assert_eq!(mapper.version_to_letters(702), "aaa");
         assert_eq!(mapper.version_to_letters(703), "aab");
+    }
+
+    #[test]
+    fn test_duplicated_variable_naming() {
+        let mut mapping = VariableMapping::new();
+
+        // Create a test SSA value
+        let ssa_value = SSAValue {
+            register: 1,
+            version: 5,
+            def_site: RegisterDef {
+                register: 1,
+                block_id: NodeIndex::new(0),
+                instruction_idx: InstructionIndex::new(10),
+            },
+        };
+
+        // Map it to a base variable name
+        mapping
+            .ssa_to_var
+            .insert(ssa_value.clone(), "var1_d".to_string());
+
+        // Test original (non-duplicated) value
+        let original_dup = DuplicatedSSAValue::original(ssa_value.clone());
+        assert_eq!(
+            mapping.get_variable_name_for_duplicated(&original_dup),
+            "var1_d"
+        );
+
+        // Test duplicated value with switch context
+        let case_keys = vec![
+            CaseKey::Number(OrderedFloat(3.0)),
+            CaseKey::Number(OrderedFloat(4.0)),
+        ];
+        let dup_context = DuplicationContext::SwitchBlockDuplication {
+            case_group_keys: case_keys,
+        };
+        let duplicated = DuplicatedSSAValue {
+            original: ssa_value.clone(),
+            duplication_context: Some(dup_context),
+        };
+
+        assert_eq!(
+            mapping.get_variable_name_for_duplicated(&duplicated),
+            "var1_d_3_4"
+        );
+    }
+
+    #[test]
+    fn test_case_group_to_id() {
+        let case_keys = vec![
+            CaseKey::Number(OrderedFloat(0.0)),
+            CaseKey::Number(OrderedFloat(1.0)),
+            CaseKey::Number(OrderedFloat(2.0)),
+        ];
+        assert_eq!(VariableMapping::case_group_to_id(&case_keys), "0_1_2");
+
+        let mixed_keys = vec![
+            CaseKey::String("test".to_string()),
+            CaseKey::Boolean(true),
+            CaseKey::Null,
+            CaseKey::Undefined,
+        ];
+        assert_eq!(VariableMapping::case_group_to_id(&mixed_keys), "s4_t_n_u");
+    }
+
+    #[test]
+    fn test_duplicated_naming_fallback() {
+        let mapping = VariableMapping::new();
+
+        // Create SSA value not in mapping
+        let ssa_value = SSAValue {
+            register: 7,
+            version: 1,
+            def_site: RegisterDef {
+                register: 7,
+                block_id: NodeIndex::new(0),
+                instruction_idx: InstructionIndex::new(5),
+            },
+        };
+
+        let original_dup = DuplicatedSSAValue::original(ssa_value.clone());
+        // Should use fallback naming
+        assert_eq!(
+            mapping.get_variable_name_for_duplicated(&original_dup),
+            "var7"
+        );
+
+        // Test with duplication context
+        let case_keys = vec![CaseKey::Number(OrderedFloat(5.0))];
+        let dup_context = DuplicationContext::SwitchBlockDuplication {
+            case_group_keys: case_keys,
+        };
+        let duplicated = DuplicatedSSAValue {
+            original: ssa_value,
+            duplication_context: Some(dup_context),
+        };
+
+        assert_eq!(
+            mapping.get_variable_name_for_duplicated(&duplicated),
+            "var7_5"
+        );
     }
 }
 

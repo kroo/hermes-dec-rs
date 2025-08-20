@@ -1,3 +1,4 @@
+use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey};
 use crate::hbc::InstructionIndex;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
@@ -58,6 +59,120 @@ impl SSAValue {
     /// Get a name for this SSA value (e.g., "r1_2")
     pub fn name(&self) -> String {
         format!("r{}_{}", self.register, self.version)
+    }
+}
+
+/// Context for SSA value duplication during code generation
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum DuplicationContext {
+    SwitchBlockDuplication { case_group_keys: Vec<CaseKey> },
+    // Future: could add LoopUnrolling, InlineExpansion, etc.
+}
+
+/// An SSA value that may be duplicated during code generation
+/// This handles cases where the same original SSA value needs different
+/// variable names and elimination status in different generated contexts
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DuplicatedSSAValue {
+    pub original: SSAValue,
+    pub duplication_context: Option<DuplicationContext>,
+}
+
+impl DuplicatedSSAValue {
+    /// Create an original (non-duplicated) SSA value
+    pub fn original(ssa_value: SSAValue) -> Self {
+        Self {
+            original: ssa_value,
+            duplication_context: None,
+        }
+    }
+
+    /// Create a duplicated SSA value for switch block duplication
+    /// The case group uniquely identifies this duplication context
+    pub fn switch_duplicated(ssa_value: SSAValue, case_group: &CaseGroup) -> Self {
+        Self {
+            original: ssa_value,
+            duplication_context: Some(DuplicationContext::SwitchBlockDuplication {
+                case_group_keys: case_group.keys.clone(),
+            }),
+        }
+    }
+
+    /// Check if this is a duplicated value
+    pub fn is_duplicated(&self) -> bool {
+        self.duplication_context.is_some()
+    }
+
+    /// Get the original SSA value
+    pub fn original_ssa_value(&self) -> &SSAValue {
+        &self.original
+    }
+
+    /// Get duplication context if this is duplicated
+    pub fn duplication_context(&self) -> Option<&DuplicationContext> {
+        self.duplication_context.as_ref()
+    }
+
+    /// Get a unique identifier based on case group
+    pub fn unique_id(&self) -> String {
+        match &self.duplication_context {
+            None => format!("r{}_{}", self.original.register, self.original.version),
+            Some(DuplicationContext::SwitchBlockDuplication { case_group_keys }) => {
+                let case_id = Self::case_group_to_id(case_group_keys);
+                format!(
+                    "r{}_{}_{}",
+                    self.original.register, self.original.version, case_id
+                )
+            }
+        }
+    }
+
+    /// Convert case group keys to a stable, short identifier
+    fn case_group_to_id(case_keys: &[CaseKey]) -> String {
+        case_keys
+            .iter()
+            .map(|k| match k {
+                CaseKey::Number(n) => (n.0 as i32).to_string(),
+                CaseKey::String(s) => format!("s{}", s.len()), // "s" + length to avoid long names
+                CaseKey::Boolean(true) => "t".to_string(),
+                CaseKey::Boolean(false) => "f".to_string(),
+                CaseKey::Null => "n".to_string(),
+                CaseKey::Undefined => "u".to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join("_")
+    }
+
+    /// Get a descriptive name for debugging
+    pub fn context_description(&self) -> String {
+        match &self.duplication_context {
+            None => "original".to_string(),
+            Some(DuplicationContext::SwitchBlockDuplication { case_group_keys }) => {
+                let keys_str = case_group_keys
+                    .iter()
+                    .map(|k| match k {
+                        CaseKey::Number(n) => n.0.to_string(),
+                        CaseKey::String(s) => format!("\"{}\"", s),
+                        CaseKey::Boolean(b) => b.to_string(),
+                        CaseKey::Null => "null".to_string(),
+                        CaseKey::Undefined => "undefined".to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!("switch_cases[{}]", keys_str)
+            }
+        }
+    }
+
+    /// Check if this represents the same duplication context as another
+    pub fn same_duplication_context(&self, other: &DuplicatedSSAValue) -> bool {
+        self.duplication_context == other.duplication_context
+    }
+}
+
+impl From<SSAValue> for DuplicatedSSAValue {
+    fn from(ssa_value: SSAValue) -> Self {
+        Self::original(ssa_value)
     }
 }
 
@@ -555,5 +670,84 @@ mod tests {
         assert_eq!(stats.total_uses, 3);
         assert_eq!(stats.unique_registers, 2);
         assert_eq!(stats.avg_uses_per_def(), 1.5);
+    }
+
+    #[test]
+    fn test_duplicated_ssa_value_original() {
+        let def = RegisterDef::new(2, NodeIndex::new(0), InstructionIndex::new(2));
+        let ssa_value = SSAValue::new(2, 1, def);
+        let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+
+        assert!(!dup_value.is_duplicated());
+        assert_eq!(dup_value.original_ssa_value(), &ssa_value);
+        assert_eq!(dup_value.unique_id(), "r2_1");
+        assert_eq!(dup_value.context_description(), "original");
+    }
+
+    #[test]
+    fn test_duplicated_ssa_value_from() {
+        let def = RegisterDef::new(3, NodeIndex::new(1), InstructionIndex::new(5));
+        let ssa_value = SSAValue::new(3, 2, def);
+        let dup_value = DuplicatedSSAValue::from(ssa_value.clone());
+
+        assert!(!dup_value.is_duplicated());
+        assert_eq!(dup_value.original_ssa_value(), &ssa_value);
+    }
+
+    #[test]
+    fn test_duplicated_ssa_value_switch() {
+        use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey};
+        use ordered_float::OrderedFloat;
+        use smallvec::SmallVec;
+
+        let def = RegisterDef::new(1, NodeIndex::new(0), InstructionIndex::new(0));
+        let ssa_value = SSAValue::new(1, 5, def);
+
+        let case_group = CaseGroup {
+            keys: vec![
+                CaseKey::Number(OrderedFloat(3.0)),
+                CaseKey::Number(OrderedFloat(4.0)),
+            ],
+            target_block: NodeIndex::new(10),
+            setup: SmallVec::new(),
+            always_terminates: false,
+            first_execution_order: 3,
+            comparison_blocks: vec![],
+        };
+
+        let dup_value = DuplicatedSSAValue::switch_duplicated(ssa_value.clone(), &case_group);
+
+        assert!(dup_value.is_duplicated());
+        assert_eq!(dup_value.original_ssa_value(), &ssa_value);
+        assert_eq!(dup_value.unique_id(), "r1_5_3_4");
+        assert_eq!(dup_value.context_description(), "switch_cases[3,4]");
+    }
+
+    #[test]
+    fn test_duplicated_ssa_value_same_context() {
+        use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey};
+        use ordered_float::OrderedFloat;
+        use smallvec::SmallVec;
+
+        let def1 = RegisterDef::new(1, NodeIndex::new(0), InstructionIndex::new(0));
+        let ssa_value1 = SSAValue::new(1, 1, def1);
+        let def2 = RegisterDef::new(2, NodeIndex::new(1), InstructionIndex::new(2));
+        let ssa_value2 = SSAValue::new(2, 1, def2);
+
+        let case_group = CaseGroup {
+            keys: vec![CaseKey::Number(OrderedFloat(0.0))],
+            target_block: NodeIndex::new(9),
+            setup: SmallVec::new(),
+            always_terminates: false,
+            first_execution_order: 0,
+            comparison_blocks: vec![],
+        };
+
+        let dup_value1 = DuplicatedSSAValue::switch_duplicated(ssa_value1, &case_group);
+        let dup_value2 = DuplicatedSSAValue::switch_duplicated(ssa_value2, &case_group);
+
+        assert!(dup_value1.same_duplication_context(&dup_value2));
+        assert_eq!(dup_value1.unique_id(), "r1_1_0");
+        assert_eq!(dup_value2.unique_id(), "r2_1_0");
     }
 }

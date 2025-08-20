@@ -6,7 +6,11 @@ use crate::analysis::value_tracker::ConstantValue;
 use crate::cfg::switch_analysis::{
     CaseGroup, CaseInfo, CaseKey, DefaultCase, PhiNode, SharedTailInfo, SwitchInfo,
 };
-use crate::cfg::{analysis::SwitchRegion, ssa::SSAValue, Cfg};
+use crate::cfg::{
+    analysis::SwitchRegion,
+    ssa::{DuplicatedSSAValue, SSAValue},
+    Cfg,
+};
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::function_table::HbcFunctionInstruction;
 use crate::hbc::InstructionIndex;
@@ -554,6 +558,10 @@ impl<'a> SwitchConverter<'a> {
                         .unwrap_or(false);
 
                     if has_phi {
+                        log::debug!(
+                            "Case group {:?} has PHI nodes, using PHI assignment path",
+                            group.keys
+                        );
                         // Generate PHI assignments before converting the target block
                         self.generate_case_body_with_phi_assignments(
                             &mut case_statements,
@@ -562,6 +570,10 @@ impl<'a> SwitchConverter<'a> {
                             block_converter,
                         )?;
                     } else {
+                        log::debug!(
+                            "Case group {:?} has no PHI nodes, using normal path",
+                            group.keys
+                        );
                         // First, check for nested switches and mark setup instructions for elimination
                         // BEFORE generating any setup instructions
                         self.pre_analyze_nested_switches(group, cfg, cfg, block_converter)?;
@@ -585,6 +597,7 @@ impl<'a> SwitchConverter<'a> {
                         )?;
 
                         if !converted_nested {
+                            // Convert the target block normally (no duplication context needed here)
                             self.convert_target_block_normally(
                                 &mut case_statements,
                                 group,
@@ -653,6 +666,14 @@ impl<'a> SwitchConverter<'a> {
 
             // Duplicate the next case's target block code instead of falling through
             // This avoids conflicts with setup instructions
+            // Set duplication context for this fallthrough duplication
+            log::debug!(
+                "Setting duplication context for fallthrough from case group {:?} to block {}",
+                group.keys,
+                next_group_clone.target_block.index()
+            );
+            block_converter.set_duplication_context_for_case_group(group);
+
             // Don't mark instructions as rendered since they'll be converted again for the actual case
             self.convert_target_block_with_marking(
                 &mut case_statements,
@@ -664,6 +685,10 @@ impl<'a> SwitchConverter<'a> {
                 region,
                 group_index + 1, // Use next group's index
             )?;
+
+            // Clear duplication context after duplicating the fallthrough block
+            log::debug!("Clearing duplication context after fallthrough duplication");
+            block_converter.clear_duplication_context();
         }
 
         // Check if we need to add a break statement
@@ -940,15 +965,17 @@ impl<'a> SwitchConverter<'a> {
             }
         }
 
-        // Then convert the target block
+        // Then convert the target block (no duplication context for PHI path)
         let target_block = &cfg.graph()[group.target_block];
-        match block_converter.convert_block_with_options(
+        let result = block_converter.convert_block_with_options(
             target_block,
             group.target_block,
             cfg.graph(),
             None::<fn(&HbcFunctionInstruction, bool) -> bool>,
             false,
-        ) {
+        );
+
+        match result {
             Ok(stmts) => case_statements.extend(stmts),
             Err(e) => {
                 return Err(SwitchConversionError::BlockConversionError(format!(
@@ -1039,61 +1066,18 @@ impl<'a> SwitchConverter<'a> {
                 continue;
             }
 
-            // Simplified: Let SSAUsageTracker handle all elimination decisions
-            // We'll generate all setup instructions unless SSAUsageTracker says they're eliminated
-
-            // Get the variable name for this SSA value
+            // Use normal variable naming for setup instructions (no duplication)
             let var_name = if let Some(mapping) = block_converter
                 .instruction_converter()
                 .register_manager()
                 .variable_mapping()
             {
-                let ssa = block_converter.ssa_analysis();
-
-                // Check if there's a PHI function at the target block for this register
-                if let Some(phi_functions) = ssa.phi_functions.get(&group.target_block) {
-                    if let Some(phi_func) = phi_functions
-                        .iter()
-                        .find(|phi| phi.register == setup_instr.ssa_value.register)
-                    {
-                        // Use the PHI result variable
-                        mapping
-                            .ssa_to_var
-                            .get(&phi_func.result)
-                            .cloned()
-                            .expect("PHI result variable not found")
-                    } else {
-                        // No PHI function for this register, use the SSA value directly
-                        mapping
-                            .ssa_to_var
-                            .get(&setup_instr.ssa_value)
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                // Generate a variable name for this SSA value if not found
-                                // This can happen when a register is used in comparisons
-                                format!(
-                                    "var{}_{}",
-                                    setup_instr.ssa_value.register,
-                                    char::from(b'a' + (setup_instr.ssa_value.version % 26) as u8)
-                                )
-                            })
-                    }
-                } else {
-                    // No PHI functions at target block, use the SSA value directly
-                    mapping
-                        .ssa_to_var
-                        .get(&setup_instr.ssa_value)
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            // Generate a variable name for this SSA value if not found
-                            // This can happen when a register is used in comparisons
-                            format!(
-                                "var{}_{}",
-                                setup_instr.ssa_value.register,
-                                char::from(b'a' + (setup_instr.ssa_value.version % 26) as u8)
-                            )
-                        })
-                }
+                // Setup instructions don't need duplicated names - they're unique per case
+                mapping
+                    .ssa_to_var
+                    .get(&setup_instr.ssa_value)
+                    .cloned()
+                    .unwrap_or_else(|| format!("var{}", setup_instr.ssa_value.register))
             } else {
                 panic!("Missing variable mapping!");
             };
@@ -1102,92 +1086,8 @@ impl<'a> SwitchConverter<'a> {
             let var_name = self.ast_builder.allocator.alloc_str(&var_name);
 
             // Create a variable declaration with the constant value
-            // Check Mov instructions first for fallthrough handling
-            let value_expr = if let UnifiedInstruction::Mov {
-                operand_1,
-                operand_0,
-            } = &setup_instr.instruction.instruction
-            {
-                // For Mov instructions, we need to handle fallthrough cases specially
-                // Check if this Mov is setting up a PHI contribution for a fallthrough
-                let ssa = block_converter.ssa_analysis();
-                let is_fallthrough_phi =
-                    if let Some(phi_functions) = ssa.phi_functions.get(&group.target_block) {
-                        // Check if there's a PHI for the register this Mov writes to
-                        phi_functions.iter().any(|phi| phi.register == *operand_0)
-                    } else {
-                        false
-                    };
-
-                // If this is a fallthrough PHI and the setup has a stored value, use that
-                // The stored value in setup_instr.value might be wrong (empty string)
-                // For fallthrough cases, we should skip the assignment entirely
-                // as the value comes from the previous case
-
-                if is_fallthrough_phi
-                    && setup_instr.value.as_ref().map_or(false, |v| {
-                        // Check if the value is suspicious (empty string for a fallthrough)
-                        matches!(v, ConstantValue::String(s) if s.is_empty())
-                    })
-                {
-                    // This is a fallthrough case where the value comes from a previous case
-                    // Skip generating this assignment entirely
-                    log::debug!("Detected fallthrough PHI with empty string - skipping assignment");
-                    continue;
-                } else {
-                    // Normal Mov handling
-                    // Look for the source value in other setup instructions
-                    let source_value = group
-                        .setup
-                        .iter()
-                        .find(|s| {
-                            if let Some(target_reg) =
-                                crate::generated::instruction_analysis::analyze_register_usage(
-                                    &s.instruction.instruction,
-                                )
-                                .target
-                            {
-                                target_reg == *operand_1 && s.value.is_some()
-                            } else {
-                                false
-                            }
-                        })
-                        .and_then(|s| s.value.as_ref());
-
-                    if let Some(const_value) = source_value {
-                        self.create_constant_expression_from_value(const_value)
-                    } else if let Some(const_value) = &setup_instr.value {
-                        // Use the stored value if available
-                        self.create_constant_expression_from_value(const_value)
-                    } else {
-                        // If we can't find the source value, use the source register variable
-                        let source_var_name = if let Some(mapping) = block_converter
-                            .instruction_converter()
-                            .register_manager()
-                            .variable_mapping()
-                        {
-                            mapping
-                                .get_source_variable_name(
-                                    *operand_1,
-                                    setup_instr.instruction.instruction_index,
-                                )
-                                .cloned()
-                                .unwrap_or_else(|| format!("var{}", operand_1))
-                        } else {
-                            format!("var{}", operand_1)
-                        };
-
-                        let source_var_name =
-                            self.ast_builder.allocator.alloc_str(&source_var_name);
-                        Expression::Identifier(
-                            self.ast_builder.alloc(
-                                self.ast_builder
-                                    .identifier_reference(Span::default(), source_var_name),
-                            ),
-                        )
-                    }
-                }
-            } else if let Some(const_value) = &setup_instr.value {
+            // Use the stored constant value for all instruction types
+            let value_expr = if let Some(const_value) = &setup_instr.value {
                 // Convert the constant value to an expression
                 self.create_constant_expression_from_value(const_value)
             } else {
@@ -1200,37 +1100,27 @@ impl<'a> SwitchConverter<'a> {
                 )
             };
 
-            // Check if this variable has already been declared at function scope
-            // If it's a function-scope variable, we should only assign, not declare
-            let is_function_scoped = if let Some(mapping) = block_converter
-                .instruction_converter()
-                .register_manager()
-                .variable_mapping()
-            {
-                // Check if this variable is marked as function-scoped
-                mapping.function_scope_vars.contains(&var_name.to_string())
-            } else {
-                false // Default to not function-scoped if we can't check
-            };
+            // Use SSAUsageTracker to determine declaration strategy
+            let ssa_tracker = block_converter.ssa_usage_tracker();
+            // For setup instructions, get the declaration strategy for the original SSA value
+            let dup_ssa_value = DuplicatedSSAValue::original(setup_instr.ssa_value.clone());
+            let declaration_strategy = ssa_tracker.get_declaration_strategy(&dup_ssa_value);
 
-            // Check if this variable's SSA value has been fully consumed
-            let is_eliminated = block_converter.is_ssa_value_eliminated(&setup_instr.ssa_value);
-
-            // We should declare if:
-            // 1. It's NOT function-scoped (i.e., it's a local variable), OR
-            // 2. It IS function-scoped but eliminated (so it won't be declared at function level)
-            let should_declare = !is_function_scoped || is_eliminated;
-
-            log::debug!(
-                "Setup instruction for {} ({}): is_function_scoped={}, is_eliminated={}, should_declare={}",
-                var_name, setup_instr.ssa_value.name(), is_function_scoped, is_eliminated, should_declare
+            // Determine if we should declare based on the strategy
+            let should_declare = matches!(
+                declaration_strategy,
+                crate::ast::optimization::ssa_usage_tracker::DeclarationStrategy::DeclareAndInitialize { .. }
             );
 
-            // If this SSA value is eliminated AND we don't need to declare it locally, skip it
-            // This happens when the value is only used in contexts that inline constants
-            // BUT: Don't skip if:
-            // 1. We're forcing PHI contributions, OR
-            // 2. We need to declare it locally (because it's eliminated from function scope)
+            log::debug!(
+                "Setup instruction for {} in case {:?}: should_declare={}",
+                var_name,
+                group.keys,
+                should_declare
+            );
+
+            // If this SSA value is eliminated AND we don't need to declare it, skip it
+            // BUT: Don't skip if we're forcing PHI contributions
             if is_eliminated && !force_phi_contributions && !should_declare {
                 log::debug!(
                     "Skipping eliminated setup instruction for SSA value: {:?}",
@@ -1238,6 +1128,8 @@ impl<'a> SwitchConverter<'a> {
                 );
                 continue;
             }
+
+            // Note: Variable name tracking is handled separately from SSA tracking
 
             let stmt = if should_declare {
                 // Create variable declaration

@@ -11,8 +11,8 @@ use crate::ast::{
     optimization::SSAUsageTracker,
 };
 use crate::{
-    analysis::GlobalAnalysisResult,
-    cfg::ssa::SSAValue,
+    cfg::ssa::{DuplicationContext, SSAValue},
+    cfg::switch_analysis::switch_info::CaseGroup,
     cfg::{block::Block, ssa::SSAAnalysis, EdgeKind},
     generated::unified_instructions::UnifiedInstruction,
     hbc::{function_table::HbcFunctionInstruction, InstructionIndex},
@@ -26,7 +26,6 @@ use oxc_ast::{
 use oxc_span::Span;
 use petgraph::{graph::NodeIndex, Graph};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 /// Error types for block-to-statement conversion
 #[derive(Debug, thiserror::Error)]
@@ -131,6 +130,8 @@ pub struct BlockToStatementConverter<'a> {
     function_analysis: &'a crate::analysis::FunctionAnalysis<'a>,
     /// Track variables that were used but not declared
     undeclared_variables: HashSet<String>,
+    /// Current duplication context for switch case processing
+    current_duplication_context: Option<DuplicationContext>,
 }
 
 impl<'a> BlockToStatementConverter<'a> {
@@ -179,6 +180,7 @@ impl<'a> BlockToStatementConverter<'a> {
             ssa_usage_tracker: SSAUsageTracker::new(function_analysis),
             function_analysis,
             undeclared_variables: HashSet::new(),
+            current_duplication_context: None,
         }
     }
 
@@ -1550,6 +1552,24 @@ impl<'a> BlockToStatementConverter<'a> {
     pub fn ssa_usage_tracker_mut(&mut self) -> &mut SSAUsageTracker<'a> {
         &mut self.ssa_usage_tracker
     }
+
+    /// Set the current duplication context for switch case processing
+    pub fn set_duplication_context_for_case_group(&mut self, case_group: &CaseGroup) {
+        self.current_duplication_context = Some(DuplicationContext::SwitchBlockDuplication {
+            case_group_keys: case_group.keys.clone(),
+        });
+        // Also propagate to instruction converter
+        self.instruction_converter
+            .set_duplication_context_for_case_group(case_group);
+    }
+
+    /// Clear the current duplication context
+    pub fn clear_duplication_context(&mut self) {
+        self.current_duplication_context = None;
+        // Also clear in instruction converter
+        self.instruction_converter.clear_duplication_context();
+    }
+
 
     /// Get the full CFG if available
     pub fn get_full_cfg(&self) -> Option<&'a crate::cfg::Cfg<'a>> {

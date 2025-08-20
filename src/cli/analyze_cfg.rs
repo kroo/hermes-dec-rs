@@ -3,8 +3,12 @@
 //! This module provides debugging and analysis tools for CFG structures,
 //! including conditional chains, loops, and other control flow patterns.
 
-use crate::analysis::GlobalSSAAnalyzer;
+use crate::analysis::{FunctionAnalysis, GlobalSSAAnalyzer};
+use crate::ast::optimization::ssa_usage_tracker::{
+    DeclarationStrategy, SSAUsageTracker, UseStrategy,
+};
 use crate::ast::variables::VariableMapper;
+use crate::cfg::ssa::DuplicatedSSAValue;
 use crate::cfg::Cfg;
 use crate::hbc::HbcFile;
 use anyhow::Result;
@@ -49,6 +53,32 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
     } else {
         None
     };
+
+    // Create FunctionAnalysis if we have SSA
+    let func_analysis = if let Some(fn_ssa) = fn_ssa.as_ref() {
+        // Get the function
+        if let Ok(function) = hbc_file.functions.get(function_index as u32, &hbc_file) {
+            // Build a new CFG for FunctionAnalysis (it needs ownership)
+            let mut func_cfg = Cfg::new(&hbc_file, function_index as u32);
+            func_cfg.build();
+
+            // Clone the SSA analysis since FunctionAnalysis needs ownership
+            Some(FunctionAnalysis::new(
+                function,
+                func_cfg,
+                (*fn_ssa).clone(),
+                &hbc_file,
+                function_index as u32,
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Create SSAUsageTracker if we have FunctionAnalysis
+    let ssa_tracker = func_analysis.as_ref().map(|fa| SSAUsageTracker::new(fa));
 
     println!("=== CFG Analysis for Function {} ===", function_index);
     println!();
@@ -405,6 +435,23 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                                 var_name_info
                             );
                         }
+
+                        // Show declaration strategy if tracker is available
+                        if let Some(ref tracker) = ssa_tracker {
+                            let dup_ssa = DuplicatedSSAValue::original(ssa_value.clone());
+                            let strategy = tracker.get_declaration_strategy(&dup_ssa);
+                            let strategy_str = match strategy {
+                                DeclarationStrategy::Skip => "Skip".to_string(),
+                                DeclarationStrategy::DeclareAtDominator { ref kind, .. } => {
+                                    format!("DeclareAtDominator({:?})", kind)
+                                }
+                                DeclarationStrategy::DeclareAndInitialize { ref kind } => {
+                                    format!("DeclareAndInitialize({:?})", kind)
+                                }
+                                DeclarationStrategy::AssignOnly => "AssignOnly".to_string(),
+                            };
+                            println!("      Declaration strategy: {}", strategy_str);
+                        }
                     } else {
                         println!(
                             "    ERROR: Invalid SSA value!  No SSA value found for register {}",
@@ -462,6 +509,20 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                                     coalesced_info,
                                     var_name_info
                                 );
+                            }
+
+                            // Show use strategy if tracker is available
+                            if let Some(ref tracker) = ssa_tracker {
+                                let dup_ssa =
+                                    DuplicatedSSAValue::original(reg_use_def_value.clone());
+                                let strategy = tracker.get_use_strategy(&dup_ssa, reg_use);
+                                let strategy_str = match strategy {
+                                    UseStrategy::UseVariable => "UseVariable".to_string(),
+                                    UseStrategy::InlineValue(ref val) => {
+                                        format!("InlineValue({:?})", val)
+                                    }
+                                };
+                                println!("      Use strategy: {}", strategy_str);
                             }
                         } else {
                             println!(

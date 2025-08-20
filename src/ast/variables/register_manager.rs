@@ -4,6 +4,7 @@
 //! All naming logic has been moved to the VariableMapper for clean separation of concerns.
 
 use super::variable_mapper::VariableMapping;
+use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext};
 use crate::hbc::InstructionIndex;
 use std::collections::HashMap;
 
@@ -27,6 +28,8 @@ pub struct RegisterManager {
     current_pc: Option<InstructionIndex>,
     /// Track register lifetime for optimization/statistics
     register_lifetimes: HashMap<u8, RegisterLifetime>,
+    /// Current duplication context for switch case processing
+    current_duplication_context: Option<DuplicationContext>,
 }
 
 impl RegisterManager {
@@ -35,6 +38,7 @@ impl RegisterManager {
             variable_mapping: None,
             current_pc: None,
             register_lifetimes: HashMap::new(),
+            current_duplication_context: None,
         }
     }
 
@@ -58,9 +62,72 @@ impl RegisterManager {
         self.current_pc
     }
 
+    /// Set the current duplication context
+    pub fn set_duplication_context(&mut self, context: Option<DuplicationContext>) {
+        self.current_duplication_context = context;
+    }
+
     /// Get the current variable name for a register (for reading)
     /// Pure lookup - no naming logic
     pub fn get_variable_name(&mut self, register: u8) -> String {
+        // First check if we're in a duplication context
+        if let Some(ref context) = self.current_duplication_context {
+            if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+                // Look for the SSA value at this register/PC
+                let ssa_before = mapping.register_before_pc.get(&(register, pc));
+                let ssa_at = mapping.register_at_pc.get(&(register, pc));
+                let ssa_value = ssa_before.or(ssa_at);
+
+                log::debug!(
+                    "Looking up register {} at PC {} in duplication context. SSA before: {:?}, SSA at: {:?}, Using: {:?}",
+                    register, pc.value(), ssa_before, ssa_at, ssa_value
+                );
+
+                if let Some(ssa_value) = ssa_value {
+                    // Create a duplicated SSA value
+                    let dup_ssa = DuplicatedSSAValue {
+                        original: ssa_value.clone(),
+                        duplication_context: Some(context.clone()),
+                    };
+                    // Get the duplicated variable name
+                    let dup_name = mapping.get_variable_name_for_duplicated(&dup_ssa);
+                    log::debug!(
+                        "Returning duplicated name: {} for SSA {:?}",
+                        dup_name,
+                        ssa_value
+                    );
+                    return dup_name;
+                } else {
+                    // If we don't find an SSA value at this exact PC, try to find the most recent one
+                    log::debug!(
+                        "No SSA value found at PC {}, searching for most recent definition",
+                        pc.value()
+                    );
+
+                    // Search backwards for the most recent definition of this register
+                    for check_pc in (0..pc.value()).rev() {
+                        let check_idx = InstructionIndex::new(check_pc);
+                        if let Some(ssa_value) = mapping.register_at_pc.get(&(register, check_idx))
+                        {
+                            log::debug!("Found SSA value at PC {}: {:?}", check_pc, ssa_value);
+                            let dup_ssa = DuplicatedSSAValue {
+                                original: ssa_value.clone(),
+                                duplication_context: Some(context.clone()),
+                            };
+                            let dup_name = mapping.get_variable_name_for_duplicated(&dup_ssa);
+                            log::debug!(
+                                "Returning duplicated name: {} for SSA {:?}",
+                                dup_name,
+                                ssa_value
+                            );
+                            return dup_name;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fall back to normal lookup if not in duplication context
         if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
             if let Some(var_name) = mapping.get_source_variable_name(register, pc) {
                 return var_name.clone();
@@ -78,6 +145,36 @@ impl RegisterManager {
     /// Get variable name for a source operand (before current instruction)
     /// This prevents self-reference issues in operations like `r1 = r2 - r1`
     pub fn get_source_variable_name(&mut self, register: u8) -> String {
+        // First check if we're in a duplication context
+        if let Some(ref context) = self.current_duplication_context {
+            if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+                // Look for the SSA value at this register/PC (before the instruction)
+                if let Some(ssa_value) =
+                    mapping.register_before_pc.get(&(register, pc)).or_else(|| {
+                        // Try to find the most recent definition before this PC
+                        for check_pc in (0..pc.value()).rev() {
+                            if let Some(ssa_val) = mapping
+                                .register_at_pc
+                                .get(&(register, InstructionIndex::new(check_pc)))
+                            {
+                                return Some(ssa_val);
+                            }
+                        }
+                        None
+                    })
+                {
+                    // Create a duplicated SSA value
+                    let dup_ssa = DuplicatedSSAValue {
+                        original: ssa_value.clone(),
+                        duplication_context: Some(context.clone()),
+                    };
+                    // Get the duplicated variable name
+                    return mapping.get_variable_name_for_duplicated(&dup_ssa);
+                }
+            }
+        }
+
+        // Fall back to normal lookup if not in duplication context
         if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
             if let Some(var_name) = mapping.get_source_variable_name(register, pc) {
                 return var_name.clone();
@@ -112,6 +209,30 @@ impl RegisterManager {
     /// Create a new variable name when a register is written to (for definitions)
     /// Pure lookup - the name is already pre-computed by VariableMapper
     pub fn create_new_variable_for_register(&mut self, register: u8) -> String {
+        // First check if we're in a duplication context
+        if let Some(ref context) = self.current_duplication_context {
+            if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+                // Look for the SSA value that will be created at this register/PC
+                if let Some(ssa_value) = mapping.register_at_pc.get(&(register, pc)) {
+                    // Create a duplicated SSA value
+                    let dup_ssa = DuplicatedSSAValue {
+                        original: ssa_value.clone(),
+                        duplication_context: Some(context.clone()),
+                    };
+                    // Get the duplicated variable name
+                    let dup_name = mapping.get_variable_name_for_duplicated(&dup_ssa);
+                    log::debug!(
+                        "Creating new duplicated variable: {} for register {} at PC {}",
+                        dup_name,
+                        register,
+                        pc.value()
+                    );
+                    return dup_name;
+                }
+            }
+        }
+
+        // Fall back to normal lookup if not in duplication context
         if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
             if let Some(var_name) = mapping.get_variable_name_with_fallback(register, pc) {
                 return var_name.clone();
@@ -258,6 +379,16 @@ impl RegisterManager {
     pub fn set_variable_name(&mut self, register: u8, name: String) {
         if let Some(mapping) = &mut self.variable_mapping {
             mapping.set_fallback_variable_name(register, name);
+        }
+    }
+
+    /// Get variable name for a duplicated SSA value
+    pub fn get_variable_name_for_duplicated(&self, dup_ssa: &DuplicatedSSAValue) -> String {
+        if let Some(mapping) = &self.variable_mapping {
+            mapping.get_variable_name_for_duplicated(dup_ssa)
+        } else {
+            // Fallback for cases without mapping
+            format!("var{}", dup_ssa.original.register)
         }
     }
 
