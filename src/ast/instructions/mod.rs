@@ -102,7 +102,7 @@ pub struct InstructionToStatementConverter<'a> {
 
 impl<'a> InstructionToStatementConverter<'a> {
     /// Create a new instruction-to-statement converter with analysis
-    pub fn new_with_analysis(
+    pub fn new(
         ast_builder: &'a OxcAstBuilder<'a>,
         expression_context: ExpressionContext<'a>,
         hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
@@ -115,15 +115,6 @@ impl<'a> InstructionToStatementConverter<'a> {
             decompile_nested: false,
             undeclared_variables: HashSet::new(),
         }
-    }
-
-    /// Create a new instruction-to-statement converter (legacy - DEPRECATED)
-    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
-    pub fn new(
-        _ast_builder: &'a OxcAstBuilder<'a>,
-        _expression_context: ExpressionContext<'a>,
-    ) -> Self {
-        panic!("Legacy constructor is deprecated. Use new_with_analysis with HbcAnalysis instead.");
     }
 
     /// Set the current program counter for context-aware operations

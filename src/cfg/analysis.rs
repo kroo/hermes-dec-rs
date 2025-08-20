@@ -1055,7 +1055,7 @@ mod tests {
             ],
             default_head: Some(default_case),
             join_block: join,
-            case_analyses: HashMap::new(),  // Empty for test
+            case_analyses: HashMap::new(), // Empty for test
         };
         analysis.regions.push(region);
 

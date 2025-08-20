@@ -344,7 +344,7 @@ impl<'a> FunctionDecompiler<'a> {
             })?;
 
         // Create block-to-statement converter with function analysis
-        let mut converter = BlockToStatementConverter::new_with_analysis(
+        let mut converter = BlockToStatementConverter::new(
             ast_builder,
             function_analysis,
             hbc_analysis,

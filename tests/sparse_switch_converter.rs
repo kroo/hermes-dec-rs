@@ -391,7 +391,7 @@ fn find_switch_regions_in_cfg(
         cases: vec![],
         default_head: Some(petgraph::graph::NodeIndex::new(1)),
         join_block: petgraph::graph::NodeIndex::new(2),
-        case_analyses: std::collections::HashMap::new(),  // Empty for test
+        case_analyses: std::collections::HashMap::new(), // Empty for test
     }]
 }
 

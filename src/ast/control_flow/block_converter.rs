@@ -134,8 +134,8 @@ pub struct BlockToStatementConverter<'a> {
 }
 
 impl<'a> BlockToStatementConverter<'a> {
-    /// Create a new block-to-statement converter with function analysis
-    pub fn new_with_analysis(
+    /// Create a new block-to-statement converter
+    pub fn new(
         ast_builder: &'a OxcAstBuilder<'a>,
         function_analysis: &'a crate::analysis::FunctionAnalysis<'a>,
         hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
@@ -150,11 +150,8 @@ impl<'a> BlockToStatementConverter<'a> {
             function_index: Some(function_analysis.function_index),
         };
 
-        let mut instruction_converter = InstructionToStatementConverter::new_with_analysis(
-            ast_builder,
-            expression_context,
-            hbc_analysis,
-        );
+        let mut instruction_converter =
+            InstructionToStatementConverter::new(ast_builder, expression_context, hbc_analysis);
 
         // Generate variable mapping from SSA analysis
         let mut variable_mapper = crate::ast::variables::VariableMapper::new();
@@ -183,54 +180,6 @@ impl<'a> BlockToStatementConverter<'a> {
             function_analysis,
             undeclared_variables: HashSet::new(),
         }
-    }
-
-    /// Create a new block-to-statement converter (legacy - DEPRECATED)
-    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
-    pub fn new(
-        _ast_builder: &'a OxcAstBuilder<'a>,
-        _expression_context: ExpressionContext<'a>,
-        _include_instruction_comments: bool,
-    ) -> Self {
-        panic!("Legacy constructor is deprecated. Use new_with_analysis with FunctionAnalysis instead.");
-    }
-
-    /// Create a new block-to-statement converter with SSA analysis (legacy - DEPRECATED)
-    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
-    pub fn with_ssa_analysis(
-        _ast_builder: &'a OxcAstBuilder<'a>,
-        _expression_context: ExpressionContext<'a>,
-        _include_instruction_comments: bool,
-        _include_ssa_comments: bool,
-        _ssa_analysis: SSAAnalysis,
-        _cfg: &crate::cfg::Cfg,
-    ) -> Self {
-        panic!("Legacy constructor is deprecated. Use new_with_analysis with FunctionAnalysis instead.");
-    }
-
-    /// Create a new block-to-statement converter with SSA and global analysis (legacy - DEPRECATED)
-    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
-    pub fn with_ssa_and_global_analysis(
-        _ast_builder: &'a OxcAstBuilder<'a>,
-        _expression_context: ExpressionContext<'a>,
-        _include_instruction_comments: bool,
-        _include_ssa_comments: bool,
-        _ssa_analysis: SSAAnalysis,
-        _cfg: &crate::cfg::Cfg,
-        _global_analysis: Arc<GlobalAnalysisResult>,
-    ) -> Self {
-        panic!("Legacy constructor is deprecated. Use new_with_analysis with FunctionAnalysis instead.");
-    }
-
-    /// Create a new block-to-statement converter with fallback variable mapping (legacy - DEPRECATED)
-    #[deprecated(note = "Use new_with_analysis instead - this will panic")]
-    pub fn with_fallback_mapping(
-        _ast_builder: &'a OxcAstBuilder<'a>,
-        _expression_context: ExpressionContext<'a>,
-        _include_instruction_comments: bool,
-        _variable_mapping: crate::ast::variables::VariableMapping,
-    ) -> Self {
-        panic!("Legacy constructor is deprecated. Use new_with_analysis with FunctionAnalysis instead.");
     }
 
     /// Convert multiple blocks from a CFG into a sequence of JavaScript statements

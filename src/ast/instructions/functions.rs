@@ -1310,7 +1310,7 @@ impl<'a> InstructionToStatementConverter<'a> {
             ExpressionContext::with_context(hbc_file, function_index, InstructionIndex::zero());
 
         // Create a new instruction converter for the nested function
-        let mut nested_converter = InstructionToStatementConverter::new_with_analysis(
+        let mut nested_converter = InstructionToStatementConverter::new(
             self.ast_builder,
             nested_context.clone(),
             self.hbc_analysis,
@@ -1336,14 +1336,13 @@ impl<'a> InstructionToStatementConverter<'a> {
             })?;
 
         // Create block converter for the nested function
-        let mut block_converter =
-            crate::ast::control_flow::BlockToStatementConverter::new_with_analysis(
-                self.ast_builder,
-                nested_function_analysis,
-                self.hbc_analysis,
-                false, // no instruction comments in nested functions
-                false, // no SSA comments in nested functions
-            );
+        let mut block_converter = crate::ast::control_flow::BlockToStatementConverter::new(
+            self.ast_builder,
+            nested_function_analysis,
+            self.hbc_analysis,
+            false, // no instruction comments in nested functions
+            false, // no SSA comments in nested functions
+        );
         block_converter.set_decompile_nested(self.decompile_nested);
 
         // Convert the nested function's blocks to statements
