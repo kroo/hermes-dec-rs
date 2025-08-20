@@ -1310,8 +1310,11 @@ impl<'a> InstructionToStatementConverter<'a> {
             ExpressionContext::with_context(hbc_file, function_index, InstructionIndex::zero());
 
         // Create a new instruction converter for the nested function
-        let mut nested_converter =
-            InstructionToStatementConverter::new_with_analysis(self.ast_builder, nested_context.clone(), self.hbc_analysis);
+        let mut nested_converter = InstructionToStatementConverter::new_with_analysis(
+            self.ast_builder,
+            nested_context.clone(),
+            self.hbc_analysis,
+        );
 
         // Keep the same decompile_nested setting for nested functions
         // This allows deeply nested functions to be decompiled
@@ -1322,27 +1325,35 @@ impl<'a> InstructionToStatementConverter<'a> {
         // No need to set it separately
 
         // Get function analysis for the nested function
-        let nested_function_analysis = self.hbc_analysis.get_function_analysis_ref(function_index)
-            .ok_or_else(|| StatementConversionError::UnsupportedInstruction(
-                format!("Function analysis not available for nested function {}", function_index)
-            ))?;
+        let nested_function_analysis = self
+            .hbc_analysis
+            .get_function_analysis_ref(function_index)
+            .ok_or_else(|| {
+                StatementConversionError::UnsupportedInstruction(format!(
+                    "Function analysis not available for nested function {}",
+                    function_index
+                ))
+            })?;
 
         // Create block converter for the nested function
-        let mut block_converter = crate::ast::control_flow::BlockToStatementConverter::new_with_analysis(
-            self.ast_builder,
-            nested_function_analysis,
-            self.hbc_analysis,
-            false, // no instruction comments in nested functions
-            false, // no SSA comments in nested functions
-        );
+        let mut block_converter =
+            crate::ast::control_flow::BlockToStatementConverter::new_with_analysis(
+                self.ast_builder,
+                nested_function_analysis,
+                self.hbc_analysis,
+                false, // no instruction comments in nested functions
+                false, // no SSA comments in nested functions
+            );
         block_converter.set_decompile_nested(self.decompile_nested);
 
         // Convert the nested function's blocks to statements
-        block_converter.convert_blocks_from_cfg(&nested_function_analysis.cfg).map_err(|e| {
-            StatementConversionError::UnsupportedInstruction(format!(
-                "Failed to convert nested function blocks: {}",
-                e
-            ))
-        })
+        block_converter
+            .convert_blocks_from_cfg(&nested_function_analysis.cfg)
+            .map_err(|e| {
+                StatementConversionError::UnsupportedInstruction(format!(
+                    "Failed to convert nested function blocks: {}",
+                    e
+                ))
+            })
     }
 }

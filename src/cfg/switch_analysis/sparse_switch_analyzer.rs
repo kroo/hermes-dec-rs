@@ -91,7 +91,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         let mut path = vec![start_block];
         let mut current = start_block;
         let mut visited = HashSet::new();
-        
+
         while current != target_case_block && visited.insert(current) {
             // For sparse switches, we follow the false branch until we reach our target
             if let Some(false_successor) = self.get_false_successor(current, cfg) {
@@ -101,7 +101,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 break;
             }
         }
-        
+
         path
     }
 
@@ -116,34 +116,40 @@ impl<'a> SparseSwitchAnalyzer<'a> {
     ) -> SmallVec<[SetupInstruction; 4]> {
         let mut setup = SmallVec::new();
         let mut seen_registers = HashSet::new();
-        
+
         // Process each block in the path
         for &block_id in path {
             let block = &cfg.graph()[block_id];
-            
+
             for instr in block.instructions() {
-                let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
-                
+                let usage = crate::generated::instruction_analysis::analyze_register_usage(
+                    &instr.instruction,
+                );
+
                 if let Some(target_reg) = usage.target {
                     // Skip if we've already seen this register (later definitions override)
                     if seen_registers.contains(&target_reg) {
                         continue;
                     }
-                    
+
                     // Skip the discriminator register itself
                     if target_reg == discriminator {
                         continue;
                     }
-                    
+
                     // Check if this value is used in the target block before being redefined
                     let instr_idx = instr.instruction_index;
-                    if let Some(ssa_value) = ssa.get_value_after_instruction(target_reg, instr_idx) {
+                    if let Some(ssa_value) = ssa.get_value_after_instruction(target_reg, instr_idx)
+                    {
                         // Check if this SSA value is used in the target block before redefinition
-                        if self.is_value_used_before_redefinition(ssa_value, target_block, cfg, ssa) {
+                        if self.is_value_used_before_redefinition(ssa_value, target_block, cfg, ssa)
+                        {
                             // Extract constant value if this is a constant load
                             let const_value = if let Some(hbc_file) = self.hbc_file {
                                 let value_tracker = ValueTracker::new(cfg, ssa, hbc_file);
-                                if let TrackedValue::Constant(c) = value_tracker.get_value(ssa_value) {
+                                if let TrackedValue::Constant(c) =
+                                    value_tracker.get_value(ssa_value)
+                                {
                                     Some(c)
                                 } else {
                                     None
@@ -151,23 +157,23 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                             } else {
                                 None
                             };
-                            
+
                             setup.push(SetupInstruction {
                                 instruction: std::rc::Rc::new(instr.clone()),
                                 ssa_value: ssa_value.clone(),
                                 value: const_value,
                             });
-                            
+
                             seen_registers.insert(target_reg);
                         }
                     }
                 }
             }
         }
-        
+
         setup
     }
-    
+
     /// Check if an SSA value is used in a block before being redefined
     fn is_value_used_before_redefinition(
         &self,
@@ -178,16 +184,19 @@ impl<'a> SparseSwitchAnalyzer<'a> {
     ) -> bool {
         let register = ssa_value.register;
         let block = &cfg.graph()[block_id];
-        
+
         // Check each instruction in order
         for instr in block.instructions() {
-            let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
-            
+            let usage =
+                crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+
             // First check if this instruction uses the register
             for src_reg in usage.sources {
                 if src_reg == register {
                     // Check if it's using our specific SSA value
-                    if let Some(src_value) = ssa.get_value_before_instruction(src_reg, instr.instruction_index) {
+                    if let Some(src_value) =
+                        ssa.get_value_before_instruction(src_reg, instr.instruction_index)
+                    {
                         if src_value == ssa_value {
                             // The value is used before any redefinition
                             return true;
@@ -195,7 +204,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                     }
                 }
             }
-            
+
             // Then check if this instruction redefines the register
             if let Some(target_reg) = usage.target {
                 if target_reg == register {
@@ -204,7 +213,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 }
             }
         }
-        
+
         // Check PHI functions at this block
         if let Some(phis) = ssa.phi_functions.get(&block_id) {
             for phi in phis {
@@ -217,21 +226,24 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 }
             }
         }
-        
+
         // Check if the value flows to successor blocks
         // Only if the register wasn't redefined in this block
         let register_redefined_in_block = block.instructions().iter().any(|instr| {
-            let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+            let usage =
+                crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
             usage.target == Some(register)
         });
-        
+
         if !register_redefined_in_block {
             // Check immediate successors for PHI functions that might use this value
             for edge in cfg.graph().edges(block_id) {
                 let successor = edge.target();
                 if let Some(successor_phis) = ssa.phi_functions.get(&successor) {
                     for phi in successor_phis {
-                        if let Some((_, operand_value)) = phi.operands.iter().find(|(pred, _)| **pred == block_id) {
+                        if let Some((_, operand_value)) =
+                            phi.operands.iter().find(|(pred, _)| **pred == block_id)
+                        {
                             if operand_value == ssa_value {
                                 return true;
                             }
@@ -240,7 +252,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 }
             }
         }
-        
+
         false
     }
 
@@ -281,7 +293,7 @@ impl<'a> SparseSwitchAnalyzer<'a> {
             ) {
                 // Store the comparison block for this case
                 case_blocks.push((case_info.comparison_block, case_info.target_block));
-                
+
                 // Set execution order
                 case_info.execution_order = execution_order;
                 execution_order += 1;
@@ -298,12 +310,12 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 break;
             }
         }
-        
+
         // Second pass: build entry paths and collect setup instructions
         for case in cases.iter_mut() {
             // Build entry path from start to this case's comparison block
             let entry_path = self.build_entry_path(start_block, case.comparison_block, cfg);
-            
+
             // Collect all setup instructions along the path
             let path_setup = self.collect_setup_along_path(
                 &entry_path,
@@ -312,12 +324,13 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                 cfg,
                 ssa,
             );
-            
+
             // Replace the case's setup with our path-based setup
             case.setup = path_setup;
-            
+
             // Filter setup instructions by safety
-            case.setup.retain(|setup_instr| safety_checker.is_case_localizable(setup_instr));
+            case.setup
+                .retain(|setup_instr| safety_checker.is_case_localizable(setup_instr));
         }
 
         // If we didn't find any cases, this isn't a switch pattern

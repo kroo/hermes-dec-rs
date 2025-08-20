@@ -3,33 +3,26 @@
 //! This module provides a container for all analyses performed on an entire HBC file,
 //! including cross-function analysis and global tracking.
 
-use crate::{
-    hbc::HbcFile,
-    cfg::ssa::construct_ssa,
-};
-use std::sync::Arc;
+use crate::{cfg::ssa::construct_ssa, hbc::HbcFile};
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use super::{
-    GlobalAnalysisResult,
-    GlobalSSAAnalyzer,
-    FunctionAnalysis,
-};
+use super::{FunctionAnalysis, GlobalAnalysisResult, GlobalSSAAnalyzer};
 
 /// Contains all analysis results for an entire HBC file
 pub struct HbcAnalysis<'a> {
     /// The HBC file being analyzed
     pub hbc_file: &'a HbcFile<'a>,
-    
+
     /// Global analysis results (cross-function SSA, etc.)
     pub global_analysis: Arc<GlobalAnalysisResult>,
-    
+
     /// Constructor detection results (placeholder)
     pub constructor_info: HashMap<u32, ()>,
-    
+
     /// Function classification results (placeholder)
     pub function_classifier: HashMap<u32, ()>,
-    
+
     /// Per-function analysis cache
     function_analyses: HashMap<u32, FunctionAnalysis<'a>>,
 }
@@ -41,13 +34,13 @@ impl<'a> HbcAnalysis<'a> {
         let global_analysis_result = GlobalSSAAnalyzer::analyze(hbc_file)
             .map_err(|e| format!("Global SSA analysis failed: {:?}", e))?;
         let global_analysis = Arc::new(global_analysis_result);
-        
+
         // Run constructor detection (needs fixing - for now create empty HashMap)
         let constructor_info = HashMap::new();
-        
+
         // Run function classification (needs fixing - for now create empty HashMap)
         let function_classifier = HashMap::new();
-        
+
         Ok(Self {
             hbc_file,
             global_analysis,
@@ -56,47 +49,47 @@ impl<'a> HbcAnalysis<'a> {
             function_analyses: HashMap::new(),
         })
     }
-    
+
     /// Get or create function analysis for a specific function
-    pub fn get_function_analysis(&mut self, function_index: u32) -> Result<&FunctionAnalysis<'a>, String> {
+    pub fn get_function_analysis(
+        &mut self,
+        function_index: u32,
+    ) -> Result<&FunctionAnalysis<'a>, String> {
         // Check cache first
         if self.function_analyses.contains_key(&function_index) {
             return Ok(&self.function_analyses[&function_index]);
         }
-        
+
         // Get the function
-        let function = self.hbc_file.functions.get(function_index, self.hbc_file)
+        let function = self
+            .hbc_file
+            .functions
+            .get(function_index, self.hbc_file)
             .map_err(|e| format!("Function {} not found: {:?}", function_index, e))?;
-        
+
         // Build CFG
         let mut cfg = crate::cfg::Cfg::new(self.hbc_file, function_index);
         cfg.build();
-        
+
         // Build SSA
         let ssa = construct_ssa(&cfg, function_index)
             .map_err(|e| format!("Failed to build SSA: {:?}", e))?;
-        
+
         // Create function analysis
-        let analysis = FunctionAnalysis::new(
-            function,
-            cfg,
-            ssa,
-            self.hbc_file,
-            function_index,
-        );
-        
+        let analysis = FunctionAnalysis::new(function, cfg, ssa, self.hbc_file, function_index);
+
         // Cache it
         self.function_analyses.insert(function_index, analysis);
-        
+
         // Return reference
         Ok(&self.function_analyses[&function_index])
     }
-    
+
     /// Get the global analysis results
     pub fn global_analysis(&self) -> &Arc<GlobalAnalysisResult> {
         &self.global_analysis
     }
-    
+
     /// Get function analysis if it already exists (doesn't create new)
     pub fn get_function_analysis_ref(&self, function_index: u32) -> Option<&FunctionAnalysis<'a>> {
         self.function_analyses.get(&function_index)

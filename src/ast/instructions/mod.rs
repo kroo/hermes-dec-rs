@@ -116,7 +116,7 @@ impl<'a> InstructionToStatementConverter<'a> {
             undeclared_variables: HashSet::new(),
         }
     }
-    
+
     /// Create a new instruction-to-statement converter (legacy - DEPRECATED)
     #[deprecated(note = "Use new_with_analysis instead - this will panic")]
     pub fn new(
@@ -137,7 +137,7 @@ impl<'a> InstructionToStatementConverter<'a> {
     pub fn set_decompile_nested(&mut self, decompile_nested: bool) {
         self.decompile_nested = decompile_nested;
     }
-    
+
     /// Get the set of undeclared variables
     pub fn get_undeclared_variables(&self) -> &HashSet<String> {
         &self.undeclared_variables
@@ -1737,7 +1737,7 @@ impl<'a> InstructionToStatementConverter<'a> {
         } else {
             // Track that this variable was used without declaration
             self.undeclared_variables.insert(variable_name.to_string());
-            
+
             // Create assignment: variable_name = init_expression
             if let Some(init_expr) = init_expression {
                 let span = oxc_span::Span::default();

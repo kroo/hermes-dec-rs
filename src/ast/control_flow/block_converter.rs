@@ -1579,10 +1579,14 @@ impl<'a> BlockToStatementConverter<'a> {
     }
 
     /// Report that specific uses of an SSA value have been consumed
-    pub fn mark_ssa_uses_consumed(&mut self, ssa_value: &SSAValue, uses: &[crate::cfg::ssa::types::RegisterUse]) {
+    pub fn mark_ssa_uses_consumed(
+        &mut self,
+        ssa_value: &SSAValue,
+        uses: &[crate::cfg::ssa::types::RegisterUse],
+    ) {
         self.ssa_usage_tracker.mark_uses_consumed(ssa_value, uses);
     }
-    
+
     /// Check if an SSA value is fully eliminated (all uses consumed)
     pub fn is_ssa_value_eliminated(&self, ssa_value: &SSAValue) -> bool {
         self.ssa_usage_tracker.is_fully_eliminated(ssa_value)

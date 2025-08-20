@@ -4,8 +4,7 @@
 
 use crate::analysis::value_tracker::ConstantValue;
 use crate::cfg::switch_analysis::{
-    CaseGroup, CaseInfo, CaseKey, DefaultCase,
-    PhiNode, SharedTailInfo, SwitchInfo,
+    CaseGroup, CaseInfo, CaseKey, DefaultCase, PhiNode, SharedTailInfo, SwitchInfo,
 };
 use crate::cfg::{analysis::SwitchRegion, ssa::SSAValue, Cfg};
 use crate::generated::unified_instructions::UnifiedInstruction;
@@ -169,12 +168,13 @@ impl<'a> SwitchConverter<'a> {
                                         comparison_blocks: vec![group.comparison_blocks[j]],
                                     };
                                     // For empty cases that go to shared tail, force PHI contributions
-                                    let force_phi = if let Some(shared_tail) = &switch_info.shared_tail {
-                                        single_key_group.target_block == shared_tail.block_id
-                                    } else {
-                                        false
-                                    };
-                                    
+                                    let force_phi =
+                                        if let Some(shared_tail) = &switch_info.shared_tail {
+                                            single_key_group.target_block == shared_tail.block_id
+                                        } else {
+                                            false
+                                        };
+
                                     self.generate_setup_instructions_with_phi_check(
                                         &mut empty_case_body,
                                         &single_key_group,
@@ -521,13 +521,13 @@ impl<'a> SwitchConverter<'a> {
                     .map(|phis| !phis.is_empty())
                     .unwrap_or(false)
             };
-            
+
             self.generate_setup_instructions_with_phi_check(
-                &mut case_statements, 
-                group, 
-                block_converter, 
+                &mut case_statements,
+                group,
+                block_converter,
                 cfg,
-                force_phi
+                force_phi,
             )?;
             // The shared block will be processed after the switch
             // so we don't inline it here
@@ -849,11 +849,11 @@ impl<'a> SwitchConverter<'a> {
     ) -> Result<(), SwitchConversionError> {
         // First, generate setup instructions with PHI check since we know there are PHI nodes
         self.generate_setup_instructions_with_phi_check(
-            case_statements, 
-            group, 
-            block_converter, 
+            case_statements,
+            group,
+            block_converter,
             cfg,
-            true // force_phi_contributions = true because we have PHI nodes at target
+            true, // force_phi_contributions = true because we have PHI nodes at target
         )?;
 
         // Get PHI functions at the target block
@@ -1025,12 +1025,11 @@ impl<'a> SwitchConverter<'a> {
             group.setup.len()
         );
         for setup_instr in &group.setup {
-            
             // Check if this SSA value has already been fully consumed
             // BUT: If force_phi_contributions is true, we need to generate the assignment
             // even if the SSA value is eliminated, because it contributes to a PHI node
             let is_eliminated = block_converter.is_ssa_value_eliminated(&setup_instr.ssa_value);
-            
+
             if is_eliminated && !force_phi_contributions {
                 log::debug!(
                     "Skipping setup instruction for eliminated SSA value: {:?} in case {:?}",
@@ -1104,28 +1103,33 @@ impl<'a> SwitchConverter<'a> {
 
             // Create a variable declaration with the constant value
             // Check Mov instructions first for fallthrough handling
-            let value_expr = if let UnifiedInstruction::Mov { operand_1, operand_0 } =
-                &setup_instr.instruction.instruction
+            let value_expr = if let UnifiedInstruction::Mov {
+                operand_1,
+                operand_0,
+            } = &setup_instr.instruction.instruction
             {
                 // For Mov instructions, we need to handle fallthrough cases specially
                 // Check if this Mov is setting up a PHI contribution for a fallthrough
                 let ssa = block_converter.ssa_analysis();
-                let is_fallthrough_phi = if let Some(phi_functions) = ssa.phi_functions.get(&group.target_block) {
-                    // Check if there's a PHI for the register this Mov writes to
-                    phi_functions.iter().any(|phi| phi.register == *operand_0)
-                } else {
-                    false
-                };
+                let is_fallthrough_phi =
+                    if let Some(phi_functions) = ssa.phi_functions.get(&group.target_block) {
+                        // Check if there's a PHI for the register this Mov writes to
+                        phi_functions.iter().any(|phi| phi.register == *operand_0)
+                    } else {
+                        false
+                    };
 
                 // If this is a fallthrough PHI and the setup has a stored value, use that
                 // The stored value in setup_instr.value might be wrong (empty string)
                 // For fallthrough cases, we should skip the assignment entirely
                 // as the value comes from the previous case
-                
-                if is_fallthrough_phi && setup_instr.value.as_ref().map_or(false, |v| {
-                    // Check if the value is suspicious (empty string for a fallthrough)
-                    matches!(v, ConstantValue::String(s) if s.is_empty())
-                }) {
+
+                if is_fallthrough_phi
+                    && setup_instr.value.as_ref().map_or(false, |v| {
+                        // Check if the value is suspicious (empty string for a fallthrough)
+                        matches!(v, ConstantValue::String(s) if s.is_empty())
+                    })
+                {
                     // This is a fallthrough case where the value comes from a previous case
                     // Skip generating this assignment entirely
                     log::debug!("Detected fallthrough PHI with empty string - skipping assignment");
@@ -1173,7 +1177,8 @@ impl<'a> SwitchConverter<'a> {
                             format!("var{}", operand_1)
                         };
 
-                        let source_var_name = self.ast_builder.allocator.alloc_str(&source_var_name);
+                        let source_var_name =
+                            self.ast_builder.allocator.alloc_str(&source_var_name);
                         Expression::Identifier(
                             self.ast_builder.alloc(
                                 self.ast_builder
@@ -1215,7 +1220,7 @@ impl<'a> SwitchConverter<'a> {
             // 1. It's NOT function-scoped (i.e., it's a local variable), OR
             // 2. It IS function-scoped but eliminated (so it won't be declared at function level)
             let should_declare = !is_function_scoped || is_eliminated;
-            
+
             log::debug!(
                 "Setup instruction for {} ({}): is_function_scoped={}, is_eliminated={}, should_declare={}",
                 var_name, setup_instr.ssa_value.name(), is_function_scoped, is_eliminated, should_declare
@@ -2045,7 +2050,6 @@ impl<'a> SwitchConverter<'a> {
         }
     }
 
-
     /// Convert a dense switch region (SwitchImm) to AST
     fn convert_dense_switch_region(
         &mut self,
@@ -2758,10 +2762,7 @@ impl<'a> SwitchConverter<'a> {
                 if self.is_switch_in_case_body(group.target_block, region, cfg) {
                     if group.target_block == region.dispatch {
                         // Case jumps directly to a nested switch
-                        log::debug!(
-                            "Case {:?} jumps directly to nested switch",
-                            group.keys
-                        );
+                        log::debug!("Case {:?} jumps directly to nested switch", group.keys);
                         // The nested switch will report its own consumed uses when it's converted
                         break;
                     }
@@ -2779,45 +2780,48 @@ impl<'a> SwitchConverter<'a> {
         block_converter: &mut super::BlockToStatementConverter<'a>,
         cfg: &'a Cfg<'a>,
     ) {
-        log::debug!("Reporting consumed uses for switch region starting at block {}", 
-                   region.dispatch.index());
-        
+        log::debug!(
+            "Reporting consumed uses for switch region starting at block {}",
+            region.dispatch.index()
+        );
+
         // Collect all uses to mark as consumed
-        let mut uses_to_consume: Vec<(SSAValue, Vec<crate::cfg::ssa::types::RegisterUse>)> = Vec::new();
-        
+        let mut uses_to_consume: Vec<(SSAValue, Vec<crate::cfg::ssa::types::RegisterUse>)> =
+            Vec::new();
+
         {
             // Scope for immutable borrows
             let ssa = block_converter.ssa_analysis();
-            
+
             // For sparse switches, find comparison blocks between dispatch and case heads
             let mut comparison_blocks = std::collections::HashSet::new();
             comparison_blocks.insert(region.dispatch);
-            
+
             // Find all blocks between dispatch and case heads that contain comparisons
             let mut to_visit = vec![region.dispatch];
             let mut visited = std::collections::HashSet::new();
-            
+
             while let Some(current) = to_visit.pop() {
                 if !visited.insert(current) {
                     continue;
                 }
-                
+
                 let block = &cfg.graph()[current];
-                
+
                 // Check if this block contains comparison instructions
                 let has_comparison = block.instructions().iter().any(|instr| {
                     matches!(
                         &instr.instruction,
                         UnifiedInstruction::JStrictEqual { .. }
-                        | UnifiedInstruction::JStrictEqualLong { .. }
-                        | UnifiedInstruction::JStrictNotEqual { .. }
-                        | UnifiedInstruction::JStrictNotEqualLong { .. }
+                            | UnifiedInstruction::JStrictEqualLong { .. }
+                            | UnifiedInstruction::JStrictNotEqual { .. }
+                            | UnifiedInstruction::JStrictNotEqualLong { .. }
                     )
                 });
-                
+
                 if has_comparison {
                     comparison_blocks.insert(current);
-                    
+
                     // Continue searching for more comparison blocks
                     for edge in cfg.graph().edges(current) {
                         let successor = edge.target();
@@ -2828,54 +2832,82 @@ impl<'a> SwitchConverter<'a> {
                     }
                 }
             }
-            
+
             // Now collect uses of constants in comparison instructions
             for &block_id in &comparison_blocks {
                 let block = &cfg.graph()[block_id];
                 for instr in block.instructions() {
                     match &instr.instruction {
-                        UnifiedInstruction::JStrictEqual { operand_1, operand_2, .. } => {
+                        UnifiedInstruction::JStrictEqual {
+                            operand_1,
+                            operand_2,
+                            ..
+                        } => {
                             // Check both operands to see if they're constants
                             for &reg in &[*operand_1, *operand_2] {
-                                if let Some(ssa_value) = ssa.get_value_before_instruction(reg, instr.instruction_index) {
+                                if let Some(ssa_value) =
+                                    ssa.get_value_before_instruction(reg, instr.instruction_index)
+                                {
                                     // Check if this is a constant value
-                                    let value_tracker = block_converter.function_analysis().value_tracker();
-                                    if let crate::analysis::TrackedValue::Constant(_) = value_tracker.get_value(ssa_value) {
+                                    let value_tracker =
+                                        block_converter.function_analysis().value_tracker();
+                                    if let crate::analysis::TrackedValue::Constant(_) =
+                                        value_tracker.get_value(ssa_value)
+                                    {
                                         // This constant's use in the comparison is consumed
-                                        let uses_in_comparison = ssa.get_ssa_value_uses(ssa_value)
+                                        let uses_in_comparison = ssa
+                                            .get_ssa_value_uses(ssa_value)
                                             .into_iter()
-                                            .filter(|u| u.block_id == block_id && u.instruction_idx == instr.instruction_index)
+                                            .filter(|u| {
+                                                u.block_id == block_id
+                                                    && u.instruction_idx == instr.instruction_index
+                                            })
                                             .cloned()
                                             .collect::<Vec<_>>();
-                                        
+
                                         if !uses_in_comparison.is_empty() {
                                             log::debug!("Will mark {} uses as consumed for constant in comparison at block {}", 
                                                      uses_in_comparison.len(), block_id.index());
-                                            uses_to_consume.push((ssa_value.clone(), uses_in_comparison));
+                                            uses_to_consume
+                                                .push((ssa_value.clone(), uses_in_comparison));
                                         }
                                     }
                                 }
                             }
                         }
-                        UnifiedInstruction::JStrictEqualLong { operand_1, operand_2, .. } => {
+                        UnifiedInstruction::JStrictEqualLong {
+                            operand_1,
+                            operand_2,
+                            ..
+                        } => {
                             // For Long variant, operand_0 is i32 (the offset), so we only check the register operands
                             // Check both register operands
                             for &reg in &[*operand_1, *operand_2] {
-                                if let Some(ssa_value) = ssa.get_value_before_instruction(reg, instr.instruction_index) {
+                                if let Some(ssa_value) =
+                                    ssa.get_value_before_instruction(reg, instr.instruction_index)
+                                {
                                     // Check if this is a constant value
-                                    let value_tracker = block_converter.function_analysis().value_tracker();
-                                    if let crate::analysis::TrackedValue::Constant(_) = value_tracker.get_value(ssa_value) {
+                                    let value_tracker =
+                                        block_converter.function_analysis().value_tracker();
+                                    if let crate::analysis::TrackedValue::Constant(_) =
+                                        value_tracker.get_value(ssa_value)
+                                    {
                                         // This constant's use in the comparison is consumed
-                                        let uses_in_comparison = ssa.get_ssa_value_uses(ssa_value)
+                                        let uses_in_comparison = ssa
+                                            .get_ssa_value_uses(ssa_value)
                                             .into_iter()
-                                            .filter(|u| u.block_id == block_id && u.instruction_idx == instr.instruction_index)
+                                            .filter(|u| {
+                                                u.block_id == block_id
+                                                    && u.instruction_idx == instr.instruction_index
+                                            })
                                             .cloned()
                                             .collect::<Vec<_>>();
-                                        
+
                                         if !uses_in_comparison.is_empty() {
                                             log::debug!("Will mark {} uses as consumed for constant in comparison at block {}", 
                                                      uses_in_comparison.len(), block_id.index());
-                                            uses_to_consume.push((ssa_value.clone(), uses_in_comparison));
+                                            uses_to_consume
+                                                .push((ssa_value.clone(), uses_in_comparison));
                                         }
                                     }
                                 }
@@ -2887,14 +2919,18 @@ impl<'a> SwitchConverter<'a> {
                 }
             }
         }
-        
+
         // Report the consumed values to the SSA usage tracker
         if !uses_to_consume.is_empty() {
-            log::debug!("Reporting {} SSA values as consumed by switch comparisons", uses_to_consume.len());
-            block_converter.ssa_usage_tracker_mut()
+            log::debug!(
+                "Reporting {} SSA values as consumed by switch comparisons",
+                uses_to_consume.len()
+            );
+            block_converter
+                .ssa_usage_tracker_mut()
                 .report_switch_inlined_uses(uses_to_consume);
         }
-        
+
         // Also mark the comparison instructions themselves as rendered
         // since they're being replaced by the switch statement
         self.mark_switch_region_as_rendered(region, block_converter, cfg);

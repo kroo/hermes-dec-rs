@@ -190,13 +190,15 @@ impl Decompiler {
         };
 
         // Create HBC analysis for this file
-        let mut hbc_analysis = crate::analysis::HbcAnalysis::analyze(hbc_file)
-            .map_err(|e| DecompilerError::Internal {
+        let mut hbc_analysis = crate::analysis::HbcAnalysis::analyze(hbc_file).map_err(|e| {
+            DecompilerError::Internal {
                 message: format!("Failed to analyze HBC file: {}", e),
-            })?;
+            }
+        })?;
 
         // Decompile the function to AST
-        let decompilation_result = function_decompiler.decompile(&allocator, &ast_builder, &mut hbc_analysis)?;
+        let decompilation_result =
+            function_decompiler.decompile(&allocator, &ast_builder, &mut hbc_analysis)?;
 
         // Convert AST to string
         let result = self.ast_to_string(
@@ -311,7 +313,8 @@ impl<'a> FunctionDecompiler<'a> {
         hbc_analysis: &'a mut crate::analysis::HbcAnalysis<'a>,
     ) -> DecompilerResult<FunctionDecompilationResult<'a>> {
         // First ensure the function analysis exists
-        hbc_analysis.get_function_analysis(self.function_index)
+        hbc_analysis
+            .get_function_analysis(self.function_index)
             .map_err(|e| DecompilerError::Internal {
                 message: format!("Failed to get function analysis: {}", e),
             })?;
@@ -334,7 +337,8 @@ impl<'a> FunctionDecompiler<'a> {
             .unwrap_or(0);
 
         // Now get the function analysis reference (guaranteed to exist)
-        let function_analysis = hbc_analysis.get_function_analysis_ref(self.function_index)
+        let function_analysis = hbc_analysis
+            .get_function_analysis_ref(self.function_index)
             .ok_or_else(|| DecompilerError::Internal {
                 message: format!("Function analysis not found after creation"),
             })?;
@@ -352,15 +356,16 @@ impl<'a> FunctionDecompiler<'a> {
         converter.set_decompile_nested(self.decompile_nested);
 
         // Process all blocks in the CFG with proper ordering and labeling
-        let all_statements =
-            match converter.convert_blocks_from_cfg_with_options(&function_analysis.cfg, self.skip_validation) {
-                Ok(statements) => statements,
-                Err(e) => {
-                    return Err(DecompilerError::Internal {
-                        message: format!("Failed to convert blocks: {}", e),
-                    });
-                }
-            };
+        let all_statements = match converter
+            .convert_blocks_from_cfg_with_options(&function_analysis.cfg, self.skip_validation)
+        {
+            Ok(statements) => statements,
+            Err(e) => {
+                return Err(DecompilerError::Internal {
+                    message: format!("Failed to convert blocks: {}", e),
+                });
+            }
+        };
 
         // Take the comment manager back from the converter
         let comment_manager = converter.take_comment_manager();

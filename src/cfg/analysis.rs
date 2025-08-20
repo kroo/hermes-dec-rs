@@ -177,9 +177,9 @@ pub struct SwitchRegion {
 /// Analysis results for a switch case body
 #[derive(Debug, Clone)]
 pub struct CaseBodyAnalysis {
-    pub blocks: HashSet<NodeIndex>,      // All blocks in this case body
-    pub conditionals: ConditionalAnalysis, // Conditional chains within the case
-    pub loops: LoopAnalysis,             // Loops within the case
+    pub blocks: HashSet<NodeIndex>,         // All blocks in this case body
+    pub conditionals: ConditionalAnalysis,  // Conditional chains within the case
+    pub loops: LoopAnalysis,                // Loops within the case
     pub nested_switches: Vec<SwitchRegion>, // Nested switches within the case
 }
 
@@ -222,7 +222,7 @@ fn analyze_conditionals_in_blocks(
     let mut chains = Vec::new();
     let mut node_to_chains = HashMap::new();
     let mut processed = HashSet::new();
-    
+
     // Find conditional nodes within the blocks
     let mut conditional_nodes = Vec::new();
     for &node in blocks {
@@ -230,16 +230,16 @@ fn analyze_conditionals_in_blocks(
             conditional_nodes.push(node);
         }
     }
-    
+
     // Sort for deterministic processing
     conditional_nodes.sort_by_key(|n| n.index());
-    
+
     // Process each conditional
     for (idx, &cond_node) in conditional_nodes.iter().enumerate() {
         if processed.contains(&cond_node) {
             continue;
         }
-        
+
         // Build a simple conditional chain
         if let Some((true_target, false_target)) = get_conditional_targets(graph, cond_node) {
             // Only include targets that are within our blocks
@@ -248,13 +248,13 @@ fn analyze_conditionals_in_blocks(
             } else {
                 vec![]
             };
-            
+
             let false_blocks: Vec<NodeIndex> = if blocks.contains(&false_target) {
                 vec![false_target]
             } else {
                 vec![]
             };
-            
+
             let branches = vec![
                 ConditionalBranch {
                     condition_source: cond_node,
@@ -271,11 +271,11 @@ fn analyze_conditionals_in_blocks(
                     branch_blocks: false_blocks,
                 },
             ];
-            
+
             // Find a simple join block (common successor)
             let join_block = find_immediate_convergence(graph, true_target, false_target)
                 .unwrap_or(false_target); // Fallback to false target
-            
+
             let chain = ConditionalChain {
                 chain_id: idx,
                 branches,
@@ -284,14 +284,17 @@ fn analyze_conditionals_in_blocks(
                 nesting_depth: 1,
                 nested_chains: vec![],
             };
-            
+
             // Add to node mappings
-            node_to_chains.entry(cond_node).or_insert_with(Vec::new).push(idx);
+            node_to_chains
+                .entry(cond_node)
+                .or_insert_with(Vec::new)
+                .push(idx);
             chains.push(chain);
             processed.insert(cond_node);
         }
     }
-    
+
     // Compute basic statistics
     let chain_statistics = ChainStatistics {
         total_chains: chains.len(),
@@ -300,7 +303,7 @@ fn analyze_conditionals_in_blocks(
         max_chain_length: if chains.is_empty() { 0 } else { 2 },
         max_nesting_depth: 1,
     };
-    
+
     ConditionalAnalysis {
         chains,
         node_to_chains,
@@ -314,7 +317,7 @@ fn find_nested_switches_in_blocks(
     blocks: &HashSet<NodeIndex>,
 ) -> Vec<SwitchRegion> {
     let mut nested_switches = Vec::new();
-    
+
     // Find switch dispatch blocks within the given blocks
     for &node in blocks {
         if is_switch_dispatch(graph, node) {
@@ -325,7 +328,7 @@ fn find_nested_switches_in_blocks(
             }
         }
     }
-    
+
     nested_switches
 }
 
@@ -333,15 +336,15 @@ fn find_nested_switches_in_blocks(
 fn is_switch_dispatch(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) -> bool {
     let mut has_switch_edges = false;
     let mut other_edges = 0;
-    
+
     for edge in graph.edges(node) {
         match edge.weight() {
             EdgeKind::Switch(_) => has_switch_edges = true,
-            EdgeKind::Default => {}, // Default is part of switch
+            EdgeKind::Default => {} // Default is part of switch
             _ => other_edges += 1,
         }
     }
-    
+
     has_switch_edges && other_edges == 0
 }
 
@@ -354,7 +357,7 @@ fn try_build_switch_region(
     // Collect switch cases that are within allowed blocks
     let mut cases = Vec::new();
     let mut default_head = None;
-    
+
     for edge in graph.edges(dispatch) {
         match edge.weight() {
             EdgeKind::Switch(case_index) => {
@@ -375,18 +378,18 @@ fn try_build_switch_region(
             _ => {}
         }
     }
-    
+
     if cases.is_empty() {
         return None;
     }
-    
+
     // Sort cases by index
     cases.sort_by_key(|c| c.case_index);
-    
+
     // Find a reasonable join block (simplified for nested switches)
     let case_heads: Vec<NodeIndex> = cases.iter().map(|c| c.case_head).collect();
     let join_block = find_common_successor(graph, &case_heads, allowed_blocks)?;
-    
+
     Some(SwitchRegion {
         dispatch,
         cases,
@@ -400,7 +403,7 @@ fn try_build_switch_region(
 fn is_conditional_node(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) -> bool {
     let mut has_true = false;
     let mut has_false = false;
-    
+
     for edge in graph.edges(node) {
         match edge.weight() {
             EdgeKind::True => has_true = true,
@@ -408,14 +411,17 @@ fn is_conditional_node(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) -> boo
             _ => {}
         }
     }
-    
+
     has_true && has_false
 }
 
-fn get_conditional_targets(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) -> Option<(NodeIndex, NodeIndex)> {
+fn get_conditional_targets(
+    graph: &DiGraph<Block, EdgeKind>,
+    node: NodeIndex,
+) -> Option<(NodeIndex, NodeIndex)> {
     let mut true_target = None;
     let mut false_target = None;
-    
+
     for edge in graph.edges(node) {
         match edge.weight() {
             EdgeKind::True => true_target = Some(edge.target()),
@@ -423,7 +429,7 @@ fn get_conditional_targets(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) ->
             _ => {}
         }
     }
-    
+
     match (true_target, false_target) {
         (Some(t), Some(f)) => Some((t, f)),
         _ => None,
@@ -438,10 +444,10 @@ fn find_immediate_convergence(
     // Get immediate successors
     let succs1: HashSet<_> = graph.edges(node1).map(|e| e.target()).collect();
     let succs2: HashSet<_> = graph.edges(node2).map(|e| e.target()).collect();
-    
+
     // Find common immediate successors
     let common: Vec<_> = succs1.intersection(&succs2).copied().collect();
-    
+
     if common.len() == 1 {
         Some(common[0])
     } else {
@@ -457,20 +463,20 @@ fn find_common_successor(
     if nodes.is_empty() {
         return None;
     }
-    
+
     // Use BFS to find reachable nodes from each starting node
     let mut reachable_from_all = None;
-    
+
     for (i, &node) in nodes.iter().enumerate() {
         let mut reachable = HashSet::new();
         let mut queue = VecDeque::new();
         queue.push_back(node);
-        
+
         while let Some(current) = queue.pop_front() {
             if !reachable.insert(current) {
                 continue;
             }
-            
+
             for edge in graph.edges(current) {
                 let target = edge.target();
                 if allowed_blocks.contains(&target) && !reachable.contains(&target) {
@@ -478,18 +484,17 @@ fn find_common_successor(
                 }
             }
         }
-        
+
         if i == 0 {
             reachable_from_all = Some(reachable);
         } else if let Some(ref mut common) = reachable_from_all {
             *common = common.intersection(&reachable).copied().collect();
         }
     }
-    
+
     // Find the first common node (simplified heuristic)
     reachable_from_all.and_then(|common| common.into_iter().next())
 }
-
 
 impl SwitchRegion {
     /// Trace all blocks belonging to a switch case body
@@ -502,7 +507,7 @@ impl SwitchRegion {
         let mut case_blocks = HashSet::new();
         let mut work_list = vec![case_head];
         let mut visited = HashSet::new();
-        
+
         // Collect all case heads to avoid crossing into other cases
         let mut other_case_heads = HashSet::new();
         for case in &self.cases {
@@ -515,21 +520,23 @@ impl SwitchRegion {
                 other_case_heads.insert(default);
             }
         }
-        
+
         while let Some(current) = work_list.pop() {
             // Skip if we've already visited this block
             if !visited.insert(current) {
                 continue;
             }
-            
+
             // Stop if we've reached the join block or another case head
-            if current == join_block || (current != case_head && other_case_heads.contains(&current)) {
+            if current == join_block
+                || (current != case_head && other_case_heads.contains(&current))
+            {
                 continue;
             }
-            
+
             // Add this block to the case body
             case_blocks.insert(current);
-            
+
             // Add all successors to work list
             for edge in graph.edges(current) {
                 let target = edge.target();
@@ -538,10 +545,10 @@ impl SwitchRegion {
                 }
             }
         }
-        
+
         case_blocks
     }
-    
+
     /// Analyze the body of each case to find nested control structures
     pub fn analyze_case_bodies(
         &mut self,
@@ -550,65 +557,75 @@ impl SwitchRegion {
     ) {
         // Clear any existing analyses
         self.case_analyses.clear();
-        
+
         // Analyze each case
         for (idx, case) in self.cases.iter().enumerate() {
             let case_blocks = self.trace_case_blocks(graph, case.case_head, self.join_block);
-            
-            log::debug!("Case {} (head block {}): traced {} blocks: {:?}", 
-                idx, case.case_head.index(), case_blocks.len(), 
-                case_blocks.iter().map(|b| b.index()).collect::<Vec<_>>());
-            
+
+            log::debug!(
+                "Case {} (head block {}): traced {} blocks: {:?}",
+                idx,
+                case.case_head.index(),
+                case_blocks.len(),
+                case_blocks.iter().map(|b| b.index()).collect::<Vec<_>>()
+            );
+
             if case_blocks.is_empty() {
                 continue;
             }
-            
+
             // Analyze conditionals within case blocks directly on the original graph
             let conditionals = analyze_conditionals_in_blocks(graph, &case_blocks);
-            
+
             // Analyze loops in the case blocks
             // TODO: Implement loop analysis for case blocks
             let loops = LoopAnalysis {
                 loops: vec![],
                 node_to_loops: HashMap::new(),
             };
-            
+
             // Find nested switches within case blocks
             let nested_switches = find_nested_switches_in_blocks(graph, &case_blocks);
-            
-            self.case_analyses.insert(idx, CaseBodyAnalysis {
-                blocks: case_blocks,
-                conditionals,
-                loops,
-                nested_switches,
-            });
+
+            self.case_analyses.insert(
+                idx,
+                CaseBodyAnalysis {
+                    blocks: case_blocks,
+                    conditionals,
+                    loops,
+                    nested_switches,
+                },
+            );
         }
-        
+
         // Also analyze default case if present
         if let Some(default_head) = self.default_head {
             let default_blocks = self.trace_case_blocks(graph, default_head, self.join_block);
-            
+
             if !default_blocks.is_empty() {
                 // Analyze conditionals within default blocks
                 let conditionals = analyze_conditionals_in_blocks(graph, &default_blocks);
-                
+
                 // Analyze loops
                 // TODO: Implement loop analysis for default blocks
                 let loops = LoopAnalysis {
                     loops: vec![],
                     node_to_loops: HashMap::new(),
                 };
-                
+
                 // Find nested switches
                 let nested_switches = find_nested_switches_in_blocks(graph, &default_blocks);
-                
+
                 // Use a special index for default case (usize::MAX)
-                self.case_analyses.insert(usize::MAX, CaseBodyAnalysis {
-                    blocks: default_blocks,
-                    conditionals,
-                    loops,
-                    nested_switches,
-                });
+                self.case_analyses.insert(
+                    usize::MAX,
+                    CaseBodyAnalysis {
+                        blocks: default_blocks,
+                        conditionals,
+                        loops,
+                        nested_switches,
+                    },
+                );
             }
         }
     }
@@ -680,7 +697,7 @@ pub fn find_switch_regions_with_ssa(
         if let Some(mut region) = detect_switch_region(graph, post_doms, dispatch) {
             // Analyze case bodies
             region.analyze_case_bodies(graph, cfg);
-            
+
             let region_idx = regions.len();
 
             // Add region to list
@@ -688,7 +705,7 @@ pub fn find_switch_regions_with_ssa(
 
             // Build node-to-region mapping
             add_nodes_to_switch_region_mapping(&mut node_to_regions, &region, region_idx);
-            
+
             // Mark all case blocks as globally processed to avoid detecting them as new switches
             for case in &region.cases {
                 globally_processed_nodes.insert(case.case_head);
@@ -711,10 +728,10 @@ pub fn find_switch_regions_with_ssa(
     );
     for candidate in sparse_candidates {
         let mut region = super::switch_analysis::sparse_candidate_to_switch_region(&candidate);
-        
+
         // Analyze case bodies
         region.analyze_case_bodies(graph, cfg);
-        
+
         let region_idx = regions.len();
 
         // Add region to list
@@ -722,7 +739,7 @@ pub fn find_switch_regions_with_ssa(
 
         // Build node-to-region mapping
         add_nodes_to_switch_region_mapping(&mut node_to_regions, &region, region_idx);
-        
+
         // Mark all case blocks as globally processed to avoid detecting them as new switches
         for case in &region.cases {
             globally_processed_nodes.insert(case.case_head);
@@ -1038,6 +1055,7 @@ mod tests {
             ],
             default_head: Some(default_case),
             join_block: join,
+            case_analyses: HashMap::new(),  // Empty for test
         };
         analysis.regions.push(region);
 

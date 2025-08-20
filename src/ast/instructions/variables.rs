@@ -335,7 +335,8 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Get all environment variables for this function
         if let Some(function_index) = self.expression_context.function_index() {
-            let env_vars = self.global_analyzer()
+            let env_vars = self
+                .global_analyzer()
                 .analyzer()
                 .get_function_environment_variables(function_index);
 
@@ -537,17 +538,18 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Try to resolve the actual variable name using global analyzer
         if let Some(function_index) = self.expression_context.function_index() {
-                // If loading from GetEnvironment result, we need to handle it specially
-                let var_name = if is_from_get_env {
-                    // Extract the environment level from _env0, _env1, etc.
-                    let level = env_var_name
-                        .trim_start_matches("_env")
-                        .parse::<u8>()
-                        .unwrap_or(0);
+            // If loading from GetEnvironment result, we need to handle it specially
+            let var_name = if is_from_get_env {
+                // Extract the environment level from _env0, _env1, etc.
+                let level = env_var_name
+                    .trim_start_matches("_env")
+                    .parse::<u8>()
+                    .unwrap_or(0);
 
-                    // In nested functions, level 0 means the captured parent environment
-                    // So we need to go up one level from the current function
-                let actual_level = if self.global_analyzer()
+                // In nested functions, level 0 means the captured parent environment
+                // So we need to go up one level from the current function
+                let actual_level = if self
+                    .global_analyzer()
                     .analyzer()
                     .is_nested_function(function_index)
                 {
@@ -556,25 +558,28 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
                     level
                 };
 
-                    // Resolve from parent function at that level
-                if let Some(parent_func) = self.global_analyzer()
+                // Resolve from parent function at that level
+                if let Some(parent_func) = self
+                    .global_analyzer()
                     .analyzer()
                     .resolve_function_at_level(function_index, actual_level)
                 {
                     // We're accessing a parent environment
                     self.global_analyzer().analyzer().resolve_variable_name(
-                            parent_func,
-                            0, // Parent's main environment register
-                            index,
-                        )
-                    } else {
-                        format!("local{}", index)
-                    }
+                        parent_func,
+                        0, // Parent's main environment register
+                        index,
+                    )
+                } else {
+                    format!("local{}", index)
+                }
             } else {
                 // Normal environment access
-                self.global_analyzer()
-                    .analyzer()
-                    .resolve_variable_name(function_index, env_reg, index)
+                self.global_analyzer().analyzer().resolve_variable_name(
+                    function_index,
+                    env_reg,
+                    index,
+                )
             };
 
             // If we have a resolved name, use it directly
@@ -646,17 +651,18 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Try to resolve the actual variable name using global analyzer
         if let Some(function_index) = self.expression_context.function_index() {
-                // If loading from GetEnvironment result, we need to handle it specially
-                let var_name = if is_from_get_env {
-                    // Extract the environment level from _env0, _env1, etc.
-                    let level = env_var_name
-                        .trim_start_matches("_env")
-                        .parse::<u8>()
-                        .unwrap_or(0);
+            // If loading from GetEnvironment result, we need to handle it specially
+            let var_name = if is_from_get_env {
+                // Extract the environment level from _env0, _env1, etc.
+                let level = env_var_name
+                    .trim_start_matches("_env")
+                    .parse::<u8>()
+                    .unwrap_or(0);
 
-                    // In nested functions, level 0 means the captured parent environment
-                    // So we need to go up one level from the current function
-                let actual_level = if self.global_analyzer()
+                // In nested functions, level 0 means the captured parent environment
+                // So we need to go up one level from the current function
+                let actual_level = if self
+                    .global_analyzer()
                     .analyzer()
                     .is_nested_function(function_index)
                 {
@@ -665,20 +671,21 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
                     level
                 };
 
-                    // Resolve from parent function at that level
-                if let Some(parent_func) = self.global_analyzer()
+                // Resolve from parent function at that level
+                if let Some(parent_func) = self
+                    .global_analyzer()
                     .analyzer()
                     .resolve_function_at_level(function_index, actual_level)
                 {
                     // We're accessing a parent environment
                     self.global_analyzer().analyzer().resolve_variable_name(
-                            parent_func,
-                            0, // Parent's main environment register
-                            index as u8,
-                        )
-                    } else {
-                        format!("local{}", index)
-                    }
+                        parent_func,
+                        0, // Parent's main environment register
+                        index as u8,
+                    )
+                } else {
+                    format!("local{}", index)
+                }
             } else {
                 // Normal environment access
                 self.global_analyzer().analyzer().resolve_variable_name(

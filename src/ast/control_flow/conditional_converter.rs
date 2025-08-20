@@ -826,15 +826,19 @@ impl<'a> ConditionalConverter<'a> {
         pc: InstructionIndex,
         block_converter: &mut crate::ast::BlockToStatementConverter<'a>,
     ) -> Result<Expression<'a>, String> {
-        log::debug!("create_register_expression: register={}, pc={}", register, pc.value());
-        
+        log::debug!(
+            "create_register_expression: register={}, pc={}",
+            register,
+            pc.value()
+        );
+
         // Try to get constant value using ValueTracker
         // We now always have function analysis
         let fa = block_converter.function_analysis();
         log::debug!("Got function analysis");
         // Create a ValueTracker to analyze this register
         let value_tracker = fa.value_tracker();
-        
+
         // Find the block containing this PC
         if let Some(block_idx) = fa.cfg.graph().node_indices().find(|&idx| {
             let block = &fa.cfg.graph()[idx];
@@ -844,10 +848,16 @@ impl<'a> ConditionalConverter<'a> {
         }) {
             // Get the tracked value for this register at this point
             let tracked_value = value_tracker.get_value_at_point(register, block_idx, pc);
-            log::debug!("ValueTracker result for r{} at pc {}: {:?}", register, pc.value(), tracked_value);
-            
+            log::debug!(
+                "ValueTracker result for r{} at pc {}: {:?}",
+                register,
+                pc.value(),
+                tracked_value
+            );
+
             // If it's a constant, inline it
-            if let crate::analysis::value_tracker::TrackedValue::Constant(constant) = tracked_value {
+            if let crate::analysis::value_tracker::TrackedValue::Constant(constant) = tracked_value
+            {
                 match constant {
                     crate::analysis::value_tracker::ConstantValue::Number(n) => {
                         // Format number appropriately
@@ -864,7 +874,9 @@ impl<'a> ConditionalConverter<'a> {
                         ));
                     }
                     crate::analysis::value_tracker::ConstantValue::Boolean(b) => {
-                        return Ok(self.ast_builder.expression_boolean_literal(Span::default(), b));
+                        return Ok(self
+                            .ast_builder
+                            .expression_boolean_literal(Span::default(), b));
                     }
                     crate::analysis::value_tracker::ConstantValue::Null => {
                         return Ok(self.ast_builder.expression_null_literal(Span::default()));
@@ -885,7 +897,7 @@ impl<'a> ConditionalConverter<'a> {
                 }
             }
         }
-        
+
         // Fall back to using the SSA-aware variable name
         let var_name = block_converter.get_variable_name_for_condition(register, pc);
 
@@ -893,7 +905,6 @@ impl<'a> ConditionalConverter<'a> {
             .ast_builder
             .expression_identifier(Span::default(), self.ast_builder.atom(&var_name)))
     }
-
 
     /// Check if a statement is empty (has no meaningful content)
     fn is_statement_empty(&self, stmt: &Statement<'a>) -> bool {

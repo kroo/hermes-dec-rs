@@ -355,12 +355,12 @@ impl SSAAnalysis {
             blocks_with_phis: self.phi_functions.len(),
         }
     }
-    
+
     /// Get all SSA values defined in the function
     pub fn all_ssa_values(&self) -> impl Iterator<Item = &SSAValue> {
         self.ssa_values.values()
     }
-    
+
     /// Get the defining instruction for an SSA value
     pub fn get_defining_instruction(&self, ssa_value: &SSAValue) -> Option<RegisterDef> {
         // The def_site in SSAValue is the RegisterDef that created it

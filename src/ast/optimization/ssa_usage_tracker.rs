@@ -4,21 +4,21 @@
 //! enabling smart decisions about variable declaration and constant folding.
 
 use crate::analysis::{ConstantValue, FunctionAnalysis, TrackedValue};
-use crate::cfg::ssa::types::{RegisterUse, SSAValue, SSAAnalysis};
+use crate::cfg::ssa::types::{RegisterUse, SSAAnalysis, SSAValue};
 use std::collections::{HashMap, HashSet};
 
 /// Tracks the usage status of SSA values during AST generation
 pub struct SSAUsageTracker<'a> {
     /// The function analysis containing SSA and CFG information
     function_analysis: &'a FunctionAnalysis<'a>,
-    
+
     /// Track which specific uses of an SSA value have been consumed (inlined)
     consumed_uses: HashMap<SSAValue, HashSet<RegisterUse>>,
-    
+
     /// Cache of constant values for SSA values
     /// This is populated when we first analyze an SSA value
     constant_cache: HashMap<SSAValue, ConstantValue>,
-    
+
     /// Track SSA values that have been declared as variables
     declared_values: HashSet<SSAValue>,
 }
@@ -28,17 +28,15 @@ pub struct SSAUsageTracker<'a> {
 pub enum UsageStatus {
     /// All uses have been consumed/inlined
     FullyConsumed,
-    
+
     /// Some uses consumed, others remain
     PartiallyConsumed {
         consumed_count: usize,
         remaining_count: usize,
     },
-    
+
     /// No uses have been consumed yet
-    Unconsumed {
-        total_uses: usize,
-    },
+    Unconsumed { total_uses: usize },
 }
 
 /// Strategy for declaring/using an SSA value
@@ -46,16 +44,16 @@ pub enum UsageStatus {
 pub enum DeclarationStrategy {
     /// Don't declare - all uses have been inlined
     FullyEliminated,
-    
+
     /// Declare as const with the literal value
     DeclareAsConst(ConstantValue),
-    
+
     /// Normal variable declaration (non-constant or complex value)
     DeclareAsVariable,
-    
+
     /// Inline the constant value at this use site
     InlineConstant(ConstantValue),
-    
+
     /// Reference existing variable
     UseVariable,
 }
@@ -70,17 +68,21 @@ impl<'a> SSAUsageTracker<'a> {
             declared_values: HashSet::new(),
         }
     }
-    
+
     /// Get the SSA analysis
     fn ssa(&self) -> &SSAAnalysis {
         &self.function_analysis.ssa
     }
-    
+
     /// Get all uses of an SSA value
     fn get_all_uses(&self, ssa_value: &SSAValue) -> Vec<RegisterUse> {
-        self.ssa().get_ssa_value_uses(ssa_value).into_iter().cloned().collect()
+        self.ssa()
+            .get_ssa_value_uses(ssa_value)
+            .into_iter()
+            .cloned()
+            .collect()
     }
-    
+
     /// Mark a specific use of an SSA value as consumed (inlined)
     pub fn mark_use_consumed(&mut self, ssa_value: &SSAValue, use_site: &RegisterUse) {
         log::debug!(
@@ -89,20 +91,20 @@ impl<'a> SSAUsageTracker<'a> {
             use_site.block_id.index(),
             use_site.instruction_idx.value()
         );
-        
+
         self.consumed_uses
             .entry(ssa_value.clone())
             .or_default()
             .insert(use_site.clone());
     }
-    
+
     /// Mark all uses in a list as consumed
     pub fn mark_uses_consumed(&mut self, ssa_value: &SSAValue, use_sites: &[RegisterUse]) {
         for use_site in use_sites {
             self.mark_use_consumed(ssa_value, use_site);
         }
     }
-    
+
     /// Check if a specific use has been consumed
     pub fn is_use_consumed(&self, ssa_value: &SSAValue, use_site: &RegisterUse) -> bool {
         self.consumed_uses
@@ -110,17 +112,18 @@ impl<'a> SSAUsageTracker<'a> {
             .map(|uses| uses.contains(use_site))
             .unwrap_or(false)
     }
-    
+
     /// Get the usage status of an SSA value
     pub fn get_usage_status(&self, ssa_value: &SSAValue) -> UsageStatus {
         let all_uses = self.get_all_uses(ssa_value);
-        let consumed_count = self.consumed_uses
+        let consumed_count = self
+            .consumed_uses
             .get(ssa_value)
             .map(|uses| uses.len())
             .unwrap_or(0);
-        
+
         let total_uses = all_uses.len();
-        
+
         if consumed_count == 0 {
             UsageStatus::Unconsumed { total_uses }
         } else if consumed_count == total_uses {
@@ -132,42 +135,38 @@ impl<'a> SSAUsageTracker<'a> {
             }
         }
     }
-    
+
     /// Get remaining (non-consumed) uses of an SSA value
     pub fn get_remaining_uses(&self, ssa_value: &SSAValue) -> Vec<RegisterUse> {
         let all_uses = self.get_all_uses(ssa_value);
         let consumed = self.consumed_uses.get(ssa_value);
-        
+
         all_uses
             .into_iter()
-            .filter(|use_site| {
-                consumed
-                    .map(|set| !set.contains(use_site))
-                    .unwrap_or(true)
-            })
+            .filter(|use_site| consumed.map(|set| !set.contains(use_site)).unwrap_or(true))
             .collect()
     }
-    
+
     /// Cache a constant value for an SSA value
     pub fn cache_constant_value(&mut self, ssa_value: &SSAValue, value: ConstantValue) {
         self.constant_cache.insert(ssa_value.clone(), value);
     }
-    
+
     /// Get cached constant value
     pub fn get_constant_value(&self, ssa_value: &SSAValue) -> Option<&ConstantValue> {
         self.constant_cache.get(ssa_value)
     }
-    
+
     /// Check if an SSA value has been fully eliminated (all uses consumed)
     /// This is a derived property based on consumed uses
     pub fn is_fully_eliminated(&self, ssa_value: &SSAValue) -> bool {
         let all_uses = self.get_all_uses(ssa_value);
-        
+
         if all_uses.is_empty() {
             // No uses means it's effectively eliminated
             return true;
         }
-        
+
         // Check if all uses have been consumed
         if let Some(consumed) = self.consumed_uses.get(ssa_value) {
             all_uses.iter().all(|use_site| consumed.contains(use_site))
@@ -176,19 +175,19 @@ impl<'a> SSAUsageTracker<'a> {
             false
         }
     }
-    
+
     /// Mark an SSA value as declared
     pub fn mark_declared(&mut self, ssa_value: &SSAValue) {
         self.declared_values.insert(ssa_value.clone());
     }
-    
+
     /// Check if an SSA value has been declared
     pub fn is_declared(&self, ssa_value: &SSAValue) -> bool {
         self.declared_values.contains(ssa_value)
     }
-    
+
     /// Determine the declaration strategy for an SSA value at a specific use site
-    /// 
+    ///
     /// This is called when we need to use an SSA value and must decide whether to:
     /// - Declare it as a variable/const
     /// - Inline its constant value
@@ -206,12 +205,12 @@ impl<'a> SSAUsageTracker<'a> {
                 ssa_value.name()
             );
         }
-        
+
         // If already declared, just use the variable
         if self.is_declared(ssa_value) {
             return DeclarationStrategy::UseVariable;
         }
-        
+
         // Check if this is a constant value using our function analysis
         let value_tracker = self.function_analysis.value_tracker();
         let tracked_value = value_tracker.get_value(ssa_value);
@@ -219,20 +218,22 @@ impl<'a> SSAUsageTracker<'a> {
             TrackedValue::Constant(c) => Some(c),
             _ => None,
         };
-        
+
         // Note: We can't cache the constant value here because this method takes &self
         // Caching should be done elsewhere with mutable access
-        
+
         // Get usage status
         let usage_status = self.get_usage_status(ssa_value);
-        
+
         match usage_status {
             UsageStatus::FullyConsumed => {
                 // All uses consumed - should have been eliminated
                 DeclarationStrategy::FullyEliminated
             }
-            
-            UsageStatus::PartiallyConsumed { remaining_count, .. } => {
+
+            UsageStatus::PartiallyConsumed {
+                remaining_count, ..
+            } => {
                 // Some uses remain
                 if let Some(const_val) = constant_value {
                     if remaining_count == 1 && current_use.is_some() {
@@ -247,7 +248,7 @@ impl<'a> SSAUsageTracker<'a> {
                     DeclarationStrategy::DeclareAsVariable
                 }
             }
-            
+
             UsageStatus::Unconsumed { total_uses } => {
                 // No uses consumed yet
                 if let Some(const_val) = constant_value {
@@ -265,9 +266,9 @@ impl<'a> SSAUsageTracker<'a> {
             }
         }
     }
-    
+
     /// Update tracking after a switch converter has processed cases
-    /// 
+    ///
     /// The switch converter should call this to report which SSA values
     /// had their comparison uses inlined into the switch cases
     pub fn report_switch_inlined_uses(
@@ -277,38 +278,38 @@ impl<'a> SSAUsageTracker<'a> {
         for (ssa_value, uses) in inlined_comparisons {
             self.mark_uses_consumed(&ssa_value, &uses);
         }
-        
+
         // After marking uses as consumed, perform cascading elimination
         self.perform_cascading_elimination();
     }
-    
+
     /// Perform cascading elimination optimization
-    /// 
+    ///
     /// When an SSA value becomes fully consumed, check if it was the only use of another value.
     /// If so, that value can also be eliminated. This process cascades transitively.
     pub fn perform_cascading_elimination(&mut self) {
         let mut changed = true;
         let max_iterations = 10; // Prevent infinite loops
         let mut iterations = 0;
-        
+
         while changed && iterations < max_iterations {
             changed = false;
             iterations += 1;
-            
+
             // Collect SSA values that are now fully eliminated
             let mut newly_eliminated = Vec::new();
-            
+
             // Check all SSA values to see if they've become fully eliminated
             for ssa_value in self.ssa().all_ssa_values() {
                 if !self.is_fully_eliminated(ssa_value) {
                     continue;
                 }
-                
+
                 // This value is fully eliminated - check what it was defined by
                 if let Some(def_instruction) = self.ssa().get_defining_instruction(ssa_value) {
                     let block_id = def_instruction.block_id;
                     let instr_idx = def_instruction.instruction_idx;
-                    
+
                     // Get the instruction
                     if let Some(block) = self.function_analysis.cfg.graph().node_weight(block_id) {
                         if let Some(instr) = block.instructions().get(instr_idx.value()) {
@@ -319,23 +320,25 @@ impl<'a> SSAUsageTracker<'a> {
                             // - Property stores
                             // - Throw instructions
                             // - etc.
-                            
+
                             // Check what SSA values this instruction uses
-                            let usage = crate::generated::instruction_analysis::analyze_register_usage(
-                                &instr.instruction
-                            );
-                            
+                            let usage =
+                                crate::generated::instruction_analysis::analyze_register_usage(
+                                    &instr.instruction,
+                                );
+
                             // For each source register used by this instruction
                             for &source_reg in &usage.sources {
-                                if let Some(source_ssa) = self.ssa().get_value_before_instruction(
-                                    source_reg,
-                                    instr_idx
-                                ) {
+                                if let Some(source_ssa) = self
+                                    .ssa()
+                                    .get_value_before_instruction(source_reg, instr_idx)
+                                {
                                     // Check if this was the only remaining use of the source SSA value
                                     let source_uses = self.get_remaining_uses(source_ssa);
-                                    if source_uses.len() == 1 && 
-                                       source_uses[0].block_id == block_id &&
-                                       source_uses[0].instruction_idx == instr_idx {
+                                    if source_uses.len() == 1
+                                        && source_uses[0].block_id == block_id
+                                        && source_uses[0].instruction_idx == instr_idx
+                                    {
                                         // This was the only use - mark it as consumed
                                         newly_eliminated.push((source_ssa.clone(), source_uses));
                                     }
@@ -345,7 +348,7 @@ impl<'a> SSAUsageTracker<'a> {
                     }
                 }
             }
-            
+
             // Mark newly eliminated values as consumed
             for (ssa_value, uses) in newly_eliminated {
                 log::debug!(
@@ -356,7 +359,7 @@ impl<'a> SSAUsageTracker<'a> {
                 changed = true;
             }
         }
-        
+
         if iterations >= max_iterations {
             log::warn!("Cascading elimination reached maximum iterations - possible cycle");
         }
