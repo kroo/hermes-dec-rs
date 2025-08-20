@@ -4,7 +4,7 @@
 
 use crate::analysis::value_tracker::ConstantValue;
 use crate::cfg::switch_analysis::{
-    CaseGroup, CaseInfo, CaseKey, DefaultCase, PhiNode, SharedTailInfo, SwitchInfo,
+    CaseGroup, CaseInfo, CaseKey, DefaultCase, PhiNode, SharedBlockAnalysis, SharedTailInfo, SwitchInfo,
 };
 use crate::cfg::{
     analysis::SwitchRegion,
@@ -113,7 +113,8 @@ impl<'a> SwitchConverter<'a> {
         let case_groups: Vec<CaseGroup> = case_groups_vec;
 
         // Identify blocks that are targeted by multiple case groups
-        let shared_blocks = self.identify_shared_target_blocks(&case_groups, cfg);
+        let shared_block_analysis = SharedBlockAnalysis::analyze(&case_groups, cfg);
+        let shared_blocks = shared_block_analysis.shared_blocks.clone();
 
         // Pre-analyze all case groups for nested switches to mark eliminated values
         // This must be done before generating any setup instructions
@@ -212,7 +213,7 @@ impl<'a> SwitchConverter<'a> {
                 switch_info,
                 i,
                 &case_groups,
-                &shared_blocks,
+                &shared_block_analysis,
                 region,
             )?;
             switch_cases.push(switch_case);
@@ -440,7 +441,7 @@ impl<'a> SwitchConverter<'a> {
         switch_info: &SwitchInfo,
         group_index: usize,
         all_groups: &[CaseGroup],
-        shared_blocks: &HashSet<NodeIndex>,
+        shared_block_analysis: &SharedBlockAnalysis,
         region: Option<&SwitchRegion>,
     ) -> Result<SwitchCase<'a>, SwitchConversionError> {
         if group.keys.is_empty() {
@@ -458,57 +459,11 @@ impl<'a> SwitchConverter<'a> {
         // Check if the target block is post-switch code
         // A block is post-switch if multiple cases converge to it (even if one targets it directly)
         // We need to handle the case where case 1 directly targets block 9, but case 4 also reaches it
-        let is_post_switch_shared = if !shared_blocks.contains(&group.target_block) {
-            false
-        } else {
-            // This block is in shared_blocks, but we need to check if it's truly post-switch
-            // or just a fallthrough target (like block 8 for cases 2 and 3)
-
-            // Check if this is part of a consecutive case pattern (fallthrough)
-            // If the current group and the previous group are consecutive cases that share the target,
-            // then this is a fallthrough pattern, not post-switch code
-            let is_fallthrough_pattern = if group_index > 0 {
-                let prev_group = &all_groups[group_index - 1];
-                // Check if previous case can reach current target through fallthrough
-                // This happens when the previous case's target can reach the current target
-                let prev_can_reach_current = cfg
-                    .graph()
-                    .edges(prev_group.target_block)
-                    .any(|edge| edge.target() == group.target_block);
-
-                // Also check if cases are consecutive in the original switch
-                let cases_consecutive = if let (Some(prev_key), Some(curr_key)) =
-                    (prev_group.keys.last(), group.keys.first())
-                {
-                    match (prev_key, curr_key) {
-                        (CaseKey::Number(OrderedFloat(n1)), CaseKey::Number(OrderedFloat(n2))) => {
-                            (*n2 - *n1).abs() == 1.0
-                        }
-                        _ => false,
-                    }
-                } else {
-                    false
-                };
-
-                prev_can_reach_current && cases_consecutive
-            } else {
-                false
-            };
-
-            if is_fallthrough_pattern {
-                false // This is part of a fallthrough pattern, not post-switch code
-            } else {
-                // Check for PHI nodes as additional evidence
-                let has_phi = block_converter
-                    .ssa_analysis()
-                    .phi_functions
-                    .get(&group.target_block)
-                    .map(|phis| !phis.is_empty())
-                    .unwrap_or(false);
-
-                has_phi
-            }
-        };
+        let is_post_switch_shared = shared_block_analysis.is_post_switch_shared(
+            group.target_block,
+            group_index,
+            all_groups,
+        );
 
         if is_post_switch_shared {
             // This case jumps to a post-switch shared block - generate setup and break
@@ -717,39 +672,6 @@ impl<'a> SwitchConverter<'a> {
         Ok(switch_case)
     }
 
-    /// Identify blocks that are shared by multiple cases
-    fn identify_shared_target_blocks(
-        &self,
-        case_groups: &[CaseGroup],
-        cfg: &'a Cfg<'a>,
-    ) -> HashSet<NodeIndex> {
-        let mut shared_blocks = HashSet::new();
-        let mut block_references: HashMap<NodeIndex, usize> = HashMap::new();
-
-        // Count direct targets
-        for group in case_groups {
-            *block_references.entry(group.target_block).or_insert(0) += 1;
-        }
-
-        // Also check indirect targets (blocks reachable from case targets)
-        for group in case_groups {
-            for edge in cfg.graph().edges(group.target_block) {
-                let successor = edge.target();
-                if !cfg.graph()[successor].is_exit() {
-                    *block_references.entry(successor).or_insert(0) += 1;
-                }
-            }
-        }
-
-        // Mark blocks referenced by multiple paths as shared
-        for (block_id, count) in block_references {
-            if count > 1 {
-                shared_blocks.insert(block_id);
-            }
-        }
-
-        shared_blocks
-    }
 
     /// Check if all keys in a group would generate the same code after optimization
     fn check_if_all_keys_generate_same_code(&self, group: &CaseGroup, cfg: &Cfg<'a>) -> bool {
@@ -2375,28 +2297,8 @@ impl<'a> SwitchConverter<'a> {
         switch_region: &SwitchRegion,
         cfg: &'a Cfg<'a>,
     ) -> bool {
-        // A switch is in the case body if:
-        // 1. The switch dispatch block IS the case target block (nested switch as first statement)
-        // 2. OR the switch dispatch block is reachable from the case target block
-
-        // Common pattern: the case target block IS the dispatch block of the nested switch
-        if switch_region.dispatch == case_target {
-            return true; // This case immediately starts with a nested switch
-        }
-
-        // Check if case target has a direct edge to the switch dispatch
-        for edge in cfg.graph().edges(case_target) {
-            if edge.target() == switch_region.dispatch {
-                return true;
-            }
-        }
-
-        // Also check if the switch dispatch is the case target + 1 (common pattern)
-        if switch_region.dispatch.index() == case_target.index() + 1 {
-            return true;
-        }
-
-        false
+        use crate::cfg::switch_analysis::nested_switch_detection::NestedSwitchAnalysis;
+        NestedSwitchAnalysis::is_switch_in_case_body(case_target, switch_region, cfg)
     }
 
     /// Convert nested control flow within a case body

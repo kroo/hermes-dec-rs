@@ -66,6 +66,7 @@ impl SSAValue {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DuplicationContext {
     SwitchBlockDuplication { case_group_keys: Vec<CaseKey> },
+    SwitchFallthrough { from_case_index: usize, to_case_index: usize },
     // Future: could add LoopUnrolling, InlineExpansion, etc.
 }
 
@@ -124,6 +125,12 @@ impl DuplicatedSSAValue {
                     self.original.register, self.original.version, case_id
                 )
             }
+            Some(DuplicationContext::SwitchFallthrough { from_case_index, to_case_index }) => {
+                format!(
+                    "r{}_{}_{}_ft_{}",
+                    self.original.register, self.original.version, from_case_index, to_case_index
+                )
+            }
         }
     }
 
@@ -160,6 +167,9 @@ impl DuplicatedSSAValue {
                     .collect::<Vec<_>>()
                     .join(",");
                 format!("switch_cases[{}]", keys_str)
+            }
+            Some(DuplicationContext::SwitchFallthrough { from_case_index, to_case_index }) => {
+                format!("fallthrough[{} -> {}]", from_case_index, to_case_index)
             }
         }
     }

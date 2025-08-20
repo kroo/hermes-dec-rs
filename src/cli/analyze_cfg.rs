@@ -80,6 +80,12 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
     // Create SSAUsageTracker if we have FunctionAnalysis
     let ssa_tracker = func_analysis.as_ref().map(|fa| SSAUsageTracker::new(fa));
 
+    // Build ControlFlowPlan if we have FunctionAnalysis
+    let control_flow_plan = func_analysis.as_ref().map(|fa| {
+        let builder = crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(&cfg, fa);
+        builder.build()
+    });
+
     println!("=== CFG Analysis for Function {} ===", function_index);
     println!();
 
@@ -539,6 +545,12 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 }
             }
         }
+    }
+
+    // Print ControlFlowPlan if we have it
+    if let Some(cfp) = control_flow_plan {
+        println!("\n=== Control Flow Plan ===");
+        println!("{}", cfp);
     }
 
     Ok(())

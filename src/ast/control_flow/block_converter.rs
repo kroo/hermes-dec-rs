@@ -217,23 +217,14 @@ impl<'a> BlockToStatementConverter<'a> {
         let switch_analysis = cfg.analyze_switch_regions(&self.function_analysis.ssa);
 
         // Identify which switches are nested inside other switches
-        let mut nested_switches = HashSet::new();
-        if let Some(ref analysis) = switch_analysis {
-            // Check which switches are nested
-            for (i, outer_region) in analysis.regions.iter().enumerate() {
-                for (j, inner_region) in analysis.regions.iter().enumerate() {
-                    if i != j {
-                        // Check if inner_region's dispatch is within any case body of outer_region
-                        for (_, case_analysis) in &outer_region.case_analyses {
-                            if case_analysis.blocks.contains(&inner_region.dispatch) {
-                                nested_switches.insert(j);
-                                break;
-                            }
-                        }
-                    }
-                }
+        let nested_switch_analysis = if let Some(ref analysis) = switch_analysis {
+            crate::cfg::switch_analysis::NestedSwitchAnalysis::analyze(&analysis.regions)
+        } else {
+            crate::cfg::switch_analysis::NestedSwitchAnalysis {
+                nested_switch_indices: HashSet::new(),
+                nesting_map: Vec::new(),
             }
-        }
+        };
 
         let mut processed_blocks: HashSet<NodeIndex> = HashSet::new();
 
@@ -257,7 +248,7 @@ impl<'a> BlockToStatementConverter<'a> {
                     self.find_switch_starting_at_indexed(*block_id, analysis)
                 {
                     // Skip if this is a nested switch - it will be converted by its parent
-                    if nested_switches.contains(&region_idx) {
+                    if nested_switch_analysis.is_nested(region_idx) {
                         // Check if this dispatch block has any unrendered instructions before the switch
                         let dispatch_block = &cfg.graph()[region.dispatch];
                         let dispatch_instructions = dispatch_block.instructions();

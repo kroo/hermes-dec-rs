@@ -185,6 +185,10 @@ impl VariableMapping {
                 let suffix = Self::case_group_to_id(case_group_keys);
                 format!("{}_{}", base_name, suffix)
             }
+            Some(DuplicationContext::SwitchFallthrough { from_case_index, to_case_index }) => {
+                // Create suffix for fallthrough duplication
+                format!("{}_ft_{}_{}", base_name, from_case_index, to_case_index)
+            }
         }
     }
 

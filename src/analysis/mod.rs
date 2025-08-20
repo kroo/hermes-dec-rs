@@ -7,6 +7,8 @@
 //! - Bundle analysis
 
 pub mod constructor_detector;
+pub mod control_flow_plan;
+pub mod control_flow_plan_builder;
 pub mod default_params;
 pub mod function_analysis;
 pub mod function_classifier;
@@ -15,6 +17,7 @@ pub mod hbc_analysis;
 pub mod value_tracker;
 
 pub use constructor_detector::{ConstructorDetector, ConstructorInfo};
+pub use control_flow_plan::{ControlFlowPlan, ControlFlowStructure};
 pub use default_params::{DefaultParameterAnalyzer, DefaultParameterInfo};
 pub use function_analysis::FunctionAnalysis;
 pub use function_classifier::{FunctionClassifier, FunctionType};
