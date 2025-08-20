@@ -423,9 +423,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                     processed_in_body.insert(branch.branch_entry);
                 }
                 
-                // Build the conditional structure
-                let conditional_structure = self.build_conditional_structure(chain.clone());
-                elements.push(SequentialElement::Structure(conditional_structure));
+                // Check if this conditional chain is actually a sparse switch
+                // A sparse switch has a specific pattern: sequential equality comparisons on the same variable
+                if let Some(switch_structure) = self.try_build_sparse_switch_from_chain(chain) {
+                    elements.push(SequentialElement::Structure(switch_structure));
+                } else {
+                    // Build as a regular conditional structure
+                    let conditional_structure = self.build_conditional_structure(chain.clone());
+                    elements.push(SequentialElement::Structure(conditional_structure));
+                }
                 continue;
             }
             
@@ -511,6 +517,38 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         } else {
             self.plan.create_structure(ControlFlowKind::Sequential { elements })
         }
+    }
+    
+    /// Try to build a sparse switch from a conditional chain
+    /// Returns Some if the chain represents a sparse switch pattern, None otherwise
+    fn try_build_sparse_switch_from_chain(&mut self, chain: &ConditionalChain) -> Option<StructureId> {
+        // Check if we have a sparse switch pattern for this chain
+        // We need to find a sparse switch candidate that starts at the same block
+        if let Some(first_branch) = chain.branches.first() {
+            // Try to detect a sparse switch starting from this block
+            let mut processed = HashSet::new();
+            if let Some(candidate) = crate::cfg::switch_analysis::sparse_switch_detector::detect_sparse_switch_chain(
+                self.cfg.graph(),
+                &self.cfg.analyze_post_dominators()?,
+                first_branch.condition_source,
+                &mut processed,
+                self.cfg.hbc_file(),
+                &self.function_analysis.ssa.ssa_values,
+                self.cfg,
+                &self.function_analysis.ssa,
+            ) {
+                // Convert the sparse switch candidate to a switch region
+                let mut region = crate::cfg::switch_analysis::sparse_candidate_to_switch_region(&candidate);
+                
+                // Analyze case bodies
+                region.analyze_case_bodies(self.cfg.graph(), self.cfg);
+                
+                // Build the switch structure from this region
+                return Some(self.build_switch_from_region(region));
+            }
+        }
+        
+        None
     }
     
     /// Build a conditional structure

@@ -717,6 +717,7 @@ pub fn find_switch_regions_with_ssa(
     }
 
     // Step 3: Find sparse switch patterns (series of equality comparisons) with SSA support
+    log::debug!("Finding sparse switch patterns, globally_processed_nodes has {} entries", globally_processed_nodes.len());
     let sparse_candidates = super::switch_analysis::find_sparse_switch_patterns(
         graph,
         post_doms,
@@ -726,6 +727,7 @@ pub fn find_switch_regions_with_ssa(
         cfg,
         ssa_analysis,
     );
+    log::debug!("Found {} sparse switch candidates", sparse_candidates.len());
     for candidate in sparse_candidates {
         let mut region = super::switch_analysis::sparse_candidate_to_switch_region(&candidate);
 
@@ -740,13 +742,9 @@ pub fn find_switch_regions_with_ssa(
         // Build node-to-region mapping
         add_nodes_to_switch_region_mapping(&mut node_to_regions, &region, region_idx);
 
-        // Mark all case blocks as globally processed to avoid detecting them as new switches
-        for case in &region.cases {
-            globally_processed_nodes.insert(case.case_head);
-        }
-        if let Some(default) = region.default_head {
-            globally_processed_nodes.insert(default);
-        }
+        // For sparse switches, the comparison blocks are already marked as processed
+        // by the detector. We don't mark case heads as globally processed because
+        // they might contain nested switches.
     }
 
     SwitchAnalysis {

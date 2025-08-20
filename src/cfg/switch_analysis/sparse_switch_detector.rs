@@ -145,7 +145,7 @@ pub fn find_sparse_switch_patterns(
 }
 
 /// Detect a sparse switch chain starting from a given node
-fn detect_sparse_switch_chain(
+pub fn detect_sparse_switch_chain(
     graph: &DiGraph<Block, EdgeKind>,
     post_doms: &PostDominatorAnalysis,
     start_node: NodeIndex,
