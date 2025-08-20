@@ -4,7 +4,7 @@
 //! including conditional chains, loops, and other control flow patterns.
 
 use crate::analysis::{FunctionAnalysis, GlobalSSAAnalyzer};
-use crate::ast::optimization::ssa_usage_tracker::{
+use crate::analysis::ssa_usage_tracker::{
     DeclarationStrategy, SSAUsageTracker, UseStrategy,
 };
 use crate::ast::variables::VariableMapper;

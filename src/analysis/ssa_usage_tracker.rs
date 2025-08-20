@@ -283,24 +283,29 @@ impl<'a> SSAUsageTracker<'a> {
         let ssa_value = dup_ssa_value.original_ssa_value();
 
         // Special handling for PHI result values
-        // PHI results themselves don't generate code - the actual assignments do
+        // PHI results need special handling - they represent the merged value
+        // but don't generate code themselves. However, if the PHI result is used
+        // (e.g., in a return statement), we need to keep it.
         if self.is_phi_result(ssa_value) {
-            return DeclarationStrategy::Skip;
+            // Check if this PHI result is actually used
+            let uses = self.ssa().get_ssa_value_uses(ssa_value);
+            if uses.is_empty() {
+                // Unused PHI result - skip it
+                return DeclarationStrategy::Skip;
+            }
+            // PHI result is used - it needs to exist as a variable
+            // Fall through to normal handling
         }
 
-        // 1. Check if fully eliminated (considering duplication context)
-        if self.is_duplicated_fully_eliminated(dup_ssa_value) {
-            return DeclarationStrategy::Skip;
-        }
-
-        // 2. Check if part of PHI group (coalesced values)
+        // 1. Check if part of PHI group (coalesced values) first
+        // This needs to be checked before elimination because PHI operands
+        // might have no direct uses but still need to generate assignments
         if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
             if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
-                // Check if this is the declaration point
+                // This is part of a PHI group (coalesced values)
                 if self.is_declaration_point(ssa_value, coalesced_rep) {
-                    // Check if needs dominator declaration
+                    // This is the declaration point for the coalesced group
                     if self.needs_dominator_declaration(coalesced_rep) {
-                        // Find the dominator block
                         let dominator_block = self.find_dominator_for_coalesced(coalesced_rep);
                         let kind = self.determine_variable_kind(coalesced_rep);
                         return DeclarationStrategy::DeclareAtDominator {
@@ -312,9 +317,16 @@ impl<'a> SSAUsageTracker<'a> {
                         return DeclarationStrategy::DeclareAndInitialize { kind };
                     }
                 } else {
+                    // Not the declaration point - this is a PHI operand that needs assignment
                     return DeclarationStrategy::AssignOnly;
                 }
             }
+        }
+
+        // 2. Check if fully eliminated (considering duplication context)
+        // Only check this AFTER checking for PHI operands
+        if self.is_duplicated_fully_eliminated(dup_ssa_value) {
+            return DeclarationStrategy::Skip;
         }
 
         // 3. Single SSA value - declare at definition

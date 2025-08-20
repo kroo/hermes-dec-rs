@@ -3,12 +3,12 @@
 //! This module provides the BlockToStatementConverter that transforms CFG basic blocks
 //! into sequences of JavaScript statements, building on instruction-to-expression conversion.
 
+use crate::analysis::ssa_usage_tracker::SSAUsageTracker;
 use crate::ast::comments::{CommentKind, CommentPosition};
 use crate::ast::{
     comments::AddressCommentManager,
     context::ExpressionContext,
     instructions::{InstructionResult, InstructionToStatementConverter, StatementConversionError},
-    optimization::SSAUsageTracker,
 };
 use crate::{
     cfg::ssa::{DuplicationContext, SSAValue},

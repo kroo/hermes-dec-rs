@@ -5,10 +5,10 @@
 //! all important decisions (declaration points, duplication contexts, value elimination)
 //! during the analysis phase rather than during AST generation.
 
-use crate::ast::optimization::ssa_usage_tracker::{DeclarationStrategy, UseStrategy};
+use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, UseStrategy};
 use crate::cfg::ssa::types::DuplicationContext;
 use crate::cfg::ssa::{DuplicatedSSAValue, RegisterUse, SSAValue};
-use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey, SwitchInfo};
+use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey, SetupInstruction, SwitchInfo};
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
@@ -155,7 +155,7 @@ pub struct SwitchCase {
     /// Comparison block for this specific case (in sparse switches)
     pub comparison_block: Option<NodeIndex>,
     /// Setup instructions executed when entering this case
-    pub setup_instructions: Vec<SSAValue>,
+    pub setup_instructions: Vec<SetupInstruction>,
     /// Execution order (which case is evaluated first)
     pub execution_order: usize,
 }
@@ -434,7 +434,7 @@ impl fmt::Display for ControlFlowPlan {
         if !self.declaration_strategies.is_empty() {
             writeln!(f, "\n  Declaration Strategies:")?;
             for (ssa_value, strategy) in &self.declaration_strategies {
-                writeln!(f, "    {:?} -> {:?}", ssa_value, strategy)?;
+                writeln!(f, "    {} -> {:?}", ssa_value, strategy)?;
             }
         }
         
@@ -442,7 +442,8 @@ impl fmt::Display for ControlFlowPlan {
         if !self.block_declarations.is_empty() {
             writeln!(f, "\n  Block Declarations:")?;
             for (block, values) in &self.block_declarations {
-                writeln!(f, "    Block {}: {:?}", block.index(), values)?;
+                let values_str: Vec<String> = values.iter().map(|v| v.to_string()).collect();
+                writeln!(f, "    Block {}: [{}]", block.index(), values_str.join(", "))?;
             }
         }
         
@@ -487,14 +488,24 @@ impl ControlFlowPlan {
                         .collect();
                     writeln!(f, "{}  CaseGroup {}: keys={:?}", indent_str, i, keys)?;
                     
-                    // Show setup instructions if any
-                    let setup_instructions: Vec<_> = group.cases.iter()
-                        .flat_map(|c| c.setup_instructions.iter())
-                        .collect();
+                    // Show setup instructions if any (deduplicated by SSA value)
+                    let mut unique_setup = std::collections::HashMap::new();
+                    for case in &group.cases {
+                        for instr in &case.setup_instructions {
+                            unique_setup.entry(instr.ssa_value.clone())
+                                .or_insert(instr.clone());
+                        }
+                    }
+                    let setup_instructions: Vec<_> = unique_setup.values().cloned().collect();
                     if !setup_instructions.is_empty() {
                         writeln!(f, "{}    Setup: {} instructions", indent_str, setup_instructions.len())?;
-                        for ssa_value in setup_instructions.iter().take(3) {
-                            writeln!(f, "{}      - {:?}", indent_str, ssa_value)?;
+                        for setup in setup_instructions.iter().take(3) {
+                            write!(f, "{}      - {} ← ", indent_str, setup.ssa_value)?;
+                            if let Some(ref value) = setup.value {
+                                writeln!(f, "{:?}", value)?;
+                            } else {
+                                writeln!(f, "<instruction>")?;
+                            }
                         }
                         if setup_instructions.len() > 3 {
                             writeln!(f, "{}      ... and {} more", indent_str, setup_instructions.len() - 3)?;
@@ -569,11 +580,17 @@ impl ControlFlowPlan {
                 }
             }
             ControlFlowKind::BasicBlock { block, instruction_count, is_synthetic } => {
-                write!(f, "BasicBlock {} ({} instructions", block.index(), instruction_count)?;
+                write!(f, "BasicBlock {}", block.index())?;
                 if *is_synthetic {
-                    write!(f, ", synthetic")?;
+                    write!(f, " [synthetic]")?;
                 }
-                writeln!(f, ")")?;
+                if *instruction_count == 0 {
+                    writeln!(f, " (empty)")?;
+                } else if *instruction_count == 1 {
+                    writeln!(f, " (1 instruction)")?;
+                } else {
+                    writeln!(f, " ({} instructions)", instruction_count)?;
+                }
             }
             ControlFlowKind::Empty => {
                 writeln!(f, "Empty")?;

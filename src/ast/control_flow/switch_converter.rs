@@ -1031,7 +1031,7 @@ impl<'a> SwitchConverter<'a> {
             // Determine if we should declare based on the strategy
             let should_declare = matches!(
                 declaration_strategy,
-                crate::ast::optimization::ssa_usage_tracker::DeclarationStrategy::DeclareAndInitialize { .. }
+                crate::analysis::ssa_usage_tracker::DeclarationStrategy::DeclareAndInitialize { .. }
             );
 
             log::debug!(

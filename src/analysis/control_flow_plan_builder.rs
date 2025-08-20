@@ -7,6 +7,7 @@ use super::ControlFlowPlan;
 use crate::analysis::control_flow_plan::{
     ControlFlowKind, SequentialElement, StructureId,
 };
+use crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer;
 use crate::analysis::FunctionAnalysis;
 use crate::cfg::analysis::{ConditionalChain, SwitchRegion};
 use crate::cfg::switch_analysis::SwitchInfo;
@@ -40,7 +41,20 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     }
 
     /// Build the control flow plan
-    pub fn build(mut self) -> ControlFlowPlan {
+    pub fn build(self) -> ControlFlowPlan {
+        // First build the structure
+        let function_analysis = self.function_analysis;
+        let mut plan = self.build_structure();
+        
+        // Then analyze it to compute SSA strategies
+        let analyzer = ControlFlowPlanAnalyzer::new(&mut plan, function_analysis);
+        analyzer.analyze();
+        
+        plan
+    }
+    
+    /// Build just the control flow structure without SSA analysis
+    fn build_structure(mut self) -> ControlFlowPlan {
         // Use existing CFG analyses instead of reimplementing
         
         // Get switch regions if any
@@ -221,20 +235,48 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Mark join block as processed
         self.processed_blocks.insert(region.join_block);
         
-        let kind = ControlFlowKind::Switch {
+        let switch_info_final = switch_info.unwrap_or_else(|| SwitchInfo {
+            discriminator: 0,
+            discriminator_instruction_index: InstructionIndex(0),
+            cases: vec![],
+            default_case: None,
+            shared_tail: None,
+        });
+        
+        let switch_structure = self.plan.create_structure(ControlFlowKind::Switch {
             dispatch_block: region.dispatch,
-            info: switch_info.unwrap_or_else(|| SwitchInfo {
-                discriminator: 0,
-                discriminator_instruction_index: InstructionIndex(0),
-                cases: vec![],
-                default_case: None,
-                shared_tail: None,
-            }),
+            info: switch_info_final.clone(),
             case_groups,
             default_case,
-        };
+        });
         
-        self.plan.create_structure(kind)
+        // If there's a shared tail, wrap the switch in a Sequential with the tail after it
+        if let Some(ref tail_info) = switch_info_final.shared_tail {
+            let tail_block = tail_info.block_id;
+            
+            // Don't mark the shared tail as processed yet
+            self.processed_blocks.remove(&tail_block);
+            
+            // Create the shared tail structure
+            let tail_structure = self.plan.create_structure(ControlFlowKind::BasicBlock {
+                block: tail_block,
+                instruction_count: self.cfg.graph()[tail_block].instructions().len(),
+                is_synthetic: false,
+            });
+            
+            // Mark it as processed now
+            self.processed_blocks.insert(tail_block);
+            
+            // Wrap switch and tail in a Sequential
+            let elements = vec![
+                crate::analysis::control_flow_plan::SequentialElement::Structure(switch_structure),
+                crate::analysis::control_flow_plan::SequentialElement::Structure(tail_structure),
+            ];
+            
+            self.plan.create_structure(ControlFlowKind::Sequential { elements })
+        } else {
+            switch_structure
+        }
     }
     
     /// Build case groups from switch info
@@ -265,12 +307,8 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             // Build the body structure
             let body = if shared_tail == Some(target_block) {
                 // This group goes directly to the shared tail
-                // Create a basic block for it but don't mark as processed
-                self.plan.create_structure(ControlFlowKind::BasicBlock {
-                    block: target_block,
-                    instruction_count: self.cfg.graph()[target_block].instructions().len(),
-                    is_synthetic: false,
-                })
+                // Create an empty body since the actual shared tail will come after the switch
+                self.plan.create_structure(ControlFlowKind::Empty)
             } else {
                 // Try to find the case analysis for this target block
                 // We need to find which case index corresponds to this target
@@ -306,7 +344,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                     keys: case_info.keys.clone(),
                     comparison_block: Some(case_info.comparison_block),
                     setup_instructions: case_info.setup.iter()
-                        .map(|setup| setup.ssa_value.clone())
+                        .cloned()
                         .collect(),
                     execution_order: case_info.execution_order,
                 }

@@ -2,6 +2,7 @@ use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey};
 use crate::hbc::InstructionIndex;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
 /// A definition site for a register
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -18,6 +19,12 @@ impl RegisterDef {
             block_id,
             instruction_idx,
         }
+    }
+}
+
+impl fmt::Display for RegisterDef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "r{} @ block{}:#{}", self.register, self.block_id.index(), self.instruction_idx.0)
     }
 }
 
@@ -62,12 +69,31 @@ impl SSAValue {
     }
 }
 
+impl fmt::Display for SSAValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "r{}_v{}", self.register, self.version)
+    }
+}
+
 /// Context for SSA value duplication during code generation
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DuplicationContext {
     SwitchBlockDuplication { case_group_keys: Vec<CaseKey> },
     SwitchFallthrough { from_case_index: usize, to_case_index: usize },
     // Future: could add LoopUnrolling, InlineExpansion, etc.
+}
+
+impl fmt::Display for DuplicationContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SwitchBlockDuplication { case_group_keys } => {
+                write!(f, "dup[cases {:?}]", case_group_keys)
+            }
+            Self::SwitchFallthrough { from_case_index, to_case_index } => {
+                write!(f, "fallthrough[{}→{}]", from_case_index, to_case_index)
+            }
+        }
+    }
 }
 
 /// An SSA value that may be duplicated during code generation
@@ -183,6 +209,16 @@ impl DuplicatedSSAValue {
 impl From<SSAValue> for DuplicatedSSAValue {
     fn from(ssa_value: SSAValue) -> Self {
         Self::original(ssa_value)
+    }
+}
+
+impl fmt::Display for DuplicatedSSAValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(ctx) = &self.duplication_context {
+            write!(f, "{}[{}]", self.original, ctx)
+        } else {
+            write!(f, "{}", self.original)
+        }
     }
 }
 
