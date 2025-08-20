@@ -8,6 +8,7 @@ use crate::ast::{
     comments::AddressCommentManager,
     context::ExpressionContext,
     instructions::{InstructionResult, InstructionToStatementConverter, StatementConversionError},
+    optimization::SSAUsageTracker,
 };
 use crate::{
     analysis::GlobalAnalysisResult,
@@ -124,8 +125,8 @@ pub struct BlockToStatementConverter<'a> {
     rendered_instructions: HashSet<InstructionIndex>,
     /// Address-based comment manager for collecting comments
     comment_manager: Option<AddressCommentManager>,
-    /// Track SSA values that are eliminated during switch conversion
-    eliminated_ssa_values: HashSet<SSAValue>,
+    /// SSA usage tracker for smart variable elimination and tracking
+    ssa_usage_tracker: SSAUsageTracker<'a>,
     /// Function analysis containing all analysis data
     function_analysis: &'a crate::analysis::FunctionAnalysis<'a>,
     /// Track variables that were used but not declared
@@ -178,7 +179,7 @@ impl<'a> BlockToStatementConverter<'a> {
             } else {
                 None
             },
-            eliminated_ssa_values: HashSet::new(),
+            ssa_usage_tracker: SSAUsageTracker::new(function_analysis),
             function_analysis,
             undeclared_variables: HashSet::new(),
         }
@@ -801,19 +802,6 @@ impl<'a> BlockToStatementConverter<'a> {
             }
         }
         None
-    }
-
-    /// Convert a basic block by index (public method for conditional converter)
-    pub fn convert_basic_block(
-        &mut self,
-        _block_idx: NodeIndex,
-    ) -> Result<ArenaVec<'a, Statement<'a>>, String> {
-        // This is a simplified version that doesn't have access to the full CFG
-        // For now, return empty statements
-        // TODO: Implement proper block conversion without full CFG context
-        Ok(ArenaVec::new_in(
-            self.instruction_converter.ast_builder().allocator,
-        ))
     }
 
     /// Check if an instruction has been rendered
@@ -1590,15 +1578,24 @@ impl<'a> BlockToStatementConverter<'a> {
         Ok(Some(stmt))
     }
 
-    /// Get the set of eliminated SSA values
-    pub fn get_eliminated_ssa_values(&self) -> &HashSet<SSAValue> {
-        &self.eliminated_ssa_values
+    /// Report that specific uses of an SSA value have been consumed
+    pub fn mark_ssa_uses_consumed(&mut self, ssa_value: &SSAValue, uses: &[crate::cfg::ssa::types::RegisterUse]) {
+        self.ssa_usage_tracker.mark_uses_consumed(ssa_value, uses);
+    }
+    
+    /// Check if an SSA value is fully eliminated (all uses consumed)
+    pub fn is_ssa_value_eliminated(&self, ssa_value: &SSAValue) -> bool {
+        self.ssa_usage_tracker.is_fully_eliminated(ssa_value)
     }
 
-    /// Mark an SSA value as eliminated
-    pub fn mark_ssa_value_eliminated(&mut self, ssa_value: SSAValue) {
-        log::debug!("Marking SSA value as eliminated: {:?}", ssa_value);
-        self.eliminated_ssa_values.insert(ssa_value);
+    /// Get a reference to the SSA usage tracker
+    pub fn ssa_usage_tracker(&self) -> &SSAUsageTracker<'a> {
+        &self.ssa_usage_tracker
+    }
+
+    /// Get a mutable reference to the SSA usage tracker
+    pub fn ssa_usage_tracker_mut(&mut self) -> &mut SSAUsageTracker<'a> {
+        &mut self.ssa_usage_tracker
     }
 
     /// Get the full CFG if available
@@ -1647,7 +1644,7 @@ impl<'a> BlockToStatementConverter<'a> {
                     let all_eliminated = !var_ssa_values.is_empty()
                         && var_ssa_values
                             .iter()
-                            .all(|ssa| self.eliminated_ssa_values.contains(ssa));
+                            .all(|ssa| self.is_ssa_value_eliminated(ssa));
 
                     if all_eliminated {
                         log::debug!(
@@ -1661,11 +1658,11 @@ impl<'a> BlockToStatementConverter<'a> {
                             var_name,
                             var_ssa_values
                                 .iter()
-                                .filter(|ssa| !self.eliminated_ssa_values.contains(ssa))
+                                .filter(|ssa| !self.is_ssa_value_eliminated(ssa))
                                 .collect::<Vec<_>>(),
                             var_ssa_values
                                 .iter()
-                                .filter(|ssa| self.eliminated_ssa_values.contains(ssa))
+                                .filter(|ssa| self.is_ssa_value_eliminated(ssa))
                                 .collect::<Vec<_>>()
                         );
                     }
@@ -1673,6 +1670,7 @@ impl<'a> BlockToStatementConverter<'a> {
                     // Keep the variable if:
                     // 1. At least one SSA value is not eliminated
                     // 2. OR if there are no SSA values for this variable (shouldn't happen)
+                    // 3. OR if it's in the undeclared variables set (was used but not declared)
                     // 3. OR if it's in the undeclared variables set (used but not declared)
                     !all_eliminated || self.undeclared_variables.contains(*var_name)
                 })

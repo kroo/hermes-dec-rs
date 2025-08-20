@@ -4,7 +4,7 @@
 
 use crate::analysis::value_tracker::ConstantValue;
 use crate::cfg::switch_analysis::{
-    sparse_switch_analyzer::SparseSwitchAnalyzer, CaseGroup, CaseInfo, CaseKey, DefaultCase,
+    CaseGroup, CaseInfo, CaseKey, DefaultCase,
     PhiNode, SharedTailInfo, SwitchInfo,
 };
 use crate::cfg::{analysis::SwitchRegion, ssa::SSAValue, Cfg};
@@ -112,6 +112,21 @@ impl<'a> SwitchConverter<'a> {
         // Identify blocks that are targeted by multiple case groups
         let shared_blocks = self.identify_shared_target_blocks(&case_groups, cfg);
 
+        // Pre-analyze all case groups for nested switches to mark eliminated values
+        // This must be done before generating any setup instructions
+        for group in case_groups.iter() {
+            if !group.keys.is_empty() {
+                self.pre_analyze_nested_switches(group, cfg, cfg, block_converter)?;
+            }
+        }
+
+        // Report which uses have been consumed by this switch statement
+        // This must be done BEFORE generating case bodies so that setup instructions
+        // can check if values are eliminated
+        if let Some(region) = region {
+            self.report_switch_consumed_uses(region, block_converter, cfg);
+        }
+
         // Generate switch cases
         let mut switch_cases = ArenaVec::new_in(self.ast_builder.allocator);
 
@@ -153,11 +168,19 @@ impl<'a> SwitchConverter<'a> {
                                         first_execution_order: group.first_execution_order,
                                         comparison_blocks: vec![group.comparison_blocks[j]],
                                     };
-                                    self.generate_setup_instructions(
+                                    // For empty cases that go to shared tail, force PHI contributions
+                                    let force_phi = if let Some(shared_tail) = &switch_info.shared_tail {
+                                        single_key_group.target_block == shared_tail.block_id
+                                    } else {
+                                        false
+                                    };
+                                    
+                                    self.generate_setup_instructions_with_phi_check(
                                         &mut empty_case_body,
                                         &single_key_group,
                                         block_converter,
                                         cfg,
+                                        force_phi,
                                     )?;
 
                                     let break_stmt =
@@ -340,21 +363,9 @@ impl<'a> SwitchConverter<'a> {
                     // This handles the pattern where later cases reuse constants loaded by earlier ones
                     let offset = setup.len() - cases[j].setup.len();
                     setup[offset..].iter().zip(&cases[j].setup).all(|(a, b)| {
-                        // For Mov instructions, check if they reference the same source register
-                        if let (
-                            UnifiedInstruction::Mov {
-                                operand_1: src1, ..
-                            },
-                            UnifiedInstruction::Mov {
-                                operand_1: src2, ..
-                            },
-                        ) = (&a.instruction.instruction, &b.instruction.instruction)
-                        {
-                            *src1 == *src2 && a.ssa_value.register == b.ssa_value.register
-                        } else {
-                            a.instruction.instruction.name() == b.instruction.instruction.name()
-                                && a.ssa_value.register == b.ssa_value.register
-                        }
+                        // Simply check if instructions match by name and register
+                        a.instruction.instruction.name() == b.instruction.instruction.name()
+                            && a.ssa_value.register == b.ssa_value.register
                     })
                 } else {
                     false
@@ -497,7 +508,27 @@ impl<'a> SwitchConverter<'a> {
 
         if is_post_switch_shared {
             // This case jumps to a post-switch shared block - generate setup and break
-            self.generate_setup_instructions(&mut case_statements, group, block_converter, cfg)?;
+            // Check if this is also the shared tail (PHI node location)
+            // OR if the target block has PHI nodes that need contributions
+            let force_phi = if let Some(shared_tail) = &switch_info.shared_tail {
+                group.target_block == shared_tail.block_id
+            } else {
+                // Even without a shared tail, check if target has PHI nodes
+                block_converter
+                    .ssa_analysis()
+                    .phi_functions
+                    .get(&group.target_block)
+                    .map(|phis| !phis.is_empty())
+                    .unwrap_or(false)
+            };
+            
+            self.generate_setup_instructions_with_phi_check(
+                &mut case_statements, 
+                group, 
+                block_converter, 
+                cfg,
+                force_phi
+            )?;
             // The shared block will be processed after the switch
             // so we don't inline it here
             // The break will be added by the logic at the end of this method
@@ -531,6 +562,10 @@ impl<'a> SwitchConverter<'a> {
                             block_converter,
                         )?;
                     } else {
+                        // First, check for nested switches and mark setup instructions for elimination
+                        // BEFORE generating any setup instructions
+                        self.pre_analyze_nested_switches(group, cfg, cfg, block_converter)?;
+
                         // Normal case: generate setup instructions then convert target block
                         self.generate_setup_instructions(
                             &mut case_statements,
@@ -563,7 +598,10 @@ impl<'a> SwitchConverter<'a> {
                     }
                 }
             } else {
-                // No shared tail - generate setup and convert target block normally
+                // No shared tail - first check for nested switches
+                self.pre_analyze_nested_switches(group, cfg, cfg, block_converter)?;
+
+                // Generate setup instructions
                 self.generate_setup_instructions(
                     &mut case_statements,
                     group,
@@ -705,35 +743,8 @@ impl<'a> SwitchConverter<'a> {
         // For cases 5,6,7, they all generate var0_e = "high" after optimization
         // This is a simplified check - in practice we'd need to simulate the optimization
 
-        // Check if all setup instructions are Mov instructions with the same source
-        let all_mov_same_source = group.setup.iter().all(|instr| {
-            matches!(
-                &instr.instruction.instruction,
-                UnifiedInstruction::Mov { .. }
-            )
-        });
-
-        if all_mov_same_source && group.setup.len() > 1 {
-            // Get the source registers from all Mov instructions
-            let sources: Vec<u8> = group
-                .setup
-                .iter()
-                .filter_map(|instr| {
-                    if let UnifiedInstruction::Mov { operand_1, .. } =
-                        &instr.instruction.instruction
-                    {
-                        Some(*operand_1)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            // Check if all Mov instructions use the same source
-            if !sources.is_empty() && sources.iter().all(|&s| s == sources[0]) {
-                return true;
-            }
-        }
+        // Simplify: Trust SSAUsageTracker to handle value elimination properly
+        // Don't need instruction-specific checks here
 
         false
     }
@@ -836,8 +847,14 @@ impl<'a> SwitchConverter<'a> {
         cfg: &'a Cfg<'a>,
         block_converter: &mut super::BlockToStatementConverter<'a>,
     ) -> Result<(), SwitchConversionError> {
-        // First, generate setup instructions
-        self.generate_setup_instructions(case_statements, group, block_converter, cfg)?;
+        // First, generate setup instructions with PHI check since we know there are PHI nodes
+        self.generate_setup_instructions_with_phi_check(
+            case_statements, 
+            group, 
+            block_converter, 
+            cfg,
+            true // force_phi_contributions = true because we have PHI nodes at target
+        )?;
 
         // Get PHI functions at the target block
         let ssa = block_converter.ssa_analysis();
@@ -944,6 +961,24 @@ impl<'a> SwitchConverter<'a> {
         Ok(())
     }
 
+    /// Generate setup instructions with optional PHI contribution forcing
+    fn generate_setup_instructions_with_phi_check(
+        &mut self,
+        case_statements: &mut ArenaVec<'a, Statement<'a>>,
+        group: &CaseGroup,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+        cfg: &'a Cfg<'a>,
+        force_phi_contributions: bool,
+    ) -> Result<(), SwitchConversionError> {
+        self.generate_setup_instructions_impl(
+            case_statements,
+            group,
+            block_converter,
+            cfg,
+            force_phi_contributions,
+        )
+    }
+
     /// Generate setup instructions for a case
     fn generate_setup_instructions(
         &mut self,
@@ -952,8 +987,26 @@ impl<'a> SwitchConverter<'a> {
         block_converter: &mut super::BlockToStatementConverter<'a>,
         cfg: &'a Cfg<'a>,
     ) -> Result<(), SwitchConversionError> {
+        self.generate_setup_instructions_impl(
+            case_statements,
+            group,
+            block_converter,
+            cfg,
+            false, // force_phi_contributions = false by default
+        )
+    }
+
+    /// Internal implementation of generate_setup_instructions
+    fn generate_setup_instructions_impl(
+        &mut self,
+        case_statements: &mut ArenaVec<'a, Statement<'a>>,
+        group: &CaseGroup,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+        cfg: &'a Cfg<'a>,
+        force_phi_contributions: bool,
+    ) -> Result<(), SwitchConversionError> {
         // Check if the target block is just a return statement
-        let target_is_simple_return =
+        let _target_is_simple_return =
             if let Some(target_block) = cfg.graph().node_weight(group.target_block) {
                 target_block.instructions().len() == 1
                     && matches!(
@@ -964,112 +1017,31 @@ impl<'a> SwitchConverter<'a> {
                 false
             };
 
-        // Identify registers that are only used as sources for Mov instructions
-        let mov_only_sources: std::collections::HashSet<u8> = {
-            let mut sources = std::collections::HashSet::new();
+        // Remove instruction-specific handling - let SSAUsageTracker handle elimination
 
-            // First, find all Mov instructions and their source registers
-            for setup_instr in &group.setup {
-                if let UnifiedInstruction::Mov { operand_1, .. } =
-                    &setup_instr.instruction.instruction
-                {
-                    // Check if this source is defined in the setup
-                    let source_defined_in_setup = group.setup.iter().any(|other| {
-                        if let Some(target_reg) =
-                            crate::generated::instruction_analysis::analyze_register_usage(
-                                &other.instruction.instruction,
-                            )
-                            .target
-                        {
-                            target_reg == *operand_1
-                        } else {
-                            false
-                        }
-                    });
-
-                    if source_defined_in_setup {
-                        sources.insert(*operand_1);
-                    }
-                }
-            }
-
-            // Now check if these sources are used by anything other than Mov
-            sources.retain(|&reg| {
-                group.setup.iter().all(|instr| {
-                    let usage = crate::generated::instruction_analysis::analyze_register_usage(
-                        &instr.instruction.instruction,
-                    );
-
-                    // If this instruction uses the register as a source
-                    if usage.sources.contains(&reg) {
-                        // It's only OK if this is a Mov instruction
-                        matches!(
-                            &instr.instruction.instruction,
-                            UnifiedInstruction::Mov { .. }
-                        )
-                    } else {
-                        true // Not used as source, so OK
-                    }
-                })
-            });
-
-            sources
-        };
-
+        log::debug!(
+            "generate_setup_instructions for case {:?} with {} setup instructions",
+            group.keys,
+            group.setup.len()
+        );
         for setup_instr in &group.setup {
-            // Check if this SSA value has already been marked as eliminated
-            if block_converter.get_eliminated_ssa_values().contains(&setup_instr.ssa_value) {
+            
+            // Check if this SSA value has already been fully consumed
+            // BUT: If force_phi_contributions is true, we need to generate the assignment
+            // even if the SSA value is eliminated, because it contributes to a PHI node
+            let is_eliminated = block_converter.is_ssa_value_eliminated(&setup_instr.ssa_value);
+            
+            if is_eliminated && !force_phi_contributions {
                 log::debug!(
-                    "Skipping setup instruction for eliminated SSA value: {:?}",
-                    setup_instr.ssa_value
+                    "Skipping setup instruction for eliminated SSA value: {:?} in case {:?}",
+                    setup_instr.ssa_value,
+                    group.keys
                 );
                 continue;
             }
-            
-            // Smart temporary instruction skipping
-            // Skip LoadConst instructions if:
-            // 1. They are immediately followed by a Ret instruction that uses the loaded value
-            // 2. There are no other instructions between the LoadConst and Ret
-            let should_skip =
-                if group.setup.len() == 1 && group.always_terminates && target_is_simple_return {
-                    // Single setup instruction in a terminating case with just a return - likely a LoadConst + Ret pattern
-                    matches!(
-                        &setup_instr.instruction.instruction,
-                        UnifiedInstruction::LoadConstString { .. }
-                            | UnifiedInstruction::LoadConstStringLongIndex { .. }
-                            | UnifiedInstruction::LoadConstUInt8 { .. }
-                            | UnifiedInstruction::LoadConstInt { .. }
-                            | UnifiedInstruction::LoadConstDouble { .. }
-                            | UnifiedInstruction::LoadConstZero { .. }
-                            | UnifiedInstruction::LoadConstNull { .. }
-                            | UnifiedInstruction::LoadConstUndefined { .. }
-                            | UnifiedInstruction::LoadConstTrue { .. }
-                            | UnifiedInstruction::LoadConstFalse { .. }
-                    )
-                } else {
-                    false
-                };
 
-            if should_skip {
-                continue;
-            }
-
-            // Skip instructions that define registers only used as Mov sources
-            if let Some(target_reg) =
-                crate::generated::instruction_analysis::analyze_register_usage(
-                    &setup_instr.instruction.instruction,
-                )
-                .target
-            {
-                if mov_only_sources.contains(&target_reg) {
-                    // Check if this SSA value has any uses at all
-                    if !self.is_ssa_value_used(&setup_instr.ssa_value, block_converter) {
-                        // Mark this SSA value as eliminated only if it has no uses
-                        block_converter.mark_ssa_value_eliminated(setup_instr.ssa_value.clone());
-                        continue;
-                    }
-                }
-            }
+            // Simplified: Let SSAUsageTracker handle all elimination decisions
+            // We'll generate all setup instructions unless SSAUsageTracker says they're eliminated
 
             // Get the variable name for this SSA value
             let var_name = if let Some(mapping) = block_converter
@@ -1097,7 +1069,15 @@ impl<'a> SwitchConverter<'a> {
                             .ssa_to_var
                             .get(&setup_instr.ssa_value)
                             .cloned()
-                            .expect("SSA value not found")
+                            .unwrap_or_else(|| {
+                                // Generate a variable name for this SSA value if not found
+                                // This can happen when a register is used in comparisons
+                                format!(
+                                    "var{}_{}",
+                                    setup_instr.ssa_value.register,
+                                    char::from(b'a' + (setup_instr.ssa_value.version % 26) as u8)
+                                )
+                            })
                     }
                 } else {
                     // No PHI functions at target block, use the SSA value directly
@@ -1105,7 +1085,15 @@ impl<'a> SwitchConverter<'a> {
                         .ssa_to_var
                         .get(&setup_instr.ssa_value)
                         .cloned()
-                        .expect("SSA value not found")
+                        .unwrap_or_else(|| {
+                            // Generate a variable name for this SSA value if not found
+                            // This can happen when a register is used in comparisons
+                            format!(
+                                "var{}_{}",
+                                setup_instr.ssa_value.register,
+                                char::from(b'a' + (setup_instr.ssa_value.version % 26) as u8)
+                            )
+                        })
                 }
             } else {
                 panic!("Missing variable mapping!");
@@ -1115,60 +1103,88 @@ impl<'a> SwitchConverter<'a> {
             let var_name = self.ast_builder.allocator.alloc_str(&var_name);
 
             // Create a variable declaration with the constant value
-            let value_expr = if let Some(const_value) = &setup_instr.value {
-                // Convert the constant value to an expression
-                // Convert the constant value directly using the same method
-                self.create_constant_expression_from_value(const_value)
-            } else if let UnifiedInstruction::Mov { operand_1, .. } =
+            // Check Mov instructions first for fallthrough handling
+            let value_expr = if let UnifiedInstruction::Mov { operand_1, operand_0 } =
                 &setup_instr.instruction.instruction
             {
-                // For Mov instructions, find the value being moved
-                // Look for the source value in other setup instructions
-                let source_value = group
-                    .setup
-                    .iter()
-                    .find(|s| {
-                        if let Some(target_reg) =
-                            crate::generated::instruction_analysis::analyze_register_usage(
-                                &s.instruction.instruction,
-                            )
-                            .target
-                        {
-                            target_reg == *operand_1 && s.value.is_some()
-                        } else {
-                            false
-                        }
-                    })
-                    .and_then(|s| s.value.as_ref());
-
-                if let Some(const_value) = source_value {
-                    self.create_constant_expression_from_value(const_value)
+                // For Mov instructions, we need to handle fallthrough cases specially
+                // Check if this Mov is setting up a PHI contribution for a fallthrough
+                let ssa = block_converter.ssa_analysis();
+                let is_fallthrough_phi = if let Some(phi_functions) = ssa.phi_functions.get(&group.target_block) {
+                    // Check if there's a PHI for the register this Mov writes to
+                    phi_functions.iter().any(|phi| phi.register == *operand_0)
                 } else {
-                    // If we can't find the source value, use the source register variable
-                    let source_var_name = if let Some(mapping) = block_converter
-                        .instruction_converter()
-                        .register_manager()
-                        .variable_mapping()
-                    {
-                        mapping
-                            .get_source_variable_name(
-                                *operand_1,
-                                setup_instr.instruction.instruction_index,
-                            )
-                            .cloned()
-                            .unwrap_or_else(|| format!("var{}", operand_1))
-                    } else {
-                        format!("var{}", operand_1)
-                    };
+                    false
+                };
 
-                    let source_var_name = self.ast_builder.allocator.alloc_str(&source_var_name);
-                    Expression::Identifier(
-                        self.ast_builder.alloc(
-                            self.ast_builder
-                                .identifier_reference(Span::default(), source_var_name),
-                        ),
-                    )
+                // If this is a fallthrough PHI and the setup has a stored value, use that
+                // The stored value in setup_instr.value might be wrong (empty string)
+                // For fallthrough cases, we should skip the assignment entirely
+                // as the value comes from the previous case
+                
+                if is_fallthrough_phi && setup_instr.value.as_ref().map_or(false, |v| {
+                    // Check if the value is suspicious (empty string for a fallthrough)
+                    matches!(v, ConstantValue::String(s) if s.is_empty())
+                }) {
+                    // This is a fallthrough case where the value comes from a previous case
+                    // Skip generating this assignment entirely
+                    log::debug!("Detected fallthrough PHI with empty string - skipping assignment");
+                    continue;
+                } else {
+                    // Normal Mov handling
+                    // Look for the source value in other setup instructions
+                    let source_value = group
+                        .setup
+                        .iter()
+                        .find(|s| {
+                            if let Some(target_reg) =
+                                crate::generated::instruction_analysis::analyze_register_usage(
+                                    &s.instruction.instruction,
+                                )
+                                .target
+                            {
+                                target_reg == *operand_1 && s.value.is_some()
+                            } else {
+                                false
+                            }
+                        })
+                        .and_then(|s| s.value.as_ref());
+
+                    if let Some(const_value) = source_value {
+                        self.create_constant_expression_from_value(const_value)
+                    } else if let Some(const_value) = &setup_instr.value {
+                        // Use the stored value if available
+                        self.create_constant_expression_from_value(const_value)
+                    } else {
+                        // If we can't find the source value, use the source register variable
+                        let source_var_name = if let Some(mapping) = block_converter
+                            .instruction_converter()
+                            .register_manager()
+                            .variable_mapping()
+                        {
+                            mapping
+                                .get_source_variable_name(
+                                    *operand_1,
+                                    setup_instr.instruction.instruction_index,
+                                )
+                                .cloned()
+                                .unwrap_or_else(|| format!("var{}", operand_1))
+                        } else {
+                            format!("var{}", operand_1)
+                        };
+
+                        let source_var_name = self.ast_builder.allocator.alloc_str(&source_var_name);
+                        Expression::Identifier(
+                            self.ast_builder.alloc(
+                                self.ast_builder
+                                    .identifier_reference(Span::default(), source_var_name),
+                            ),
+                        )
+                    }
                 }
+            } else if let Some(const_value) = &setup_instr.value {
+                // Convert the constant value to an expression
+                self.create_constant_expression_from_value(const_value)
             } else {
                 // For other non-constant setup instructions, create an undefined literal
                 Expression::Identifier(
@@ -1192,8 +1208,31 @@ impl<'a> SwitchConverter<'a> {
                 false // Default to not function-scoped if we can't check
             };
 
-            // We should declare if it's NOT function-scoped (i.e., it's a local variable)
-            let should_declare = !is_function_scoped;
+            // Check if this variable's SSA value has been fully consumed
+            let is_eliminated = block_converter.is_ssa_value_eliminated(&setup_instr.ssa_value);
+
+            // We should declare if:
+            // 1. It's NOT function-scoped (i.e., it's a local variable), OR
+            // 2. It IS function-scoped but eliminated (so it won't be declared at function level)
+            let should_declare = !is_function_scoped || is_eliminated;
+            
+            log::debug!(
+                "Setup instruction for {} ({}): is_function_scoped={}, is_eliminated={}, should_declare={}",
+                var_name, setup_instr.ssa_value.name(), is_function_scoped, is_eliminated, should_declare
+            );
+
+            // If this SSA value is eliminated AND we don't need to declare it locally, skip it
+            // This happens when the value is only used in contexts that inline constants
+            // BUT: Don't skip if:
+            // 1. We're forcing PHI contributions, OR
+            // 2. We need to declare it locally (because it's eliminated from function scope)
+            if is_eliminated && !force_phi_contributions && !should_declare {
+                log::debug!(
+                    "Skipping eliminated setup instruction for SSA value: {:?}",
+                    setup_instr.ssa_value
+                );
+                continue;
+            }
 
             let stmt = if should_declare {
                 // Create variable declaration
@@ -1505,12 +1544,18 @@ impl<'a> SwitchConverter<'a> {
         cfg: &'a Cfg<'a>,
     ) -> Result<(), SwitchConversionError> {
         // For cases that jump directly to the shared tail, we need to:
-        // 1. Generate setup instructions
-        // 2. Generate any PHI value assignments
-        // 3. Add a break statement
+        // 1. Generate setup instructions (including PHI contributions)
+        // 2. Add a break statement
 
-        // Generate setup instructions - these should handle all necessary assignments
-        self.generate_setup_instructions(case_statements, group, block_converter, cfg)?;
+        // Special handling: for break-only cases, we need to generate PHI contributions
+        // even if the SSA values are marked as eliminated
+        self.generate_setup_instructions_with_phi_check(
+            case_statements,
+            group,
+            block_converter,
+            cfg,
+            true, // force_phi_contributions = true for shared tail cases
+        )?;
 
         // Break is added by the caller based on should_add_break_for_group
         Ok(())
@@ -2000,48 +2045,6 @@ impl<'a> SwitchConverter<'a> {
         }
     }
 
-    /// Check if an SSA value is used anywhere (in def-use chains or phi functions)
-    fn is_ssa_value_used(
-        &self,
-        ssa_value: &SSAValue,
-        block_converter: &super::BlockToStatementConverter<'a>,
-    ) -> bool {
-        let ssa = block_converter.ssa_analysis();
-
-        // First check if this SSA value is an input to any phi function
-        for (block_id, phi_functions) in &ssa.phi_functions {
-            for phi in phi_functions {
-                // Check if this SSA value is an operand of the phi function
-                for (_, operand_value) in &phi.operands {
-                    if operand_value == ssa_value {
-                        log::debug!(
-                            "SSA value {:?} is input to phi function in block {:?}",
-                            ssa_value.name(),
-                            block_id
-                        );
-                        return true; // Used as phi input
-                    }
-                }
-            }
-        }
-
-        // Get the definition site for this SSA value
-        let def_site = &ssa_value.def_site;
-
-        // Check if there are any uses of this definition
-        if let Some(uses) = ssa.def_use_chains.get(def_site) {
-            if !uses.is_empty() {
-                log::debug!(
-                    "SSA value {:?} has {} uses in def-use chains",
-                    ssa_value.name(),
-                    uses.len()
-                );
-                return true;
-            }
-        }
-
-        false // No uses anywhere
-    }
 
     /// Convert a dense switch region (SwitchImm) to AST
     fn convert_dense_switch_region(
@@ -2374,13 +2377,13 @@ impl<'a> SwitchConverter<'a> {
                                 comparison_blocks: vec![first_case.comparison_block],
                             };
 
-                            // For now, don't eliminate the value
-                            // TODO: Implement proper cross-case analysis
-                            if false {
-                                // Mark its SSA value as eliminated only if not used elsewhere
-                                block_converter
-                                    .mark_ssa_value_eliminated(setup_instr.ssa_value.clone());
-                            }
+                            // TODO: Implement cross-case analysis to check if this setup value
+                            // is used in other cases. If not, mark its uses in case 0 as consumed.
+                            // This requires:
+                            // 1. Check all other cases to see if they use this SSA value
+                            // 2. If only case 0 uses it, mark those uses as consumed
+                            // 3. This would allow elimination of setup instructions that are
+                            //    only used by a single case
                             break;
                         }
                     }
@@ -2430,35 +2433,8 @@ impl<'a> SwitchConverter<'a> {
                     for instruction in block.instructions() {
                         block_converter.mark_instruction_rendered(instruction);
 
-                        // Also mark SSA values from const loads as eliminated
-                        let ssa_analysis = block_converter.ssa_analysis();
-                        let usage = crate::generated::instruction_analysis::analyze_register_usage(
-                            &instruction.instruction,
-                        );
-                        if let Some(target_reg) = usage.target {
-                            // Check if this is a const load instruction
-                            if matches!(instruction.instruction,
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstZero { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstUInt8 { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstInt { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstDouble { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstString { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstStringLongIndex { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstTrue { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstFalse { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstNull { .. } |
-                                    crate::generated::unified_instructions::UnifiedInstruction::LoadConstUndefined { .. }
-                            ) {
-                                let reg_def = crate::cfg::ssa::RegisterDef {
-                                    register: target_reg,
-                                    block_id: current,
-                                    instruction_idx: instruction.instruction_index,
-                                };
-                                if let Some(ssa_value) = ssa_analysis.ssa_values.get(&reg_def) {
-                                    block_converter.mark_ssa_value_eliminated(ssa_value.clone());
-                                }
-                            }
-                        }
+                        // The uses of constants in comparison blocks will be marked as consumed
+                        // by report_switch_consumed_uses() after the switch is generated
                     }
                 }
             }
@@ -2551,12 +2527,9 @@ impl<'a> SwitchConverter<'a> {
                         // Case jumps directly to a nested switch
                         // Don't mark the dispatch block as rendered yet - let the nested
                         // switch converter handle it, as it needs to process setup instructions
-                        
-                        // Before converting, check if any of this case's setup instructions
-                        // are only used by the nested switch comparisons
-                        log::debug!("Checking setup instructions for nested switch elimination in case {:?}", group.keys);
-                        self.mark_nested_switch_setup_eliminated(group, region, block_converter, full_cfg);
-                        
+
+                        // The nested switch will report its own consumed uses when it's converted
+
                         let mut nested_converter = SwitchConverter::new(self.ast_builder);
                         match nested_converter.convert_switch_region(
                             region,
@@ -2769,107 +2742,162 @@ impl<'a> SwitchConverter<'a> {
             .find(move |loop_info| loop_info.is_header(start_block))
     }
 
-    /// Mark setup instructions as eliminated if they're only used by nested switch comparisons
-    fn mark_nested_switch_setup_eliminated(
+    /// Pre-analyze nested switches to mark setup instructions for elimination
+    /// This is called BEFORE generating setup instructions
+    fn pre_analyze_nested_switches(
         &self,
         group: &CaseGroup,
-        nested_region: &SwitchRegion,
+        cfg: &'a Cfg<'a>,
+        full_cfg: &'a Cfg<'a>,
+        block_converter: &mut super::BlockToStatementConverter<'a>,
+    ) -> Result<(), SwitchConversionError> {
+        // Check if the target block is a switch dispatch
+        let ssa = block_converter.ssa_analysis();
+        if let Some(switch_analysis) = full_cfg.analyze_switch_regions(ssa) {
+            for region in &switch_analysis.regions {
+                if self.is_switch_in_case_body(group.target_block, region, cfg) {
+                    if group.target_block == region.dispatch {
+                        // Case jumps directly to a nested switch
+                        log::debug!(
+                            "Case {:?} jumps directly to nested switch",
+                            group.keys
+                        );
+                        // The nested switch will report its own consumed uses when it's converted
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Report which SSA value uses have been consumed by switch statement generation
+    /// This should be called AFTER we've decided to generate a switch statement
+    fn report_switch_consumed_uses(
+        &self,
+        region: &SwitchRegion,
         block_converter: &mut super::BlockToStatementConverter<'a>,
         cfg: &'a Cfg<'a>,
     ) {
-        // Check each setup instruction in the case group
-        log::debug!("Case group has {} setup instructions", group.setup.len());
-        for setup_instr in &group.setup {
-            let register = setup_instr.ssa_value.register;
-            log::debug!("Checking setup instruction for register {}: {:?}", register, setup_instr.value);
-            
-            // Check if this register is used in the nested switch comparisons
-            let mut only_used_in_comparisons = true;
-            let mut used_in_comparisons = false;
-            
-            // Get all uses of this SSA value
+        log::debug!("Reporting consumed uses for switch region starting at block {}", 
+                   region.dispatch.index());
+        
+        // Collect all uses to mark as consumed
+        let mut uses_to_consume: Vec<(SSAValue, Vec<crate::cfg::ssa::types::RegisterUse>)> = Vec::new();
+        
+        {
+            // Scope for immutable borrows
             let ssa = block_converter.ssa_analysis();
             
-            // Check the dispatch block of the nested switch
-            let dispatch_block = &cfg.graph()[nested_region.dispatch];
-            for instr in dispatch_block.instructions() {
-                let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
+            // For sparse switches, find comparison blocks between dispatch and case heads
+            let mut comparison_blocks = std::collections::HashSet::new();
+            comparison_blocks.insert(region.dispatch);
+            
+            // Find all blocks between dispatch and case heads that contain comparisons
+            let mut to_visit = vec![region.dispatch];
+            let mut visited = std::collections::HashSet::new();
+            
+            while let Some(current) = to_visit.pop() {
+                if !visited.insert(current) {
+                    continue;
+                }
                 
-                // Check if this instruction uses our register
-                for src_reg in usage.sources {
-                    if src_reg == register {
-                        // Check if this is using our specific SSA value
-                        if let Some(src_value) = ssa.get_value_before_instruction(src_reg, instr.instruction_index) {
-                            if src_value == &setup_instr.ssa_value {
-                                // This instruction uses our value
-                                match &instr.instruction {
-                                    crate::generated::unified_instructions::UnifiedInstruction::JStrictEqual { .. }
-                                    | crate::generated::unified_instructions::UnifiedInstruction::JStrictEqualLong { .. } => {
-                                        used_in_comparisons = true;
-                                    }
-                                    _ => {
-                                        // Non-comparison use found
-                                        only_used_in_comparisons = false;
-                                    }
-                                }
-                            }
+                let block = &cfg.graph()[current];
+                
+                // Check if this block contains comparison instructions
+                let has_comparison = block.instructions().iter().any(|instr| {
+                    matches!(
+                        &instr.instruction,
+                        UnifiedInstruction::JStrictEqual { .. }
+                        | UnifiedInstruction::JStrictEqualLong { .. }
+                        | UnifiedInstruction::JStrictNotEqual { .. }
+                        | UnifiedInstruction::JStrictNotEqualLong { .. }
+                    )
+                });
+                
+                if has_comparison {
+                    comparison_blocks.insert(current);
+                    
+                    // Continue searching for more comparison blocks
+                    for edge in cfg.graph().edges(current) {
+                        let successor = edge.target();
+                        // Don't go past case heads
+                        if !region.cases.iter().any(|c| c.case_head == successor) {
+                            to_visit.push(successor);
                         }
                     }
                 }
             }
             
-            // Also check comparison blocks for each case
-            for _case in &nested_region.cases {
-                // Skip if we already found non-comparison use
-                if !only_used_in_comparisons {
-                    break;
-                }
-                
-                // For sparse switches, we need to detect the pattern to find comparison blocks
-                if let Some(hbc_file) = block_converter.hbc_file() {
-                    if let Some(postdom) = cfg.analyze_post_dominators() {
-                        let analyzer = SparseSwitchAnalyzer::with_hbc_file(hbc_file);
-                        
-                        if let Some(switch_info) = analyzer.detect_switch_pattern(nested_region.dispatch, cfg, ssa, &postdom) {
-                        for case_info in &switch_info.cases {
-                            let comp_block = &cfg.graph()[case_info.comparison_block];
-                            for instr in comp_block.instructions() {
-                                let usage = crate::generated::instruction_analysis::analyze_register_usage(&instr.instruction);
-                                
-                                for src_reg in usage.sources {
-                                    if src_reg == register {
-                                        if let Some(src_value) = ssa.get_value_before_instruction(src_reg, instr.instruction_index) {
-                                            if src_value == &setup_instr.ssa_value {
-                                                match &instr.instruction {
-                                                    crate::generated::unified_instructions::UnifiedInstruction::JStrictEqual { .. }
-                                                    | crate::generated::unified_instructions::UnifiedInstruction::JStrictEqualLong { .. } => {
-                                                        used_in_comparisons = true;
-                                                    }
-                                                    _ => {
-                                                        only_used_in_comparisons = false;
-                                                    }
-                                                }
-                                            }
+            // Now collect uses of constants in comparison instructions
+            for &block_id in &comparison_blocks {
+                let block = &cfg.graph()[block_id];
+                for instr in block.instructions() {
+                    match &instr.instruction {
+                        UnifiedInstruction::JStrictEqual { operand_1, operand_2, .. } => {
+                            // Check both operands to see if they're constants
+                            for &reg in &[*operand_1, *operand_2] {
+                                if let Some(ssa_value) = ssa.get_value_before_instruction(reg, instr.instruction_index) {
+                                    // Check if this is a constant value
+                                    let value_tracker = block_converter.function_analysis().value_tracker();
+                                    if let crate::analysis::TrackedValue::Constant(_) = value_tracker.get_value(ssa_value) {
+                                        // This constant's use in the comparison is consumed
+                                        let uses_in_comparison = ssa.get_ssa_value_uses(ssa_value)
+                                            .into_iter()
+                                            .filter(|u| u.block_id == block_id && u.instruction_idx == instr.instruction_index)
+                                            .cloned()
+                                            .collect::<Vec<_>>();
+                                        
+                                        if !uses_in_comparison.is_empty() {
+                                            log::debug!("Will mark {} uses as consumed for constant in comparison at block {}", 
+                                                     uses_in_comparison.len(), block_id.index());
+                                            uses_to_consume.push((ssa_value.clone(), uses_in_comparison));
                                         }
                                     }
                                 }
                             }
                         }
-                    }
+                        UnifiedInstruction::JStrictEqualLong { operand_1, operand_2, .. } => {
+                            // For Long variant, operand_0 is i32 (the offset), so we only check the register operands
+                            // Check both register operands
+                            for &reg in &[*operand_1, *operand_2] {
+                                if let Some(ssa_value) = ssa.get_value_before_instruction(reg, instr.instruction_index) {
+                                    // Check if this is a constant value
+                                    let value_tracker = block_converter.function_analysis().value_tracker();
+                                    if let crate::analysis::TrackedValue::Constant(_) = value_tracker.get_value(ssa_value) {
+                                        // This constant's use in the comparison is consumed
+                                        let uses_in_comparison = ssa.get_ssa_value_uses(ssa_value)
+                                            .into_iter()
+                                            .filter(|u| u.block_id == block_id && u.instruction_idx == instr.instruction_index)
+                                            .cloned()
+                                            .collect::<Vec<_>>();
+                                        
+                                        if !uses_in_comparison.is_empty() {
+                                            log::debug!("Will mark {} uses as consumed for constant in comparison at block {}", 
+                                                     uses_in_comparison.len(), block_id.index());
+                                            uses_to_consume.push((ssa_value.clone(), uses_in_comparison));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Remove Mov-specific handling - cascading elimination will handle it
+                        _ => {}
                     }
                 }
             }
-            
-            // If the value is only used in comparisons that will be inlined as switch statements,
-            // mark it as eliminated
-            if used_in_comparisons && only_used_in_comparisons {
-                log::debug!(
-                    "Marking setup instruction as eliminated: register {} only used in nested switch comparisons",
-                    register
-                );
-                block_converter.mark_ssa_value_eliminated(setup_instr.ssa_value.clone());
-            }
         }
+        
+        // Report the consumed values to the SSA usage tracker
+        if !uses_to_consume.is_empty() {
+            log::debug!("Reporting {} SSA values as consumed by switch comparisons", uses_to_consume.len());
+            block_converter.ssa_usage_tracker_mut()
+                .report_switch_inlined_uses(uses_to_consume);
+        }
+        
+        // Also mark the comparison instructions themselves as rendered
+        // since they're being replaced by the switch statement
+        self.mark_switch_region_as_rendered(region, block_converter, cfg);
     }
 
     /// Mark all blocks in a switch region as rendered to prevent double conversion

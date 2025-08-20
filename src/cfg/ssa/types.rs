@@ -334,6 +334,14 @@ impl SSAAnalysis {
         self.get_register_definitions(register).len() > 1
     }
 
+    /// Get all uses of a specific SSA value
+    pub fn get_ssa_value_uses(&self, ssa_value: &SSAValue) -> Vec<&RegisterUse> {
+        self.def_use_chains
+            .get(&ssa_value.def_site)
+            .map(|uses| uses.iter().collect())
+            .unwrap_or_default()
+    }
+
     /// Get statistics about the SSA analysis
     pub fn get_stats(&self) -> SSAStats {
         SSAStats {
@@ -345,6 +353,21 @@ impl SSAAnalysis {
                 .count(),
             phi_functions: self.phi_functions.values().map(|v| v.len()).sum(),
             blocks_with_phis: self.phi_functions.len(),
+        }
+    }
+    
+    /// Get all SSA values defined in the function
+    pub fn all_ssa_values(&self) -> impl Iterator<Item = &SSAValue> {
+        self.ssa_values.values()
+    }
+    
+    /// Get the defining instruction for an SSA value
+    pub fn get_defining_instruction(&self, ssa_value: &SSAValue) -> Option<RegisterDef> {
+        // The def_site in SSAValue is the RegisterDef that created it
+        if self.ssa_values.values().any(|v| v == ssa_value) {
+            Some(ssa_value.def_site.clone())
+        } else {
+            None
         }
     }
 }

@@ -15,6 +15,7 @@ pub mod comments;
 pub mod context;
 pub mod control_flow;
 pub mod instructions;
+pub mod optimization;
 pub mod variables;
 
 // Re-export the main types for public API
