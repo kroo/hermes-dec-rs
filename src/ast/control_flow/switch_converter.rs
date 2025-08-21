@@ -4,7 +4,8 @@
 
 use crate::analysis::value_tracker::ConstantValue;
 use crate::cfg::switch_analysis::{
-    CaseGroup, CaseInfo, CaseKey, DefaultCase, PhiNode, SharedBlockAnalysis, SharedTailInfo, SwitchInfo,
+    CaseGroup, CaseInfo, CaseKey, DefaultCase, PhiNode, SharedBlockAnalysis, SharedTailInfo,
+    SwitchInfo,
 };
 use crate::cfg::{
     analysis::SwitchRegion,
@@ -671,7 +672,6 @@ impl<'a> SwitchConverter<'a> {
 
         Ok(switch_case)
     }
-
 
     /// Check if all keys in a group would generate the same code after optimization
     fn check_if_all_keys_generate_same_code(&self, group: &CaseGroup, cfg: &Cfg<'a>) -> bool {

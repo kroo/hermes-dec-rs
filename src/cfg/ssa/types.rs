@@ -24,7 +24,13 @@ impl RegisterDef {
 
 impl fmt::Display for RegisterDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "r{} @ block{}:#{}", self.register, self.block_id.index(), self.instruction_idx.0)
+        write!(
+            f,
+            "r{} @ block{}:#{}",
+            self.register,
+            self.block_id.index(),
+            self.instruction_idx.0
+        )
     }
 }
 
@@ -78,8 +84,13 @@ impl fmt::Display for SSAValue {
 /// Context for SSA value duplication during code generation
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DuplicationContext {
-    SwitchBlockDuplication { case_group_keys: Vec<CaseKey> },
-    SwitchFallthrough { from_case_index: usize, to_case_index: usize },
+    SwitchBlockDuplication {
+        case_group_keys: Vec<CaseKey>,
+    },
+    SwitchFallthrough {
+        from_case_index: usize,
+        to_case_index: usize,
+    },
     // Future: could add LoopUnrolling, InlineExpansion, etc.
 }
 
@@ -89,7 +100,10 @@ impl fmt::Display for DuplicationContext {
             Self::SwitchBlockDuplication { case_group_keys } => {
                 write!(f, "dup[cases {:?}]", case_group_keys)
             }
-            Self::SwitchFallthrough { from_case_index, to_case_index } => {
+            Self::SwitchFallthrough {
+                from_case_index,
+                to_case_index,
+            } => {
                 write!(f, "fallthrough[{}→{}]", from_case_index, to_case_index)
             }
         }
@@ -151,7 +165,10 @@ impl DuplicatedSSAValue {
                     self.original.register, self.original.version, case_id
                 )
             }
-            Some(DuplicationContext::SwitchFallthrough { from_case_index, to_case_index }) => {
+            Some(DuplicationContext::SwitchFallthrough {
+                from_case_index,
+                to_case_index,
+            }) => {
                 format!(
                     "r{}_{}_{}_ft_{}",
                     self.original.register, self.original.version, from_case_index, to_case_index
@@ -194,7 +211,10 @@ impl DuplicatedSSAValue {
                     .join(",");
                 format!("switch_cases[{}]", keys_str)
             }
-            Some(DuplicationContext::SwitchFallthrough { from_case_index, to_case_index }) => {
+            Some(DuplicationContext::SwitchFallthrough {
+                from_case_index,
+                to_case_index,
+            }) => {
                 format!("fallthrough[{} -> {}]", from_case_index, to_case_index)
             }
         }

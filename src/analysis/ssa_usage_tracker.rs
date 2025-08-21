@@ -117,6 +117,11 @@ impl<'a> SSAUsageTracker<'a> {
         }
     }
 
+    /// Get all consumed uses
+    pub fn get_consumed_uses(&self) -> &HashMap<DuplicatedSSAValue, HashSet<RegisterUse>> {
+        &self.consumed_uses
+    }
+
     /// Mark a specific use of a duplicated SSA value as consumed (inlined)
     pub fn mark_duplicated_use_consumed(
         &mut self,
@@ -256,14 +261,31 @@ impl<'a> SSAUsageTracker<'a> {
         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
 
         if all_uses.is_empty() {
+            eprintln!(
+                "DEBUG: {} has no uses, eliminated",
+                dup_ssa_value.original_ssa_value()
+            );
             // No uses means it's effectively eliminated
             return true;
         }
 
         // Check if all uses have been consumed
         if let Some(consumed) = self.consumed_uses.get(dup_ssa_value) {
-            all_uses.iter().all(|use_site| consumed.contains(use_site))
+            let is_eliminated = all_uses.iter().all(|use_site| consumed.contains(use_site));
+            eprintln!(
+                "DEBUG: {} has {} uses, {} consumed, eliminated: {}",
+                dup_ssa_value.original_ssa_value(),
+                all_uses.len(),
+                consumed.len(),
+                is_eliminated
+            );
+            is_eliminated
         } else {
+            eprintln!(
+                "DEBUG: {} has {} uses, 0 consumed, not eliminated",
+                dup_ssa_value.original_ssa_value(),
+                all_uses.len()
+            );
             // No consumed uses tracked, so not eliminated
             false
         }
@@ -302,8 +324,20 @@ impl<'a> SSAUsageTracker<'a> {
         // might have no direct uses but still need to generate assignments
         if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
             if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
+                eprintln!(
+                    "DEBUG: {} is part of PHI group with representative {}",
+                    ssa_value, coalesced_rep
+                );
                 // This is part of a PHI group (coalesced values)
                 if self.is_declaration_point(ssa_value, coalesced_rep) {
+                    eprintln!("DEBUG: {} is the declaration point", ssa_value);
+
+                    // Check if fully eliminated even for declaration points
+                    if self.is_duplicated_fully_eliminated(dup_ssa_value) {
+                        eprintln!("DEBUG: {} is fully eliminated, returning Skip", ssa_value);
+                        return DeclarationStrategy::Skip;
+                    }
+
                     // This is the declaration point for the coalesced group
                     if self.needs_dominator_declaration(coalesced_rep) {
                         let dominator_block = self.find_dominator_for_coalesced(coalesced_rep);
@@ -317,6 +351,10 @@ impl<'a> SSAUsageTracker<'a> {
                         return DeclarationStrategy::DeclareAndInitialize { kind };
                     }
                 } else {
+                    eprintln!(
+                        "DEBUG: {} is NOT the declaration point, returning AssignOnly",
+                        ssa_value
+                    );
                     // Not the declaration point - this is a PHI operand that needs assignment
                     return DeclarationStrategy::AssignOnly;
                 }
@@ -326,7 +364,10 @@ impl<'a> SSAUsageTracker<'a> {
         // 2. Check if fully eliminated (considering duplication context)
         // Only check this AFTER checking for PHI operands
         if self.is_duplicated_fully_eliminated(dup_ssa_value) {
+            eprintln!("DEBUG: {} is fully eliminated, returning Skip", ssa_value);
             return DeclarationStrategy::Skip;
+        } else {
+            eprintln!("DEBUG: {} is NOT fully eliminated", ssa_value);
         }
 
         // 3. Single SSA value - declare at definition
@@ -565,13 +606,11 @@ impl<'a> SSAUsageTracker<'a> {
                     // Get the instruction
                     if let Some(block) = self.function_analysis.cfg.graph().node_weight(block_id) {
                         if let Some(instr) = block.instructions().get(instr_idx.value()) {
-                            // TODO: Check if this instruction is side-effect free and can be eliminated
-                            // For now, treat all instructions as safe to eliminate when their results are unused
-                            // In the future, we should check for instructions with side effects like:
-                            // - Function calls
-                            // - Property stores
-                            // - Throw instructions
-                            // - etc.
+                            // Check if this instruction has side effects and cannot be eliminated
+                            if has_side_effects(&instr.instruction) {
+                                // This instruction has side effects, cannot eliminate its uses
+                                continue;
+                            }
 
                             // Check what SSA values this instruction uses
                             let usage =
@@ -660,4 +699,103 @@ mod tests {
     fn test_duplicated_value_independence() {
         // TODO: Re-enable with proper mocking infrastructure
     */
+}
+
+/// Check if an instruction has side effects that prevent it from being eliminated
+///
+/// Returns true if the instruction has observable side effects beyond just writing
+/// to its target register. These instructions cannot be eliminated even if their
+/// result is unused.
+///
+/// Instructions with side effects include:
+/// - Function calls (can throw, modify global state)
+/// - Object/Array creation (allocates memory, can throw)
+/// - Closure/Generator creation (captures environment)
+/// - Property access (can call getters/setters, can throw)
+/// - Iterator operations (follow protocol, can throw)
+/// - Exception handling (Catch, Throw)
+/// - Environment operations (modify scope)
+/// - Direct eval (can do anything)
+///
+/// Pure instructions that are safe to eliminate when unused include:
+/// - Load constants (LoadConstNull, LoadConstTrue, etc.)
+/// - Register moves (Mov, MovLong)
+/// - Arithmetic operations (Add, Sub, Mul, Div, etc.)
+/// - Bitwise operations (BitAnd, BitOr, etc.)
+/// - Comparisons (Eq, StrictEq, Less, etc.)
+/// - Type conversions (ToNumber, ToString, etc.)
+/// - Memory loads (Loadi8, Loadu16, etc.)
+/// - Load from environment (pure reads)
+/// - PHI functions (SSA construction)
+fn has_side_effects(
+    instruction: &crate::generated::unified_instructions::UnifiedInstruction,
+) -> bool {
+    use crate::generated::unified_instructions::UnifiedInstruction;
+
+    match instruction {
+        // Function calls can throw, have side effects, modify state
+        UnifiedInstruction::Call { .. }
+        | UnifiedInstruction::CallLong { .. }
+        | UnifiedInstruction::Call1 { .. }
+        | UnifiedInstruction::Call2 { .. }
+        | UnifiedInstruction::Call3 { .. }
+        | UnifiedInstruction::Call4 { .. }
+        | UnifiedInstruction::CallDirect { .. }
+        | UnifiedInstruction::CallDirectLongIndex { .. }
+        | UnifiedInstruction::CallBuiltin { .. }
+        | UnifiedInstruction::CallBuiltinLong { .. }
+        | UnifiedInstruction::Construct { .. }
+        | UnifiedInstruction::ConstructLong { .. }
+        // Object/Array creation allocates memory, can throw
+        | UnifiedInstruction::NewObject { .. }
+        | UnifiedInstruction::NewObjectWithParent { .. }
+        | UnifiedInstruction::NewObjectWithBuffer { .. }
+        | UnifiedInstruction::NewObjectWithBufferLong { .. }
+        | UnifiedInstruction::NewArray { .. }
+        | UnifiedInstruction::NewArrayWithBuffer { .. }
+        | UnifiedInstruction::NewArrayWithBufferLong { .. }
+        // Closure/Generator creation allocates memory, captures environment
+        | UnifiedInstruction::CreateClosure { .. }
+        | UnifiedInstruction::CreateClosureLongIndex { .. }
+        | UnifiedInstruction::CreateAsyncClosure { .. }
+        | UnifiedInstruction::CreateAsyncClosureLongIndex { .. }
+        | UnifiedInstruction::CreateGenerator { .. }
+        | UnifiedInstruction::CreateGeneratorLongIndex { .. }
+        | UnifiedInstruction::CreateGeneratorClosure { .. }
+        | UnifiedInstruction::CreateGeneratorClosureLongIndex { .. }
+        // Environment operations modify program state
+        | UnifiedInstruction::CreateEnvironment { .. }
+        | UnifiedInstruction::CreateInnerEnvironment { .. }
+        | UnifiedInstruction::CreateThis { .. }
+        // Iterator operations follow iterator protocol, can throw
+        | UnifiedInstruction::IteratorBegin { .. }
+        | UnifiedInstruction::IteratorNext { .. }
+        // Property access can call getters, can throw
+        | UnifiedInstruction::GetById { .. }
+        | UnifiedInstruction::GetByIdShort { .. }
+        | UnifiedInstruction::GetByIdLong { .. }
+        | UnifiedInstruction::TryGetById { .. }
+        | UnifiedInstruction::TryGetByIdLong { .. }
+        | UnifiedInstruction::GetByVal { .. }
+        | UnifiedInstruction::GetPNameList { .. }
+        // Exception handling must not be eliminated
+        | UnifiedInstruction::Catch { .. }
+        // Meta properties and special values might be needed
+        | UnifiedInstruction::GetNewTarget { .. }
+        | UnifiedInstruction::GetGlobalObject { .. }
+        | UnifiedInstruction::GetArgumentsLength { .. }
+        | UnifiedInstruction::GetArgumentsPropByVal { .. }
+        | UnifiedInstruction::ReifyArguments { .. }
+        // Regex creation allocates memory, can throw
+        | UnifiedInstruction::CreateRegExp { .. }
+        // TypeOf can be observed through toString/valueOf
+        | UnifiedInstruction::TypeOf { .. }
+        // These instructions throw or have other observable effects
+        | UnifiedInstruction::ThrowIfUndefinedInst { .. }
+        | UnifiedInstruction::ThrowIfEmpty { .. }
+        // Direct eval can do anything
+        | UnifiedInstruction::DirectEval { .. } => true,
+        // All other instructions are pure or only write to their target
+        _ => false,
+    }
 }

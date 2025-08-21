@@ -717,7 +717,10 @@ pub fn find_switch_regions_with_ssa(
     }
 
     // Step 3: Find sparse switch patterns (series of equality comparisons) with SSA support
-    log::debug!("Finding sparse switch patterns, globally_processed_nodes has {} entries", globally_processed_nodes.len());
+    log::debug!(
+        "Finding sparse switch patterns, globally_processed_nodes has {} entries",
+        globally_processed_nodes.len()
+    );
     let sparse_candidates = super::switch_analysis::find_sparse_switch_patterns(
         graph,
         post_doms,

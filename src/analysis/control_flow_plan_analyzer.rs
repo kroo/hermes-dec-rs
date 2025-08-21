@@ -3,66 +3,99 @@
 //! Analyzes SSA value usage within the control flow plan to determine
 //! declaration and use strategies for each value in each context.
 
-use super::control_flow_plan::{ControlFlowPlan, ControlFlowKind, StructureId};
-use crate::analysis::FunctionAnalysis;
-use crate::analysis::ssa_usage_tracker::{
-    DeclarationStrategy, SSAUsageTracker,
+use super::control_flow_plan::{
+    ControlFlowKind, ControlFlowPlan, ControlFlowStructure, PhiDeconstructionInfo, StructureId,
+    UpdatedPhiFunction,
 };
-use crate::cfg::ssa::types::{DuplicatedSSAValue, RegisterUse, DuplicationContext};
+use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker};
+use crate::analysis::FunctionAnalysis;
+use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext, RegisterUse};
+use crate::cfg::ssa::{PhiFunction, SSAValue};
 use crate::generated::unified_instructions::UnifiedInstruction;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
+
+/// Information about a block with PHI functions that needs deconstruction
+#[derive(Debug, Clone)]
+struct PhiAffectedInfo {
+    /// PHI functions in this block
+    phis: Vec<PhiFunction>,
+    /// Duplication contexts where this block will be duplicated
+    duplication_contexts: Vec<DuplicationContext>,
+}
 
 /// Analyzes a control flow plan to determine SSA value strategies
 pub struct ControlFlowPlanAnalyzer<'a> {
     plan: &'a mut ControlFlowPlan,
     function_analysis: &'a FunctionAnalysis<'a>,
     usage_tracker: SSAUsageTracker<'a>,
+    /// Blocks that will be duplicated in various contexts
+    duplicated_blocks: HashMap<NodeIndex, Vec<DuplicationContext>>,
 }
 
 impl<'a> ControlFlowPlanAnalyzer<'a> {
     /// Create a new analyzer
-    pub fn new(
-        plan: &'a mut ControlFlowPlan,
-        function_analysis: &'a FunctionAnalysis<'a>,
-    ) -> Self {
+    pub fn new(plan: &'a mut ControlFlowPlan, function_analysis: &'a FunctionAnalysis<'a>) -> Self {
         let usage_tracker = SSAUsageTracker::new(function_analysis);
         Self {
             plan,
             function_analysis,
             usage_tracker,
+            duplicated_blocks: HashMap::new(),
         }
     }
-    
+
     /// Analyze the control flow plan and compute strategies
     pub fn analyze(mut self) {
-        // First pass: Mark consumed uses (e.g., switch discriminators, inlined constants)
+        // First pass: Collect duplicated blocks
+        self.collect_duplicated_blocks(self.plan.root);
+
+        // Second pass: Mark consumed uses (e.g., switch discriminators, inlined constants)
         self.mark_consumed_uses();
-        
-        // Second pass: Compute declaration strategies for each structure
+
+        // Perform cascading elimination to find transitively eliminated values
+        self.usage_tracker.perform_cascading_elimination();
+
+        // Transfer consumed uses from tracker to plan before reusing the tracker
+        self.plan
+            .consumed_uses
+            .extend(self.usage_tracker.get_consumed_uses().clone());
+
+        // Third pass: Compute declaration strategies for each structure
         self.compute_declaration_strategies();
-        
-        // Third pass: Compute use strategies for each use site
+
+        // Fourth pass: Analyze PHI deconstruction for duplicated blocks
+        self.analyze_phi_deconstruction();
+
+        // Fifth pass: Update declaration strategies based on PHI deconstruction
+        self.update_strategies_for_phi_deconstruction();
+
+        // Sixth pass: Compute use strategies for each use site
         self.compute_use_strategies();
-        
+
         // Store the computed strategies in the plan
         self.store_strategies();
     }
-    
+
     /// Mark uses that will be consumed/inlined
     fn mark_consumed_uses(&mut self) {
         self.mark_consumed_uses_in_structure(self.plan.root);
     }
-    
+
     /// Recursively mark consumed uses in a structure
     fn mark_consumed_uses_in_structure(&mut self, structure_id: StructureId) {
         let structure = match self.plan.get_structure(structure_id) {
             Some(s) => s.clone(),
             None => return,
         };
-        
+
         match &structure.kind {
-            ControlFlowKind::Switch { info, case_groups, default_case, .. } => {
+            ControlFlowKind::Switch {
+                info,
+                case_groups,
+                default_case,
+                ..
+            } => {
                 // Mark discriminator uses as consumed (they're inlined in the switch)
                 // For sparse switches, the comparison uses are inlined
                 for case in &info.cases {
@@ -73,49 +106,67 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                         if matches!(
                             &instr.instruction,
                             UnifiedInstruction::JStrictEqual { .. }
-                            | UnifiedInstruction::JStrictEqualLong { .. }
-                            | UnifiedInstruction::JStrictNotEqual { .. }
-                            | UnifiedInstruction::JStrictNotEqualLong { .. }
+                                | UnifiedInstruction::JStrictEqualLong { .. }
+                                | UnifiedInstruction::JStrictNotEqual { .. }
+                                | UnifiedInstruction::JStrictNotEqualLong { .. }
                         ) {
-                            // Find the SSA value being compared
-                            let discriminator_reg = info.discriminator;
-                            if let Some(ssa_value) = self.find_ssa_value_for_register(
-                                discriminator_reg,
-                                case.comparison_block,
-                            ) {
-                                // Create the use site for this comparison
-                                let use_site = RegisterUse {
-                                    register: discriminator_reg,
-                                    block_id: case.comparison_block,
-                                    instruction_idx: instr.instruction_index,
-                                };
-                                self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
+                            // Use the generated instruction analysis to get all register operands
+                            let usage =
+                                crate::generated::instruction_analysis::analyze_register_usage(
+                                    &instr.instruction,
+                                );
+
+                            // Mark all source registers as consumed (they're inlined in the comparison)
+                            for register in usage.sources {
+                                if let Some(ssa_value) = self
+                                    .find_ssa_value_for_register(register, case.comparison_block)
+                                {
+                                    let use_site = RegisterUse {
+                                        register,
+                                        block_id: case.comparison_block,
+                                        instruction_idx: instr.instruction_index,
+                                    };
+                                    // Mark in both the tracker and the plan
+                                    self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
+                                    let dup_value = DuplicatedSSAValue::original(ssa_value);
+                                    self.plan.mark_use_consumed(dup_value, use_site);
+                                }
                             }
                             break; // Found the comparison instruction
                         }
                     }
                 }
-                
+
                 // Recursively analyze case bodies
                 for group in case_groups {
                     self.mark_consumed_uses_in_structure(group.body);
                 }
-                
+
                 // Analyze default case
                 if let Some(default_id) = default_case {
                     self.mark_consumed_uses_in_structure(*default_id);
                 }
             }
-            
-            ControlFlowKind::Conditional { true_branch, false_branch, .. } => {
+
+            ControlFlowKind::Conditional {
+                true_branch,
+                false_branch,
+                ..
+            } => {
                 // Recursively analyze branches
                 self.mark_consumed_uses_in_structure(*true_branch);
                 if let Some(false_id) = false_branch {
                     self.mark_consumed_uses_in_structure(*false_id);
                 }
             }
-            
-            ControlFlowKind::Loop { body, update, break_target, continue_target, .. } => {
+
+            ControlFlowKind::Loop {
+                body,
+                update,
+                break_target,
+                continue_target,
+                ..
+            } => {
                 // Recursively analyze loop components
                 self.mark_consumed_uses_in_structure(*body);
                 if let Some(update_id) = update {
@@ -128,7 +179,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                     self.mark_consumed_uses_in_structure(*continue_id);
                 }
             }
-            
+
             ControlFlowKind::Sequential { elements } => {
                 // Analyze nested structures
                 for element in elements {
@@ -137,8 +188,12 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                     }
                 }
             }
-            
-            ControlFlowKind::TryCatch { try_body, catch_clause, finally_body } => {
+
+            ControlFlowKind::TryCatch {
+                try_body,
+                catch_clause,
+                finally_body,
+            } => {
                 self.mark_consumed_uses_in_structure(*try_body);
                 if let Some(catch) = catch_clause {
                     self.mark_consumed_uses_in_structure(catch.body);
@@ -147,11 +202,11 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                     self.mark_consumed_uses_in_structure(*finally_id);
                 }
             }
-            
+
             _ => {}
         }
     }
-    
+
     /// Find the SSA value for a register at a specific block
     fn find_ssa_value_for_register(
         &self,
@@ -161,9 +216,16 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         // Look up the SSA value that's live for this register at this block
         self.function_analysis.ssa.find_live_value(register, block)
     }
-    
+
     /// Collect all blocks that will be duplicated in the control flow plan
-    fn collect_duplicated_blocks(
+    fn collect_duplicated_blocks(&mut self, structure_id: StructureId) {
+        let mut temp_duplicated = HashMap::new();
+        self.collect_duplicated_blocks_helper(structure_id, &mut temp_duplicated);
+        self.duplicated_blocks = temp_duplicated;
+    }
+
+    /// Helper for collecting duplicated blocks
+    fn collect_duplicated_blocks_helper(
         &self,
         structure_id: StructureId,
         duplicated_blocks: &mut HashMap<NodeIndex, Vec<DuplicationContext>>,
@@ -172,9 +234,13 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             Some(s) => s.clone(),
             None => return,
         };
-        
+
         match &structure.kind {
-            ControlFlowKind::Switch { case_groups, default_case, .. } => {
+            ControlFlowKind::Switch {
+                case_groups,
+                default_case,
+                ..
+            } => {
                 // Check each case group for fallthrough duplications
                 for group in case_groups {
                     if let Some(ref fallthrough) = group.fallthrough {
@@ -186,76 +252,456 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                 .push(fallthrough.duplication_context.clone());
                         }
                     }
-                    
+
                     // Recursively check the case body
-                    self.collect_duplicated_blocks(group.body, duplicated_blocks);
+                    self.collect_duplicated_blocks_helper(group.body, duplicated_blocks);
                 }
-                
+
                 // Check default case
                 if let Some(default_id) = default_case {
-                    self.collect_duplicated_blocks(*default_id, duplicated_blocks);
+                    self.collect_duplicated_blocks_helper(*default_id, duplicated_blocks);
                 }
             }
-            
+
             ControlFlowKind::Sequential { elements } => {
                 for element in elements {
                     if let super::control_flow_plan::SequentialElement::Structure(id) = element {
-                        self.collect_duplicated_blocks(*id, duplicated_blocks);
+                        self.collect_duplicated_blocks_helper(*id, duplicated_blocks);
                     }
                 }
             }
-            
-            ControlFlowKind::Conditional { true_branch, false_branch, .. } => {
-                self.collect_duplicated_blocks(*true_branch, duplicated_blocks);
+
+            ControlFlowKind::Conditional {
+                true_branch,
+                false_branch,
+                ..
+            } => {
+                self.collect_duplicated_blocks_helper(*true_branch, duplicated_blocks);
                 if let Some(false_id) = false_branch {
-                    self.collect_duplicated_blocks(*false_id, duplicated_blocks);
+                    self.collect_duplicated_blocks_helper(*false_id, duplicated_blocks);
                 }
             }
-            
-            ControlFlowKind::Loop { body, update, break_target, continue_target, .. } => {
-                self.collect_duplicated_blocks(*body, duplicated_blocks);
+
+            ControlFlowKind::Loop {
+                body,
+                update,
+                break_target,
+                continue_target,
+                ..
+            } => {
+                self.collect_duplicated_blocks_helper(*body, duplicated_blocks);
                 if let Some(update_id) = update {
-                    self.collect_duplicated_blocks(*update_id, duplicated_blocks);
+                    self.collect_duplicated_blocks_helper(*update_id, duplicated_blocks);
                 }
                 if let Some(break_id) = break_target {
-                    self.collect_duplicated_blocks(*break_id, duplicated_blocks);
+                    self.collect_duplicated_blocks_helper(*break_id, duplicated_blocks);
                 }
                 if let Some(continue_id) = continue_target {
-                    self.collect_duplicated_blocks(*continue_id, duplicated_blocks);
+                    self.collect_duplicated_blocks_helper(*continue_id, duplicated_blocks);
                 }
             }
-            
-            ControlFlowKind::TryCatch { try_body, catch_clause, finally_body } => {
-                self.collect_duplicated_blocks(*try_body, duplicated_blocks);
+
+            ControlFlowKind::TryCatch {
+                try_body,
+                catch_clause,
+                finally_body,
+            } => {
+                self.collect_duplicated_blocks_helper(*try_body, duplicated_blocks);
                 if let Some(catch) = catch_clause {
-                    self.collect_duplicated_blocks(catch.body, duplicated_blocks);
+                    self.collect_duplicated_blocks_helper(catch.body, duplicated_blocks);
                 }
                 if let Some(finally_id) = finally_body {
-                    self.collect_duplicated_blocks(*finally_id, duplicated_blocks);
+                    self.collect_duplicated_blocks_helper(*finally_id, duplicated_blocks);
                 }
             }
-            
+
             _ => {}
         }
     }
-    
+
+    /// Analyze PHI deconstruction for all duplicated blocks
+    fn analyze_phi_deconstruction(&mut self) {
+        // Collect all blocks with PHI functions that need deconstruction
+        let phi_affected = self.collect_phi_affected_blocks();
+
+        // Process each affected block
+        for (block_id, info) in phi_affected {
+            // Process duplicated contexts
+            for context in &info.duplication_contexts {
+                let phi_info = self.compute_phi_replacements(block_id, context, &info.phis);
+                self.plan
+                    .set_phi_info(block_id, Some(context.clone()), phi_info);
+            }
+
+            // Update original block's PHIs if needed
+            if !info.duplication_contexts.is_empty() {
+                // Find which predecessors are being redirected to duplicated blocks
+                let removed_predecessors =
+                    self.find_removed_predecessors(block_id, &info.duplication_contexts);
+
+                if !removed_predecessors.is_empty() {
+                    let phi_info =
+                        self.update_original_phis(block_id, &info.phis, &removed_predecessors);
+                    self.plan.set_phi_info(block_id, None, phi_info);
+                }
+            }
+        }
+    }
+
+    /// Collect blocks with PHI functions that will be affected by duplication
+    fn collect_phi_affected_blocks(&self) -> HashMap<NodeIndex, PhiAffectedInfo> {
+        let mut affected = HashMap::new();
+
+        // For each block that will be duplicated
+        for (block_id, contexts) in &self.duplicated_blocks {
+            if let Some(phi_functions) = self.function_analysis.ssa.phi_functions.get(block_id) {
+                if !phi_functions.is_empty() {
+                    let info = PhiAffectedInfo {
+                        phis: phi_functions.clone(),
+                        duplication_contexts: contexts.clone(),
+                    };
+                    affected.insert(*block_id, info);
+                }
+            }
+        }
+
+        affected
+    }
+
+    /// Compute PHI replacements for a duplicated block
+    fn compute_phi_replacements(
+        &mut self,
+        block: NodeIndex,
+        context: &DuplicationContext,
+        phi_functions: &[PhiFunction],
+    ) -> PhiDeconstructionInfo {
+        let mut replacements = HashMap::new();
+
+        // Determine the predecessor for this duplication context
+        let predecessor = self.determine_predecessor_for_context(block, context);
+        // For each PHI in the block
+        for phi in phi_functions {
+            // Find the operand from this predecessor
+            if let Some(operand) = phi.operands.get(&predecessor) {
+                // Create replacement: phi_result → concrete_operand
+                replacements.insert(phi.result.clone(), operand.clone());
+
+                // The PHI result in the duplicated context is replaced by the concrete operand
+                // The declaration strategy for the PHI result remains as-is (it describes where
+                // the replacement value needs to be available)
+            }
+        }
+
+        PhiDeconstructionInfo {
+            replacements,
+            updated_phis: vec![], // No updated PHIs for duplicated blocks
+        }
+    }
+
+    /// Update PHI functions in original blocks (remove redirected predecessors)
+    fn update_original_phis(
+        &mut self,
+        _block: NodeIndex,
+        phi_functions: &[PhiFunction],
+        removed_predecessors: &[NodeIndex],
+    ) -> PhiDeconstructionInfo {
+        let mut updated_phis = Vec::new();
+
+        for phi in phi_functions {
+            // Filter out removed predecessors
+            let remaining_operands: Vec<(NodeIndex, SSAValue)> = phi
+                .operands
+                .iter()
+                .filter(|(pred, _)| !removed_predecessors.contains(pred))
+                .map(|(p, v)| (*p, v.clone()))
+                .collect();
+
+            if remaining_operands.len() > 1 {
+                // Still need a PHI
+                updated_phis.push(UpdatedPhiFunction {
+                    result: phi.result.clone(),
+                    operands: remaining_operands,
+                });
+            } else if remaining_operands.len() == 1 {
+                // PHI degenerates to simple assignment
+                // Mark the PHI result to use AssignOnly strategy
+                let dup_result = DuplicatedSSAValue::original(phi.result.clone());
+                self.plan
+                    .set_declaration_strategy(dup_result, DeclarationStrategy::AssignOnly);
+            }
+            // If no operands remain, this is an error condition
+        }
+
+        PhiDeconstructionInfo {
+            replacements: HashMap::new(), // No replacements for original blocks
+            updated_phis,
+        }
+    }
+
+    /// Determine the predecessor block for a given duplication context
+    fn determine_predecessor_for_context(
+        &self,
+        duplicated_block: NodeIndex,
+        context: &DuplicationContext,
+    ) -> NodeIndex {
+        match context {
+            DuplicationContext::SwitchFallthrough {
+                from_case_index, ..
+            } => {
+                // Find the block that implements the "from" case group
+                // We need to look at the switch structure to find which block corresponds to case group from_case_index
+                let predecessor = self.find_case_group_block(*from_case_index, duplicated_block);
+
+                // If we can't find it systematically, fall back to checking predecessors
+                if let Some(block) = predecessor {
+                    return block;
+                }
+
+                // Fallback: get all predecessors and return the first one
+                // This is imperfect but better than hardcoding
+                self.function_analysis
+                    .cfg
+                    .graph()
+                    .neighbors_directed(duplicated_block, petgraph::Direction::Incoming)
+                    .next()
+                    .unwrap_or(NodeIndex::new(0))
+            }
+            DuplicationContext::SwitchBlockDuplication { case_group_keys: _ } => {
+                // Find which block leads to this duplication
+                // This would need to look at which case groups are being duplicated
+                self.function_analysis
+                    .cfg
+                    .graph()
+                    .neighbors_directed(duplicated_block, petgraph::Direction::Incoming)
+                    .next()
+                    .unwrap_or(NodeIndex::new(0))
+            }
+        }
+    }
+
+    /// Find the block that implements a specific case group
+    fn find_case_group_block(
+        &self,
+        case_index: usize,
+        target_block: NodeIndex,
+    ) -> Option<NodeIndex> {
+        // Find the switch structure that contains the target block
+        let switch_structure = self.find_switch_containing_block(target_block)?;
+
+        if let ControlFlowKind::Switch { case_groups, .. } = &switch_structure.kind {
+            // Get the case group at the specified index
+            let case_group = case_groups.get(case_index)?;
+
+            // Find the final block in this case group's body
+            self.find_final_block_in_structure(case_group.body)
+        } else {
+            None
+        }
+    }
+
+    /// Find the switch structure that contains a specific block
+    fn find_switch_containing_block(
+        &self,
+        target_block: NodeIndex,
+    ) -> Option<&ControlFlowStructure> {
+        // Search through all structures to find a switch that has target_block
+        // in one of its case groups (either as the target of duplication or as a case body)
+        for structure in self.plan.structures.values() {
+            if let ControlFlowKind::Switch { case_groups, .. } = &structure.kind {
+                for group in case_groups {
+                    // Check if this case group has fallthrough that duplicates target_block
+                    if let Some(ref fallthrough) = group.fallthrough {
+                        if fallthrough.blocks_to_duplicate.contains(&target_block) {
+                            return Some(structure);
+                        }
+                    }
+
+                    // Check if target_block is part of this case group's body
+                    if self.structure_contains_block(group.body, target_block) {
+                        return Some(structure);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Find the final block in a structure (the block that would be the predecessor for fallthrough)
+    fn find_final_block_in_structure(&self, structure_id: StructureId) -> Option<NodeIndex> {
+        let structure = self.plan.get_structure(structure_id)?;
+
+        match &structure.kind {
+            ControlFlowKind::BasicBlock { block, .. } => {
+                // A basic block is its own final block
+                Some(*block)
+            }
+            ControlFlowKind::Sequential { elements } => {
+                // The final block is the last element's final block
+                for element in elements.iter().rev() {
+                    if let super::control_flow_plan::SequentialElement::Structure(id) = element {
+                        if let Some(final_block) = self.find_final_block_in_structure(*id) {
+                            return Some(final_block);
+                        }
+                    } else if let super::control_flow_plan::SequentialElement::Block(block) =
+                        element
+                    {
+                        return Some(*block);
+                    }
+                }
+                None
+            }
+            ControlFlowKind::Conditional {
+                true_branch,
+                false_branch,
+                ..
+            } => {
+                // For conditionals, we'd need to determine which branch leads to the target
+                // This is complex - for now, try the true branch first
+                self.find_final_block_in_structure(*true_branch)
+                    .or_else(|| false_branch.and_then(|fb| self.find_final_block_in_structure(fb)))
+            }
+            _ => {
+                // For other control flow kinds, we'd need specific logic
+                None
+            }
+        }
+    }
+
+    /// Check if a structure contains a specific block
+    fn structure_contains_block(&self, structure_id: StructureId, target_block: NodeIndex) -> bool {
+        let Some(structure) = self.plan.get_structure(structure_id) else {
+            return false;
+        };
+
+        match &structure.kind {
+            ControlFlowKind::BasicBlock { block, .. } => *block == target_block,
+            ControlFlowKind::Sequential { elements } => {
+                for element in elements {
+                    match element {
+                        super::control_flow_plan::SequentialElement::Structure(id) => {
+                            if self.structure_contains_block(*id, target_block) {
+                                return true;
+                            }
+                        }
+                        super::control_flow_plan::SequentialElement::Block(block) => {
+                            if *block == target_block {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            ControlFlowKind::Conditional {
+                true_branch,
+                false_branch,
+                ..
+            } => {
+                self.structure_contains_block(*true_branch, target_block)
+                    || false_branch
+                        .map_or(false, |fb| self.structure_contains_block(fb, target_block))
+            }
+            _ => {
+                // For other kinds, we'd need specific logic
+                false
+            }
+        }
+    }
+
+    /// Find which predecessors are being redirected to duplicated blocks
+    fn find_removed_predecessors(
+        &self,
+        block: NodeIndex,
+        duplication_contexts: &[DuplicationContext],
+    ) -> Vec<NodeIndex> {
+        // For each duplication context, find which predecessor is being redirected
+        let mut removed = Vec::new();
+
+        for context in duplication_contexts {
+            match context {
+                DuplicationContext::SwitchFallthrough { .. } => {
+                    // The fallthrough predecessor is the block that was redirected to the duplicate
+                    // This is the same logic we use in determine_predecessor_for_context
+                    let predecessor = self.determine_predecessor_for_context(block, context);
+                    removed.push(predecessor);
+                }
+                DuplicationContext::SwitchBlockDuplication { case_group_keys: _ } => {
+                    // For block duplication, we need to determine which predecessors
+                    // are associated with the duplicated case groups
+                    // This needs more sophisticated analysis based on the control flow plan
+                }
+            }
+        }
+
+        removed
+    }
+
+    /// Update declaration strategies based on PHI deconstruction information
+    fn update_strategies_for_phi_deconstruction(&mut self) {
+        // Get a copy of PHI deconstructions to avoid borrow checker issues
+        let phi_deconstructions = self.plan.phi_deconstructions.clone();
+
+        for ((_block_id, context), phi_info) in &phi_deconstructions {
+            // Update strategies for PHI results that are replaced
+            for (phi_result, replacement_value) in &phi_info.replacements {
+                if let Some(context) = context {
+                    // Mark the PHI result as Skip in the duplicated context
+                    let dup_phi_result = DuplicatedSSAValue {
+                        original: phi_result.clone(),
+                        duplication_context: Some(context.clone()),
+                    };
+                    self.plan
+                        .set_declaration_strategy(dup_phi_result, DeclarationStrategy::Skip);
+
+                    // Ensure the replacement value has a declaration strategy in this context
+                    let dup_replacement = DuplicatedSSAValue {
+                        original: replacement_value.clone(),
+                        duplication_context: Some(context.clone()),
+                    };
+
+                    if self
+                        .plan
+                        .get_declaration_strategy(&dup_replacement)
+                        .is_none()
+                    {
+                        let replacement_strategy = self
+                            .usage_tracker
+                            .get_declaration_strategy(&dup_replacement);
+                        self.plan
+                            .set_declaration_strategy(dup_replacement, replacement_strategy);
+                    }
+                }
+            }
+        }
+    }
+
     /// Compute declaration strategies for all SSA values
     fn compute_declaration_strategies(&mut self) {
+        eprintln!(
+            "DEBUG: usage_tracker has {} consumed uses",
+            self.usage_tracker
+                .get_consumed_uses()
+                .values()
+                .map(|s| s.len())
+                .sum::<usize>()
+        );
+
         // Track which SSA values need declarations and where
         let mut declaration_points: HashMap<NodeIndex, Vec<DuplicatedSSAValue>> = HashMap::new();
-        
-        // First, collect all blocks that will be duplicated
-        let mut duplicated_blocks: HashMap<NodeIndex, Vec<DuplicationContext>> = HashMap::new();
-        self.collect_duplicated_blocks(self.plan.root, &mut duplicated_blocks);
-        
+
+        // Use the already collected duplicated blocks from analyze()
+        let duplicated_blocks = self.duplicated_blocks.clone();
+
         // Analyze each SSA value
         for ssa_value in self.function_analysis.ssa.all_values() {
             // Always analyze the original version
             let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
             let strategy = self.usage_tracker.get_declaration_strategy(&dup_value);
-            
+
             match &strategy {
-                DeclarationStrategy::DeclareAtDominator { dominator_block, .. } => {
+                DeclarationStrategy::DeclareAtDominator {
+                    dominator_block, ..
+                } => {
                     // Only DeclareAtDominator needs a separate declaration point
                     declaration_points
                         .entry(*dominator_block)
@@ -268,10 +714,10 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 }
                 _ => {}
             }
-            
+
             // Store the strategy in the plan
             self.plan.set_declaration_strategy(dup_value, strategy);
-            
+
             // If this SSA value is defined in a block that will be duplicated,
             // also analyze the duplicated versions
             if let Some(contexts) = duplicated_blocks.get(&ssa_value.def_site.block_id) {
@@ -280,15 +726,14 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                         original: ssa_value.clone(),
                         duplication_context: Some(context.clone()),
                     };
-                    
+
+                    // Normal duplicated value
                     let dup_strategy = self.usage_tracker.get_declaration_strategy(&dup_value);
-                    
-                    // Store the strategy for the duplicated value
                     self.plan.set_declaration_strategy(dup_value, dup_strategy);
                 }
             }
         }
-        
+
         // Store declaration points in the plan
         for (block, values) in declaration_points {
             for value in values {
@@ -296,20 +741,21 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             }
         }
     }
-    
+
     /// Compute use strategies for all use sites
     fn compute_use_strategies(&mut self) {
         // For each SSA value, determine strategy at each use site
         for ssa_value in self.function_analysis.ssa.all_values() {
             let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
-            
+
             for use_site in self.function_analysis.ssa.get_ssa_value_uses(&ssa_value) {
                 let strategy = self.usage_tracker.get_use_strategy(&dup_value, use_site);
-                self.plan.set_use_strategy(dup_value.clone(), use_site.clone(), strategy);
+                self.plan
+                    .set_use_strategy(dup_value.clone(), use_site.clone(), strategy);
             }
         }
     }
-    
+
     /// Store the computed strategies in the plan
     fn store_strategies(&mut self) {
         // The strategies have already been stored during computation
@@ -323,7 +769,7 @@ impl crate::cfg::ssa::SSAAnalysis {
     pub fn all_values(&self) -> Vec<crate::cfg::ssa::SSAValue> {
         self.ssa_values.values().cloned().collect()
     }
-    
+
     /// Find the SSA value that's live for a register at a block
     pub fn find_live_value(
         &self,

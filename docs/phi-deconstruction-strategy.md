@@ -67,32 +67,113 @@ pub struct ControlFlowPlan {
 #### Step 1: Identify Blocks with PHIs to Deconstruct
 ```rust
 fn collect_phi_affected_blocks(&self) -> HashMap<NodeIndex, PhiAffectedInfo> {
+    let mut affected = HashMap::new();
+    
     // For each block that will be duplicated:
-    // 1. Check if it contains PHI functions
-    // 2. Identify which predecessors lead to duplication
-    // 3. Determine concrete values for each duplication context
+    for (block_id, contexts) in &self.duplicated_blocks {
+        if let Some(phi_functions) = self.ssa.phi_functions.get(&block_id) {
+            let info = PhiAffectedInfo {
+                phis: phi_functions.clone(),
+                duplication_contexts: contexts.clone(),
+                predecessors: self.cfg.predecessors(block_id).collect(),
+            };
+            affected.insert(block_id, info);
+        }
+    }
+    
+    affected
 }
 ```
 
 #### Step 2: Compute PHI Replacements for Duplicated Blocks
 ```rust
-fn compute_phi_replacements(&mut self, block: NodeIndex, context: &DuplicationContext) {
+fn compute_phi_replacements(&mut self, 
+    block: NodeIndex, 
+    context: &DuplicationContext,
+    phi_functions: &[PhiFunction]
+) -> PhiDeconstructionInfo {
+    let mut replacements = HashMap::new();
+    
+    // Determine the predecessor for this duplication context
+    let predecessor = match context {
+        DuplicationContext::SwitchFallthrough { from_case_index, .. } => {
+            // Find the block that implements from_case_index
+            self.find_case_block(*from_case_index)
+        }
+        DuplicationContext::SwitchBlockDuplication { case_group_keys } => {
+            // Find the common predecessor for these cases
+            self.find_common_predecessor(case_group_keys)
+        }
+    };
+    
     // For each PHI in the block:
-    // 1. Identify the single predecessor for this duplication context
-    // 2. Find the PHI operand from that predecessor
-    // 3. Create replacement: phi_result → concrete_operand
-    // 4. Mark PHI result as Skip in duplicated context
-    // 5. Update strategy for concrete operand in duplicated context
+    for phi in phi_functions {
+        // Find the operand from this predecessor
+        if let Some(operand) = phi.operands.get(&predecessor) {
+            // Create replacement: phi_result → concrete_operand
+            replacements.insert(phi.result.clone(), operand.clone());
+            
+            // Mark PHI result as Skip in duplicated context
+            let dup_phi_result = DuplicatedSSAValue {
+                original: phi.result.clone(),
+                duplication_context: Some(context.clone()),
+            };
+            self.plan.set_declaration_strategy(dup_phi_result, DeclarationStrategy::Skip);
+            
+            // Ensure concrete operand has appropriate strategy
+            let dup_operand = DuplicatedSSAValue {
+                original: operand.clone(),
+                duplication_context: Some(context.clone()),
+            };
+            // The operand keeps its original strategy (likely AssignOnly if it's a PHI operand)
+            let operand_strategy = self.usage_tracker.get_declaration_strategy(&dup_operand);
+            self.plan.set_declaration_strategy(dup_operand, operand_strategy);
+        }
+    }
+    
+    PhiDeconstructionInfo {
+        replacements,
+        updated_phis: vec![], // No updated PHIs for duplicated blocks
+    }
 }
 ```
 
 #### Step 3: Update PHIs in Original Blocks
 ```rust
-fn update_original_phis(&mut self, block: NodeIndex) {
-    // For each PHI in the original block:
-    // 1. Remove operands from predecessors that now go to duplicated blocks
-    // 2. Create UpdatedPhiFunction with remaining operands
-    // 3. If only one operand remains, mark for complete elimination
+fn update_original_phis(&mut self, 
+    block: NodeIndex,
+    phi_functions: &[PhiFunction],
+    removed_predecessors: &[NodeIndex]
+) -> PhiDeconstructionInfo {
+    let mut updated_phis = Vec::new();
+    
+    for phi in phi_functions {
+        // Filter out removed predecessors
+        let remaining_operands: Vec<(NodeIndex, SSAValue)> = phi.operands
+            .iter()
+            .filter(|(pred, _)| !removed_predecessors.contains(pred))
+            .map(|(p, v)| (*p, v.clone()))
+            .collect();
+        
+        if remaining_operands.len() > 1 {
+            // Still need a PHI
+            updated_phis.push(UpdatedPhiFunction {
+                result: phi.result.clone(),
+                operands: remaining_operands,
+            });
+        } else if remaining_operands.len() == 1 {
+            // PHI degenerates to simple assignment
+            // Mark the PHI result to use AssignOnly strategy
+            let dup_result = DuplicatedSSAValue::original(phi.result.clone());
+            self.plan.set_declaration_strategy(dup_result, DeclarationStrategy::AssignOnly);
+        }
+        // If no operands remain, this is an error condition
+    }
+    
+    PhiDeconstructionInfo {
+        replacements: HashMap::new(), // No replacements for original blocks
+        updated_phis,
+    }
 }
 ```
 
@@ -231,37 +312,105 @@ case 4:
   break;
 ```
 
+## Critical Implementation Notes
+
+### Predecessor Mapping
+The key challenge is correctly mapping duplication contexts to their predecessors:
+
+1. **SwitchFallthrough**: 
+   - The predecessor is the last block of the "from" case group
+   - For `SwitchFallthrough { from_case_index: 0, to_case_index: 1 }`
+   - Find the case group at index 0, get its body blocks
+   - The predecessor is the last block that would execute before fallthrough
+
+2. **SwitchBlockDuplication**:
+   - Used when multiple cases share a body
+   - For `SwitchBlockDuplication { case_group_keys: [0, 1, 2] }`
+   - The predecessor is the dispatch block or comparison chain
+   - Need to trace control flow from dispatch to the duplicated block
+
+### Determining the Concrete Predecessor
+```rust
+fn determine_predecessor_for_context(
+    &self,
+    duplicated_block: NodeIndex,
+    context: &DuplicationContext,
+) -> NodeIndex {
+    match context {
+        DuplicationContext::SwitchFallthrough { from_case_index, .. } => {
+            // Get the case group that's falling through
+            let from_group = &self.plan.get_case_group(from_case_index);
+            // Find the last block in that group's body
+            self.find_last_block_in_structure(from_group.body)
+        }
+        DuplicationContext::SwitchBlockDuplication { case_group_keys } => {
+            // Find which block leads to this duplication
+            // This is typically the block just before the duplicated block
+            // in the original control flow
+            self.cfg.predecessors(duplicated_block)
+                .find(|pred| self.is_predecessor_for_cases(pred, case_group_keys))
+                .unwrap_or_else(|| panic!("No predecessor found for duplication"))
+        }
+    }
+}
+```
+
+### SSA Value References
+When replacing PHI results with concrete values, we must update ALL references:
+- Direct uses in instructions
+- Uses as operands to other PHIs
+- Uses in condition expressions
+
+### Declaration Strategy Coordination
+The strategy for replaced values must be coordinated:
+- PHI result in duplicated context: Always Skip
+- Concrete replacement value: Depends on its original context
+- May need to create new variable if used across scopes
+
 ## Implementation Checklist
 
 ### Phase 1: Data Structure Setup
-- [ ] Add `PhiDeconstructionInfo` struct
-- [ ] Add `UpdatedPhiFunction` struct  
-- [ ] Extend `ControlFlowPlan` with `phi_deconstructions` map
-- [ ] Add methods to query/store PHI info
+- [ ] Add `PhiDeconstructionInfo` struct to control_flow_plan.rs
+- [ ] Add `UpdatedPhiFunction` struct to control_flow_plan.rs
+- [ ] Extend `ControlFlowPlan` with `phi_deconstructions` field
+- [ ] Add `get_phi_info()` method to ControlFlowPlan
+- [ ] Add `set_phi_info()` method to ControlFlowPlan
 
 ### Phase 2: Analysis Implementation
+- [ ] Add `PhiAffectedInfo` helper struct
 - [ ] Implement `collect_phi_affected_blocks()`
+- [ ] Implement `find_case_block()` helper
+- [ ] Implement `find_common_predecessor()` helper
 - [ ] Implement `compute_phi_replacements()`
 - [ ] Implement `update_original_phis()`
-- [ ] Integrate into `ControlFlowPlanAnalyzer::analyze()`
+- [ ] Add `analyze_phi_deconstruction()` main method
+- [ ] Call from `ControlFlowPlanAnalyzer::analyze()`
 
 ### Phase 3: SSA Tracker Integration
-- [ ] Add `get_phi_replacement()` helper
-- [ ] Update `get_declaration_strategy()` to handle PHI replacements
-- [ ] Update `get_use_strategy()` to handle PHI replacements
-- [ ] Add `resolve_phi_replacement()` for value resolution
+- [ ] Add `phi_replacements` cache to SSAUsageTracker
+- [ ] Add `get_phi_replacement()` method
+- [ ] Update `get_declaration_strategy()` to check PHI replacements
+- [ ] Update `get_use_strategy()` to resolve replacements
+- [ ] Add `is_phi_replacement()` helper
+- [ ] Update `is_duplicated_fully_eliminated()` for replaced values
 
 ### Phase 4: Code Generation Updates
-- [ ] Update block generator to check for PHI info
-- [ ] Implement PHI skipping for duplicated blocks
-- [ ] Implement PHI updating for original blocks
-- [ ] Add value mapping for replacements
+- [ ] Create `PhiDeconstructionContext` for code gen
+- [ ] Update instruction visitor to use replacement mappings
+- [ ] Skip PHI generation for duplicated blocks
+- [ ] Generate updated PHIs for original blocks
+- [ ] Handle degenerate PHIs (single operand)
+- [ ] Add value resolution through replacement chain
 
 ### Phase 5: Testing and Validation
-- [ ] Test simple fallthrough with PHI
-- [ ] Test multiple fallthroughs
-- [ ] Test nested switches with PHI
-- [ ] Verify generated JavaScript correctness
+- [ ] Create test case: simple fallthrough with PHI
+- [ ] Create test case: multiple fallthroughs to same block
+- [ ] Create test case: nested switches with PHI
+- [ ] Create test case: PHI with all constant operands
+- [ ] Create test case: PHI with mixed constant/variable operands
+- [ ] Verify no undefined variables in output
+- [ ] Verify correct value propagation
+- [ ] Verify optimal variable allocation
 
 ## Success Criteria
 

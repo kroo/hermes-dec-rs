@@ -3,8 +3,8 @@
 //! This module analyzes which case groups fall through to other case groups,
 //! helping determine where code duplication is needed during AST generation.
 
-use crate::cfg::Cfg;
 use super::{CaseGroup, SwitchInfo};
+use crate::cfg::Cfg;
 
 /// Information about fallthrough between case groups
 #[derive(Debug, Clone)]
@@ -15,13 +15,9 @@ pub struct FallthroughAnalysis {
 
 impl FallthroughAnalysis {
     /// Analyze fallthrough patterns in a switch
-    pub fn analyze(
-        case_groups: &[CaseGroup],
-        switch_info: &SwitchInfo,
-        cfg: &Cfg,
-    ) -> Self {
+    pub fn analyze(case_groups: &[CaseGroup], switch_info: &SwitchInfo, cfg: &Cfg) -> Self {
         let mut fallthrough_targets = Vec::new();
-        
+
         for (group_index, group) in case_groups.iter().enumerate() {
             fallthrough_targets.push(Self::needs_fallthrough_duplication(
                 group,
@@ -31,13 +27,15 @@ impl FallthroughAnalysis {
                 switch_info,
             ));
         }
-        
-        Self { fallthrough_targets }
+
+        Self {
+            fallthrough_targets,
+        }
     }
-    
+
     /// Check if a case group needs fallthrough duplication
     /// Returns the index of the group it falls through to, if any
-    /// 
+    ///
     /// This is extracted from switch_converter::needs_fallthrough_duplication
     fn needs_fallthrough_duplication(
         group: &CaseGroup,

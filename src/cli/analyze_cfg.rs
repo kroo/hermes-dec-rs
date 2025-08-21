@@ -3,10 +3,8 @@
 //! This module provides debugging and analysis tools for CFG structures,
 //! including conditional chains, loops, and other control flow patterns.
 
+use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker, UseStrategy};
 use crate::analysis::{FunctionAnalysis, GlobalSSAAnalyzer};
-use crate::analysis::ssa_usage_tracker::{
-    DeclarationStrategy, SSAUsageTracker, UseStrategy,
-};
 use crate::ast::variables::VariableMapper;
 use crate::cfg::ssa::DuplicatedSSAValue;
 use crate::cfg::Cfg;
@@ -82,7 +80,8 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
 
     // Build ControlFlowPlan if we have FunctionAnalysis
     let control_flow_plan = func_analysis.as_ref().map(|fa| {
-        let builder = crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(&cfg, fa);
+        let builder =
+            crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(&cfg, fa);
         builder.build()
     });
 

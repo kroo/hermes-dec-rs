@@ -16,30 +16,58 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StructureId(pub usize);
 
+/// PHI deconstruction information for a block
+#[derive(Debug, Clone)]
+pub struct PhiDeconstructionInfo {
+    /// PHI replacements for duplicated blocks
+    /// Maps: PHI result → concrete predecessor value
+    pub replacements: HashMap<SSAValue, SSAValue>,
+
+    /// Updated PHI functions for original blocks
+    /// (with removed predecessors)
+    pub updated_phis: Vec<UpdatedPhiFunction>,
+}
+
+/// An updated PHI function with removed predecessors
+#[derive(Debug, Clone)]
+pub struct UpdatedPhiFunction {
+    /// The PHI result value
+    pub result: SSAValue,
+    /// Remaining predecessors and their values
+    pub operands: Vec<(NodeIndex, SSAValue)>,
+}
+
 /// The complete plan for converting a function from CFG to AST
 #[derive(Debug, Clone)]
 pub struct ControlFlowPlan {
     /// The root control flow structure ID
     pub root: StructureId,
-    
+
     /// Registry of all control flow structures
     pub structures: HashMap<StructureId, ControlFlowStructure>,
-    
+
     /// Variables that need declaration at specific block entry points
     pub block_declarations: HashMap<NodeIndex, Vec<DuplicatedSSAValue>>,
-    
+
     /// Declaration strategy for each (potentially duplicated) SSA value at its definition site
     pub declaration_strategies: HashMap<DuplicatedSSAValue, DeclarationStrategy>,
-    
+
     /// Use strategy for each (potentially duplicated) SSA value at each use site
     pub use_strategies: HashMap<(DuplicatedSSAValue, RegisterUse), UseStrategy>,
-    
+
     /// Which uses have been consumed (will be inlined)
     pub consumed_uses: HashMap<DuplicatedSSAValue, HashSet<RegisterUse>>,
-    
+
     /// Variable scope boundaries
     pub scope_boundaries: HashMap<StructureId, ScopeInfo>,
-    
+
+    /// PHI deconstruction info per block and duplication context
+    /// Key: (block_id, Option<DuplicationContext>)
+    /// - None = original block (may have updated PHIs)
+    /// - Some(ctx) = duplicated block (has PHI replacements)
+    pub phi_deconstructions:
+        HashMap<(NodeIndex, Option<DuplicationContext>), PhiDeconstructionInfo>,
+
     /// Next available structure ID
     next_structure_id: usize,
 }
@@ -49,19 +77,19 @@ pub struct ControlFlowPlan {
 pub struct ControlFlowStructure {
     /// Unique identifier for this structure
     pub id: StructureId,
-    
+
     /// If this is a duplicate of another structure
     pub duplication_info: Option<DuplicationInfo>,
-    
+
     /// Variables that should be scoped to this structure
     pub scoped_variables: Vec<DuplicatedSSAValue>,
-    
+
     /// Entry blocks for this structure (blocks that can enter this structure)
     pub entry_blocks: Vec<NodeIndex>,
-    
+
     /// Exit blocks for this structure (blocks that can exit this structure)
     pub exit_blocks: Vec<NodeIndex>,
-    
+
     /// The actual control flow pattern
     pub kind: ControlFlowKind,
 }
@@ -79,10 +107,8 @@ pub struct DuplicationInfo {
 #[derive(Debug, Clone)]
 pub enum ControlFlowKind {
     /// Sequential execution of blocks and nested structures
-    Sequential {
-        elements: Vec<SequentialElement>,
-    },
-    
+    Sequential { elements: Vec<SequentialElement> },
+
     /// Switch statement structure
     Switch {
         dispatch_block: NodeIndex,
@@ -90,7 +116,7 @@ pub enum ControlFlowKind {
         case_groups: Vec<CaseGroupStructure>,
         default_case: Option<StructureId>,
     },
-    
+
     /// Conditional (if-else) structure
     Conditional {
         condition_block: NodeIndex,
@@ -98,7 +124,7 @@ pub enum ControlFlowKind {
         true_branch: StructureId,
         false_branch: Option<StructureId>,
     },
-    
+
     /// Loop structure
     Loop {
         loop_type: LoopType,
@@ -109,21 +135,21 @@ pub enum ControlFlowKind {
         break_target: Option<StructureId>,
         continue_target: Option<StructureId>,
     },
-    
+
     /// Try-catch-finally structure
     TryCatch {
         try_body: StructureId,
         catch_clause: Option<CatchClause>,
         finally_body: Option<StructureId>,
     },
-    
+
     /// A single basic block
     BasicBlock {
         block: NodeIndex,
         instruction_count: usize,
         is_synthetic: bool, // Created by analysis vs original CFG block
     },
-    
+
     /// Empty structure (for missing else branches, etc.)
     Empty,
 }
@@ -203,16 +229,16 @@ pub struct ScopeInfo {
 pub struct SwitchConversionPlan {
     /// Fallthrough duplications needed
     pub fallthrough_duplications: Vec<FallthroughDuplication>,
-    
+
     /// Blocks shared between multiple case groups
     pub shared_blocks: HashSet<NodeIndex>,
-    
+
     /// Nested switches within case bodies
     pub nested_switches: Vec<NestedSwitchInfo>,
-    
+
     /// PHI contributions from each case
     pub phi_contributions: HashMap<CaseGroup, HashMap<u8, SSAValue>>,
-    
+
     /// Which setup instruction uses will be inlined
     pub inlined_setup_uses: Vec<(SSAValue, RegisterUse)>,
 }
@@ -247,10 +273,10 @@ impl ControlFlowPlan {
             exit_blocks: Vec::new(),
             kind: ControlFlowKind::Empty,
         };
-        
+
         let mut structures = HashMap::new();
         structures.insert(root_id, root);
-        
+
         Self {
             root: root_id,
             structures,
@@ -259,24 +285,25 @@ impl ControlFlowPlan {
             use_strategies: HashMap::new(),
             consumed_uses: HashMap::new(),
             scope_boundaries: HashMap::new(),
+            phi_deconstructions: HashMap::new(),
             next_structure_id: 1,
         }
     }
-    
+
     /// Create a new structure ID
     pub fn new_structure_id(&mut self) -> StructureId {
         let id = StructureId(self.next_structure_id);
         self.next_structure_id += 1;
         id
     }
-    
+
     /// Add a control flow structure to the plan
     pub fn add_structure(&mut self, structure: ControlFlowStructure) -> StructureId {
         let id = structure.id;
         self.structures.insert(id, structure);
         id
     }
-    
+
     /// Create and add a new control flow structure
     pub fn create_structure(&mut self, kind: ControlFlowKind) -> StructureId {
         let id = self.new_structure_id();
@@ -290,22 +317,22 @@ impl ControlFlowPlan {
         };
         self.add_structure(structure)
     }
-    
+
     /// Get a structure by ID
     pub fn get_structure(&self, id: StructureId) -> Option<&ControlFlowStructure> {
         self.structures.get(&id)
     }
-    
+
     /// Get a mutable structure by ID
     pub fn get_structure_mut(&mut self, id: StructureId) -> Option<&mut ControlFlowStructure> {
         self.structures.get_mut(&id)
     }
-    
+
     /// Set the root structure
     pub fn set_root(&mut self, id: StructureId) {
         self.root = id;
     }
-    
+
     /// Add a declaration point for a variable
     pub fn add_block_declaration(&mut self, block: NodeIndex, ssa_value: DuplicatedSSAValue) {
         self.block_declarations
@@ -313,17 +340,46 @@ impl ControlFlowPlan {
             .or_default()
             .push(ssa_value);
     }
-    
+
     /// Set the declaration strategy for an SSA value
-    pub fn set_declaration_strategy(&mut self, ssa_value: DuplicatedSSAValue, strategy: DeclarationStrategy) {
+    pub fn set_declaration_strategy(
+        &mut self,
+        ssa_value: DuplicatedSSAValue,
+        strategy: DeclarationStrategy,
+    ) {
         self.declaration_strategies.insert(ssa_value, strategy);
     }
-    
+
+    /// Get PHI deconstruction info for a block in a specific duplication context
+    pub fn get_phi_info(
+        &self,
+        block_id: NodeIndex,
+        context: Option<&DuplicationContext>,
+    ) -> Option<&PhiDeconstructionInfo> {
+        let key = (block_id, context.cloned());
+        self.phi_deconstructions.get(&key)
+    }
+
+    /// Set PHI deconstruction info for a block in a specific duplication context
+    pub fn set_phi_info(
+        &mut self,
+        block_id: NodeIndex,
+        context: Option<DuplicationContext>,
+        info: PhiDeconstructionInfo,
+    ) {
+        self.phi_deconstructions.insert((block_id, context), info);
+    }
+
     /// Set the use strategy for an SSA value at a specific use site
-    pub fn set_use_strategy(&mut self, ssa_value: DuplicatedSSAValue, use_site: RegisterUse, strategy: UseStrategy) {
+    pub fn set_use_strategy(
+        &mut self,
+        ssa_value: DuplicatedSSAValue,
+        use_site: RegisterUse,
+        strategy: UseStrategy,
+    ) {
         self.use_strategies.insert((ssa_value, use_site), strategy);
     }
-    
+
     /// Mark a use as consumed (will be inlined)
     pub fn mark_use_consumed(&mut self, ssa_value: DuplicatedSSAValue, use_site: RegisterUse) {
         self.consumed_uses
@@ -331,28 +387,67 @@ impl ControlFlowPlan {
             .or_default()
             .insert(use_site);
     }
-    
+
     /// Add scope information for a structure
     pub fn add_scope_info(&mut self, structure_id: StructureId, scope_info: ScopeInfo) {
         self.scope_boundaries.insert(structure_id, scope_info);
     }
-    
+
     /// Get the declaration strategy for an SSA value
-    pub fn get_declaration_strategy(&self, ssa_value: &DuplicatedSSAValue) -> Option<&DeclarationStrategy> {
+    pub fn get_declaration_strategy(
+        &self,
+        ssa_value: &DuplicatedSSAValue,
+    ) -> Option<&DeclarationStrategy> {
         self.declaration_strategies.get(ssa_value)
     }
-    
+
     /// Get the use strategy for an SSA value at a use site
-    pub fn get_use_strategy(&self, ssa_value: &DuplicatedSSAValue, use_site: &RegisterUse) -> Option<&UseStrategy> {
-        self.use_strategies.get(&(ssa_value.clone(), use_site.clone()))
+    pub fn get_use_strategy(
+        &self,
+        ssa_value: &DuplicatedSSAValue,
+        use_site: &RegisterUse,
+    ) -> Option<&UseStrategy> {
+        self.use_strategies
+            .get(&(ssa_value.clone(), use_site.clone()))
     }
-    
+
     /// Check if a use has been marked as consumed
     pub fn is_use_consumed(&self, ssa_value: &DuplicatedSSAValue, use_site: &RegisterUse) -> bool {
         self.consumed_uses
             .get(ssa_value)
             .map(|uses| uses.contains(use_site))
             .unwrap_or(false)
+    }
+
+    /// Resolve PHI replacements for a value in a specific context
+    /// Returns the replacement value if the original is a PHI result in a duplicated block
+    pub fn resolve_phi_replacement(
+        &self,
+        original_value: &SSAValue,
+        block_id: NodeIndex,
+        context: Option<&DuplicationContext>,
+    ) -> Option<SSAValue> {
+        // Check if this block has PHI deconstruction info for the given context
+        if let Some(phi_info) = self.get_phi_info(block_id, context) {
+            // Look for a replacement for the original value
+            phi_info.replacements.get(original_value).cloned()
+        } else {
+            None
+        }
+    }
+
+    /// Check if a PHI result should be excluded from block declarations in a duplicated context
+    pub fn is_phi_result_replaced(
+        &self,
+        ssa_value: &SSAValue,
+        block_id: NodeIndex,
+        context: Option<&DuplicationContext>,
+    ) -> bool {
+        if let Some(phi_info) = self.get_phi_info(block_id, context) {
+            phi_info.replacements.contains_key(ssa_value)
+        } else {
+            false
+        }
     }
 }
 
@@ -363,12 +458,12 @@ impl ControlFlowStructure {
         self.collect_blocks(&mut blocks);
         blocks
     }
-    
+
     fn collect_blocks(&self, blocks: &mut Vec<NodeIndex>) {
         // Add entry and exit blocks
         blocks.extend(&self.entry_blocks);
         blocks.extend(&self.exit_blocks);
-        
+
         // Collect blocks based on kind
         match &self.kind {
             ControlFlowKind::Sequential { elements } => {
@@ -382,7 +477,9 @@ impl ControlFlowStructure {
             ControlFlowKind::Switch { dispatch_block, .. } => {
                 blocks.push(*dispatch_block);
             }
-            ControlFlowKind::Conditional { condition_block, .. } => {
+            ControlFlowKind::Conditional {
+                condition_block, ..
+            } => {
                 blocks.push(*condition_block);
             }
             ControlFlowKind::Loop { header_block, .. } => {
@@ -397,12 +494,12 @@ impl ControlFlowStructure {
             ControlFlowKind::Empty => {}
         }
     }
-    
+
     /// Check if this structure is a duplicate
     pub fn is_duplicate(&self) -> bool {
         self.duplication_info.is_some()
     }
-    
+
     /// Get the original structure if this is a duplicate
     pub fn original_structure(&self) -> Option<StructureId> {
         self.duplication_info.as_ref().map(|info| info.original)
@@ -423,13 +520,13 @@ impl fmt::Display for ControlFlowPlan {
         writeln!(f, "ControlFlowPlan {{")?;
         writeln!(f, "  Root: {:?}", self.root)?;
         writeln!(f, "  Structures: {} total", self.structures.len())?;
-        
+
         // Display the root structure tree
         if let Some(root_structure) = self.get_structure(self.root) {
             writeln!(f, "\n  Structure Tree:")?;
             self.fmt_structure(f, root_structure, 2)?;
         }
-        
+
         // Display declaration strategies
         if !self.declaration_strategies.is_empty() {
             writeln!(f, "\n  Declaration Strategies:")?;
@@ -437,31 +534,75 @@ impl fmt::Display for ControlFlowPlan {
                 writeln!(f, "    {} -> {:?}", ssa_value, strategy)?;
             }
         }
-        
+
         // Display block declarations
         if !self.block_declarations.is_empty() {
             writeln!(f, "\n  Block Declarations:")?;
             for (block, values) in &self.block_declarations {
                 let values_str: Vec<String> = values.iter().map(|v| v.to_string()).collect();
-                writeln!(f, "    Block {}: [{}]", block.index(), values_str.join(", "))?;
+                writeln!(
+                    f,
+                    "    Block {}: [{}]",
+                    block.index(),
+                    values_str.join(", ")
+                )?;
             }
         }
-        
+
+        // Display PHI deconstructions
+        if !self.phi_deconstructions.is_empty() {
+            writeln!(f, "\n  PHI Deconstructions:")?;
+            for ((block_id, context), info) in &self.phi_deconstructions {
+                write!(f, "    Block {}", block_id.index())?;
+                if let Some(ctx) = context {
+                    write!(f, " (duplicated: {:?})", ctx)?;
+                } else {
+                    write!(f, " (original)")?;
+                }
+                writeln!(f, ":")?;
+
+                if !info.replacements.is_empty() {
+                    writeln!(f, "      Replacements:")?;
+                    for (phi_result, concrete_value) in &info.replacements {
+                        writeln!(f, "        {} → {}", phi_result, concrete_value)?;
+                    }
+                }
+
+                if !info.updated_phis.is_empty() {
+                    writeln!(f, "      Updated PHIs:")?;
+                    for updated_phi in &info.updated_phis {
+                        write!(f, "        {} = ɸ(", updated_phi.result)?;
+                        let operands_str: Vec<String> = updated_phi
+                            .operands
+                            .iter()
+                            .map(|(pred, val)| format!("{}:{}", pred.index(), val))
+                            .collect();
+                        writeln!(f, "{})", operands_str.join(", "))?;
+                    }
+                }
+            }
+        }
+
         writeln!(f, "}}")
     }
 }
 
 impl ControlFlowPlan {
     /// Format a structure recursively for display
-    fn fmt_structure(&self, f: &mut fmt::Formatter<'_>, structure: &ControlFlowStructure, indent: usize) -> fmt::Result {
+    fn fmt_structure(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        structure: &ControlFlowStructure,
+        indent: usize,
+    ) -> fmt::Result {
         let indent_str = "  ".repeat(indent);
-        
+
         write!(f, "{}Structure {} ", indent_str, structure.id.0)?;
-        
+
         if structure.is_duplicate() {
             write!(f, "[DUPLICATE of {:?}] ", structure.original_structure())?;
         }
-        
+
         match &structure.kind {
             ControlFlowKind::Sequential { elements } => {
                 writeln!(f, "Sequential ({} elements)", elements.len())?;
@@ -480,25 +621,34 @@ impl ControlFlowPlan {
                     }
                 }
             }
-            ControlFlowKind::Switch { dispatch_block, case_groups, default_case, .. } => {
+            ControlFlowKind::Switch {
+                dispatch_block,
+                case_groups,
+                default_case,
+                ..
+            } => {
                 writeln!(f, "Switch (dispatch: {})", dispatch_block.index())?;
                 for (i, group) in case_groups.iter().enumerate() {
-                    let keys: Vec<_> = group.cases.iter()
-                        .flat_map(|c| c.keys.iter())
-                        .collect();
+                    let keys: Vec<_> = group.cases.iter().flat_map(|c| c.keys.iter()).collect();
                     writeln!(f, "{}  CaseGroup {}: keys={:?}", indent_str, i, keys)?;
-                    
+
                     // Show setup instructions if any (deduplicated by SSA value)
                     let mut unique_setup = std::collections::HashMap::new();
                     for case in &group.cases {
                         for instr in &case.setup_instructions {
-                            unique_setup.entry(instr.ssa_value.clone())
+                            unique_setup
+                                .entry(instr.ssa_value.clone())
                                 .or_insert(instr.clone());
                         }
                     }
                     let setup_instructions: Vec<_> = unique_setup.values().cloned().collect();
                     if !setup_instructions.is_empty() {
-                        writeln!(f, "{}    Setup: {} instructions", indent_str, setup_instructions.len())?;
+                        writeln!(
+                            f,
+                            "{}    Setup: {} instructions",
+                            indent_str,
+                            setup_instructions.len()
+                        )?;
                         for setup in setup_instructions.iter().take(3) {
                             write!(f, "{}      - {} ← ", indent_str, setup.ssa_value)?;
                             if let Some(ref value) = setup.value {
@@ -508,16 +658,28 @@ impl ControlFlowPlan {
                             }
                         }
                         if setup_instructions.len() > 3 {
-                            writeln!(f, "{}      ... and {} more", indent_str, setup_instructions.len() - 3)?;
+                            writeln!(
+                                f,
+                                "{}      ... and {} more",
+                                indent_str,
+                                setup_instructions.len() - 3
+                            )?;
                         }
                     }
-                    
+
                     if let Some(ref fallthrough) = group.fallthrough {
                         if !fallthrough.blocks_to_duplicate.is_empty() {
-                            writeln!(f, "{}    (falls through to group {} with duplication)", 
-                                indent_str, fallthrough.to_case_index)?;
+                            writeln!(
+                                f,
+                                "{}    (falls through to group {} with duplication)",
+                                indent_str, fallthrough.to_case_index
+                            )?;
                         } else {
-                            writeln!(f, "{}    (falls through to group {})", indent_str, fallthrough.to_case_index)?;
+                            writeln!(
+                                f,
+                                "{}    (falls through to group {})",
+                                indent_str, fallthrough.to_case_index
+                            )?;
                         }
                     }
                     if let Some(body) = self.get_structure(group.body) {
@@ -526,11 +688,18 @@ impl ControlFlowPlan {
                     // Show blocks to duplicate after the body
                     if let Some(ref fallthrough) = group.fallthrough {
                         if !fallthrough.blocks_to_duplicate.is_empty() {
-                            let block_indices: Vec<_> = fallthrough.blocks_to_duplicate.iter()
+                            let block_indices: Vec<_> = fallthrough
+                                .blocks_to_duplicate
+                                .iter()
                                 .map(|b| format!("Block {}", b.index()))
                                 .collect();
-                            writeln!(f, "{}    Blocks to duplicate from group {}: [{}]", 
-                                indent_str, fallthrough.to_case_index, block_indices.join(", "))?;
+                            writeln!(
+                                f,
+                                "{}    Blocks to duplicate from group {}: [{}]",
+                                indent_str,
+                                fallthrough.to_case_index,
+                                block_indices.join(", ")
+                            )?;
                         }
                     }
                 }
@@ -541,7 +710,12 @@ impl ControlFlowPlan {
                     }
                 }
             }
-            ControlFlowKind::Conditional { condition_block, true_branch, false_branch, .. } => {
+            ControlFlowKind::Conditional {
+                condition_block,
+                true_branch,
+                false_branch,
+                ..
+            } => {
                 writeln!(f, "Conditional (condition: {})", condition_block.index())?;
                 writeln!(f, "{}  True branch:", indent_str)?;
                 if let Some(branch) = self.get_structure(*true_branch) {
@@ -554,13 +728,27 @@ impl ControlFlowPlan {
                     }
                 }
             }
-            ControlFlowKind::Loop { loop_type, header_block, body, .. } => {
-                writeln!(f, "Loop ({:?}, header: {})", loop_type, header_block.index())?;
+            ControlFlowKind::Loop {
+                loop_type,
+                header_block,
+                body,
+                ..
+            } => {
+                writeln!(
+                    f,
+                    "Loop ({:?}, header: {})",
+                    loop_type,
+                    header_block.index()
+                )?;
                 if let Some(body_structure) = self.get_structure(*body) {
                     self.fmt_structure(f, body_structure, indent + 1)?;
                 }
             }
-            ControlFlowKind::TryCatch { try_body, catch_clause, finally_body } => {
+            ControlFlowKind::TryCatch {
+                try_body,
+                catch_clause,
+                finally_body,
+            } => {
                 writeln!(f, "TryCatch")?;
                 writeln!(f, "{}  Try:", indent_str)?;
                 if let Some(try_structure) = self.get_structure(*try_body) {
@@ -579,7 +767,11 @@ impl ControlFlowPlan {
                     }
                 }
             }
-            ControlFlowKind::BasicBlock { block, instruction_count, is_synthetic } => {
+            ControlFlowKind::BasicBlock {
+                block,
+                instruction_count,
+                is_synthetic,
+            } => {
                 write!(f, "BasicBlock {}", block.index())?;
                 if *is_synthetic {
                     write!(f, " [synthetic]")?;
@@ -596,7 +788,7 @@ impl ControlFlowPlan {
                 writeln!(f, "Empty")?;
             }
         }
-        
+
         Ok(())
     }
 }

@@ -154,7 +154,6 @@ impl<'a> InstructionToStatementConverter<'a> {
         self.register_manager.set_duplication_context(None);
     }
 
-
     /// Get the set of undeclared variables
     pub fn get_undeclared_variables(&self) -> &HashSet<String> {
         &self.undeclared_variables

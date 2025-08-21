@@ -23,5 +23,7 @@ pub use fallthrough_analysis::FallthroughAnalysis;
 pub use nested_switch_detection::NestedSwitchAnalysis;
 pub use shared_block_analysis::SharedBlockAnalysis;
 pub use sparse_switch_analyzer::{SetupSafetyChecker, SparseSwitchAnalyzer};
-pub use sparse_switch_detector::{detect_sparse_switch_chain, find_sparse_switch_patterns, sparse_candidate_to_switch_region};
+pub use sparse_switch_detector::{
+    detect_sparse_switch_chain, find_sparse_switch_patterns, sparse_candidate_to_switch_region,
+};
 pub use switch_info::*;

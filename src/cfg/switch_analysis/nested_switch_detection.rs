@@ -6,7 +6,7 @@
 use petgraph::graph::NodeIndex;
 use std::collections::HashSet;
 
-use crate::cfg::{Cfg, analysis::SwitchRegion};
+use crate::cfg::{analysis::SwitchRegion, Cfg};
 
 /// Information about nested switches within a switch statement
 #[derive(Debug, Clone)]
@@ -22,7 +22,7 @@ impl NestedSwitchAnalysis {
     pub fn analyze(regions: &[SwitchRegion]) -> Self {
         let mut nested_switch_indices = HashSet::new();
         let mut nesting_map = vec![Vec::new(); regions.len()];
-        
+
         // Check each pair of switches to see if one is nested in the other
         for (outer_idx, outer_region) in regions.iter().enumerate() {
             for (inner_idx, inner_region) in regions.iter().enumerate() {
@@ -38,25 +38,28 @@ impl NestedSwitchAnalysis {
                 }
             }
         }
-        
+
         Self {
             nested_switch_indices,
             nesting_map,
         }
     }
-    
+
     /// Check if a switch region is nested inside another switch
     pub fn is_nested(&self, region_index: usize) -> bool {
         self.nested_switch_indices.contains(&region_index)
     }
-    
+
     /// Get the indices of switches nested within a given switch
     pub fn get_nested_switches(&self, outer_index: usize) -> &[usize] {
-        self.nesting_map.get(outer_index).map(|v| v.as_slice()).unwrap_or(&[])
+        self.nesting_map
+            .get(outer_index)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
-    
+
     /// Check if a switch is in a case body
-    /// 
+    ///
     /// A switch is in the case body if:
     /// 1. The switch dispatch block IS the case target block (nested switch as first statement)
     /// 2. OR the switch dispatch block is reachable from the case target block
@@ -69,7 +72,7 @@ impl NestedSwitchAnalysis {
         if switch_region.dispatch == case_target {
             return true; // This case immediately starts with a nested switch
         }
-        
+
         // Check if case target has a direct edge to the switch dispatch
         use petgraph::visit::EdgeRef;
         for edge in cfg.graph().edges(case_target) {
@@ -77,18 +80,18 @@ impl NestedSwitchAnalysis {
                 return true;
             }
         }
-        
+
         // Also check if the switch dispatch is the case target + 1 (common pattern)
         // This handles the case where instructions are split across consecutive blocks
         if switch_region.dispatch.index() == case_target.index() + 1 {
             return true;
         }
-        
+
         false
     }
-    
+
     /// Check if a case group contains a nested switch
-    /// 
+    ///
     /// Returns the switch region if the case contains a nested switch, None otherwise
     pub fn find_nested_switch_in_case<'a>(
         case_target: NodeIndex,

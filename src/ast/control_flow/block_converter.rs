@@ -1561,7 +1561,6 @@ impl<'a> BlockToStatementConverter<'a> {
         self.instruction_converter.clear_duplication_context();
     }
 
-
     /// Get the full CFG if available
     pub fn get_full_cfg(&self) -> Option<&'a crate::cfg::Cfg<'a>> {
         Some(&self.function_analysis.cfg)
