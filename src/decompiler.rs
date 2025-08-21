@@ -308,7 +308,7 @@ impl<'a> FunctionDecompiler<'a> {
     /// Decompile the function to AST
     pub fn decompile(
         &self,
-        allocator: &'a Allocator,
+        _allocator: &'a Allocator,
         ast_builder: &'a OxcAstBuilder<'a>,
         hbc_analysis: &'a mut crate::analysis::HbcAnalysis<'a>,
     ) -> DecompilerResult<FunctionDecompilationResult<'a>> {
@@ -344,7 +344,7 @@ impl<'a> FunctionDecompiler<'a> {
             })?;
 
         // Build and analyze the control flow plan
-        let mut plan_builder = crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(
+        let plan_builder = crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(
             &function_analysis.cfg,
             function_analysis,
         );
@@ -363,6 +363,7 @@ impl<'a> FunctionDecompiler<'a> {
             self.hbc_file,
             hbc_analysis,
             self.function_index,
+            function_analysis,
         );
         let all_statements = converter.convert_to_ast(&plan);
 

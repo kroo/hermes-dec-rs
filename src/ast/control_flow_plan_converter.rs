@@ -5,34 +5,29 @@
 
 use crate::analysis::control_flow_plan::{
     CaseGroupStructure, CatchClause, ControlFlowKind, ControlFlowPlan,
-    ControlFlowStructure, LoopType, SequentialElement, StructureId,
+    LoopType, SequentialElement, StructureId,
 };
 use crate::cfg::switch_analysis::switch_info::{CaseKey, SwitchInfo};
-use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, UseStrategy};
 use crate::analysis::value_tracker::ConstantValue;
 use crate::ast::{ExpressionContext, InstructionToStatementConverter};
-use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext, RegisterUse, SSAValue};
+use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext, SSAValue};
 use crate::hbc::HbcFile;
 use oxc_allocator::Vec as OxcVec;
 use oxc_ast::ast::*;
 use oxc_ast::AstBuilder;
 use petgraph::graph::NodeIndex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Converts a ControlFlowPlan into JavaScript AST
 pub struct ControlFlowPlanConverter<'a> {
     /// AST builder for creating nodes
     ast_builder: &'a AstBuilder<'a>,
-    /// HBC file for looking up constants and metadata
-    hbc: &'a HbcFile<'a>,
     /// HBC analysis for function information
     hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
     /// Function index we're converting
     function_index: u32,
     /// Instruction-to-statement converter for basic blocks
     instruction_converter: InstructionToStatementConverter<'a>,
-    /// Track which variables have been declared
-    declared_variables: HashSet<String>,
     /// Map from SSA values to variable names
     variable_names: HashMap<DuplicatedSSAValue, String>,
 }
@@ -44,6 +39,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         hbc: &'a HbcFile<'a>,
         hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
         function_index: u32,
+        function_analysis: &crate::analysis::FunctionAnalysis<'a>,
     ) -> Self {
         let expression_context = ExpressionContext::with_context(
             hbc,
@@ -51,19 +47,28 @@ impl<'a> ControlFlowPlanConverter<'a> {
             crate::hbc::InstructionIndex::zero(),
         );
         
-        let instruction_converter = InstructionToStatementConverter::new(
+        let mut instruction_converter = InstructionToStatementConverter::new(
             ast_builder,
             expression_context,
             hbc_analysis,
         );
 
+        // Generate variable mapping from SSA analysis
+        let mut variable_mapper = crate::ast::variables::VariableMapper::new();
+        if let Ok(variable_mapping) =
+            variable_mapper.generate_mapping(&function_analysis.ssa, &function_analysis.cfg)
+        {
+            // Set the SSA-based variable mapping in the register manager
+            instruction_converter
+                .register_manager_mut()
+                .set_variable_mapping(variable_mapping);
+        }
+
         Self {
             ast_builder,
-            hbc,
             hbc_analysis,
             function_index,
             instruction_converter,
-            declared_variables: HashSet::new(),
             variable_names: HashMap::new(),
         }
     }
@@ -198,7 +203,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
     fn convert_switch(
         &mut self,
         plan: &ControlFlowPlan,
-        dispatch_block: &NodeIndex,
+        _dispatch_block: &NodeIndex,
         info: &SwitchInfo,
         case_groups: &[CaseGroupStructure],
         default_case: Option<&StructureId>,
@@ -281,7 +286,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
     fn convert_conditional(
         &mut self,
         plan: &ControlFlowPlan,
-        condition_block: NodeIndex,
+        _condition_block: NodeIndex,
         condition_expr: Option<&SSAValue>,
         true_branch: StructureId,
         false_branch: Option<&StructureId>,
@@ -331,12 +336,12 @@ impl<'a> ControlFlowPlanConverter<'a> {
         &mut self,
         plan: &ControlFlowPlan,
         loop_type: &LoopType,
-        header_block: NodeIndex,
+        _header_block: NodeIndex,
         condition: Option<&SSAValue>,
         body: StructureId,
         update: Option<&StructureId>,
-        break_target: Option<&StructureId>,
-        continue_target: Option<&StructureId>,
+        _break_target: Option<&StructureId>,
+        _continue_target: Option<&StructureId>,
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
@@ -481,8 +486,8 @@ impl<'a> ControlFlowPlanConverter<'a> {
         &mut self,
         plan: &ControlFlowPlan,
         block_id: NodeIndex,
-        instruction_count: usize,
-        is_synthetic: bool,
+        _instruction_count: usize,
+        _is_synthetic: bool,
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
@@ -673,7 +678,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
     }
 
     /// Create a comment statement
-    fn create_comment_statement(&self, text: &str) -> Statement<'a> {
+    fn create_comment_statement(&self, _text: &str) -> Statement<'a> {
         // For now, create an empty statement
         // TODO: Properly attach comments
         self.ast_builder.statement_empty(oxc_span::SPAN)
