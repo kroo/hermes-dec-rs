@@ -9,7 +9,7 @@ use crate::analysis::{
 };
 use crate::ast::{
     build_function_program, generate_code_with_comments, AddressCommentManager,
-    BlockToStatementConverter, ExpressionContext, InstructionIndex,
+    ExpressionContext, InstructionIndex,
 };
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
@@ -308,7 +308,7 @@ impl<'a> FunctionDecompiler<'a> {
     /// Decompile the function to AST
     pub fn decompile(
         &self,
-        _allocator: &'a Allocator,
+        allocator: &'a Allocator,
         ast_builder: &'a OxcAstBuilder<'a>,
         hbc_analysis: &'a mut crate::analysis::HbcAnalysis<'a>,
     ) -> DecompilerResult<FunctionDecompilationResult<'a>> {
@@ -343,32 +343,32 @@ impl<'a> FunctionDecompiler<'a> {
                 message: format!("Function analysis not found after creation"),
             })?;
 
-        // Create block-to-statement converter with function analysis
-        let mut converter = BlockToStatementConverter::new(
-            ast_builder,
+        // Build and analyze the control flow plan
+        let mut plan_builder = crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(
+            &function_analysis.cfg,
             function_analysis,
-            hbc_analysis,
-            self.include_instruction_comments,
-            self.include_ssa_comments,
         );
-
-        // Set whether to decompile nested functions
-        converter.set_decompile_nested(self.decompile_nested);
-
-        // Process all blocks in the CFG with proper ordering and labeling
-        let all_statements = match converter
-            .convert_blocks_from_cfg_with_options(&function_analysis.cfg, self.skip_validation)
-        {
-            Ok(statements) => statements,
-            Err(e) => {
-                return Err(DecompilerError::Internal {
-                    message: format!("Failed to convert blocks: {}", e),
-                });
-            }
-        };
+        let mut plan = plan_builder.build();
+        
+        // Analyze the plan to determine declaration and use strategies
+        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
+            &mut plan,
+            function_analysis,
+        );
+        analyzer.analyze();
+        
+        // Convert the plan to AST
+        let mut converter = crate::ast::ControlFlowPlanConverter::new(
+            ast_builder,
+            self.hbc_file,
+            hbc_analysis,
+            self.function_index,
+        );
+        let all_statements = converter.convert_to_ast(&plan);
 
         // Take the comment manager back from the converter
-        let comment_manager = converter.take_comment_manager();
+        // let comment_manager = converter.take_comment_manager();
+        let comment_manager = None;
 
         // Analyze the function for patterns
         let (default_params, function_type) = match self

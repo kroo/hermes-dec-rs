@@ -134,17 +134,18 @@ impl<'a> InstructionToStatementConverter<'a> {
         self.decompile_nested = decompile_nested;
     }
 
+    /// Set the current duplication context
+    pub fn set_duplication_context(&mut self, context: Option<DuplicationContext>) {
+        self.current_duplication_context = context.clone();
+        // Also set it in the register manager so it can use duplicated names
+        self.register_manager.set_duplication_context(context);
+    }
+    
     /// Set the current duplication context for switch case processing
     pub fn set_duplication_context_for_case_group(&mut self, case_group: &CaseGroup) {
-        self.current_duplication_context = Some(DuplicationContext::SwitchBlockDuplication {
+        self.set_duplication_context(Some(DuplicationContext::SwitchBlockDuplication {
             case_group_keys: case_group.keys.clone(),
-        });
-        // Also set it in the register manager so it can use duplicated names
-        self.register_manager.set_duplication_context(Some(
-            DuplicationContext::SwitchBlockDuplication {
-                case_group_keys: case_group.keys.clone(),
-            },
-        ));
+        }));
     }
 
     /// Clear the current duplication context

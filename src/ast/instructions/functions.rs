@@ -1325,7 +1325,7 @@ impl<'a> InstructionToStatementConverter<'a> {
         // No need to set it separately
 
         // Get function analysis for the nested function
-        let nested_function_analysis = self
+        let _nested_function_analysis = self
             .hbc_analysis
             .get_function_analysis_ref(function_index)
             .ok_or_else(|| {
@@ -1335,24 +1335,30 @@ impl<'a> InstructionToStatementConverter<'a> {
                 ))
             })?;
 
-        // Create block converter for the nested function
-        let mut block_converter = crate::ast::control_flow::BlockToStatementConverter::new(
-            self.ast_builder,
-            nested_function_analysis,
-            self.hbc_analysis,
-            false, // no instruction comments in nested functions
-            false, // no SSA comments in nested functions
-        );
-        block_converter.set_decompile_nested(self.decompile_nested);
-
-        // Convert the nested function's blocks to statements
-        block_converter
-            .convert_blocks_from_cfg(&nested_function_analysis.cfg)
-            .map_err(|e| {
-                StatementConversionError::UnsupportedInstruction(format!(
-                    "Failed to convert nested function blocks: {}",
-                    e
-                ))
-            })
+        // TODO: Replace with ControlFlowPlanConverter once implemented
+        Err(StatementConversionError::UnsupportedInstruction(
+            "Nested function decompilation temporarily disabled during converter refactoring".to_string()
+        ))
+        
+        // Original code commented out:
+        // // Create block converter for the nested function
+        // let mut block_converter = crate::ast::control_flow::BlockToStatementConverter::new(
+        //     self.ast_builder,
+        //     nested_function_analysis,
+        //     self.hbc_analysis,
+        //     false, // no instruction comments in nested functions
+        //     false, // no SSA comments in nested functions
+        // );
+        // block_converter.set_decompile_nested(self.decompile_nested);
+        //
+        // // Convert the nested function's blocks to statements
+        // block_converter
+        //     .convert_blocks_from_cfg(&nested_function_analysis.cfg)
+        //     .map_err(|e| {
+        //         StatementConversionError::UnsupportedInstruction(format!(
+        //             "Failed to convert nested function blocks: {}",
+        //             e
+        //         ))
+        //     })
     }
 }

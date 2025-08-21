@@ -765,6 +765,9 @@ fn print_switch_region(
                         // Analyze what values each case contributes to PHI nodes
                         println!("\n      Case PHI Contributions:");
 
+                        // TODO: Replace with ControlFlowPlanConverter once implemented
+                        // Temporarily disabled during converter refactoring
+                        /*
                         // Create a temporary switch converter for PHI analysis
                         let allocator = oxc_allocator::Allocator::default();
                         let ast_builder = oxc_ast::AstBuilder::new(&allocator);
@@ -772,12 +775,13 @@ fn print_switch_region(
                             crate::ast::control_flow::switch_converter::SwitchConverter::new(
                                 &ast_builder,
                             );
+                        */
 
                         for (i, case) in switch_info.cases.iter().enumerate() {
                             println!("        Case {} (keys {:?}):", i, case.keys);
 
                             // Create a temporary case group to analyze PHI contributions
-                            let group = crate::cfg::switch_analysis::CaseGroup {
+                            let _group = crate::cfg::switch_analysis::CaseGroup {
                                 keys: case.keys.clone(),
                                 target_block: case.target_block,
                                 setup: case.setup.clone(),
@@ -793,6 +797,8 @@ fn print_switch_region(
                                     .map(|ssa| ssa.name())
                                     .unwrap_or_else(|| format!("r{}", phi_node.register));
 
+                                // TODO: Re-enable once ControlFlowPlanConverter is implemented
+                                /*
                                 if let Some(value) = switch_converter
                                     .find_phi_contribution_for_case(&group, phi_node)
                                 {
@@ -812,6 +818,8 @@ fn print_switch_region(
                                         );
                                     }
                                 }
+                                */
+                                println!("          {} = <analysis disabled during refactoring>", phi_name);
                             }
                         }
 

@@ -14,6 +14,7 @@ pub mod builders;
 pub mod comments;
 pub mod context;
 pub mod control_flow;
+pub mod control_flow_plan_converter;
 pub mod instructions;
 pub mod optimization;
 pub mod variables;
@@ -26,10 +27,7 @@ pub use comments::{
     PendingComment, PositionAssigner,
 };
 pub use context::{ExpressionContext, ExpressionContextError};
-pub use control_flow::{
-    BlockConversionError, BlockConversionStats, BlockToStatementConverter, ConditionalConverter,
-    SwitchConversionError, SwitchConverter,
-};
+pub use control_flow_plan_converter::ControlFlowPlanConverter;
 pub use instructions::{
     InstructionResult, InstructionToStatementConverter, JumpCondition, JumpType,
     StatementConversionError,
