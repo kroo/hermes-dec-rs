@@ -116,20 +116,33 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                     &instr.instruction,
                                 );
 
-                            // Mark all source registers as consumed (they're inlined in the comparison)
+                            // For sparse switch comparisons, we only mark the case value register as consumed,
+                            // not the discriminator. The discriminator should remain as a variable reference.
+                            // We can identify the case value register as the one that contains a constant.
                             for register in usage.sources {
                                 if let Some(ssa_value) = self
                                     .find_ssa_value_for_register(register, case.comparison_block)
                                 {
-                                    let use_site = RegisterUse {
-                                        register,
-                                        block_id: case.comparison_block,
-                                        instruction_idx: instr.instruction_index,
-                                    };
-                                    // Mark in both the tracker and the plan
-                                    self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
-                                    let dup_value = DuplicatedSSAValue::original(ssa_value);
-                                    self.plan.mark_use_consumed(dup_value, use_site);
+                                    // Check if this register contains a constant value (case value)
+                                    // The discriminator will be a parameter or variable, not a constant
+                                    let value_tracker = self.function_analysis.value_tracker();
+                                    let tracked_value = value_tracker.get_value(&ssa_value);
+                                    let is_case_value =
+                                        crate::analysis::value_tracker::ValueTracker::is_constant(
+                                            &tracked_value,
+                                        );
+
+                                    if is_case_value {
+                                        let use_site = RegisterUse {
+                                            register,
+                                            block_id: case.comparison_block,
+                                            instruction_idx: instr.instruction_index,
+                                        };
+                                        // Mark in both the tracker and the plan
+                                        self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
+                                        let dup_value = DuplicatedSSAValue::original(ssa_value);
+                                        self.plan.mark_use_consumed(dup_value, use_site);
+                                    }
                                 }
                             }
                             break; // Found the comparison instruction
@@ -746,12 +759,39 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
     fn compute_use_strategies(&mut self) {
         // For each SSA value, determine strategy at each use site
         for ssa_value in self.function_analysis.ssa.all_values() {
-            let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
-
             for use_site in self.function_analysis.ssa.get_ssa_value_uses(&ssa_value) {
-                let strategy = self.usage_tracker.get_use_strategy(&dup_value, use_site);
-                self.plan
-                    .set_use_strategy(dup_value.clone(), use_site.clone(), strategy);
+                // Check if this use is in a duplicated block
+                if let Some(contexts) = self.duplicated_blocks.get(&use_site.block_id) {
+                    // This use is in a duplicated block
+                    for context in contexts {
+                        // Check if the definition is also in a duplicated block with the same context
+                        let dup_value = if self
+                            .duplicated_blocks
+                            .get(&ssa_value.def_site.block_id)
+                            .map(|ctxs| ctxs.contains(context))
+                            .unwrap_or(false)
+                        {
+                            // Both definition and use are in the same duplicated context
+                            DuplicatedSSAValue {
+                                original: ssa_value.clone(),
+                                duplication_context: Some(context.clone()),
+                            }
+                        } else {
+                            // Use is in duplicated block but definition is not - use original
+                            DuplicatedSSAValue::original(ssa_value.clone())
+                        };
+
+                        let strategy = self.usage_tracker.get_use_strategy(&dup_value, use_site);
+                        self.plan
+                            .set_use_strategy(dup_value.clone(), use_site.clone(), strategy);
+                    }
+                } else {
+                    // Normal use, not in a duplicated block
+                    let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+                    let strategy = self.usage_tracker.get_use_strategy(&dup_value, use_site);
+                    self.plan
+                        .set_use_strategy(dup_value.clone(), use_site.clone(), strategy);
+                }
             }
         }
     }

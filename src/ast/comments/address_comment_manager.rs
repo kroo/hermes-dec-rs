@@ -144,35 +144,81 @@ impl AddressCommentManager {
             }
         }
 
-        // Second pass: assign positions with proper spacing
-        for (node_pos, node_comments) in formatted_comments {
-            // Calculate space needed for leading comments
+        // Sort by node position to ensure proper ordering
+        formatted_comments.sort_by_key(|(pos, _)| *pos);
+
+        // Second pass: assign positions ensuring no overlaps
+        let mut current_pos = 0u32;
+        // Store (original_node_pos, adjusted_pos_for_layout, comments)
+        let mut final_positions: Vec<(u32, u32, Vec<(PendingComment, String)>)> = Vec::new();
+
+        // Process each node with its comments
+        for (_i, (node_pos, node_comments)) in formatted_comments.iter().enumerate() {
+            // Separate leading and trailing comments (cloning the PendingComment)
+            let leading: Vec<(PendingComment, String)> = node_comments
+                .iter()
+                .filter(|(pending, _)| pending.position == CommentPosition::Leading)
+                .map(|(p, t)| ((*p).clone(), t.clone()))
+                .collect();
+            let trailing: Vec<(PendingComment, String)> = node_comments
+                .iter()
+                .filter(|(pending, _)| pending.position == CommentPosition::Trailing)
+                .map(|(p, t)| ((*p).clone(), t.clone()))
+                .collect();
+
+            // Calculate space needed
+            let leading_space: u32 = leading
+                .iter()
+                .map(|(_, text)| text.len() as u32 + 1) // +1 for newline
+                .sum();
+            let trailing_space: u32 = trailing
+                .iter()
+                .map(|(_, text)| text.len() as u32 + 1) // +1 for space
+                .sum();
+
+            // Ensure we have enough space before this node for its leading comments
+            let min_start = current_pos + leading_space;
+            let actual_node_pos = if min_start > *node_pos {
+                // We need more space, shift this node forward
+                min_start + 10 // Add small buffer
+            } else {
+                *node_pos
+            };
+
+            // Store the adjusted position
+            let mut adjusted_comments = Vec::new();
+            for (pending, text) in leading {
+                adjusted_comments.push((pending, text));
+            }
+            for (pending, text) in trailing {
+                adjusted_comments.push((pending, text));
+            }
+            final_positions.push((*node_pos, actual_node_pos, adjusted_comments));
+
+            // Update current position to after this node and its trailing comments
+            current_pos = actual_node_pos + 10 + trailing_space; // Node gets 10 units of space
+        }
+
+        // Now actually place the comments using the adjusted positions
+        current_pos = 0;
+        for (original_node_pos, adjusted_node_pos, node_comments) in final_positions {
             let leading_comments: Vec<_> = node_comments
                 .iter()
                 .filter(|(pending, _)| pending.position == CommentPosition::Leading)
                 .collect();
-
             let trailing_comments: Vec<_> = node_comments
                 .iter()
                 .filter(|(pending, _)| pending.position == CommentPosition::Trailing)
                 .collect();
 
             // Place leading comments before the node
-            let mut leading_space_needed = 0u32;
-            for (_, formatted_text) in leading_comments.iter() {
-                leading_space_needed += formatted_text.len() as u32;
-            }
-
-            let leading_start_pos = node_pos.saturating_sub(leading_space_needed + 10); // 10 byte buffer
-            let mut current_pos = leading_start_pos;
-
-            for (pending, formatted_text) in leading_comments.iter() {
+            for (i, (pending, formatted_text)) in leading_comments.iter().enumerate() {
                 let comment_pos = current_pos;
                 source_parts.push((comment_pos, formatted_text.clone()));
 
                 let comment = Comment {
                     span: Span::new(comment_pos, comment_pos + formatted_text.len() as u32),
-                    attached_to: node_pos,
+                    attached_to: original_node_pos,
                     kind: pending.kind.into(),
                     position: pending.position.into(),
                     newlines: oxc_ast::ast::CommentNewlines::Leading,
@@ -181,29 +227,56 @@ impl AddressCommentManager {
 
                 final_comments.push(comment);
                 current_pos += formatted_text.len() as u32;
+
+                // Add newline after each leading comment
+                if i < leading_comments.len() - 1 {
+                    source_parts.push((current_pos, "\n".to_string()));
+                    current_pos += 1;
+                }
             }
 
-            // Place trailing comments after the node
-            current_pos = node_pos + 20; // Small buffer after node
-            for (pending, formatted_text) in trailing_comments.iter() {
-                let comment_pos = current_pos;
-                source_parts.push((comment_pos, formatted_text.clone()));
-
-                let comment = Comment {
-                    span: Span::new(comment_pos, comment_pos + formatted_text.len() as u32),
-                    attached_to: node_pos,
-                    kind: pending.kind.into(),
-                    position: pending.position.into(),
-                    newlines: oxc_ast::ast::CommentNewlines::Trailing,
-                    content: oxc_ast::CommentContent::None,
-                };
-
-                final_comments.push(comment);
-                current_pos += formatted_text.len() as u32;
+            // Add final newline before node if we had leading comments
+            if !leading_comments.is_empty() {
+                source_parts.push((current_pos, "\n".to_string()));
+                // current_pos += 1; // Not needed since we reassign below
             }
+
+            // Skip past the adjusted node position
+            current_pos = adjusted_node_pos + 10; // Node takes 10 units
+
+            // Place trailing comments
+            if !trailing_comments.is_empty() {
+                source_parts.push((current_pos, " ".to_string()));
+                current_pos += 1;
+
+                for (i, (pending, formatted_text)) in trailing_comments.iter().enumerate() {
+                    let comment_pos = current_pos;
+                    source_parts.push((comment_pos, formatted_text.clone()));
+
+                    let comment = Comment {
+                        span: Span::new(comment_pos, comment_pos + formatted_text.len() as u32),
+                        attached_to: original_node_pos,
+                        kind: pending.kind.into(),
+                        position: pending.position.into(),
+                        newlines: oxc_ast::ast::CommentNewlines::Trailing,
+                        content: oxc_ast::CommentContent::None,
+                    };
+
+                    final_comments.push(comment);
+                    current_pos += formatted_text.len() as u32;
+
+                    if i < trailing_comments.len() - 1 {
+                        source_parts.push((current_pos, " ".to_string()));
+                        current_pos += 1;
+                    }
+                }
+            }
+
+            // Add some space before next node
+            current_pos += 2;
         }
 
-        // Build synthetic source text with proper sizing
+        // Build synthetic source text based on actual content
         source_parts.sort_by_key(|(pos, _)| *pos);
         let max_pos = source_parts
             .iter()
@@ -211,7 +284,7 @@ impl AddressCommentManager {
             .max()
             .unwrap_or(0);
 
-        let total_source_size = (max_pos + 50) as usize; // Small buffer
+        let total_source_size = (max_pos + 1) as usize; // Just enough space
         let mut synthetic_source = " ".repeat(total_source_size);
 
         for (pos, text) in &source_parts {

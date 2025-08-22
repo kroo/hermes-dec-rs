@@ -6,7 +6,7 @@
 use super::variable_mapper::VariableMapping;
 use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext};
 use crate::hbc::InstructionIndex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Register lifetime information for optimization
 #[derive(Debug, Clone)]
@@ -30,6 +30,8 @@ pub struct RegisterManager {
     register_lifetimes: HashMap<u8, RegisterLifetime>,
     /// Current duplication context for switch case processing
     current_duplication_context: Option<DuplicationContext>,
+    /// Set of duplicated SSA values that actually exist (have definitions in duplicated blocks)
+    existing_duplicated_ssas: HashSet<DuplicatedSSAValue>,
 }
 
 impl RegisterManager {
@@ -39,12 +41,18 @@ impl RegisterManager {
             current_pc: None,
             register_lifetimes: HashMap::new(),
             current_duplication_context: None,
+            existing_duplicated_ssas: HashSet::new(),
         }
     }
 
     /// Set the pre-computed variable mapping (from VariableMapper)
     pub fn set_variable_mapping(&mut self, mapping: VariableMapping) {
         self.variable_mapping = Some(mapping);
+    }
+
+    /// Set the existing duplicated SSAs from the control flow plan
+    pub fn set_existing_duplicated_ssas(&mut self, ssas: HashSet<DuplicatedSSAValue>) {
+        self.existing_duplicated_ssas = ssas;
     }
 
     /// Update the current program counter for variable lookup
@@ -163,12 +171,25 @@ impl RegisterManager {
                         None
                     })
                 {
-                    // Create a duplicated SSA value
-                    let dup_ssa = DuplicatedSSAValue {
+                    // Check if a duplicated version of this SSA value actually exists
+                    let dup_ssa_with_context = DuplicatedSSAValue {
                         original: ssa_value.clone(),
                         duplication_context: Some(context.clone()),
                     };
-                    // Get the duplicated variable name
+
+                    // Only use the duplicated name if this SSA value is actually defined in a duplicated block
+                    let dup_ssa = if self
+                        .existing_duplicated_ssas
+                        .contains(&dup_ssa_with_context)
+                    {
+                        // This SSA value is defined in a duplicated block, use the duplicated name
+                        dup_ssa_with_context
+                    } else {
+                        // This SSA value is NOT defined in a duplicated block, use the original name
+                        DuplicatedSSAValue::original(ssa_value.clone())
+                    };
+
+                    // Get the variable name
                     return mapping.get_variable_name_for_duplicated(&dup_ssa);
                 }
             }

@@ -819,7 +819,10 @@ fn print_switch_region(
                                     }
                                 }
                                 */
-                                println!("          {} = <analysis disabled during refactoring>", phi_name);
+                                println!(
+                                    "          {} = <analysis disabled during refactoring>",
+                                    phi_name
+                                );
                             }
                         }
 

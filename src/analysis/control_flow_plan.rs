@@ -113,6 +113,8 @@ pub enum ControlFlowKind {
     Switch {
         dispatch_block: NodeIndex,
         info: SwitchInfo,
+        discriminator_value: Option<SSAValue>, // The SSA value being switched on
+        discriminator_use: Option<RegisterUse>, // The specific use of the discriminator
         case_groups: Vec<CaseGroupStructure>,
         default_case: Option<StructureId>,
     },
@@ -121,6 +123,7 @@ pub enum ControlFlowKind {
     Conditional {
         condition_block: NodeIndex,
         condition_expr: Option<SSAValue>,
+        condition_use: Option<RegisterUse>, // The specific use of the condition value
         true_branch: StructureId,
         false_branch: Option<StructureId>,
     },
@@ -130,6 +133,7 @@ pub enum ControlFlowKind {
         loop_type: LoopType,
         header_block: NodeIndex,
         condition: Option<SSAValue>,
+        condition_use: Option<RegisterUse>, // The specific use of the condition value
         body: StructureId,
         update: Option<StructureId>,
         break_target: Option<StructureId>,
@@ -172,6 +176,34 @@ pub struct CaseGroupStructure {
     pub body: StructureId,
     /// Whether this group falls through to the next
     pub fallthrough: Option<FallthroughInfo>,
+    /// Whether this case needs a break statement
+    pub needs_break: BreakRequirement,
+}
+
+/// Describes whether and why a switch case needs a break statement
+#[derive(Debug, Clone, PartialEq)]
+pub enum BreakRequirement {
+    /// No break needed - case body always terminates (return, throw, etc.)
+    NotNeeded { reason: TerminationReason },
+    /// Break is required to prevent fallthrough
+    Required,
+    /// No break because this case intentionally falls through
+    FallthroughIntended,
+}
+
+/// Reason why a case doesn't need a break statement
+#[derive(Debug, Clone, PartialEq)]
+pub enum TerminationReason {
+    /// Case ends with return statement
+    Return,
+    /// Case ends with throw statement
+    Throw,
+    /// Case ends with an explicit break
+    ExplicitBreak,
+    /// Case ends with continue (in a loop context)
+    Continue,
+    /// Case body is empty
+    EmptyBody,
 }
 
 /// A single case in a switch statement
@@ -335,10 +367,11 @@ impl ControlFlowPlan {
 
     /// Add a declaration point for a variable
     pub fn add_block_declaration(&mut self, block: NodeIndex, ssa_value: DuplicatedSSAValue) {
-        self.block_declarations
-            .entry(block)
-            .or_default()
-            .push(ssa_value);
+        let declarations = self.block_declarations.entry(block).or_default();
+        // Only add if not already present (avoid duplicates)
+        if !declarations.contains(&ssa_value) {
+            declarations.push(ssa_value);
+        }
     }
 
     /// Set the declaration strategy for an SSA value
@@ -358,6 +391,70 @@ impl ControlFlowPlan {
     ) -> Option<&PhiDeconstructionInfo> {
         let key = (block_id, context.cloned());
         self.phi_deconstructions.get(&key)
+    }
+
+    /// Check if a structure always terminates (returns, throws, etc.)
+    pub fn structure_always_terminates(&self, id: StructureId) -> Option<TerminationReason> {
+        let structure = self.get_structure(id)?;
+
+        match &structure.kind {
+            ControlFlowKind::BasicBlock { block: _, .. } => {
+                // Check if the block ends with a terminal instruction
+                // This would need access to the CFG to check the actual instructions
+                // For now, we'll return None and handle this in the builder
+                None
+            }
+            ControlFlowKind::Sequential { elements } => {
+                // Check if the last element terminates
+                if let Some(last) = elements.last() {
+                    match last {
+                        SequentialElement::Block(_) => None, // Would need CFG access
+                        SequentialElement::Structure(sid) => self.structure_always_terminates(*sid),
+                    }
+                } else {
+                    Some(TerminationReason::EmptyBody)
+                }
+            }
+            ControlFlowKind::Conditional {
+                true_branch,
+                false_branch,
+                ..
+            } => {
+                // Both branches must terminate for the conditional to always terminate
+                let true_terminates = self.structure_always_terminates(*true_branch);
+                let false_terminates =
+                    false_branch.and_then(|fb| self.structure_always_terminates(fb));
+
+                // Only if both branches terminate with the same reason
+                if true_terminates.is_some() && true_terminates == false_terminates {
+                    true_terminates
+                } else {
+                    None
+                }
+            }
+            ControlFlowKind::Switch {
+                case_groups,
+                default_case,
+                ..
+            } => {
+                // All cases must terminate for the switch to always terminate
+                let all_cases_terminate = case_groups
+                    .iter()
+                    .all(|group| self.structure_always_terminates(group.body).is_some());
+
+                let default_terminates = default_case
+                    .map(|dc| self.structure_always_terminates(dc).is_some())
+                    .unwrap_or(false);
+
+                if all_cases_terminate && default_terminates {
+                    // Return the most common termination reason
+                    Some(TerminationReason::Return)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 
     /// Set PHI deconstruction info for a block in a specific duplication context
@@ -399,6 +496,13 @@ impl ControlFlowPlan {
         ssa_value: &DuplicatedSSAValue,
     ) -> Option<&DeclarationStrategy> {
         self.declaration_strategies.get(ssa_value)
+    }
+
+    /// Check if a duplicated SSA value actually exists (has a declaration)
+    /// This is used to determine if we should use a duplicated variable name
+    pub fn duplicated_ssa_exists(&self, ssa_value: &DuplicatedSSAValue) -> bool {
+        // A duplicated SSA value exists if it has a declaration strategy
+        self.declaration_strategies.contains_key(ssa_value)
     }
 
     /// Get the use strategy for an SSA value at a use site
@@ -482,7 +586,11 @@ impl ControlFlowStructure {
             } => {
                 blocks.push(*condition_block);
             }
-            ControlFlowKind::Loop { header_block, .. } => {
+            ControlFlowKind::Loop {
+                header_block,
+                condition_use: _,
+                ..
+            } => {
                 blocks.push(*header_block);
             }
             ControlFlowKind::TryCatch { .. } => {

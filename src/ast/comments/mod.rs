@@ -7,6 +7,9 @@ pub mod address_comment_manager;
 pub mod comment_anchor_manager;
 pub mod position_assigner;
 
+#[cfg(test)]
+mod test_comment_overlap;
+
 pub use address_comment_manager::{
     AddressCommentManager, CommentKind, CommentPosition, PendingComment,
 };

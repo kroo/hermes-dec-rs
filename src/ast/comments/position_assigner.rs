@@ -12,6 +12,12 @@ use std::collections::HashMap;
 pub struct PositionAssigner {
     current_pos: u32,
     address_to_position: HashMap<Address, u32>,
+    /// Estimated size for different statement types
+    estimated_sizes: HashMap<Address, u32>,
+    /// Space reserved for comments before each node
+    comment_space_before: HashMap<Address, u32>,
+    /// Space reserved for comments after each node  
+    comment_space_after: HashMap<Address, u32>,
 }
 
 impl PositionAssigner {
@@ -19,6 +25,19 @@ impl PositionAssigner {
         Self {
             current_pos: 0,
             address_to_position: HashMap::new(),
+            estimated_sizes: HashMap::new(),
+            comment_space_before: HashMap::new(),
+            comment_space_after: HashMap::new(),
+        }
+    }
+
+    /// Pre-calculate comment space requirements based on pending comments
+    pub fn reserve_comment_space(&mut self, addr: Address, chars_before: u32, chars_after: u32) {
+        if chars_before > 0 {
+            self.comment_space_before.insert(addr, chars_before + 1); // +1 for newline
+        }
+        if chars_after > 0 {
+            self.comment_space_after.insert(addr, chars_after + 1); // +1 for space
         }
     }
 
@@ -32,6 +51,77 @@ impl PositionAssigner {
     /// Get the final position mapping
     pub fn get_address_positions(&self) -> &HashMap<Address, u32> {
         &self.address_to_position
+    }
+
+    /// Estimate the size of a statement based on its type and content
+    /// These are rough character counts for typical statement representations
+    fn estimate_statement_size(&self, stmt: &Statement) -> u32 {
+        match stmt {
+            Statement::ReturnStatement(ret) => {
+                // "return" (6) + space (1) + argument (~20) + ";" (1)
+                if ret.argument.is_some() {
+                    "return ".len() as u32 + 20 + 1 // estimate 20 chars for value
+                } else {
+                    "return;".len() as u32
+                }
+            }
+            Statement::BreakStatement(_) => "break;".len() as u32,
+            Statement::ContinueStatement(_) => "continue;".len() as u32,
+            Statement::ExpressionStatement(_) => {
+                // Estimate for typical expression + semicolon
+                20 + 1
+            }
+            Statement::VariableDeclaration(decl) => {
+                // "const " (6) + declarators
+                let base = match decl.kind {
+                    oxc_ast::ast::VariableDeclarationKind::Const => "const ".len(),
+                    oxc_ast::ast::VariableDeclarationKind::Let => "let ".len(),
+                    oxc_ast::ast::VariableDeclarationKind::Var => "var ".len(),
+                    oxc_ast::ast::VariableDeclarationKind::Using => "using ".len(),
+                    oxc_ast::ast::VariableDeclarationKind::AwaitUsing => "await using ".len(),
+                };
+                // Each declarator: name (~10) + " = " (3) + value (~15)
+                base as u32 + (decl.declarations.len() as u32 * 28) + 1
+            }
+            Statement::IfStatement(if_stmt) => {
+                // "if (" (4) + condition (~10) + ") " (2) + consequent + alternate
+                let mut size = 16u32;
+                if if_stmt.alternate.is_some() {
+                    size += " else ".len() as u32;
+                }
+                size
+            }
+            Statement::SwitchStatement(switch) => {
+                // "switch (" (8) + discriminant (~10) + ") {" (3) + cases + "}" (1)
+                22 + (switch.cases.len() as u32 * 30) // estimate 30 chars per case
+            }
+            Statement::BlockStatement(block) => {
+                // "{" (1) + statements + "}" (1)
+                2 + (block.body.len() as u32 * 20) // rough estimate per statement
+            }
+            Statement::ForStatement(_) => {
+                // "for (" (5) + init (~10) + "; " (2) + test (~10) + "; " (2) + update (~10) + ") " (2)
+                31
+            }
+            Statement::WhileStatement(_) => {
+                // "while (" (7) + condition (~10) + ") " (2)
+                19
+            }
+            Statement::DoWhileStatement(_) => {
+                // "do " (3) + body + " while (" (8) + condition (~10) + ");" (2)
+                23
+            }
+            Statement::FunctionDeclaration(func) => {
+                // "function " (9) + name (~10) + "(" (1) + params + ") {" (3) + "}" (1)
+                let param_size = func.params.items.len() as u32 * 10; // estimate per param
+                24 + param_size
+            }
+            Statement::TryStatement(_) => {
+                // "try {" (5) + "} catch (" (9) + "e" (1) + ") {" (3) + "}" (1)
+                19
+            }
+            _ => 20, // Conservative default
+        }
     }
 
     /// Helper to get boxed statement if available
@@ -67,37 +157,48 @@ impl<'a> VisitMut<'a> for PositionAssigner {
         // For statements that can have an address, assign position
         if let Some(addressable) = Self::get_boxed_statement(stmt) {
             let addr = addressable.address();
+
+            // Account for any comment space needed before this statement
+            let comment_before = self.comment_space_before.get(&addr).copied().unwrap_or(0);
+            self.current_pos += comment_before;
+
             self.address_to_position.insert(addr, self.current_pos);
 
-            // Update the statement's span to the final position if possible
+            // Estimate size based on statement type and content
+            let estimated_size = self.estimate_statement_size(stmt);
+            self.estimated_sizes.insert(addr, estimated_size);
+
+            let stmt_end = self.current_pos + estimated_size;
+
+            // Update the statement's span to reflect its estimated size
             match stmt {
                 Statement::ExpressionStatement(expr_stmt) => {
                     expr_stmt.span.start = self.current_pos;
-                    expr_stmt.span.end = self.current_pos + 1;
+                    expr_stmt.span.end = stmt_end;
                 }
                 Statement::BlockStatement(block) => {
                     block.span.start = self.current_pos;
-                    block.span.end = self.current_pos + 1;
+                    block.span.end = stmt_end;
                 }
                 Statement::IfStatement(if_stmt) => {
                     if_stmt.span.start = self.current_pos;
-                    if_stmt.span.end = self.current_pos + 1;
+                    if_stmt.span.end = stmt_end;
                 }
                 Statement::SwitchStatement(switch) => {
                     switch.span.start = self.current_pos;
-                    switch.span.end = self.current_pos + 1;
+                    switch.span.end = stmt_end;
                 }
                 Statement::ReturnStatement(ret) => {
                     ret.span.start = self.current_pos;
-                    ret.span.end = self.current_pos + 1;
+                    ret.span.end = stmt_end;
                 }
                 Statement::VariableDeclaration(var_decl) => {
                     var_decl.span.start = self.current_pos;
-                    var_decl.span.end = self.current_pos + 1;
+                    var_decl.span.end = stmt_end;
                 }
                 Statement::FunctionDeclaration(func_decl) => {
                     func_decl.span.start = self.current_pos;
-                    func_decl.span.end = self.current_pos + 1;
+                    func_decl.span.end = stmt_end;
                 }
                 _ => {
                     // For other statement types, we can't directly update spans
@@ -105,7 +206,11 @@ impl<'a> VisitMut<'a> for PositionAssigner {
                 }
             }
 
-            self.current_pos += 100; // Leave space for comments
+            // Account for any comment space after this statement
+            let comment_after = self.comment_space_after.get(&addr).copied().unwrap_or(0);
+
+            // Move position forward by estimated size plus any trailing comments
+            self.current_pos = stmt_end + comment_after + 1; // +1 for newline between statements
         }
 
         walk_statement(self, stmt);

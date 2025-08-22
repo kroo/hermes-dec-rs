@@ -140,7 +140,7 @@ impl<'a> InstructionToStatementConverter<'a> {
         // Also set it in the register manager so it can use duplicated names
         self.register_manager.set_duplication_context(context);
     }
-    
+
     /// Set the current duplication context for switch case processing
     pub fn set_duplication_context_for_case_group(&mut self, case_group: &CaseGroup) {
         self.set_duplication_context(Some(DuplicationContext::SwitchBlockDuplication {

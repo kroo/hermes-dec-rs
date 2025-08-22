@@ -1337,9 +1337,10 @@ impl<'a> InstructionToStatementConverter<'a> {
 
         // TODO: Replace with ControlFlowPlanConverter once implemented
         Err(StatementConversionError::UnsupportedInstruction(
-            "Nested function decompilation temporarily disabled during converter refactoring".to_string()
+            "Nested function decompilation temporarily disabled during converter refactoring"
+                .to_string(),
         ))
-        
+
         // Original code commented out:
         // // Create block converter for the nested function
         // let mut block_converter = crate::ast::control_flow::BlockToStatementConverter::new(

@@ -337,8 +337,8 @@ fn analyze_usage_patterns(
         usage.is_reassigned = usage.assignment_count > 1;
 
         // Variables can be const if they're never reassigned
-        // Parameters can't be const in JavaScript
-        usage.should_be_const = !usage.is_reassigned && !usage.is_parameter;
+        // Even parameter copies (like param0 = arg0) can be const if never reassigned
+        usage.should_be_const = !usage.is_reassigned;
 
         analysis.variable_usage.insert(representative, usage);
     }

@@ -8,8 +8,8 @@ use crate::analysis::{
     GlobalSSAAnalyzer,
 };
 use crate::ast::{
-    build_function_program, generate_code_with_comments, AddressCommentManager,
-    ExpressionContext, InstructionIndex,
+    build_function_program, generate_code_with_comments, AddressCommentManager, ExpressionContext,
+    InstructionIndex,
 };
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
@@ -349,14 +349,14 @@ impl<'a> FunctionDecompiler<'a> {
             function_analysis,
         );
         let mut plan = plan_builder.build();
-        
+
         // Analyze the plan to determine declaration and use strategies
         let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
             &mut plan,
             function_analysis,
         );
         analyzer.analyze();
-        
+
         // Convert the plan to AST
         let mut converter = crate::ast::ControlFlowPlanConverter::new(
             ast_builder,
@@ -364,12 +364,13 @@ impl<'a> FunctionDecompiler<'a> {
             hbc_analysis,
             self.function_index,
             function_analysis,
+            self.include_ssa_comments,
+            self.include_instruction_comments,
         );
         let all_statements = converter.convert_to_ast(&plan);
 
         // Take the comment manager back from the converter
-        // let comment_manager = converter.take_comment_manager();
-        let comment_manager = None;
+        let comment_manager = converter.take_comment_manager();
 
         // Analyze the function for patterns
         let (default_params, function_type) = match self

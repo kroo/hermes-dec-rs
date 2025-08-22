@@ -4,7 +4,6 @@
 //! These handle literal values (numbers, strings, booleans, null, undefined, etc.).
 
 use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
-use oxc_ast::ast::VariableDeclarationKind;
 
 use oxc_span::Span;
 
@@ -123,11 +122,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_syntax::number::NumberBase::Decimal,
         );
 
-        let stmt = self.create_variable_declaration(
-            &dest_var,
-            Some(value_expr),
-            VariableDeclarationKind::Let,
-        )?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(value_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }

@@ -9,7 +9,7 @@
 //! FunctionAnalysis and HbcAnalysis structures.
 
 use hermes_dec_rs::{
-    ast::{BlockToStatementConverter, ExpressionContext},
+    ast::ExpressionContext,
     cfg::{Block, EdgeKind},
     generated::unified_instructions::UnifiedInstruction,
     hbc::function_table::HbcFunctionInstruction,
@@ -20,12 +20,13 @@ use oxc_ast::AstBuilder as OxcAstBuilder;
 use petgraph::Graph;
 
 // Helper function - tests need refactoring for new constructor
+// BlockToStatementConverter has been removed in favor of ControlFlowPlanConverter
 #[allow(dead_code)]
 fn create_test_converter<'a>(
     _ast_builder: &'a OxcAstBuilder<'a>,
     _context: ExpressionContext<'a>,
     _cfg: &Graph<Block, EdgeKind>,
-) -> BlockToStatementConverter<'a> {
+) {
     panic!("Tests need refactoring for new unified constructor that requires FunctionAnalysis");
 }
 

@@ -8,8 +8,10 @@ use crate::analysis::control_flow_plan::{ControlFlowKind, SequentialElement, Str
 use crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer;
 use crate::analysis::FunctionAnalysis;
 use crate::cfg::analysis::{ConditionalChain, SwitchRegion};
+use crate::cfg::ssa::{RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::SwitchInfo;
 use crate::cfg::Cfg;
+use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::instruction_types::InstructionIndex;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -200,8 +202,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             region.analyze_case_bodies(self.cfg.graph(), self.cfg);
         }
 
-        // Detect the full switch pattern if it's sparse
-        let switch_info = self.detect_sparse_switch_pattern(&region);
+        // Detect the switch pattern - either dense (SwitchImm) or sparse
+        let switch_info = if self.is_dense_switch(&region) {
+            self.detect_dense_switch_pattern(&region)
+        } else {
+            self.detect_sparse_switch_pattern(&region)
+        };
 
         // Mark all comparison blocks as processed if we have switch info
         if let Some(ref info) = switch_info {
@@ -230,30 +236,65 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Build default case if present
         let default_case = if let Some(ref info) = switch_info {
             info.default_case.as_ref().map(|default| {
+                // Don't mark as processed before building - build_sequential_structure will handle it
+                let structure = self.build_sequential_structure(default.target_block);
+                // Now mark it as processed after building
                 self.processed_blocks.insert(default.target_block);
-                self.build_sequential_structure(default.target_block)
+                structure
             })
         } else {
             region.default_head.map(|default_block| {
+                // Don't mark as processed before building - build_sequential_structure will handle it
+                let structure = self.build_sequential_structure(default_block);
+                // Now mark it as processed after building
                 self.processed_blocks.insert(default_block);
-                self.build_sequential_structure(default_block)
+                structure
             })
         };
 
         // Mark join block as processed
         self.processed_blocks.insert(region.join_block);
 
-        let switch_info_final = switch_info.unwrap_or_else(|| SwitchInfo {
-            discriminator: 0,
-            discriminator_instruction_index: InstructionIndex(0),
-            cases: vec![],
-            default_case: None,
-            shared_tail: None,
-        });
+        let switch_info_final =
+            switch_info.expect("Switch info should be populated by this point.");
+
+        // Extract the discriminator SSA value and RegisterUse
+        // For SwitchImm, the discriminator is used in the switch instruction itself
+        // However, SSA analysis might not track SwitchImm as a use, so we need to find the value differently
+
+        let (discriminator_value, discriminator_use) = {
+            // Get the SSA value that's defined for this register before the switch instruction
+            // We use get_value_before_instruction to find what value reaches the switch
+            let ssa_value = self
+                .function_analysis
+                .ssa
+                .get_value_before_instruction(
+                    switch_info_final.discriminator,
+                    switch_info_final.discriminator_instruction_index,
+                )
+                .cloned();
+
+            // Create a RegisterUse for the switch discriminator if we have the SSA value
+            let register_use = if ssa_value.is_some()
+                && switch_info_final.discriminator_instruction_index != InstructionIndex(0)
+            {
+                Some(RegisterUse::new(
+                    switch_info_final.discriminator,
+                    region.dispatch,
+                    switch_info_final.discriminator_instruction_index,
+                ))
+            } else {
+                None
+            };
+
+            (ssa_value, register_use)
+        };
 
         let switch_structure = self.plan.create_structure(ControlFlowKind::Switch {
             dispatch_block: region.dispatch,
             info: switch_info_final.clone(),
+            discriminator_value,
+            discriminator_use,
             case_groups,
             default_case,
         });
@@ -368,10 +409,25 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             // Check for fallthrough - we'll detect this after all groups are built
             let fallthrough = None;
 
+            // Determine if this case needs a break statement
+            let needs_break = if fallthrough.is_some() {
+                crate::analysis::control_flow_plan::BreakRequirement::FallthroughIntended
+            } else {
+                // Check if the body always terminates
+                if let Some(termination) = self.check_structure_termination(&body) {
+                    crate::analysis::control_flow_plan::BreakRequirement::NotNeeded {
+                        reason: termination,
+                    }
+                } else {
+                    crate::analysis::control_flow_plan::BreakRequirement::Required
+                }
+            };
+
             case_groups.push(crate::analysis::control_flow_plan::CaseGroupStructure {
                 cases: switch_cases,
                 body,
                 fallthrough,
+                needs_break,
             });
         }
 
@@ -422,10 +478,20 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 execution_order: case.case_index,
             };
 
+            // Determine if this case needs a break statement
+            let needs_break = if let Some(termination) = self.check_structure_termination(&body) {
+                crate::analysis::control_flow_plan::BreakRequirement::NotNeeded {
+                    reason: termination,
+                }
+            } else {
+                crate::analysis::control_flow_plan::BreakRequirement::Required
+            };
+
             case_groups.push(crate::analysis::control_flow_plan::CaseGroupStructure {
                 cases: vec![switch_case],
                 body,
                 fallthrough: None,
+                needs_break,
             });
         }
 
@@ -532,10 +598,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                     }
                 };
 
+                // Extract condition info from the loop header
+                let header = loop_info.primary_header();
+                let (condition, condition_use) = self.extract_condition_info(header);
+
                 let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
                     loop_type,
-                    header_block: loop_info.primary_header(),
-                    condition: None, // TODO: Extract condition from header block
+                    header_block: header,
+                    condition,
+                    condition_use,
                     body: loop_body,
                     update: None,       // TODO: Detect update statements for for-loops
                     break_target: None, // TODO: Track break targets
@@ -661,9 +732,14 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             // Mark join block as processed
             self.processed_blocks.insert(chain.join_block);
 
+            // Extract condition information from the condition block
+            let (condition_expr, condition_use) =
+                self.extract_condition_info(first_branch.condition_block);
+
             let kind = ControlFlowKind::Conditional {
                 condition_block: first_branch.condition_block,
-                condition_expr: None, // TODO: Extract condition expression
+                condition_expr,
+                condition_use,
                 true_branch,
                 false_branch,
             };
@@ -672,6 +748,111 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         } else {
             // Empty conditional?
             self.plan.create_structure(ControlFlowKind::Empty)
+        }
+    }
+
+    /// Extract condition SSAValue and RegisterUse from a condition block
+    fn extract_condition_info(
+        &self,
+        condition_block: NodeIndex,
+    ) -> (Option<SSAValue>, Option<RegisterUse>) {
+        // Get the block
+        let block = match self.cfg.graph().node_weight(condition_block) {
+            Some(b) => b,
+            None => return (None, None),
+        };
+
+        // Jump instructions always terminate blocks, so look at the last instruction
+        let last_inst = match block.instructions.last() {
+            Some(inst) => inst,
+            None => return (None, None),
+        };
+
+        // Extract the condition register based on the jump type
+        let condition_register = match &last_inst.instruction {
+            // Single register condition jumps
+            UnifiedInstruction::JmpTrue { operand_1, .. }
+            | UnifiedInstruction::JmpTrueLong { operand_1, .. }
+            | UnifiedInstruction::JmpFalse { operand_1, .. }
+            | UnifiedInstruction::JmpFalseLong { operand_1, .. }
+            | UnifiedInstruction::JmpUndefined { operand_1, .. }
+            | UnifiedInstruction::JmpUndefinedLong { operand_1, .. } => Some(*operand_1),
+
+            // Comparison jumps - for now we track the first operand
+            // TODO: We might want to track both operands for better analysis
+            UnifiedInstruction::JEqual { operand_1, .. }
+            | UnifiedInstruction::JEqualLong { operand_1, .. }
+            | UnifiedInstruction::JNotEqual { operand_1, .. }
+            | UnifiedInstruction::JNotEqualLong { operand_1, .. }
+            | UnifiedInstruction::JStrictEqual { operand_1, .. }
+            | UnifiedInstruction::JStrictEqualLong { operand_1, .. }
+            | UnifiedInstruction::JStrictNotEqual { operand_1, .. }
+            | UnifiedInstruction::JStrictNotEqualLong { operand_1, .. }
+            | UnifiedInstruction::JLess { operand_1, .. }
+            | UnifiedInstruction::JLessLong { operand_1, .. }
+            | UnifiedInstruction::JLessN { operand_1, .. }
+            | UnifiedInstruction::JLessNLong { operand_1, .. }
+            | UnifiedInstruction::JNotLess { operand_1, .. }
+            | UnifiedInstruction::JNotLessLong { operand_1, .. }
+            | UnifiedInstruction::JNotLessN { operand_1, .. }
+            | UnifiedInstruction::JNotLessNLong { operand_1, .. }
+            | UnifiedInstruction::JLessEqual { operand_1, .. }
+            | UnifiedInstruction::JLessEqualLong { operand_1, .. }
+            | UnifiedInstruction::JLessEqualN { operand_1, .. }
+            | UnifiedInstruction::JLessEqualNLong { operand_1, .. }
+            | UnifiedInstruction::JNotLessEqual { operand_1, .. }
+            | UnifiedInstruction::JNotLessEqualLong { operand_1, .. }
+            | UnifiedInstruction::JNotLessEqualN { operand_1, .. }
+            | UnifiedInstruction::JNotLessEqualNLong { operand_1, .. }
+            | UnifiedInstruction::JGreater { operand_1, .. }
+            | UnifiedInstruction::JGreaterLong { operand_1, .. }
+            | UnifiedInstruction::JGreaterN { operand_1, .. }
+            | UnifiedInstruction::JGreaterNLong { operand_1, .. }
+            | UnifiedInstruction::JNotGreater { operand_1, .. }
+            | UnifiedInstruction::JNotGreaterLong { operand_1, .. }
+            | UnifiedInstruction::JNotGreaterN { operand_1, .. }
+            | UnifiedInstruction::JNotGreaterNLong { operand_1, .. }
+            | UnifiedInstruction::JGreaterEqual { operand_1, .. }
+            | UnifiedInstruction::JGreaterEqualLong { operand_1, .. }
+            | UnifiedInstruction::JGreaterEqualN { operand_1, .. }
+            | UnifiedInstruction::JGreaterEqualNLong { operand_1, .. }
+            | UnifiedInstruction::JNotGreaterEqual { operand_1, .. }
+            | UnifiedInstruction::JNotGreaterEqualLong { operand_1, .. }
+            | UnifiedInstruction::JNotGreaterEqualN { operand_1, .. }
+            | UnifiedInstruction::JNotGreaterEqualNLong { operand_1, .. } => Some(*operand_1),
+
+            // Unconditional jumps - no condition
+            UnifiedInstruction::Jmp { .. } | UnifiedInstruction::JmpLong { .. } => None,
+
+            // Any other instruction shouldn't be terminating a conditional block
+            _ => None,
+        };
+
+        if let Some(register) = condition_register {
+            let pc = last_inst.instruction_index;
+
+            // Create the RegisterUse
+            let register_use = RegisterUse::new(register, condition_block, pc);
+
+            // Get the SSA value for this register use
+            // First find the definition site from the use-def chains
+            let ssa_value = if let Some(def_site) =
+                self.function_analysis.ssa.use_def_chains.get(&register_use)
+            {
+                // Find the SSA value with this def site
+                self.function_analysis
+                    .ssa
+                    .ssa_values
+                    .values()
+                    .find(|v| &v.def_site == def_site)
+                    .cloned()
+            } else {
+                None
+            };
+
+            (ssa_value, Some(register_use))
+        } else {
+            (None, None)
         }
     }
 
@@ -773,8 +954,118 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                             blocks_to_duplicate,
                             duplication_context,
                         });
+                    // Update needs_break to indicate fallthrough is intended
+                    case_groups[i].needs_break =
+                        crate::analysis::control_flow_plan::BreakRequirement::FallthroughIntended;
                 }
             }
+        }
+    }
+
+    /// Check if a switch region uses a dense switch (SwitchImm instruction)
+    fn is_dense_switch(&self, region: &SwitchRegion) -> bool {
+        let dispatch_block = &self.cfg.graph()[region.dispatch];
+
+        // Check if the dispatch block contains a SwitchImm instruction
+        dispatch_block.instructions().iter().any(|instr| {
+            matches!(
+                &instr.instruction,
+                crate::generated::unified_instructions::UnifiedInstruction::SwitchImm { .. }
+            )
+        })
+    }
+
+    /// Detect dense switch pattern (SwitchImm) for a switch region
+    fn detect_dense_switch_pattern(&self, region: &SwitchRegion) -> Option<SwitchInfo> {
+        let dispatch_block = &self.cfg.graph()[region.dispatch];
+
+        // Find the SwitchImm instruction
+        let switch_instr = dispatch_block.instructions().iter().find(|instr| {
+            matches!(
+                &instr.instruction,
+                crate::generated::unified_instructions::UnifiedInstruction::SwitchImm { .. }
+            )
+        })?;
+
+        // Extract the SwitchImm details
+        if let crate::generated::unified_instructions::UnifiedInstruction::SwitchImm {
+            operand_0: switch_register,
+            operand_3: _min_value,
+            operand_4: _max_value,
+            ..
+        } = &switch_instr.instruction
+        {
+            // Get the switch table from the HBC file
+            let switch_table = self
+                .function_analysis
+                .hbc_file
+                .switch_tables
+                .get_switch_table_by_instruction(
+                    self.function_analysis.function_index,
+                    switch_instr.instruction_index.into(),
+                )?;
+
+            // Build case info from the switch table
+            let mut cases = Vec::new();
+            let mut execution_order = 0;
+            for case in &switch_table.cases {
+                // Each case in a dense switch has a single key value
+                let keys = vec![crate::cfg::switch_analysis::CaseKey::Number(
+                    ordered_float::OrderedFloat(case.value as f64),
+                )];
+
+                // The target block is determined by the case's target instruction index
+                if let Some(target_inst_idx) = case.target_instruction_index {
+                    // Find the block that contains this instruction
+                    let target_block = self.cfg.graph().node_indices().find(|&idx| {
+                        let block = &self.cfg.graph()[idx];
+                        block
+                            .instructions()
+                            .iter()
+                            .any(|instr| instr.instruction_index == target_inst_idx.into())
+                    })?;
+
+                    cases.push(crate::cfg::switch_analysis::CaseInfo {
+                        keys,
+                        comparison_block: region.dispatch, // Dense switch doesn't have separate comparison blocks
+                        target_block,
+                        setup: smallvec::SmallVec::new(),
+                        always_terminates: false,
+                        execution_order,
+                    });
+                    execution_order += 1;
+                }
+            }
+
+            // Handle default case
+            let default_case =
+                if let Some(default_inst_idx) = switch_table.default_instruction_index {
+                    // Find the block that contains the default target instruction
+                    let default_block = self.cfg.graph().node_indices().find(|&idx| {
+                        let block = &self.cfg.graph()[idx];
+                        block
+                            .instructions()
+                            .iter()
+                            .any(|instr| instr.instruction_index == default_inst_idx.into())
+                    })?;
+
+                    Some(crate::cfg::switch_analysis::DefaultCase {
+                        target_block: default_block,
+                        setup: smallvec::SmallVec::new(),
+                    })
+                } else {
+                    None
+                };
+
+            Some(crate::cfg::switch_analysis::SwitchInfo {
+                discriminator: *switch_register,
+                discriminator_instruction_index: switch_instr.instruction_index,
+                cases,
+                default_case,
+                shared_tail: None, // Dense switches typically don't have shared tails in the same way
+            })
+        } else {
+            None
         }
     }
 
@@ -818,5 +1109,47 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         } else {
             None
         }
+    }
+
+    /// Check if a structure always terminates
+    fn check_structure_termination(
+        &self,
+        structure_id: &StructureId,
+    ) -> Option<crate::analysis::control_flow_plan::TerminationReason> {
+        // First check using the plan's built-in method
+        if let Some(reason) = self.plan.structure_always_terminates(*structure_id) {
+            return Some(reason);
+        }
+
+        // If that didn't work, check if it's a basic block and analyze its instructions
+        if let Some(structure) = self.plan.get_structure(*structure_id) {
+            if let crate::analysis::control_flow_plan::ControlFlowKind::BasicBlock {
+                block, ..
+            } = &structure.kind
+            {
+                // Check the last instruction of the block
+                if let Some(last_instr) = self.cfg.graph()[*block].instructions().last() {
+                    match &last_instr.instruction {
+                        crate::generated::unified_instructions::UnifiedInstruction::Ret {
+                            ..
+                        } => {
+                            return Some(
+                                crate::analysis::control_flow_plan::TerminationReason::Return,
+                            );
+                        }
+                        crate::generated::unified_instructions::UnifiedInstruction::Throw {
+                            ..
+                        } => {
+                            return Some(
+                                crate::analysis::control_flow_plan::TerminationReason::Throw,
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        None
     }
 }

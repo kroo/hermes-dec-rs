@@ -330,11 +330,8 @@ impl<'a> SSAUsageTracker<'a> {
                 );
                 // This is part of a PHI group (coalesced values)
                 if self.is_declaration_point(ssa_value, coalesced_rep) {
-                    eprintln!("DEBUG: {} is the declaration point", ssa_value);
-
                     // Check if fully eliminated even for declaration points
                     if self.is_duplicated_fully_eliminated(dup_ssa_value) {
-                        eprintln!("DEBUG: {} is fully eliminated, returning Skip", ssa_value);
                         return DeclarationStrategy::Skip;
                     }
 
@@ -351,10 +348,6 @@ impl<'a> SSAUsageTracker<'a> {
                         return DeclarationStrategy::DeclareAndInitialize { kind };
                     }
                 } else {
-                    eprintln!(
-                        "DEBUG: {} is NOT the declaration point, returning AssignOnly",
-                        ssa_value
-                    );
                     // Not the declaration point - this is a PHI operand that needs assignment
                     return DeclarationStrategy::AssignOnly;
                 }
@@ -364,10 +357,7 @@ impl<'a> SSAUsageTracker<'a> {
         // 2. Check if fully eliminated (considering duplication context)
         // Only check this AFTER checking for PHI operands
         if self.is_duplicated_fully_eliminated(dup_ssa_value) {
-            eprintln!("DEBUG: {} is fully eliminated, returning Skip", ssa_value);
             return DeclarationStrategy::Skip;
-        } else {
-            eprintln!("DEBUG: {} is NOT fully eliminated", ssa_value);
         }
 
         // 3. Single SSA value - declare at definition
@@ -659,19 +649,20 @@ impl<'a> SSAUsageTracker<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::cfg::ssa::types::{DuplicatedSSAValue, RegisterDef, SSAValue};
+    use crate::cfg::ssa::types::{RegisterDef, SSAValue};
     use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey};
     use crate::hbc::InstructionIndex;
     use ordered_float::OrderedFloat;
     use petgraph::graph::NodeIndex;
     use smallvec::SmallVec;
 
+    #[allow(dead_code)]
     fn create_mock_ssa_value() -> SSAValue {
         let def = RegisterDef::new(1, NodeIndex::new(0), InstructionIndex::new(0));
         SSAValue::new(1, 1, def)
     }
 
+    #[allow(dead_code)]
     fn create_mock_case_group(keys: Vec<f64>) -> CaseGroup {
         CaseGroup {
             keys: keys
