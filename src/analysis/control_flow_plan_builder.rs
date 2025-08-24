@@ -7,8 +7,9 @@ use super::ControlFlowPlan;
 use crate::analysis::control_flow_plan::{ControlFlowKind, SequentialElement, StructureId};
 use crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer;
 use crate::analysis::FunctionAnalysis;
-use crate::cfg::analysis::{ConditionalChain, SwitchRegion};
+use crate::cfg::analysis::{ConditionalChain, PostDominatorAnalysis, SwitchRegion};
 use crate::cfg::ssa::{RegisterUse, SSAValue};
+use crate::cfg::switch_analysis::sparse_switch_analyzer::SparseSwitchAnalyzer;
 use crate::cfg::switch_analysis::SwitchInfo;
 use crate::cfg::Cfg;
 use crate::generated::unified_instructions::UnifiedInstruction;
@@ -26,17 +27,23 @@ pub struct ControlFlowPlanBuilder<'a> {
     processed_blocks: HashSet<NodeIndex>,
     /// Blocks that should stop sequential traversal (e.g., shared tails, join blocks)
     stop_blocks: HashSet<NodeIndex>,
+    /// Cached post-dominator analysis for nested pattern detection
+    post_dominators: Option<PostDominatorAnalysis>,
 }
 
 impl<'a> ControlFlowPlanBuilder<'a> {
     /// Create a new builder
     pub fn new(cfg: &'a Cfg<'a>, function_analysis: &'a FunctionAnalysis<'a>) -> Self {
+        // Pre-compute post-dominators for pattern detection
+        let post_dominators = cfg.analyze_post_dominators();
+
         Self {
             plan: ControlFlowPlan::new(),
             cfg,
             function_analysis,
             processed_blocks: HashSet::new(),
             stop_blocks: HashSet::new(),
+            post_dominators,
         }
     }
 
@@ -187,9 +194,34 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     }
 
     /// Try to build a control flow structure starting at this block
-    fn try_build_control_structure(&mut self, _block: NodeIndex) -> Option<StructureId> {
-        // This is now simplified - we rely on the pre-computed analyses
-        // rather than detecting patterns on the fly
+    fn try_build_control_structure(&mut self, block: NodeIndex) -> Option<StructureId> {
+        // Don't try to detect patterns in already processed blocks
+        if self.processed_blocks.contains(&block) {
+            return None;
+        }
+
+        // 1. Check for dense switch (SwitchImm instruction)
+        if let Some(region) = self.detect_dense_switch_at_block(block) {
+            return Some(self.build_switch_from_region(region));
+        }
+
+        // 2. Check for sparse switch using existing analyzer
+        if let Some(ref postdom) = self.post_dominators {
+            let analyzer = SparseSwitchAnalyzer::with_hbc_file(self.cfg.hbc_file());
+            if let Some(switch_info) = analyzer.detect_switch_pattern(
+                block,
+                self.cfg,
+                &self.function_analysis.ssa,
+                postdom,
+            ) {
+                // Convert switch_info to SwitchRegion and build
+                let region = self.switch_info_to_region(switch_info, block);
+                return Some(self.build_switch_from_region(region));
+            }
+        }
+
+        // 3. TODO: Could also check for conditionals and loops here
+
         None
     }
 
@@ -479,11 +511,14 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             };
 
             // Determine if this case needs a break statement
-            let needs_break = if let Some(termination) = self.check_structure_termination(&body) {
+            let termination = self.check_structure_termination(&body);
+            let needs_break = if let Some(termination) = termination {
+                log::debug!("Case terminates with {:?}, no break needed", termination);
                 crate::analysis::control_flow_plan::BreakRequirement::NotNeeded {
                     reason: termination,
                 }
             } else {
+                log::debug!("Case does not terminate, break required");
                 crate::analysis::control_flow_plan::BreakRequirement::Required
             };
 
@@ -1118,38 +1153,160 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     ) -> Option<crate::analysis::control_flow_plan::TerminationReason> {
         // First check using the plan's built-in method
         if let Some(reason) = self.plan.structure_always_terminates(*structure_id) {
+            log::debug!(
+                "Structure {:?} terminates via plan method: {:?}",
+                structure_id,
+                reason
+            );
             return Some(reason);
         }
 
         // If that didn't work, check if it's a basic block and analyze its instructions
         if let Some(structure) = self.plan.get_structure(*structure_id) {
-            if let crate::analysis::control_flow_plan::ControlFlowKind::BasicBlock {
-                block, ..
-            } = &structure.kind
-            {
-                // Check the last instruction of the block
-                if let Some(last_instr) = self.cfg.graph()[*block].instructions().last() {
-                    match &last_instr.instruction {
-                        crate::generated::unified_instructions::UnifiedInstruction::Ret {
-                            ..
-                        } => {
-                            return Some(
-                                crate::analysis::control_flow_plan::TerminationReason::Return,
-                            );
+            log::debug!(
+                "Checking termination for structure kind: {:?}",
+                std::mem::discriminant(&structure.kind)
+            );
+            match &structure.kind {
+                crate::analysis::control_flow_plan::ControlFlowKind::BasicBlock {
+                    block, ..
+                } => {
+                    // Check the last instruction of the block
+                    if let Some(last_instr) = self.cfg.graph()[*block].instructions().last() {
+                        match &last_instr.instruction {
+                            crate::generated::unified_instructions::UnifiedInstruction::Ret {
+                                ..
+                            } => {
+                                return Some(
+                                    crate::analysis::control_flow_plan::TerminationReason::Return,
+                                );
+                            }
+                            crate::generated::unified_instructions::UnifiedInstruction::Throw {
+                                ..
+                            } => {
+                                return Some(
+                                    crate::analysis::control_flow_plan::TerminationReason::Throw,
+                                );
+                            }
+                            _ => {}
                         }
-                        crate::generated::unified_instructions::UnifiedInstruction::Throw {
-                            ..
-                        } => {
-                            return Some(
-                                crate::analysis::control_flow_plan::TerminationReason::Throw,
-                            );
-                        }
-                        _ => {}
                     }
                 }
+                crate::analysis::control_flow_plan::ControlFlowKind::Sequential { elements } => {
+                    // For Sequential structures, check if any block terminates
+                    log::debug!("Sequential structure has {} elements", elements.len());
+
+                    // Check elements from the end, looking for termination
+                    for element in elements.iter().rev() {
+                        match element {
+                            crate::analysis::control_flow_plan::SequentialElement::Block(block) => {
+                                log::debug!("Checking Block({})", block.index());
+                                let instructions = self.cfg.graph()[*block].instructions();
+                                log::debug!("Block has {} instructions", instructions.len());
+
+                                // Skip empty blocks (like join blocks)
+                                if instructions.is_empty() {
+                                    log::debug!("Block is empty, skipping");
+                                    continue;
+                                }
+
+                                if let Some(last_instr) = instructions.last() {
+                                    log::debug!(
+                                        "Last instruction: {:?}",
+                                        std::mem::discriminant(&last_instr.instruction)
+                                    );
+                                    match &last_instr.instruction {
+                                        crate::generated::unified_instructions::UnifiedInstruction::Ret { .. } => {
+                                            log::debug!("Found Ret instruction - structure terminates");
+                                            return Some(crate::analysis::control_flow_plan::TerminationReason::Return);
+                                        }
+                                        crate::generated::unified_instructions::UnifiedInstruction::Throw { .. } => {
+                                            log::debug!("Found Throw instruction - structure terminates");
+                                            return Some(crate::analysis::control_flow_plan::TerminationReason::Throw);
+                                        }
+                                        _ => {
+                                            // If we found a non-terminal non-empty block, stop checking
+                                            log::debug!("Found non-terminal instruction, structure does not terminate");
+                                            return None;
+                                        }
+                                    }
+                                }
+                            }
+                            crate::analysis::control_flow_plan::SequentialElement::Structure(
+                                sid,
+                            ) => {
+                                log::debug!("Checking Structure({:?})", sid);
+                                // Check if this structure terminates
+                                if let Some(reason) = self.check_structure_termination(sid) {
+                                    return Some(reason);
+                                }
+                                // If the structure doesn't terminate, keep checking earlier elements
+                            }
+                        }
+                    }
+
+                    // No termination found
+                }
+                _ => {}
             }
         }
 
         None
+    }
+
+    /// Detect if a block contains a dense switch (SwitchImm instruction)
+    fn detect_dense_switch_at_block(&self, block: NodeIndex) -> Option<SwitchRegion> {
+        let block_data = &self.cfg.graph()[block];
+
+        // Check if the block contains a SwitchImm instruction
+        for instr in block_data.instructions() {
+            if matches!(&instr.instruction, UnifiedInstruction::SwitchImm { .. }) {
+                // For now, we'll need to analyze the switch pattern
+                // This is already handled by the global analysis, so we'll skip for now
+                // TODO: Implement local dense switch detection
+                return None;
+            }
+        }
+
+        None
+    }
+
+    /// Convert SwitchInfo to SwitchRegion for building
+    fn switch_info_to_region(
+        &self,
+        switch_info: SwitchInfo,
+        dispatch_block: NodeIndex,
+    ) -> SwitchRegion {
+        use crate::cfg::analysis::SwitchCase;
+
+        // Convert SwitchInfo cases to SwitchCase format
+        let cases = switch_info
+            .cases
+            .iter()
+            .map(|case_info| SwitchCase {
+                case_index: case_info.execution_order,
+                case_head: case_info.target_block,
+            })
+            .collect();
+
+        // Determine the join block (where control flow merges after the switch)
+        // This is typically the shared tail if it exists
+        let join_block = if let Some(ref tail) = switch_info.shared_tail {
+            tail.block_id
+        } else {
+            // Find a common post-dominator or use a dummy exit block
+            NodeIndex::new(self.cfg.graph().node_count())
+        };
+
+        // Determine default head
+        let default_head = switch_info.default_case.as_ref().map(|dc| dc.target_block);
+
+        SwitchRegion {
+            dispatch: dispatch_block,
+            cases,
+            default_head,
+            join_block,
+            case_analyses: std::collections::HashMap::new(),
+        }
     }
 }

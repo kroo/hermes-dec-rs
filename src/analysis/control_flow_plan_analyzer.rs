@@ -97,6 +97,10 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
     /// Recursively mark consumed uses in a structure
     fn mark_consumed_uses_in_structure(&mut self, structure_id: StructureId) {
+        eprintln!(
+            "DEBUG: mark_consumed_uses_in_structure called for structure {}",
+            structure_id.0
+        );
         let structure = match self.plan.get_structure(structure_id) {
             Some(s) => s.clone(),
             None => return,
@@ -111,7 +115,16 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             } => {
                 // Mark discriminator uses as consumed (they're inlined in the switch)
                 // For sparse switches, the comparison uses are inlined
+                eprintln!(
+                    "DEBUG: Processing {} cases for switch in structure {}",
+                    info.cases.len(),
+                    structure_id.0
+                );
                 for case in &info.cases {
+                    eprintln!(
+                        "DEBUG: Processing case with comparison block {}",
+                        case.comparison_block.index()
+                    );
                     // Find the comparison instruction in this case's comparison block
                     let block = &self.function_analysis.cfg.graph()[case.comparison_block];
                     for instr in block.instructions() {
@@ -133,9 +146,29 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                             // not the discriminator. The discriminator should remain as a variable reference.
                             // We can identify the case value register as the one that contains a constant.
                             for register in usage.sources {
-                                if let Some(ssa_value) = self
-                                    .find_ssa_value_for_register(register, case.comparison_block)
+                                // Find the SSA value being used at this specific instruction
+                                let use_site = RegisterUse {
+                                    register,
+                                    block_id: case.comparison_block,
+                                    instruction_idx: instr.instruction_index,
+                                };
+
+                                // Look up the SSA value from the use-def chain
+                                let ssa_value = if let Some(def_site) =
+                                    self.function_analysis.ssa.use_def_chains.get(&use_site)
                                 {
+                                    // Find the SSA value with this def site
+                                    self.function_analysis
+                                        .ssa
+                                        .ssa_values
+                                        .values()
+                                        .find(|v| &v.def_site == def_site)
+                                        .cloned()
+                                } else {
+                                    None
+                                };
+
+                                if let Some(ssa_value) = ssa_value {
                                     // Check if this register contains a constant value (case value)
                                     // The discriminator will be a parameter or variable, not a constant
                                     let value_tracker = self.function_analysis.value_tracker();
@@ -145,16 +178,24 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                             &tracked_value,
                                         );
 
+                                    eprintln!(
+                                        "DEBUG: Block {}, Register r{} -> SSA {} (constant: {})",
+                                        case.comparison_block.index(),
+                                        register,
+                                        ssa_value,
+                                        is_case_value
+                                    );
+
                                     if is_case_value {
-                                        let use_site = RegisterUse {
-                                            register,
-                                            block_id: case.comparison_block,
-                                            instruction_idx: instr.instruction_index,
-                                        };
+                                        eprintln!("DEBUG: Marking {} as consumed at Block {}, Instruction {}",
+                                                 ssa_value,
+                                                 use_site.block_id.index(),
+                                                 use_site.instruction_idx.value());
                                         // Mark in both the tracker and the plan
                                         self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
-                                        let dup_value = DuplicatedSSAValue::original(ssa_value);
-                                        self.plan.mark_use_consumed(dup_value, use_site);
+                                        let dup_value =
+                                            DuplicatedSSAValue::original(ssa_value.clone());
+                                        self.plan.mark_use_consumed(dup_value, use_site.clone());
                                     }
                                 }
                             }
@@ -229,18 +270,73 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 }
             }
 
+            ControlFlowKind::BasicBlock { block, .. } => {
+                // Check if this basic block contains comparison instructions that use setup values
+                // This can happen in default cases that have their own dispatch logic
+                let cfg_block = &self.function_analysis.cfg.graph()[*block];
+                for instr in cfg_block.instructions() {
+                    // Check if this is a comparison instruction
+                    if matches!(
+                        &instr.instruction,
+                        UnifiedInstruction::JStrictEqual { .. }
+                            | UnifiedInstruction::JStrictEqualLong { .. }
+                            | UnifiedInstruction::JStrictNotEqual { .. }
+                            | UnifiedInstruction::JStrictNotEqualLong { .. }
+                    ) {
+                        // Get all register operands
+                        let usage = crate::generated::instruction_analysis::analyze_register_usage(
+                            &instr.instruction,
+                        );
+
+                        // Check if any of the source registers contain constants (setup values)
+                        for register in usage.sources {
+                            // Find the SSA value being used at this specific instruction
+                            let use_site = RegisterUse {
+                                register,
+                                block_id: *block,
+                                instruction_idx: instr.instruction_index,
+                            };
+
+                            // Look up the SSA value from the use-def chain
+                            let ssa_value = if let Some(def_site) =
+                                self.function_analysis.ssa.use_def_chains.get(&use_site)
+                            {
+                                // Find the SSA value with this def site
+                                self.function_analysis
+                                    .ssa
+                                    .ssa_values
+                                    .values()
+                                    .find(|v| &v.def_site == def_site)
+                                    .cloned()
+                            } else {
+                                None
+                            };
+
+                            if let Some(ssa_value) = ssa_value {
+                                // Check if this register contains a constant value
+                                let value_tracker = self.function_analysis.value_tracker();
+                                let tracked_value = value_tracker.get_value(&ssa_value);
+                                let is_constant =
+                                    crate::analysis::value_tracker::ValueTracker::is_constant(
+                                        &tracked_value,
+                                    );
+
+                                if is_constant {
+                                    eprintln!("DEBUG: BasicBlock {} comparison uses constant {}, marking as consumed",
+                                             block.index(), ssa_value);
+                                    // Mark this constant use as consumed
+                                    self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
+                                    let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+                                    self.plan.mark_use_consumed(dup_value, use_site.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             _ => {}
         }
-    }
-
-    /// Find the SSA value for a register at a specific block
-    fn find_ssa_value_for_register(
-        &self,
-        register: u8,
-        block: NodeIndex,
-    ) -> Option<crate::cfg::ssa::SSAValue> {
-        // Look up the SSA value that's live for this register at this block
-        self.function_analysis.ssa.find_live_value(register, block)
     }
 
     /// Collect all blocks that will be duplicated in the control flow plan

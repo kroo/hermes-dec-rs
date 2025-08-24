@@ -703,6 +703,16 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             }
                             processed_setup.insert(setup_key.clone());
 
+                            // Check if this SSA value should be skipped
+                            let dup_ssa =
+                                DuplicatedSSAValue::original(setup_instr.ssa_value.clone());
+                            if let Some(DeclarationStrategy::Skip) =
+                                plan.get_declaration_strategy(&dup_ssa)
+                            {
+                                // Skip this setup instruction as its SSA value is eliminated
+                                continue;
+                            }
+
                             // Create an assignment statement for the setup instruction
                             // The SSA value tells us what variable is being assigned
                             let var_name = self.get_variable_name(&DuplicatedSSAValue::original(

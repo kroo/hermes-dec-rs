@@ -550,6 +550,72 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
     if let Some(cfp) = control_flow_plan {
         println!("\n=== Control Flow Plan ===");
         println!("{}", cfp);
+
+        // Print consumed uses and elimination details
+        println!("\n=== SSA Consumption and Elimination Analysis ===");
+
+        // Print consumed uses
+        if !cfp.consumed_uses.is_empty() {
+            println!("Consumed uses:");
+            for (dup_ssa, uses) in &cfp.consumed_uses {
+                // Also get the total uses from SSA analysis for comparison
+                let total_uses = if let Some(fa) = func_analysis.as_ref() {
+                    fa.ssa
+                        .get_ssa_value_uses(dup_ssa.original_ssa_value())
+                        .len()
+                } else {
+                    0
+                };
+                println!(
+                    "  {} -> {} uses consumed (total: {})",
+                    dup_ssa.original_ssa_value(),
+                    uses.len(),
+                    total_uses
+                );
+                for use_site in uses {
+                    println!(
+                        "    - Block {}, Instruction {}",
+                        use_site.block_id.index(),
+                        use_site.instruction_idx.value()
+                    );
+                }
+            }
+        } else {
+            println!("No consumed uses tracked");
+        }
+
+        // Print declaration strategies
+        println!("\nDeclaration strategies:");
+        for (dup_ssa, strategy) in &cfp.declaration_strategies {
+            let status = match strategy {
+                crate::analysis::ssa_usage_tracker::DeclarationStrategy::Skip => {
+                    "ELIMINATED (Skip)"
+                }
+                crate::analysis::ssa_usage_tracker::DeclarationStrategy::DeclareAndInitialize {
+                    kind,
+                } => match kind {
+                    crate::analysis::ssa_usage_tracker::VariableKind::Let => {
+                        "DeclareAndInitialize (let)"
+                    }
+                    crate::analysis::ssa_usage_tracker::VariableKind::Const => {
+                        "DeclareAndInitialize (const)"
+                    }
+                },
+                crate::analysis::ssa_usage_tracker::DeclarationStrategy::AssignOnly => "AssignOnly",
+                crate::analysis::ssa_usage_tracker::DeclarationStrategy::DeclareAtDominator {
+                    kind,
+                    ..
+                } => match kind {
+                    crate::analysis::ssa_usage_tracker::VariableKind::Let => {
+                        "DeclareAtDominator (let)"
+                    }
+                    crate::analysis::ssa_usage_tracker::VariableKind::Const => {
+                        "DeclareAtDominator (const)"
+                    }
+                },
+            };
+            println!("  {} -> {}", dup_ssa.original_ssa_value(), status);
+        }
     }
 
     Ok(())

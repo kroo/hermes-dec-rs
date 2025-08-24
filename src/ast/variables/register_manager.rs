@@ -498,7 +498,6 @@ pub struct RegisterStats {
 mod tests {
     use super::*;
     use crate::analysis::control_flow_plan::StructureId;
-    use std::collections::HashSet;
 
     fn create_test_control_flow_plan() -> Rc<ControlFlowPlan> {
         // Create a minimal control flow plan for testing
