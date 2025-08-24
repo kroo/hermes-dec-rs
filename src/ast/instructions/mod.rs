@@ -4,6 +4,7 @@
 //! individual Hermes bytecode instructions into JavaScript statements using a 1:1 mapping.
 //! This is the first phase of decompilation - direct translation without optimization.
 
+use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, VariableKind};
 use crate::ast::{
     context::{ExpressionContext, ExpressionContextError},
     variables::RegisterManager,
@@ -1749,12 +1750,20 @@ impl<'a> InstructionToStatementConverter<'a> {
         let is_first_definition = self.register_manager.is_first_definition(variable_name);
 
         if is_first_definition {
-            // Check if variable should be const
-            let declaration_kind = if self.register_manager.should_be_const(variable_name) {
-                oxc_ast::ast::VariableDeclarationKind::Const
-            } else {
-                oxc_ast::ast::VariableDeclarationKind::Let
-            };
+            // Check if variable should be const - first check declaration strategy, then fallback to usage analysis
+            let declaration_kind =
+                if let Some(kind) = self.get_declaration_kind_from_plan(variable_name) {
+                    // Use declaration strategy from control flow plan
+                    match kind {
+                        VariableKind::Const => oxc_ast::ast::VariableDeclarationKind::Const,
+                        VariableKind::Let => oxc_ast::ast::VariableDeclarationKind::Let,
+                    }
+                } else if self.register_manager.should_be_const(variable_name) {
+                    // Fallback to variable usage analysis
+                    oxc_ast::ast::VariableDeclarationKind::Const
+                } else {
+                    oxc_ast::ast::VariableDeclarationKind::Let
+                };
             // Create declaration: let/const variable_name = init_expression
             self.create_variable_declaration(variable_name, init_expression, declaration_kind)
         } else {
@@ -1849,5 +1858,26 @@ impl<'a> InstructionToStatementConverter<'a> {
             params,
             None::<oxc_ast::ast::BindingRestElement>,
         )
+    }
+
+    /// Get the declaration kind (const vs let) from the control flow plan
+    fn get_declaration_kind_from_plan(&self, variable_name: &str) -> Option<VariableKind> {
+        let plan = &self.control_flow_plan;
+
+        // Look through all declaration strategies to find one that matches this variable name
+        for (dup_ssa, strategy) in &plan.declaration_strategies {
+            // Check if this strategy applies to a variable with the given name
+            let strategy_var_name = self
+                .register_manager
+                .get_variable_name_for_duplicated(dup_ssa);
+            if strategy_var_name == variable_name {
+                return match strategy {
+                    DeclarationStrategy::DeclareAndInitialize { kind } => Some(*kind),
+                    DeclarationStrategy::DeclareAtDominator { kind, .. } => Some(*kind),
+                    _ => None,
+                };
+            }
+        }
+        None
     }
 }

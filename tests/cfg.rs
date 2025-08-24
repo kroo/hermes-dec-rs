@@ -306,7 +306,6 @@ fn make_test_hbc_file_with_jumps<'a>(
     make_test_hbc_file_with_instructions(instructions)
 }
 
-#[allow(dead_code)]
 fn make_test_instructions(
     unified_instructions: Vec<UnifiedInstruction>,
 ) -> Vec<HbcFunctionInstruction> {

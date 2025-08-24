@@ -16,28 +16,21 @@ use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
 use smallvec::SmallVec;
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 /// Safety checker for setup instructions
 pub struct SetupSafetyChecker<'a> {
-    #[allow(dead_code)]
-    cfg: &'a Cfg<'a>,
-    #[allow(dead_code)]
-    ssa: &'a SSAAnalysis,
-    #[allow(dead_code)]
-    postdom: &'a PostDominatorAnalysis,
-    #[allow(dead_code)]
-    reachability_cache: RefCell<HashMap<(NodeIndex, NodeIndex), HashSet<NodeIndex>>>,
+    _phantom: std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a> SetupSafetyChecker<'a> {
-    pub fn new(cfg: &'a Cfg<'a>, ssa: &'a SSAAnalysis, postdom: &'a PostDominatorAnalysis) -> Self {
+    pub fn new(
+        _cfg: &'a Cfg<'a>,
+        _ssa: &'a SSAAnalysis,
+        _postdom: &'a PostDominatorAnalysis,
+    ) -> Self {
         Self {
-            cfg,
-            ssa,
-            postdom,
-            reachability_cache: RefCell::new(HashMap::new()),
+            _phantom: std::marker::PhantomData,
         }
     }
 

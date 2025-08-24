@@ -58,7 +58,7 @@ pub enum DeclarationStrategy {
 }
 
 /// Variable declaration kind
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VariableKind {
     Let,
     Const,
@@ -650,34 +650,6 @@ impl<'a> SSAUsageTracker<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::cfg::ssa::types::{RegisterDef, SSAValue};
-    use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey};
-    use crate::hbc::InstructionIndex;
-    use ordered_float::OrderedFloat;
-    use petgraph::graph::NodeIndex;
-    use smallvec::SmallVec;
-
-    #[allow(dead_code)]
-    fn create_mock_ssa_value() -> SSAValue {
-        let def = RegisterDef::new(1, NodeIndex::new(0), InstructionIndex::new(0));
-        SSAValue::new(1, 1, def)
-    }
-
-    #[allow(dead_code)]
-    fn create_mock_case_group(keys: Vec<f64>) -> CaseGroup {
-        CaseGroup {
-            keys: keys
-                .into_iter()
-                .map(|k| CaseKey::Number(OrderedFloat(k)))
-                .collect(),
-            target_block: NodeIndex::new(10),
-            setup: SmallVec::new(),
-            always_terminates: false,
-            first_execution_order: 0,
-            comparison_blocks: vec![],
-        }
-    }
-
     // Note: These tests are temporarily disabled due to complex setup requirements
     // The core functionality they test is verified through integration tests
 

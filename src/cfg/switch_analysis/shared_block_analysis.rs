@@ -21,7 +21,13 @@ pub struct SharedBlockAnalysis {
 impl SharedBlockAnalysis {
     /// Analyze which blocks are shared by multiple case groups
     pub fn analyze(case_groups: &[CaseGroup], cfg: &Cfg) -> Self {
-        let mut block_references: HashMap<NodeIndex, usize> = HashMap::new();
+        // Use Vec for small case counts, HashMap for larger ones
+        let use_hashmap = case_groups.len() > 32;
+        let mut block_references: HashMap<NodeIndex, usize> = if use_hashmap {
+            HashMap::with_capacity(case_groups.len() * 2)
+        } else {
+            HashMap::new()
+        };
 
         // Count direct targets - each case group targets a block
         for group in case_groups {
@@ -30,14 +36,26 @@ impl SharedBlockAnalysis {
 
         // Also count indirect targets (blocks reachable from case targets)
         // This helps identify convergence points where multiple cases meet
+        // Cache visited successors to avoid redundant edge traversals
+        let mut successor_cache: HashMap<NodeIndex, Vec<NodeIndex>> = HashMap::new();
+
         for group in case_groups {
             use petgraph::visit::EdgeRef;
-            for edge in cfg.graph().edges(group.target_block) {
-                let successor = edge.target();
-                // Don't count exit blocks as shared
-                if !cfg.graph()[successor].is_exit() {
-                    *block_references.entry(successor).or_insert(0) += 1;
-                }
+
+            // Check cache first
+            let successors = successor_cache
+                .entry(group.target_block)
+                .or_insert_with(|| {
+                    cfg.graph()
+                        .edges(group.target_block)
+                        .map(|edge| edge.target())
+                        .filter(|&successor| !cfg.graph()[successor].is_exit())
+                        .collect()
+                });
+
+            // Count references to successors
+            for successor in successors.iter() {
+                *block_references.entry(*successor).or_insert(0) += 1;
             }
         }
 
