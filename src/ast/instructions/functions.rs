@@ -1309,23 +1309,8 @@ impl<'a> InstructionToStatementConverter<'a> {
         let nested_context =
             ExpressionContext::with_context(hbc_file, function_index, InstructionIndex::zero());
 
-        // Create a new instruction converter for the nested function
-        let mut nested_converter = InstructionToStatementConverter::new(
-            self.ast_builder,
-            nested_context.clone(),
-            self.hbc_analysis,
-        );
-
-        // Keep the same decompile_nested setting for nested functions
-        // This allows deeply nested functions to be decompiled
-        nested_converter.set_decompile_nested(self.decompile_nested);
-
-        // If we have a global analyzer, share it
-        // Global analyzer is now accessed through hbc_analysis
-        // No need to set it separately
-
         // Get function analysis for the nested function
-        let _nested_function_analysis = self
+        let nested_function_analysis = self
             .hbc_analysis
             .get_function_analysis_ref(function_index)
             .ok_or_else(|| {
@@ -1335,9 +1320,35 @@ impl<'a> InstructionToStatementConverter<'a> {
                 ))
             })?;
 
-        // TODO: Replace with ControlFlowPlanConverter once implemented
+        // Build and analyze the control flow plan for the nested function
+        let plan_builder = crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(
+            &nested_function_analysis.cfg,
+            nested_function_analysis,
+        );
+        let mut plan = plan_builder.build();
+
+        // Analyze the plan to determine declaration and use strategies
+        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
+            &mut plan,
+            nested_function_analysis,
+        );
+        analyzer.analyze();
+
+        // Create a new instruction converter for the nested function with the plan
+        let mut nested_converter = InstructionToStatementConverter::new(
+            self.ast_builder,
+            nested_context.clone(),
+            self.hbc_analysis,
+            plan,
+        );
+
+        // Keep the same decompile_nested setting for nested functions
+        // This allows deeply nested functions to be decompiled
+        nested_converter.set_decompile_nested(self.decompile_nested);
+
+        // TODO: Complete nested function decompilation using ControlFlowPlanConverter
         Err(StatementConversionError::UnsupportedInstruction(
-            "Nested function decompilation temporarily disabled during converter refactoring"
+            "Nested function decompilation temporarily disabled - need to port to ControlFlowPlanConverter"
                 .to_string(),
         ))
 

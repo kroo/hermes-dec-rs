@@ -48,6 +48,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
         function_index: u32,
         function_analysis: &crate::analysis::FunctionAnalysis<'a>,
+        plan: ControlFlowPlan,
         include_ssa_comments: bool,
         include_instruction_comments: bool,
     ) -> Self {
@@ -57,8 +58,13 @@ impl<'a> ControlFlowPlanConverter<'a> {
             crate::hbc::InstructionIndex::zero(),
         );
 
-        let mut instruction_converter =
-            InstructionToStatementConverter::new(ast_builder, expression_context, hbc_analysis);
+        // Create the instruction converter with the plan
+        let mut instruction_converter = InstructionToStatementConverter::new(
+            ast_builder,
+            expression_context.clone(),
+            hbc_analysis,
+            plan,
+        );
 
         // Generate variable mapping from SSA analysis
         let mut variable_mapper = crate::ast::variables::VariableMapper::new();
@@ -93,32 +99,16 @@ impl<'a> ControlFlowPlanConverter<'a> {
     }
 
     /// Convert the entire plan to statements
-    pub fn convert_to_ast(&mut self, plan: &ControlFlowPlan) -> OxcVec<'a, Statement<'a>> {
-        // Extract the set of duplicated SSA values that actually exist (i.e., are declared, not skipped)
-        let existing_duplicated_ssas: std::collections::HashSet<DuplicatedSSAValue> = plan
-            .declaration_strategies
-            .iter()
-            .filter_map(|(dup_val, strategy)| {
-                // Only include duplicated SSA values that are actually declared (not Skip)
-                if dup_val.duplication_context.is_some()
-                    && !matches!(strategy, DeclarationStrategy::Skip)
-                {
-                    Some(dup_val.clone())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        // Pass this information to the register manager
-        self.instruction_converter
-            .register_manager_mut()
-            .set_existing_duplicated_ssas(existing_duplicated_ssas);
+    pub fn convert_to_ast(&mut self) -> OxcVec<'a, Statement<'a>> {
+        // We now have the plan available through the instruction_converter
+        // The register manager will use the plan directly for declaration strategies
 
         let mut statements = self.ast_builder.vec();
 
         // Convert the root structure
-        self.convert_structure_id(plan, plan.root, &mut statements, None);
+        let plan = self.instruction_converter.control_flow_plan.clone();
+        let root = plan.root;
+        self.convert_structure_id(&plan, root, &mut statements, None);
 
         statements
     }
@@ -680,128 +670,134 @@ impl<'a> ControlFlowPlanConverter<'a> {
         let mut cases = self.ast_builder.vec();
 
         for group in case_groups {
-            // Create switch case for each key in the group
-            let mut first_case = true;
+            // Collect all case keys for this group
+            let mut case_keys = Vec::new();
             for case in &group.cases {
                 for key in &case.keys {
-                    let test = self.create_case_key_expression(key);
+                    case_keys.push(key.clone());
+                }
+            }
 
-                    // Only generate body for the first case in the group
-                    // Others will fall through to it
-                    let body = if first_case {
-                        let mut case_statements = self.ast_builder.vec();
+            // Create switch cases - empty bodies for all but the last
+            for (i, key) in case_keys.iter().enumerate() {
+                let test = self.create_case_key_expression(key);
+                let is_last_case = i == case_keys.len() - 1;
 
-                        // First, convert any setup instructions for this case group
-                        // These are instructions that were hoisted from the comparison blocks
-                        // We need to deduplicate them since multiple cases might have the same setup
-                        let mut processed_setup = std::collections::HashSet::new();
+                // Only generate body for the last case in the group
+                // Others will fall through to it
+                let body = if is_last_case {
+                    let mut case_statements = self.ast_builder.vec();
 
-                        for case in &group.cases {
-                            for setup_instr in &case.setup_instructions {
-                                // Create a key for deduplication based on the SSA value
-                                let setup_key = format!("{:?}", setup_instr.ssa_value);
-                                if processed_setup.contains(&setup_key) {
-                                    // Already processed this setup instruction
-                                    continue;
-                                }
-                                processed_setup.insert(setup_key.clone());
+                    // First, convert any setup instructions for this case group
+                    // These are instructions that were hoisted from the comparison blocks
+                    // We need to deduplicate them since multiple cases might have the same setup
+                    let mut processed_setup = std::collections::HashSet::new();
 
-                                // Create an assignment statement for the setup instruction
-                                // The SSA value tells us what variable is being assigned
-                                let var_name = self.get_variable_name(
-                                    &DuplicatedSSAValue::original(setup_instr.ssa_value.clone()),
-                                );
-
-                                // Create the value expression based on the setup instruction
-                                let value_expr = if let Some(ref const_value) = setup_instr.value {
-                                    // It's a constant value
-                                    self.create_constant_expression(const_value)
-                                } else {
-                                    // For non-constant setup instructions, we need to convert the instruction
-                                    // This is more complex and might need the actual instruction
-                                    continue; // Skip for now if we can't handle it
-                                };
-
-                                // Create the assignment: var_name = value_expr
-                                let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-                                let left =
-                                    oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
-                                        self.ast_builder.alloc(
-                                            self.ast_builder
-                                                .identifier_reference(oxc_span::SPAN, var_atom),
-                                        ),
-                                    );
-                                let assign = self.ast_builder.expression_assignment(
-                                    oxc_span::SPAN,
-                                    oxc_ast::ast::AssignmentOperator::Assign,
-                                    left,
-                                    value_expr,
-                                );
-                                let stmt = self
-                                    .ast_builder
-                                    .statement_expression(oxc_span::SPAN, assign);
-
-                                // Add comment for setup instruction
-                                if let Some(ref mut comment_manager) = self.comment_manager {
-                                    // Add instruction comment
-                                    if self.include_instruction_comments {
-                                        let instr_comment = format!(
-                                            "PC {}: {}",
-                                            setup_instr.instruction.instruction_index.0,
-                                            setup_instr
-                                                .instruction
-                                                .format_instruction(self.hbc_analysis.hbc_file)
-                                        );
-                                        comment_manager.add_comment(
-                                            &stmt,
-                                            instr_comment,
-                                            CommentKind::Line,
-                                            CommentPosition::Leading,
-                                        );
-                                    }
-
-                                    // Add SSA comment
-                                    if self.include_ssa_comments {
-                                        let ssa_comment = format!(
-                                            "Setup: {} [r{}_{}]",
-                                            var_name,
-                                            setup_instr.ssa_value.register,
-                                            setup_instr.ssa_value.version
-                                        );
-                                        comment_manager.add_comment(
-                                            &stmt,
-                                            ssa_comment,
-                                            CommentKind::Line,
-                                            CommentPosition::Leading,
-                                        );
-                                    }
-                                }
-
-                                case_statements.push(stmt);
+                    for case in &group.cases {
+                        for setup_instr in &case.setup_instructions {
+                            // Create a key for deduplication based on the SSA value
+                            let setup_key = format!("{:?}", setup_instr.ssa_value);
+                            if processed_setup.contains(&setup_key) {
+                                // Already processed this setup instruction
+                                continue;
                             }
-                        }
+                            processed_setup.insert(setup_key.clone());
 
-                        self.convert_structure_id(plan, group.body, &mut case_statements, context);
+                            // Create an assignment statement for the setup instruction
+                            // The SSA value tells us what variable is being assigned
+                            let var_name = self.get_variable_name(&DuplicatedSSAValue::original(
+                                setup_instr.ssa_value.clone(),
+                            ));
 
-                        // Handle fallthrough by duplicating blocks from the next group
-                        if let Some(ref fallthrough_info) = group.fallthrough {
-                            if !fallthrough_info.blocks_to_duplicate.is_empty() {
-                                // Convert the duplicated blocks with the duplication context
-                                // This will apply PHI replacements as needed
-                                for &block_idx in &fallthrough_info.blocks_to_duplicate {
-                                    // Convert just the specific block, not the whole structure
-                                    self.convert_single_block(
-                                        plan,
-                                        block_idx,
-                                        &mut case_statements,
-                                        Some(&fallthrough_info.duplication_context),
+                            // Create the value expression based on the setup instruction
+                            let value_expr = if let Some(ref const_value) = setup_instr.value {
+                                // It's a constant value
+                                self.create_constant_expression(const_value)
+                            } else {
+                                // For non-constant setup instructions, we need to convert the instruction
+                                // This is more complex and might need the actual instruction
+                                continue; // Skip for now if we can't handle it
+                            };
+
+                            // Create the assignment: var_name = value_expr
+                            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+                            let left = oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
+                                self.ast_builder.alloc(
+                                    self.ast_builder
+                                        .identifier_reference(oxc_span::SPAN, var_atom),
+                                ),
+                            );
+                            let assign = self.ast_builder.expression_assignment(
+                                oxc_span::SPAN,
+                                oxc_ast::ast::AssignmentOperator::Assign,
+                                left,
+                                value_expr,
+                            );
+                            let stmt = self
+                                .ast_builder
+                                .statement_expression(oxc_span::SPAN, assign);
+
+                            // Add comment for setup instruction
+                            if let Some(ref mut comment_manager) = self.comment_manager {
+                                // Add instruction comment
+                                if self.include_instruction_comments {
+                                    let instr_comment = format!(
+                                        "PC {}: {}",
+                                        setup_instr.instruction.instruction_index.0,
+                                        setup_instr
+                                            .instruction
+                                            .format_instruction(self.hbc_analysis.hbc_file)
+                                    );
+                                    comment_manager.add_comment(
+                                        &stmt,
+                                        instr_comment,
+                                        CommentKind::Line,
+                                        CommentPosition::Leading,
+                                    );
+                                }
+
+                                // Add SSA comment
+                                if self.include_ssa_comments {
+                                    let ssa_comment = format!(
+                                        "Setup: {} [r{}_{}]",
+                                        var_name,
+                                        setup_instr.ssa_value.register,
+                                        setup_instr.ssa_value.version
+                                    );
+                                    comment_manager.add_comment(
+                                        &stmt,
+                                        ssa_comment,
+                                        CommentKind::Line,
+                                        CommentPosition::Leading,
                                     );
                                 }
                             }
-                        }
 
-                        // Add break based on the needs_break field
-                        match &group.needs_break {
+                            case_statements.push(stmt);
+                        }
+                    }
+
+                    self.convert_structure_id(plan, group.body, &mut case_statements, context);
+
+                    // Handle fallthrough by duplicating blocks from the next group
+                    if let Some(ref fallthrough_info) = group.fallthrough {
+                        if !fallthrough_info.blocks_to_duplicate.is_empty() {
+                            // Convert the duplicated blocks with the duplication context
+                            // This will apply PHI replacements as needed
+                            for &block_idx in &fallthrough_info.blocks_to_duplicate {
+                                // Convert just the specific block, not the whole structure
+                                self.convert_single_block(
+                                    plan,
+                                    block_idx,
+                                    &mut case_statements,
+                                    Some(&fallthrough_info.duplication_context),
+                                );
+                            }
+                        }
+                    }
+
+                    // Add break based on the needs_break field
+                    match &group.needs_break {
                             crate::analysis::control_flow_plan::BreakRequirement::Required => {
                                 let break_stmt = self.ast_builder.statement_break(
                                     oxc_span::SPAN,
@@ -824,18 +820,16 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                 }
                             }
                         }
-                        first_case = false;
-                        case_statements
-                    } else {
-                        // Empty body - falls through to the first case
-                        self.ast_builder.vec()
-                    };
+                    case_statements
+                } else {
+                    // Empty body - falls through to the last case
+                    self.ast_builder.vec()
+                };
 
-                    let switch_case =
-                        self.ast_builder
-                            .switch_case(oxc_span::SPAN, Some(test), body);
-                    cases.push(switch_case);
-                }
+                let switch_case = self
+                    .ast_builder
+                    .switch_case(oxc_span::SPAN, Some(test), body);
+                cases.push(switch_case);
             }
         }
 

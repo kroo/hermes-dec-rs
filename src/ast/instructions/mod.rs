@@ -14,6 +14,7 @@ use crate::hbc::InstructionIndex;
 use crate::{analysis::GlobalAnalysisResult, generated::unified_instructions::UnifiedInstruction};
 use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
 use std::collections::HashSet;
+use std::rc::Rc;
 use std::sync::Arc;
 
 mod arithmetic;
@@ -102,6 +103,8 @@ pub struct InstructionToStatementConverter<'a> {
     undeclared_variables: HashSet<String>,
     /// Current duplication context for switch case processing
     current_duplication_context: Option<DuplicationContext>,
+    /// The control flow plan (shared ownership)
+    pub control_flow_plan: Rc<crate::analysis::control_flow_plan::ControlFlowPlan>,
 }
 
 impl<'a> InstructionToStatementConverter<'a> {
@@ -110,15 +113,18 @@ impl<'a> InstructionToStatementConverter<'a> {
         ast_builder: &'a OxcAstBuilder<'a>,
         expression_context: ExpressionContext<'a>,
         hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
+        control_flow_plan: crate::analysis::control_flow_plan::ControlFlowPlan,
     ) -> Self {
+        let control_flow_plan_rc = Rc::new(control_flow_plan);
         Self {
             ast_builder,
             expression_context,
-            register_manager: RegisterManager::new(),
+            register_manager: RegisterManager::new(control_flow_plan_rc.clone()),
             hbc_analysis,
             decompile_nested: false,
             undeclared_variables: HashSet::new(),
             current_duplication_context: None,
+            control_flow_plan: control_flow_plan_rc,
         }
     }
 

@@ -45,8 +45,21 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         }
     }
 
+    /// Collect all PHI results from the SSA analysis
+    fn collect_phi_results(&mut self) {
+        // Iterate through all PHI functions and collect their result SSA values
+        for phi_list in self.function_analysis.ssa.phi_functions.values() {
+            for phi in phi_list {
+                self.plan.phi_results.insert(phi.result.clone());
+            }
+        }
+    }
+
     /// Analyze the control flow plan and compute strategies
     pub fn analyze(mut self) {
+        // Collect PHI results from SSA analysis
+        self.collect_phi_results();
+
         // First pass: Collect duplicated blocks
         self.collect_duplicated_blocks(self.plan.root);
 
@@ -690,8 +703,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
     /// Compute declaration strategies for all SSA values
     fn compute_declaration_strategies(&mut self) {
-        eprintln!(
-            "DEBUG: usage_tracker has {} consumed uses",
+        log::debug!(
+            "usage_tracker has {} consumed uses",
             self.usage_tracker
                 .get_consumed_uses()
                 .values()

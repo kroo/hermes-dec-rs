@@ -4,9 +4,11 @@
 //! All naming logic has been moved to the VariableMapper for clean separation of concerns.
 
 use super::variable_mapper::VariableMapping;
+use crate::analysis::control_flow_plan::ControlFlowPlan;
 use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext};
 use crate::hbc::InstructionIndex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Register lifetime information for optimization
 #[derive(Debug, Clone)]
@@ -30,29 +32,24 @@ pub struct RegisterManager {
     register_lifetimes: HashMap<u8, RegisterLifetime>,
     /// Current duplication context for switch case processing
     current_duplication_context: Option<DuplicationContext>,
-    /// Set of duplicated SSA values that actually exist (have definitions in duplicated blocks)
-    existing_duplicated_ssas: HashSet<DuplicatedSSAValue>,
+    /// Reference to the control flow plan for declaration strategy lookups
+    control_flow_plan: Rc<ControlFlowPlan>,
 }
 
 impl RegisterManager {
-    pub fn new() -> Self {
+    pub fn new(control_flow_plan: Rc<ControlFlowPlan>) -> Self {
         Self {
             variable_mapping: None,
             current_pc: None,
             register_lifetimes: HashMap::new(),
             current_duplication_context: None,
-            existing_duplicated_ssas: HashSet::new(),
+            control_flow_plan,
         }
     }
 
     /// Set the pre-computed variable mapping (from VariableMapper)
     pub fn set_variable_mapping(&mut self, mapping: VariableMapping) {
         self.variable_mapping = Some(mapping);
-    }
-
-    /// Set the existing duplicated SSAs from the control flow plan
-    pub fn set_existing_duplicated_ssas(&mut self, ssas: HashSet<DuplicatedSSAValue>) {
-        self.existing_duplicated_ssas = ssas;
     }
 
     /// Update the current program counter for variable lookup
@@ -171,23 +168,11 @@ impl RegisterManager {
                         None
                     })
                 {
-                    // Check if a duplicated version of this SSA value actually exists
-                    let dup_ssa_with_context = DuplicatedSSAValue {
-                        original: ssa_value.clone(),
-                        duplication_context: Some(context.clone()),
-                    };
-
-                    // Only use the duplicated name if this SSA value is actually defined in a duplicated block
-                    let dup_ssa = if self
-                        .existing_duplicated_ssas
-                        .contains(&dup_ssa_with_context)
-                    {
-                        // This SSA value is defined in a duplicated block, use the duplicated name
-                        dup_ssa_with_context
-                    } else {
-                        // This SSA value is NOT defined in a duplicated block, use the original name
-                        DuplicatedSSAValue::original(ssa_value.clone())
-                    };
+                    // Use the control flow plan to determine if we should use a duplicated name
+                    let dup_ssa = self
+                        .control_flow_plan
+                        .should_use_duplicated_name(ssa_value, Some(context))
+                        .unwrap_or_else(|| DuplicatedSSAValue::original(ssa_value.clone()));
 
                     // Get the variable name
                     return mapping.get_variable_name_for_duplicated(&dup_ssa);
@@ -240,7 +225,38 @@ impl RegisterManager {
                         original: ssa_value.clone(),
                         duplication_context: Some(context.clone()),
                     };
-                    // Get the duplicated variable name
+
+                    // Check if this duplicated SSA should be declared or assigned
+                    // If it has AssignOnly strategy, use the PHI group representative's variable name
+                    use crate::analysis::ssa_usage_tracker::DeclarationStrategy;
+                    if let Some(DeclarationStrategy::AssignOnly) =
+                        self.control_flow_plan.declaration_strategies.get(&dup_ssa)
+                    {
+                        // AssignOnly - use the PHI group representative's variable name
+                        // First check if this SSA value is part of a PHI group
+                        let target_ssa = if let Some(representative) =
+                            mapping.coalesced_values.get(&ssa_value)
+                        {
+                            // Use the PHI group representative
+                            representative.clone()
+                        } else {
+                            // Not part of a PHI group, use the original
+                            ssa_value.clone()
+                        };
+
+                        let original_name = mapping.get_variable_name_for_duplicated(
+                            &DuplicatedSSAValue::original(target_ssa),
+                        );
+                        log::debug!(
+                            "Creating assignment to PHI group variable: {} for register {} at PC {} (AssignOnly)",
+                            original_name,
+                            register,
+                            pc.value()
+                        );
+                        return original_name;
+                    }
+
+                    // Get the duplicated variable name for declaration
                     let dup_name = mapping.get_variable_name_for_duplicated(&dup_ssa);
                     log::debug!(
                         "Creating new duplicated variable: {} for register {} at PC {}",
@@ -466,12 +482,6 @@ impl RegisterManager {
     }
 }
 
-impl Default for RegisterManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Statistics about register usage patterns
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegisterStats {
@@ -487,10 +497,20 @@ pub struct RegisterStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analysis::control_flow_plan::StructureId;
+    use std::collections::HashSet;
+
+    fn create_test_control_flow_plan() -> Rc<ControlFlowPlan> {
+        // Create a minimal control flow plan for testing
+        let mut plan = ControlFlowPlan::new();
+        plan.root = StructureId(0);
+        Rc::new(plan)
+    }
 
     #[test]
     fn test_register_manager_basic_functionality() {
-        let rm = RegisterManager::new();
+        let control_flow_plan = create_test_control_flow_plan();
+        let rm = RegisterManager::new(control_flow_plan);
 
         // Without variable mapping, should return None
         assert_eq!(rm.try_get_variable_name(0), None);
@@ -498,7 +518,8 @@ mod tests {
 
     #[test]
     fn test_parameter_marking() {
-        let mut rm = RegisterManager::new();
+        let control_flow_plan = create_test_control_flow_plan();
+        let mut rm = RegisterManager::new(control_flow_plan);
 
         // Mark register as parameter
         rm.mark_as_parameter(0, 0);
@@ -509,7 +530,8 @@ mod tests {
 
     #[test]
     fn test_lifetime_tracking() {
-        let mut rm = RegisterManager::new();
+        let control_flow_plan = create_test_control_flow_plan();
+        let mut rm = RegisterManager::new(control_flow_plan);
 
         // Track usage
         rm.track_usage(5, 10);
@@ -525,7 +547,8 @@ mod tests {
 
     #[test]
     fn test_single_use_detection() {
-        let mut rm = RegisterManager::new();
+        let control_flow_plan = create_test_control_flow_plan();
+        let mut rm = RegisterManager::new(control_flow_plan);
 
         // Single use register
         rm.track_usage(10, 15);
@@ -539,7 +562,8 @@ mod tests {
 
     #[test]
     fn test_register_stats() {
-        let mut rm = RegisterManager::new();
+        let control_flow_plan = create_test_control_flow_plan();
+        let mut rm = RegisterManager::new(control_flow_plan);
 
         rm.mark_as_parameter(0, 0);
         rm.mark_as_parameter(1, 0);
@@ -558,7 +582,8 @@ mod tests {
 
     #[test]
     fn test_reset() {
-        let mut rm = RegisterManager::new();
+        let control_flow_plan = create_test_control_flow_plan();
+        let mut rm = RegisterManager::new(control_flow_plan);
 
         rm.mark_as_parameter(0, 0);
         rm.track_usage(1, 5);

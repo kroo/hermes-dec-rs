@@ -68,6 +68,10 @@ pub struct ControlFlowPlan {
     pub phi_deconstructions:
         HashMap<(NodeIndex, Option<DuplicationContext>), PhiDeconstructionInfo>,
 
+    /// Set of SSA values that are PHI results
+    /// These should not use duplicated names even when in duplicated blocks
+    pub phi_results: HashSet<SSAValue>,
+
     /// Next available structure ID
     next_structure_id: usize,
 }
@@ -318,6 +322,7 @@ impl ControlFlowPlan {
             consumed_uses: HashMap::new(),
             scope_boundaries: HashMap::new(),
             phi_deconstructions: HashMap::new(),
+            phi_results: HashSet::new(),
             next_structure_id: 1,
         }
     }
@@ -503,6 +508,99 @@ impl ControlFlowPlan {
     pub fn duplicated_ssa_exists(&self, ssa_value: &DuplicatedSSAValue) -> bool {
         // A duplicated SSA value exists if it has a declaration strategy
         self.declaration_strategies.contains_key(ssa_value)
+    }
+
+    /// Determine whether a variable reference should use a duplicated name
+    ///
+    /// This is the key logic that determines whether we use var0_ft_0_1 or var0
+    /// based on where the SSA value is defined vs where it's being used.
+    ///
+    /// The rule: If an SSA value is defined inside a duplication context,
+    /// and we're using it in the same duplication context, use the duplicated name.
+    /// Otherwise, use the original name.
+    pub fn should_use_duplicated_name(
+        &self,
+        ssa_value: &SSAValue,
+        current_duplication_context: Option<&DuplicationContext>,
+    ) -> Option<DuplicatedSSAValue> {
+        // If we're not in a duplication context, use the original
+        let context = current_duplication_context?;
+
+        // The key insight: we should only use duplicated names for SSA values
+        // that are DEFINED WITHIN the blocks being duplicated BY ACTUAL INSTRUCTIONS.
+        // SSA values defined outside the duplicated blocks should use their original names.
+        // PHI results, even if defined in duplicated blocks, should use original names.
+
+        // Check which blocks are being duplicated in this context
+        match context {
+            DuplicationContext::SwitchFallthrough {
+                from_case_index,
+                to_case_index,
+            } => {
+                // Find which blocks are duplicated for this fallthrough
+                // We need to look through the switch structure to find the fallthrough info
+                for structure in self.structures.values() {
+                    if let ControlFlowKind::Switch { case_groups, .. } = &structure.kind {
+                        for group in case_groups {
+                            if let Some(ref fallthrough) = group.fallthrough {
+                                if let DuplicationContext::SwitchFallthrough {
+                                    from_case_index: from,
+                                    to_case_index: to,
+                                } = &fallthrough.duplication_context
+                                {
+                                    if from == from_case_index && to == to_case_index {
+                                        // Found the matching fallthrough
+                                        // Check if this SSA value is defined in a duplicated block
+
+                                        if !fallthrough
+                                            .blocks_to_duplicate
+                                            .contains(&ssa_value.def_site.block_id)
+                                        {
+                                            // SSA value is defined outside the duplicated blocks
+                                            return None;
+                                        }
+
+                                        // SSA value is defined in a duplicated block
+                                        // But we need to check if it's a PHI result or an actual instruction
+
+                                        // PHI results should not use duplicated names even when in duplicated blocks
+                                        // because they represent merges from predecessor blocks
+                                        if self.phi_results.contains(ssa_value) {
+                                            // This is a PHI result - use original name
+                                            return None;
+                                        }
+
+                                        // It's an actual instruction - use duplicated name
+                                        return Some(DuplicatedSSAValue {
+                                            original: ssa_value.clone(),
+                                            duplication_context: Some(context.clone()),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            DuplicationContext::SwitchBlockDuplication { .. } => {
+                // For switch block duplication, check if the SSA is defined in the duplicated blocks
+                // This would need similar logic to find which blocks are duplicated
+            }
+        }
+
+        // Fallback: check if this duplicated SSA value is in block_declarations
+        let dup_ssa = DuplicatedSSAValue {
+            original: ssa_value.clone(),
+            duplication_context: Some(context.clone()),
+        };
+
+        for declarations in self.block_declarations.values() {
+            if declarations.contains(&dup_ssa) {
+                return Some(dup_ssa);
+            }
+        }
+
+        None
     }
 
     /// Get the use strategy for an SSA value at a use site

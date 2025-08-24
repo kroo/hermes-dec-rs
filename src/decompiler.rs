@@ -364,10 +364,11 @@ impl<'a> FunctionDecompiler<'a> {
             hbc_analysis,
             self.function_index,
             function_analysis,
+            plan,
             self.include_ssa_comments,
             self.include_instruction_comments,
         );
-        let all_statements = converter.convert_to_ast(&plan);
+        let all_statements = converter.convert_to_ast();
 
         // Take the comment manager back from the converter
         let comment_manager = converter.take_comment_manager();

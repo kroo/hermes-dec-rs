@@ -360,16 +360,14 @@ fn build_lookup_tables(ssa: &SSAAnalysis, _cfg: &Cfg, analysis: &mut VariableAna
     }
 
     // Map phi functions - they're available at their definition site
-    for (_block_id, phi_list) in &ssa.phi_functions {
-        for phi in phi_list {
-            // Use the PHI's actual definition site, which is set to block_start_pc - 1
-            // to avoid collisions with instructions at the block start
-            analysis.register_at_pc.insert(
-                (phi.register, phi.result.def_site.instruction_idx),
-                phi.result.clone(),
-            );
-        }
-    }
+    // NOTE: PHI results are virtual and don't correspond to actual instructions
+    // We skip adding them to register_at_pc to avoid collisions with real instructions
+    // PHI results are handled separately through coalesced_values
+    // for (_block_id, phi_list) in &ssa.phi_functions {
+    //     for phi in phi_list {
+    //         // Don't add PHI results to register_at_pc - they can collide with real instructions
+    //     }
+    // }
 
     // Build register_before_pc mapping
     // For each use, map it to the SSA value that was live before the instruction

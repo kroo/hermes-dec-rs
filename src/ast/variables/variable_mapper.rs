@@ -35,6 +35,8 @@ pub struct VariableMapping {
     pub variable_usage: HashMap<String, VariableUsage>,
     /// Track which PC locations are the first definition of a variable
     pub first_definitions: HashMap<String, InstructionIndex>,
+    /// PHI group coalesced values mapping (SSA value -> representative)
+    pub coalesced_values: HashMap<SSAValue, SSAValue>,
 }
 
 impl VariableMapping {
@@ -50,6 +52,7 @@ impl VariableMapping {
             temp_counter: 0,
             variable_usage: HashMap::new(),
             first_definitions: HashMap::new(),
+            coalesced_values: HashMap::new(),
         }
     }
 
@@ -343,7 +346,8 @@ impl VariableMapper {
             }
         }
 
-        // Map all SSA values to their variable names
+        // Map all SSA values to their variable names and store coalesced values
+        mapping.coalesced_values = var_analysis.coalesced_values.clone();
         for (ssa_value, representative) in &var_analysis.coalesced_values {
             if let Some(name) = class_to_name.get(representative) {
                 mapping.ssa_to_var.insert(ssa_value.clone(), name.clone());
