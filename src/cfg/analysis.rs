@@ -217,15 +217,22 @@ impl SwitchAnalysis {
 fn analyze_conditionals_in_blocks(
     graph: &DiGraph<Block, EdgeKind>,
     blocks: &HashSet<NodeIndex>,
+    globally_processed: Option<&HashSet<NodeIndex>>,
 ) -> ConditionalAnalysis {
     // Create a restricted conditional detector that only considers nodes within blocks
     let mut chains = Vec::new();
     let mut node_to_chains = HashMap::new();
     let mut processed = HashSet::new();
 
-    // Find conditional nodes within the blocks
+    // Find conditional nodes within the blocks, excluding globally processed ones
     let mut conditional_nodes = Vec::new();
     for &node in blocks {
+        // Skip globally processed blocks (e.g., sparse switch comparison blocks)
+        if let Some(global) = globally_processed {
+            if global.contains(&node) {
+                continue;
+            }
+        }
         if is_conditional_node(graph, node) {
             conditional_nodes.push(node);
         }
@@ -497,6 +504,175 @@ fn find_common_successor(
 }
 
 impl SwitchRegion {
+    /// Analyze case bodies with knowledge of sparse switch regions
+    pub fn analyze_case_bodies_with_sparse_info(
+        &mut self,
+        graph: &DiGraph<Block, EdgeKind>,
+        _cfg: &crate::cfg::Cfg,
+        globally_processed: Option<&HashSet<NodeIndex>>,
+        sparse_dispatch_to_region: &HashMap<NodeIndex, usize>,
+        sparse_regions: &[SwitchRegion],
+    ) {
+        // Clear any existing analyses
+        self.case_analyses.clear();
+
+        // Analyze each case
+        for (idx, case) in self.cases.iter().enumerate() {
+            let case_blocks = self.trace_case_blocks(graph, case.case_head, self.join_block);
+
+            log::debug!(
+                "Case {} (head block {}): traced {} blocks: {:?}",
+                idx,
+                case.case_head.index(),
+                case_blocks.len(),
+                case_blocks.iter().map(|b| b.index()).collect::<Vec<_>>()
+            );
+
+            if case_blocks.is_empty() {
+                continue;
+            }
+
+            // Find both dense and sparse nested switches
+            let mut nested_switches = find_nested_switches_in_blocks(graph, &case_blocks);
+
+            // Also check for sparse switches within case blocks
+            for &block in &case_blocks {
+                if let Some(&region_idx) = sparse_dispatch_to_region.get(&block) {
+                    // This block is a sparse switch dispatch
+                    let sparse_region = &sparse_regions[region_idx];
+                    // Check if the entire sparse switch is contained within case blocks
+                    let all_comparison_blocks_in_case = sparse_region.dispatch == block
+                        && globally_processed.map_or(false, |g| g.contains(&block));
+
+                    if all_comparison_blocks_in_case {
+                        log::debug!(
+                            "Found nested sparse switch at block {} in case {}",
+                            block.index(),
+                            idx
+                        );
+                        nested_switches.push(sparse_region.clone());
+                    }
+                }
+            }
+
+            log::debug!(
+                "Case {}: Found {} nested switches (dense + sparse) in blocks {:?}",
+                idx,
+                nested_switches.len(),
+                case_blocks.iter().map(|b| b.index()).collect::<Vec<_>>()
+            );
+
+            // Collect all blocks that are part of nested switch dispatch
+            let mut switch_comparison_blocks = HashSet::new();
+            for nested_switch in &nested_switches {
+                // Add the dispatch block itself
+                switch_comparison_blocks.insert(nested_switch.dispatch);
+
+                // For dense switches, add dispatch block
+                // For sparse switches, the comparison blocks are already globally processed
+                // so we don't need to trace them here
+            }
+
+            // Filter out switch comparison blocks before analyzing conditionals
+            let blocks_for_conditional_analysis: HashSet<_> = case_blocks
+                .difference(&switch_comparison_blocks)
+                .copied()
+                .collect();
+
+            log::debug!(
+                "Case {}: Excluded {} switch comparison blocks from conditional analysis. Analyzing {} blocks for conditionals",
+                idx,
+                switch_comparison_blocks.len(),
+                blocks_for_conditional_analysis.len()
+            );
+
+            // Analyze conditionals within case blocks, excluding switch comparison blocks
+            let conditionals = analyze_conditionals_in_blocks(
+                graph,
+                &blocks_for_conditional_analysis,
+                globally_processed,
+            );
+
+            // Analyze loops in the case blocks
+            let loops = LoopAnalysis {
+                loops: vec![],
+                node_to_loops: HashMap::new(),
+            };
+
+            self.case_analyses.insert(
+                idx,
+                CaseBodyAnalysis {
+                    blocks: case_blocks,
+                    conditionals,
+                    loops,
+                    nested_switches,
+                },
+            );
+        }
+
+        // Also analyze default case if present
+        if let Some(default_head) = self.default_head {
+            let default_blocks = self.trace_case_blocks(graph, default_head, self.join_block);
+
+            if !default_blocks.is_empty() {
+                // Find both dense and sparse nested switches
+                let mut nested_switches = find_nested_switches_in_blocks(graph, &default_blocks);
+
+                // Also check for sparse switches within default blocks
+                for &block in &default_blocks {
+                    if let Some(&region_idx) = sparse_dispatch_to_region.get(&block) {
+                        let sparse_region = &sparse_regions[region_idx];
+                        let all_comparison_blocks_in_case = sparse_region.dispatch == block
+                            && globally_processed.map_or(false, |g| g.contains(&block));
+
+                        if all_comparison_blocks_in_case {
+                            log::debug!(
+                                "Found nested sparse switch at block {} in default case",
+                                block.index()
+                            );
+                            nested_switches.push(sparse_region.clone());
+                        }
+                    }
+                }
+
+                // Collect all blocks that are part of nested switch dispatch
+                let mut switch_comparison_blocks = HashSet::new();
+                for nested_switch in &nested_switches {
+                    switch_comparison_blocks.insert(nested_switch.dispatch);
+                }
+
+                // Filter out switch comparison blocks before analyzing conditionals
+                let blocks_for_conditional_analysis: HashSet<_> = default_blocks
+                    .difference(&switch_comparison_blocks)
+                    .copied()
+                    .collect();
+
+                // Analyze conditionals within default blocks
+                let conditionals = analyze_conditionals_in_blocks(
+                    graph,
+                    &blocks_for_conditional_analysis,
+                    globally_processed,
+                );
+
+                // Analyze loops
+                let loops = LoopAnalysis {
+                    loops: vec![],
+                    node_to_loops: HashMap::new(),
+                };
+
+                self.case_analyses.insert(
+                    usize::MAX,
+                    CaseBodyAnalysis {
+                        blocks: default_blocks,
+                        conditionals,
+                        loops,
+                        nested_switches,
+                    },
+                );
+            }
+        }
+    }
+
     /// Trace all blocks belonging to a switch case body
     pub fn trace_case_blocks(
         &self,
@@ -554,6 +730,7 @@ impl SwitchRegion {
         &mut self,
         graph: &DiGraph<Block, EdgeKind>,
         _cfg: &crate::cfg::Cfg,
+        globally_processed: Option<&HashSet<NodeIndex>>,
     ) {
         // Clear any existing analyses
         self.case_analyses.clear();
@@ -574,8 +751,108 @@ impl SwitchRegion {
                 continue;
             }
 
-            // Analyze conditionals within case blocks directly on the original graph
-            let conditionals = analyze_conditionals_in_blocks(graph, &case_blocks);
+            // Find nested switches FIRST so we can exclude their comparison blocks
+            let nested_switches = find_nested_switches_in_blocks(graph, &case_blocks);
+
+            log::debug!(
+                "Case {}: Found {} nested switches in blocks {:?}",
+                idx,
+                nested_switches.len(),
+                case_blocks.iter().map(|b| b.index()).collect::<Vec<_>>()
+            );
+            for (i, ns) in nested_switches.iter().enumerate() {
+                log::debug!(
+                    "  Nested switch {}: dispatch={}, cases={:?}, default={:?}",
+                    i,
+                    ns.dispatch.index(),
+                    ns.cases
+                        .iter()
+                        .map(|c| c.case_head.index())
+                        .collect::<Vec<_>>(),
+                    ns.default_head.map(|h| h.index())
+                );
+            }
+
+            // Collect all blocks that are part of nested switch dispatch
+            let mut switch_comparison_blocks = HashSet::new();
+            for nested_switch in &nested_switches {
+                // Add the dispatch block itself
+                switch_comparison_blocks.insert(nested_switch.dispatch);
+
+                // For sparse switches, we need to find all comparison blocks
+                // These are conditional blocks that are part of the switch dispatch chain
+                // We can identify them as blocks that:
+                // 1. Are conditional nodes (have conditional edges)
+                // 2. Lead (directly or indirectly) to case heads
+                // 3. Are between the dispatch and the cases
+
+                // Start from dispatch and trace to each case, collecting comparison blocks
+                for case in &nested_switch.cases {
+                    // Find path from dispatch to case head
+                    let current = nested_switch.dispatch;
+                    let mut visited = HashSet::new();
+
+                    // Simple BFS to find comparison blocks leading to this case
+                    let mut queue = vec![current];
+                    while let Some(block) = queue.pop() {
+                        if !visited.insert(block) {
+                            continue;
+                        }
+
+                        // If this is a conditional block in our case blocks, it's a comparison block
+                        if case_blocks.contains(&block) && is_conditional_node(graph, block) {
+                            switch_comparison_blocks.insert(block);
+                        }
+
+                        // Stop when we reach the case head
+                        if block == case.case_head {
+                            continue;
+                        }
+
+                        // Add successors to queue
+                        for edge in graph.edges(block) {
+                            let target = edge.target();
+                            if case_blocks.contains(&target) {
+                                queue.push(target);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Filter out switch comparison blocks before analyzing conditionals
+            let blocks_for_conditional_analysis: HashSet<_> = case_blocks
+                .difference(&switch_comparison_blocks)
+                .copied()
+                .collect();
+
+            log::debug!(
+                "Case {}: Excluded {} switch comparison blocks from conditional analysis. Analyzing {} blocks for conditionals",
+                idx,
+                switch_comparison_blocks.len(),
+                blocks_for_conditional_analysis.len()
+            );
+            log::debug!(
+                "  Switch comparison blocks: {:?}",
+                switch_comparison_blocks
+                    .iter()
+                    .map(|b| b.index())
+                    .collect::<Vec<_>>()
+            );
+            log::debug!(
+                "  Blocks for conditional analysis: {:?}",
+                blocks_for_conditional_analysis
+                    .iter()
+                    .map(|b| b.index())
+                    .collect::<Vec<_>>()
+            );
+
+            // Analyze conditionals within case blocks, excluding switch comparison blocks
+            let conditionals = analyze_conditionals_in_blocks(
+                graph,
+                &blocks_for_conditional_analysis,
+                globally_processed,
+            );
 
             // Analyze loops in the case blocks
             // TODO: Implement loop analysis for case blocks
@@ -583,9 +860,6 @@ impl SwitchRegion {
                 loops: vec![],
                 node_to_loops: HashMap::new(),
             };
-
-            // Find nested switches within case blocks
-            let nested_switches = find_nested_switches_in_blocks(graph, &case_blocks);
 
             self.case_analyses.insert(
                 idx,
@@ -603,8 +877,69 @@ impl SwitchRegion {
             let default_blocks = self.trace_case_blocks(graph, default_head, self.join_block);
 
             if !default_blocks.is_empty() {
-                // Analyze conditionals within default blocks
-                let conditionals = analyze_conditionals_in_blocks(graph, &default_blocks);
+                // Find nested switches FIRST so we can exclude their comparison blocks
+                let nested_switches = find_nested_switches_in_blocks(graph, &default_blocks);
+
+                // Collect all blocks that are part of nested switch dispatch
+                let mut switch_comparison_blocks = HashSet::new();
+                for nested_switch in &nested_switches {
+                    // Add the dispatch block itself
+                    switch_comparison_blocks.insert(nested_switch.dispatch);
+
+                    // For sparse switches, we need to find all comparison blocks
+                    // These are conditional blocks that are part of the switch dispatch chain
+                    // We can identify them as blocks that:
+                    // 1. Are conditional nodes (have conditional edges)
+                    // 2. Lead (directly or indirectly) to case heads
+                    // 3. Are between the dispatch and the cases
+
+                    // Start from dispatch and trace to each case, collecting comparison blocks
+                    for case in &nested_switch.cases {
+                        // Find path from dispatch to case head
+                        let current = nested_switch.dispatch;
+                        let mut visited = HashSet::new();
+
+                        // Simple BFS to find comparison blocks leading to this case
+                        let mut queue = vec![current];
+                        while let Some(block) = queue.pop() {
+                            if !visited.insert(block) {
+                                continue;
+                            }
+
+                            // If this is a conditional block in our default blocks, it's a comparison block
+                            if default_blocks.contains(&block) && is_conditional_node(graph, block)
+                            {
+                                switch_comparison_blocks.insert(block);
+                            }
+
+                            // Stop when we reach the case head
+                            if block == case.case_head {
+                                continue;
+                            }
+
+                            // Add successors to queue
+                            for edge in graph.edges(block) {
+                                let target = edge.target();
+                                if default_blocks.contains(&target) {
+                                    queue.push(target);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Filter out switch comparison blocks before analyzing conditionals
+                let blocks_for_conditional_analysis: HashSet<_> = default_blocks
+                    .difference(&switch_comparison_blocks)
+                    .copied()
+                    .collect();
+
+                // Analyze conditionals within default blocks, excluding switch comparison blocks
+                let conditionals = analyze_conditionals_in_blocks(
+                    graph,
+                    &blocks_for_conditional_analysis,
+                    globally_processed,
+                );
 
                 // Analyze loops
                 // TODO: Implement loop analysis for default blocks
@@ -612,9 +947,6 @@ impl SwitchRegion {
                     loops: vec![],
                     node_to_loops: HashMap::new(),
                 };
-
-                // Find nested switches
-                let nested_switches = find_nested_switches_in_blocks(graph, &default_blocks);
 
                 // Use a special index for default case (usize::MAX)
                 self.case_analyses.insert(
@@ -693,24 +1025,29 @@ pub fn find_switch_regions_with_ssa(
     let switch_dispatches = find_switch_dispatch_blocks(graph);
 
     // Step 2: Detect dense switch regions for each dispatch
+    let mut dense_regions = Vec::new();
     for dispatch in switch_dispatches {
-        if let Some(mut region) = detect_switch_region(graph, post_doms, dispatch) {
-            // Analyze case bodies
-            region.analyze_case_bodies(graph, cfg);
+        if let Some(region) = detect_switch_region(graph, post_doms, dispatch) {
+            // Don't analyze case bodies yet - we'll do it after collecting all switches
 
             let region_idx = regions.len();
 
             // Add region to list
             regions.push(region.clone());
+            dense_regions.push(region);
 
             // Build node-to-region mapping
-            add_nodes_to_switch_region_mapping(&mut node_to_regions, &region, region_idx);
+            add_nodes_to_switch_region_mapping(
+                &mut node_to_regions,
+                &regions[region_idx],
+                region_idx,
+            );
 
             // Mark all case blocks as globally processed to avoid detecting them as new switches
-            for case in &region.cases {
+            for case in &regions[region_idx].cases {
                 globally_processed_nodes.insert(case.case_head);
             }
-            if let Some(default) = region.default_head {
+            if let Some(default) = regions[region_idx].default_head {
                 globally_processed_nodes.insert(default);
             }
         }
@@ -730,12 +1067,21 @@ pub fn find_switch_regions_with_ssa(
         cfg,
         ssa_analysis,
     );
+
+    // Convert sparse candidates to regions and keep track of dispatch blocks
+    let mut sparse_dispatch_to_region = HashMap::new();
+    let mut sparse_regions = Vec::new();
+
     log::debug!("Found {} sparse switch candidates", sparse_candidates.len());
     for candidate in sparse_candidates {
-        let mut region = super::switch_analysis::sparse_candidate_to_switch_region(&candidate);
+        let region = super::switch_analysis::sparse_candidate_to_switch_region(&candidate);
 
-        // Analyze case bodies
-        region.analyze_case_bodies(graph, cfg);
+        // Track the dispatch block for nested switch detection
+        sparse_dispatch_to_region.insert(region.dispatch, sparse_regions.len());
+        sparse_regions.push(region.clone());
+
+        // Analyze case bodies (will be done after all sparse switches are collected)
+        // region.analyze_case_bodies(graph, cfg, Some(&globally_processed_nodes));
 
         let region_idx = regions.len();
 
@@ -748,6 +1094,18 @@ pub fn find_switch_regions_with_ssa(
         // For sparse switches, the comparison blocks are already marked as processed
         // by the detector. We don't mark case heads as globally processed because
         // they might contain nested switches.
+    }
+
+    // Step 4: Now analyze case bodies for all regions (dense and sparse)
+    // We need to do this after all sparse switches are collected so nested sparse switches can be detected
+    for region in &mut regions {
+        region.analyze_case_bodies_with_sparse_info(
+            graph,
+            cfg,
+            Some(&globally_processed_nodes),
+            &sparse_dispatch_to_region,
+            &sparse_regions,
+        );
     }
 
     SwitchAnalysis {

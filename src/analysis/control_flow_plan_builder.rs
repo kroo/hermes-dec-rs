@@ -199,7 +199,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
         // Analyze case bodies if not already done
         if region.case_analyses.is_empty() {
-            region.analyze_case_bodies(self.cfg.graph(), self.cfg);
+            region.analyze_case_bodies(self.cfg.graph(), self.cfg, None);
         }
 
         // Detect the switch pattern - either dense (SwitchImm) or sparse
@@ -698,7 +698,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                     crate::cfg::switch_analysis::sparse_candidate_to_switch_region(&candidate);
 
                 // Analyze case bodies
-                region.analyze_case_bodies(self.cfg.graph(), self.cfg);
+                region.analyze_case_bodies(self.cfg.graph(), self.cfg, None);
 
                 // Build the switch structure from this region
                 return Some(self.build_switch_from_region(region));

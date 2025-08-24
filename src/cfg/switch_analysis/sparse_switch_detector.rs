@@ -66,6 +66,9 @@ pub struct SparseSwitchCandidate {
     pub default_block: Option<NodeIndex>,
     /// The join block where all cases converge
     pub join_block: NodeIndex,
+    /// All blocks that are part of the switch infrastructure
+    /// (includes comparison blocks and any trailing conditional blocks)
+    pub infrastructure_blocks: Vec<NodeIndex>,
 }
 
 /// A block performing an equality comparison
@@ -118,19 +121,20 @@ pub fn find_sparse_switch_patterns(
             cfg,
             ssa_analysis,
         ) {
-            // Mark only comparison blocks as globally processed
+            // Mark all infrastructure blocks as globally processed
+            // This includes comparison blocks and any trailing conditional blocks
             // Don't mark target blocks (case heads) as they might contain inner switches
             log::trace!(
-                "Found sparse switch pattern with {} comparison blocks",
-                candidate.comparison_blocks.len()
+                "Found sparse switch pattern with {} comparison blocks and {} infrastructure blocks",
+                candidate.comparison_blocks.len(),
+                candidate.infrastructure_blocks.len()
             );
-            for comp in &candidate.comparison_blocks {
-                log::trace!("Marking block {:?} as globally processed", comp.block_index);
-                globally_processed.insert(comp.block_index);
-                processed.insert(comp.block_index); // Also mark in local processed set
-                                                    // Don't mark comp.target_block - it might contain an inner switch
+            for &block in &candidate.infrastructure_blocks {
+                log::trace!("Marking block {:?} as globally processed", block);
+                globally_processed.insert(block);
+                processed.insert(block); // Also mark in local processed set
             }
-            // Don't mark default block either - it might contain an inner switch
+            // Don't mark case target blocks or default block - they might contain inner switches
 
             candidates.push(candidate);
         }
@@ -264,8 +268,21 @@ pub fn detect_sparse_switch_chain(
         }
 
         // We've reached the end of the comparison chain
-        // The next target is the default case
+        // Check if the next_target is also a comparison block (just not for our register)
+        // If so, it's still part of the switch infrastructure and should be marked as processed
         let default_block = Some(next_target);
+
+        // Check if next_target is a conditional block - if so, it's part of switch infrastructure
+        if is_conditional_block(graph, next_target) {
+            log::debug!(
+                "Block {:?} is a conditional block at end of chain - marking as part of switch",
+                next_target
+            );
+            chain_blocks.push(next_target);
+            // The actual default is whatever this conditional leads to
+            // We'll just keep it as next_target for now since finding the true default
+            // would require more complex analysis
+        }
 
         // Find the join point - where all cases converge
         let mut all_targets = vec![next_target];
@@ -291,7 +308,7 @@ pub fn detect_sparse_switch_chain(
             );
 
             // Mark all blocks in the chain as processed
-            for block in chain_blocks {
+            for &block in &chain_blocks {
                 processed.insert(block);
             }
 
@@ -300,6 +317,7 @@ pub fn detect_sparse_switch_chain(
                 comparison_blocks,
                 default_block,
                 join_block,
+                infrastructure_blocks: chain_blocks,
             });
         }
 
@@ -655,6 +673,22 @@ fn is_register_assigned(instruction: &UnifiedInstruction, register: u8) -> bool 
 }
 
 /// Get true and false targets from a conditional node
+/// Check if a block is a conditional block (has true/false edges)
+fn is_conditional_block(graph: &DiGraph<Block, EdgeKind>, node: NodeIndex) -> bool {
+    let mut has_true = false;
+    let mut has_false = false;
+
+    for edge in graph.edges(node) {
+        match edge.weight() {
+            EdgeKind::True => has_true = true,
+            EdgeKind::False => has_false = true,
+            _ => {}
+        }
+    }
+
+    has_true && has_false
+}
+
 fn get_conditional_targets(
     graph: &DiGraph<Block, EdgeKind>,
     node: NodeIndex,
