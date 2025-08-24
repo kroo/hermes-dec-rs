@@ -39,10 +39,10 @@ fn test_dense_switch_disassembly() {
     );
 
     let actual_content = fs::read_to_string(&output_file).expect("Failed to read output file");
-    
+
     // Note: We're no longer comparing exact output since the test file has changed
     // The important thing is that the disassembly completes successfully and contains expected patterns
-    
+
     // Verify specific dense switch instruction is present
     assert!(
         actual_content.contains("SwitchImm"),

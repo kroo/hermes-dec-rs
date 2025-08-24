@@ -12,6 +12,7 @@ use crate::analysis::FunctionAnalysis;
 use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext, RegisterUse};
 use crate::cfg::ssa::{PhiFunction, SSAValue};
 use crate::generated::unified_instructions::UnifiedInstruction;
+use log::debug;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
@@ -97,8 +98,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
     /// Recursively mark consumed uses in a structure
     fn mark_consumed_uses_in_structure(&mut self, structure_id: StructureId) {
-        eprintln!(
-            "DEBUG: mark_consumed_uses_in_structure called for structure {}",
+        debug!(
+            "mark_consumed_uses_in_structure called for structure {}",
             structure_id.0
         );
         let structure = match self.plan.get_structure(structure_id) {
@@ -115,14 +116,14 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             } => {
                 // Mark discriminator uses as consumed (they're inlined in the switch)
                 // For sparse switches, the comparison uses are inlined
-                eprintln!(
-                    "DEBUG: Processing {} cases for switch in structure {}",
+                debug!(
+                    "Processing {} cases for switch in structure {}",
                     info.cases.len(),
                     structure_id.0
                 );
                 for case in &info.cases {
-                    eprintln!(
-                        "DEBUG: Processing case with comparison block {}",
+                    debug!(
+                        "Processing case with comparison block {}",
                         case.comparison_block.index()
                     );
                     // Find the comparison instruction in this case's comparison block
@@ -178,8 +179,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                             &tracked_value,
                                         );
 
-                                    eprintln!(
-                                        "DEBUG: Block {}, Register r{} -> SSA {} (constant: {})",
+                                    debug!(
+                                        "Block {}, Register r{} -> SSA {} (constant: {})",
                                         case.comparison_block.index(),
                                         register,
                                         ssa_value,
@@ -187,10 +188,12 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                     );
 
                                     if is_case_value {
-                                        eprintln!("DEBUG: Marking {} as consumed at Block {}, Instruction {}",
-                                                 ssa_value,
-                                                 use_site.block_id.index(),
-                                                 use_site.instruction_idx.value());
+                                        debug!(
+                                            "Marking {} as consumed at Block {}, Instruction {}",
+                                            ssa_value,
+                                            use_site.block_id.index(),
+                                            use_site.instruction_idx.value()
+                                        );
                                         // Mark in both the tracker and the plan
                                         self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
                                         let dup_value =
@@ -322,8 +325,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                     );
 
                                 if is_constant {
-                                    eprintln!("DEBUG: BasicBlock {} comparison uses constant {}, marking as consumed",
-                                             block.index(), ssa_value);
+                                    debug!("BasicBlock {} comparison uses constant {}, marking as consumed",
+                                           block.index(), ssa_value);
                                     // Mark this constant use as consumed
                                     self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
                                     let dup_value = DuplicatedSSAValue::original(ssa_value.clone());

@@ -5,6 +5,7 @@
 
 use crate::analysis::{ConstantValue, FunctionAnalysis, TrackedValue};
 use crate::cfg::ssa::types::{DuplicatedSSAValue, RegisterUse, SSAAnalysis, SSAValue};
+use log::debug;
 use petgraph::algo::dominators::Dominators;
 use std::collections::{HashMap, HashSet};
 
@@ -261,8 +262,8 @@ impl<'a> SSAUsageTracker<'a> {
         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
 
         if all_uses.is_empty() {
-            eprintln!(
-                "DEBUG: {} has no uses, eliminated",
+            debug!(
+                "{} has no uses, eliminated",
                 dup_ssa_value.original_ssa_value()
             );
             // No uses means it's effectively eliminated
@@ -272,8 +273,8 @@ impl<'a> SSAUsageTracker<'a> {
         // Check if all uses have been consumed
         if let Some(consumed) = self.consumed_uses.get(dup_ssa_value) {
             let is_eliminated = all_uses.iter().all(|use_site| consumed.contains(use_site));
-            eprintln!(
-                "DEBUG: {} has {} uses, {} consumed, eliminated: {}",
+            debug!(
+                "{} has {} uses, {} consumed, eliminated: {}",
                 dup_ssa_value.original_ssa_value(),
                 all_uses.len(),
                 consumed.len(),
@@ -281,8 +282,8 @@ impl<'a> SSAUsageTracker<'a> {
             );
             is_eliminated
         } else {
-            eprintln!(
-                "DEBUG: {} has {} uses, 0 consumed, not eliminated",
+            debug!(
+                "{} has {} uses, 0 consumed, not eliminated",
                 dup_ssa_value.original_ssa_value(),
                 all_uses.len()
             );
@@ -324,8 +325,8 @@ impl<'a> SSAUsageTracker<'a> {
         // might have no direct uses but still need to generate assignments
         if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
             if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
-                eprintln!(
-                    "DEBUG: {} is part of PHI group with representative {}",
+                debug!(
+                    "{} is part of PHI group with representative {}",
                     ssa_value, coalesced_rep
                 );
                 // This is part of a PHI group (coalesced values)
