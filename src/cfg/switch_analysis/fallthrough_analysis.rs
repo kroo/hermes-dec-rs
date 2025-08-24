@@ -5,6 +5,7 @@
 
 use super::{CaseGroup, SwitchInfo};
 use crate::cfg::Cfg;
+use log::debug;
 
 /// Information about fallthrough between case groups
 #[derive(Debug, Clone)]
@@ -60,18 +61,20 @@ impl FallthroughAnalysis {
             return None;
         }
 
+        debug!(
+            "Checking fallthrough for group {} (block {:?})",
+            group_index, group.target_block
+        );
+        if let Some(ref shared_tail) = switch_info.shared_tail {
+            debug!("  Shared tail is block {:?}", shared_tail.block_id);
+        } else {
+            debug!("  No shared tail detected");
+        }
+
         // Find which case group's target block this one falls through to
         for (i, other_group) in all_groups.iter().enumerate() {
             if i == group_index {
                 continue;
-            }
-
-            // Skip if the other group targets the shared tail
-            // (falling through to shared tail is normal and doesn't need duplication)
-            if let Some(shared_tail) = &switch_info.shared_tail {
-                if other_group.target_block == shared_tail.block_id {
-                    continue;
-                }
             }
 
             // Check if control flow goes from our target to this group's target
@@ -82,6 +85,23 @@ impl FallthroughAnalysis {
                 .any(|edge| edge.target() == other_group.target_block);
 
             if falls_through {
+                debug!(
+                    "  Group {} flows to group {}'s target block {:?}",
+                    group_index, i, other_group.target_block
+                );
+                // Check if the target block is also the shared tail
+                // If it is, this is a break to shared exit, not a fallthrough
+                if let Some(shared_tail) = &switch_info.shared_tail {
+                    if other_group.target_block == shared_tail.block_id {
+                        debug!(
+                            "    -> But target is shared tail, treating as break not fallthrough"
+                        );
+                        // This case jumps to a block that is both a case target
+                        // and the shared tail - treat as break, not fallthrough
+                        continue;
+                    }
+                }
+                debug!("    -> This is a true fallthrough");
                 return Some(i);
             }
         }

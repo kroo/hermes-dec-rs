@@ -11,6 +11,7 @@ use crate::cfg::{Cfg, EdgeKind};
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
 use crate::hbc::InstructionIndex;
+use log::debug;
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -614,16 +615,66 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         // Don't skip shared tail detection based on termination
         // Even if cases terminate, they might all jump to the same terminating block
 
-        // Collect all target blocks
-        let mut target_blocks = Vec::new();
+        // Check if any case target block is jumped to by other case blocks
+        // This would indicate it's a shared tail (break target) rather than a fallthrough
+        let mut jump_targets = std::collections::HashSet::new();
+
         for case in cases {
-            target_blocks.push(case.target_block);
+            // Check what this case's target block jumps to
+            let block = &cfg.graph()[case.target_block];
+            if let Some(last_instr) = block.instructions().last() {
+                if let UnifiedInstruction::Jmp { .. } = &last_instr.instruction {
+                    // This block jumps somewhere - find where
+                    use petgraph::visit::EdgeRef;
+                    for edge in cfg.graph().edges(case.target_block) {
+                        jump_targets.insert(edge.target());
+                    }
+                }
+            }
         }
         if let Some(default) = default_case {
-            target_blocks.push(default.target_block);
+            let block = &cfg.graph()[default.target_block];
+            if let Some(last_instr) = block.instructions().last() {
+                if let UnifiedInstruction::Jmp { .. } = &last_instr.instruction {
+                    use petgraph::visit::EdgeRef;
+                    for edge in cfg.graph().edges(default.target_block) {
+                        jump_targets.insert(edge.target());
+                    }
+                }
+            }
         }
-        // Find common post-dominator
-        let shared_tail = self.find_common_postdominator(&target_blocks, postdom)?;
+
+        // Check if any jump target is also a case target
+        // If so, it might be a shared tail
+        let mut shared_tail = None;
+        for case in cases {
+            if jump_targets.contains(&case.target_block) {
+                // This case's target is jumped to by other cases
+                // Check if it's meaningful
+                if self.is_meaningful_shared_tail(case.target_block, cfg) {
+                    debug!(
+                        "Detected shared tail at case target block {:?}",
+                        case.target_block
+                    );
+                    shared_tail = Some(case.target_block);
+                    break;
+                }
+            }
+        }
+
+        // If no shared tail found, try common post-dominator
+        if shared_tail.is_none() {
+            let mut target_blocks = Vec::new();
+            for case in cases {
+                target_blocks.push(case.target_block);
+            }
+            if let Some(default) = default_case {
+                target_blocks.push(default.target_block);
+            }
+            shared_tail = self.find_common_postdominator(&target_blocks, postdom);
+        }
+
+        let shared_tail = shared_tail?;
 
         // Check if it's a meaningful shared tail
         if !self.is_meaningful_shared_tail(shared_tail, cfg) {
