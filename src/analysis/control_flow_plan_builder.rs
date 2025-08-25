@@ -4,7 +4,9 @@
 //! that can be used for AST generation.
 
 use super::ControlFlowPlan;
-use crate::analysis::control_flow_plan::{ControlFlowKind, SequentialElement, StructureId};
+use crate::analysis::control_flow_plan::{
+    ComparisonExpression, ControlFlowKind, SequentialElement, StructureId,
+};
 use crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer;
 use crate::analysis::FunctionAnalysis;
 use crate::cfg::analysis::{ConditionalChain, PostDominatorAnalysis, SwitchRegion};
@@ -12,6 +14,7 @@ use crate::cfg::ssa::{RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::sparse_switch_analyzer::SparseSwitchAnalyzer;
 use crate::cfg::switch_analysis::SwitchInfo;
 use crate::cfg::Cfg;
+use crate::generated::generated_traits::BinaryOperator;
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::instruction_types::InstructionIndex;
 use petgraph::graph::NodeIndex;
@@ -220,7 +223,40 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             }
         }
 
-        // 3. TODO: Could also check for conditionals and loops here
+        // 3. Check for conditional chains starting at this block
+        if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
+            // Check all top-level chains
+            for chain in &conditional_analysis.chains {
+                if let Some(structure_id) = self.check_chain_at_block(chain, block) {
+                    return Some(structure_id);
+                }
+            }
+        }
+
+        // 4. TODO: Could also check for loops here
+
+        None
+    }
+
+    /// Check if a conditional chain (or its nested chains) starts at the given block
+    fn check_chain_at_block(
+        &mut self,
+        chain: &ConditionalChain,
+        block: NodeIndex,
+    ) -> Option<StructureId> {
+        // Check if this chain starts at the current block
+        if let Some(first_branch) = chain.branches.first() {
+            if first_branch.condition_block == block {
+                return Some(self.build_conditional_structure(chain.clone()));
+            }
+        }
+
+        // Recursively check nested chains
+        for nested_chain in &chain.nested_chains {
+            if let Some(structure_id) = self.check_chain_at_block(nested_chain, block) {
+                return Some(structure_id);
+            }
+        }
 
         None
     }
@@ -635,7 +671,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
                 // Extract condition info from the loop header
                 let header = loop_info.primary_header();
-                let (condition, condition_use) = self.extract_condition_info(header);
+                let (condition, condition_use) = self.extract_loop_condition_info(header);
 
                 let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
                     loop_type,
@@ -745,16 +781,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
     /// Build a conditional structure
     fn build_conditional_structure(&mut self, chain: ConditionalChain) -> StructureId {
-        // For now, just build a simple if-else from the first branch
+        // Build a simple if-else from the first branch, applying inversion if needed
         if let Some(first_branch) = chain.branches.first() {
             self.processed_blocks.insert(first_branch.condition_source);
             self.processed_blocks.insert(first_branch.condition_block);
 
-            // Build true branch
-            let true_branch = self.build_sequential_structure(first_branch.branch_entry);
+            // Build both branches first
+            let original_true_branch = self.build_sequential_structure(first_branch.branch_entry);
 
-            // Build false branch if there's another branch
-            let false_branch = if chain.branches.len() > 1 {
+            let original_false_branch = if chain.branches.len() > 1 {
                 if let Some(second_branch) = chain.branches.get(1) {
                     Some(self.build_sequential_structure(second_branch.branch_entry))
                 } else {
@@ -768,14 +803,31 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             self.processed_blocks.insert(chain.join_block);
 
             // Extract condition information from the condition block
-            let (condition_expr, condition_use) =
-                self.extract_condition_info(first_branch.condition_block);
+            let condition_expr = self.extract_condition_info(first_branch.condition_block);
+
+            // Apply conditional inversion if needed
+            let (final_condition_expr, true_branch, false_branch) = if chain.should_invert {
+                // Invert the condition and swap the branches
+                let inverted_condition = condition_expr.map(|expr| expr.invert());
+                (
+                    inverted_condition,
+                    original_false_branch,
+                    Some(original_true_branch),
+                )
+            } else {
+                // Keep original order
+                (
+                    condition_expr,
+                    Some(original_true_branch),
+                    original_false_branch,
+                )
+            };
 
             let kind = ControlFlowKind::Conditional {
                 condition_block: first_branch.condition_block,
-                condition_expr,
-                condition_use,
-                true_branch,
+                condition_expr: final_condition_expr,
+                true_branch: true_branch
+                    .unwrap_or_else(|| self.plan.create_structure(ControlFlowKind::Empty)),
                 false_branch,
             };
 
@@ -786,91 +838,27 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         }
     }
 
-    /// Extract condition SSAValue and RegisterUse from a condition block
-    fn extract_condition_info(
-        &self,
-        condition_block: NodeIndex,
-    ) -> (Option<SSAValue>, Option<RegisterUse>) {
+    /// Extract condition expression from a condition block
+    fn extract_condition_info(&self, condition_block: NodeIndex) -> Option<ComparisonExpression> {
         // Get the block
         let block = match self.cfg.graph().node_weight(condition_block) {
             Some(b) => b,
-            None => return (None, None),
+            None => return None,
         };
 
         // Jump instructions always terminate blocks, so look at the last instruction
         let last_inst = match block.instructions.last() {
             Some(inst) => inst,
-            None => return (None, None),
+            None => return None,
         };
 
-        // Extract the condition register based on the jump type
-        let condition_register = match &last_inst.instruction {
-            // Single register condition jumps
-            UnifiedInstruction::JmpTrue { operand_1, .. }
-            | UnifiedInstruction::JmpTrueLong { operand_1, .. }
-            | UnifiedInstruction::JmpFalse { operand_1, .. }
-            | UnifiedInstruction::JmpFalseLong { operand_1, .. }
-            | UnifiedInstruction::JmpUndefined { operand_1, .. }
-            | UnifiedInstruction::JmpUndefinedLong { operand_1, .. } => Some(*operand_1),
+        let pc = last_inst.instruction_index;
 
-            // Comparison jumps - for now we track the first operand
-            // TODO: We might want to track both operands for better analysis
-            UnifiedInstruction::JEqual { operand_1, .. }
-            | UnifiedInstruction::JEqualLong { operand_1, .. }
-            | UnifiedInstruction::JNotEqual { operand_1, .. }
-            | UnifiedInstruction::JNotEqualLong { operand_1, .. }
-            | UnifiedInstruction::JStrictEqual { operand_1, .. }
-            | UnifiedInstruction::JStrictEqualLong { operand_1, .. }
-            | UnifiedInstruction::JStrictNotEqual { operand_1, .. }
-            | UnifiedInstruction::JStrictNotEqualLong { operand_1, .. }
-            | UnifiedInstruction::JLess { operand_1, .. }
-            | UnifiedInstruction::JLessLong { operand_1, .. }
-            | UnifiedInstruction::JLessN { operand_1, .. }
-            | UnifiedInstruction::JLessNLong { operand_1, .. }
-            | UnifiedInstruction::JNotLess { operand_1, .. }
-            | UnifiedInstruction::JNotLessLong { operand_1, .. }
-            | UnifiedInstruction::JNotLessN { operand_1, .. }
-            | UnifiedInstruction::JNotLessNLong { operand_1, .. }
-            | UnifiedInstruction::JLessEqual { operand_1, .. }
-            | UnifiedInstruction::JLessEqualLong { operand_1, .. }
-            | UnifiedInstruction::JLessEqualN { operand_1, .. }
-            | UnifiedInstruction::JLessEqualNLong { operand_1, .. }
-            | UnifiedInstruction::JNotLessEqual { operand_1, .. }
-            | UnifiedInstruction::JNotLessEqualLong { operand_1, .. }
-            | UnifiedInstruction::JNotLessEqualN { operand_1, .. }
-            | UnifiedInstruction::JNotLessEqualNLong { operand_1, .. }
-            | UnifiedInstruction::JGreater { operand_1, .. }
-            | UnifiedInstruction::JGreaterLong { operand_1, .. }
-            | UnifiedInstruction::JGreaterN { operand_1, .. }
-            | UnifiedInstruction::JGreaterNLong { operand_1, .. }
-            | UnifiedInstruction::JNotGreater { operand_1, .. }
-            | UnifiedInstruction::JNotGreaterLong { operand_1, .. }
-            | UnifiedInstruction::JNotGreaterN { operand_1, .. }
-            | UnifiedInstruction::JNotGreaterNLong { operand_1, .. }
-            | UnifiedInstruction::JGreaterEqual { operand_1, .. }
-            | UnifiedInstruction::JGreaterEqualLong { operand_1, .. }
-            | UnifiedInstruction::JGreaterEqualN { operand_1, .. }
-            | UnifiedInstruction::JGreaterEqualNLong { operand_1, .. }
-            | UnifiedInstruction::JNotGreaterEqual { operand_1, .. }
-            | UnifiedInstruction::JNotGreaterEqualLong { operand_1, .. }
-            | UnifiedInstruction::JNotGreaterEqualN { operand_1, .. }
-            | UnifiedInstruction::JNotGreaterEqualNLong { operand_1, .. } => Some(*operand_1),
-
-            // Unconditional jumps - no condition
-            UnifiedInstruction::Jmp { .. } | UnifiedInstruction::JmpLong { .. } => None,
-
-            // Any other instruction shouldn't be terminating a conditional block
-            _ => None,
-        };
-
-        if let Some(register) = condition_register {
-            let pc = last_inst.instruction_index;
-
-            // Create the RegisterUse
+        // Helper to create SSAValue and RegisterUse for a register
+        let create_ssa_info = |register: u8| -> Option<(SSAValue, RegisterUse)> {
             let register_use = RegisterUse::new(register, condition_block, pc);
 
             // Get the SSA value for this register use
-            // First find the definition site from the use-def chains
             let ssa_value = if let Some(def_site) =
                 self.function_analysis.ssa.use_def_chains.get(&register_use)
             {
@@ -885,7 +873,379 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 None
             };
 
-            (ssa_value, Some(register_use))
+            ssa_value.map(|ssav| (ssav, register_use))
+        };
+
+        // Extract condition information based on the jump type
+        match &last_inst.instruction {
+            // Simple register condition jumps
+            UnifiedInstruction::JmpTrue { operand_1, .. }
+            | UnifiedInstruction::JmpTrueLong { operand_1, .. }
+            | UnifiedInstruction::JmpFalse { operand_1, .. }
+            | UnifiedInstruction::JmpFalseLong { operand_1, .. }
+            | UnifiedInstruction::JmpUndefined { operand_1, .. }
+            | UnifiedInstruction::JmpUndefinedLong { operand_1, .. } => {
+                if let Some((ssa_value, register_use)) = create_ssa_info(*operand_1) {
+                    Some(ComparisonExpression::SimpleCondition {
+                        operand: ssa_value,
+                        operand_use: register_use,
+                    })
+                } else {
+                    None
+                }
+            }
+
+            // Binary comparison jumps - now we extract both operands and the operator
+            UnifiedInstruction::JEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::Equality,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JNotEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::Inequality,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JStrictEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JStrictEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::StrictEquality,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JStrictNotEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JStrictNotEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::StrictInequality,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JLess {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JLessLong {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JLessN {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JLessNLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::LessThan,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JNotLess {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotLessLong {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotLessN {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotLessNLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::GreaterEqualThan,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JLessEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JLessEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JLessEqualN {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JLessEqualNLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::LessEqualThan,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JNotLessEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotLessEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotLessEqualN {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotLessEqualNLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::GreaterThan,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JGreater {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JGreaterLong {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JGreaterN {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JGreaterNLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::GreaterThan,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JNotGreater {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotGreaterLong {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotGreaterN {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotGreaterNLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::LessEqualThan,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JGreaterEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JGreaterEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JGreaterEqualN {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JGreaterEqualNLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::GreaterEqualThan,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+            UnifiedInstruction::JNotGreaterEqual {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotGreaterEqualLong {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotGreaterEqualN {
+                operand_1,
+                operand_2,
+                ..
+            }
+            | UnifiedInstruction::JNotGreaterEqualNLong {
+                operand_1,
+                operand_2,
+                ..
+            } => self.create_binary_comparison(
+                BinaryOperator::LessThan,
+                *operand_1,
+                *operand_2,
+                condition_block,
+                pc,
+            ),
+
+            // Unconditional jumps - no condition
+            UnifiedInstruction::Jmp { .. } | UnifiedInstruction::JmpLong { .. } => None,
+
+            // Any other instruction shouldn't be terminating a conditional block
+            _ => None,
+        }
+    }
+
+    /// Helper function to create a binary comparison expression
+    fn create_binary_comparison(
+        &self,
+        operator: BinaryOperator,
+        operand_1: u8,
+        operand_2: u8,
+        condition_block: NodeIndex,
+        pc: InstructionIndex,
+    ) -> Option<ComparisonExpression> {
+        // Create RegisterUse for both operands
+        let left_use = RegisterUse::new(operand_1, condition_block, pc);
+        let right_use = RegisterUse::new(operand_2, condition_block, pc);
+
+        // Get SSA values for both operands
+        let left_ssa =
+            if let Some(def_site) = self.function_analysis.ssa.use_def_chains.get(&left_use) {
+                self.function_analysis
+                    .ssa
+                    .ssa_values
+                    .values()
+                    .find(|v| &v.def_site == def_site)
+                    .cloned()
+            } else {
+                None
+            };
+
+        let right_ssa =
+            if let Some(def_site) = self.function_analysis.ssa.use_def_chains.get(&right_use) {
+                self.function_analysis
+                    .ssa
+                    .ssa_values
+                    .values()
+                    .find(|v| &v.def_site == def_site)
+                    .cloned()
+            } else {
+                None
+            };
+
+        // Only create the comparison if we have both SSA values
+        if let (Some(left), Some(right)) = (left_ssa, right_ssa) {
+            Some(ComparisonExpression::BinaryComparison {
+                operator,
+                left,
+                left_use,
+                right,
+                right_use,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Extract condition SSAValue and RegisterUse for loops (backward compatibility)
+    fn extract_loop_condition_info(
+        &self,
+        condition_block: NodeIndex,
+    ) -> (Option<SSAValue>, Option<RegisterUse>) {
+        // Get comparison expression and extract the first operand for backward compatibility
+        if let Some(comparison) = self.extract_condition_info(condition_block) {
+            match comparison {
+                ComparisonExpression::SimpleCondition {
+                    operand,
+                    operand_use,
+                } => (Some(operand), Some(operand_use)),
+                ComparisonExpression::BinaryComparison { left, left_use, .. } => {
+                    // For loops, just return the left operand for now
+                    (Some(left), Some(left_use))
+                }
+            }
         } else {
             (None, None)
         }

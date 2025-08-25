@@ -82,7 +82,15 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
     let control_flow_plan = func_analysis.as_ref().map(|fa| {
         let builder =
             crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(&cfg, fa);
-        builder.build()
+        let mut plan = builder.build();
+
+        // Analyze the plan to determine declaration and use strategies
+        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
+            &mut plan, fa,
+        );
+        analyzer.analyze();
+
+        plan
     });
 
     println!("=== CFG Analysis for Function {} ===", function_index);
@@ -447,6 +455,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                             let strategy = tracker.get_declaration_strategy(&dup_ssa);
                             let strategy_str = match strategy {
                                 DeclarationStrategy::Skip => "Skip".to_string(),
+                                DeclarationStrategy::SideEffectOnly => "SideEffectOnly".to_string(),
                                 DeclarationStrategy::DeclareAtDominator { ref kind, .. } => {
                                     format!("DeclareAtDominator({:?})", kind)
                                 }
@@ -591,6 +600,9 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 crate::analysis::ssa_usage_tracker::DeclarationStrategy::Skip => {
                     "ELIMINATED (Skip)"
                 }
+                crate::analysis::ssa_usage_tracker::DeclarationStrategy::SideEffectOnly => {
+                    "SIDE EFFECT ONLY"
+                }
                 crate::analysis::ssa_usage_tracker::DeclarationStrategy::DeclareAndInitialize {
                     kind,
                 } => match kind {
@@ -630,12 +642,13 @@ fn print_chain_recursive(
     let indent_str = "  ".repeat(indent);
 
     println!(
-        "{}Chain {}: {:?} (depth={}, join={})",
+        "{}Chain {}: {:?} (depth={}, join={}, should_invert={})",
         indent_str,
         index,
         chain.chain_type,
         chain.nesting_depth,
-        chain.join_block.index()
+        chain.join_block.index(),
+        chain.should_invert
     );
 
     // Print branches

@@ -9,6 +9,7 @@ use crate::ast::{
     context::{ExpressionContext, ExpressionContextError},
     variables::RegisterManager,
 };
+use crate::cfg::ssa::DuplicatedSSAValue;
 use crate::cfg::ssa::DuplicationContext;
 use crate::cfg::switch_analysis::switch_info::CaseGroup;
 use crate::hbc::InstructionIndex;
@@ -175,6 +176,23 @@ impl<'a> InstructionToStatementConverter<'a> {
     /// Get reference to register manager
     pub fn register_manager(&self) -> &RegisterManager {
         &self.register_manager
+    }
+
+    /// Check if the current instruction's result should be executed for side effects only
+    fn should_be_side_effect_only(&self, dest_reg: u8) -> bool {
+        // Get the SSA value for this register at the current PC
+        if let Some(ssa_value) = self.register_manager.get_current_ssa_value(dest_reg) {
+            let dup_ssa = DuplicatedSSAValue {
+                original: ssa_value,
+                duplication_context: self.current_duplication_context.clone(),
+            };
+
+            // Check the declaration strategy
+            if let Some(strategy) = self.control_flow_plan.get_declaration_strategy(&dup_ssa) {
+                return matches!(strategy, DeclarationStrategy::SideEffectOnly);
+            }
+        }
+        false
     }
 
     /// Get reference to AST builder

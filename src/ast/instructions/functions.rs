@@ -357,10 +357,19 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let arg2_var = self.register_manager.get_source_variable_name(arg2_reg);
         let arg3_var = self.register_manager.get_source_variable_name(arg3_reg);
 
-        // Now create the destination variable
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
+        // Check if this should be executed for side effects only
+        let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
+
+        // Create the destination variable only if we need it
+        let dest_var = if !is_side_effect_only {
+            self.register_manager
+                .create_new_variable_for_register(dest_reg)
+        } else {
+            // Still need to register the variable even if we don't use it
+            self.register_manager
+                .create_new_variable_for_register(dest_reg);
+            String::new() // Won't be used
+        };
 
         let span = Span::default();
 
@@ -397,7 +406,13 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             false,
         );
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
+        // Check if this should be executed for side effects only (no assignment)
+        let stmt = if is_side_effect_only {
+            // Create an expression statement instead of a variable declaration
+            self.ast_builder.statement_expression(span, call_expr)
+        } else {
+            self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
+        };
 
         Ok(InstructionResult::Statement(stmt))
     }

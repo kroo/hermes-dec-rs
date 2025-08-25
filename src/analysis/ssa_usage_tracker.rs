@@ -44,6 +44,10 @@ pub enum DeclarationStrategy {
     /// Skip - all uses have been inlined/eliminated
     Skip,
 
+    /// Execute for side effects only - no assignment or declaration
+    /// Used for instructions with side effects whose result is not used
+    SideEffectOnly,
+
     /// Declare at dominator point (for PHI nodes with no single dominating def)
     DeclareAtDominator {
         dominator_block: petgraph::graph::NodeIndex,
@@ -305,6 +309,33 @@ impl<'a> SSAUsageTracker<'a> {
     ) -> DeclarationStrategy {
         let ssa_value = dup_ssa_value.original_ssa_value();
 
+        // Check for side effects first - even if a value has no uses,
+        // we need to execute the instruction if it has side effects
+        if let Some(block) = self
+            .function_analysis
+            .cfg
+            .graph()
+            .node_weight(ssa_value.def_site.block_id)
+        {
+            for instr in &block.instructions {
+                if instr.instruction_index == ssa_value.def_site.instruction_idx {
+                    if has_side_effects(&instr.instruction) {
+                        // Check if this value has any uses
+                        let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
+                        if all_uses.is_empty() || self.is_duplicated_fully_eliminated(dup_ssa_value)
+                        {
+                            debug!(
+                                "SSA value {} has side effects but no uses, using SideEffectOnly",
+                                ssa_value
+                            );
+                            return DeclarationStrategy::SideEffectOnly;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
         // Special handling for PHI result values
         // PHI results need special handling - they represent the merged value
         // but don't generate code themselves. However, if the PHI result is used
@@ -357,7 +388,12 @@ impl<'a> SSAUsageTracker<'a> {
 
         // 2. Check if fully eliminated (considering duplication context)
         // Only check this AFTER checking for PHI operands
+        // Side effects were already checked above
         if self.is_duplicated_fully_eliminated(dup_ssa_value) {
+            debug!(
+                "SSA value {} is fully eliminated with no side effects, using Skip",
+                ssa_value
+            );
             return DeclarationStrategy::Skip;
         }
 
@@ -596,7 +632,12 @@ impl<'a> SSAUsageTracker<'a> {
 
                     // Get the instruction
                     if let Some(block) = self.function_analysis.cfg.graph().node_weight(block_id) {
-                        if let Some(instr) = block.instructions().get(instr_idx.value()) {
+                        // Find the instruction with the matching index
+                        let instr = block
+                            .instructions()
+                            .iter()
+                            .find(|i| i.instruction_index == instr_idx);
+                        if let Some(instr) = instr {
                             // Check if this instruction has side effects and cannot be eliminated
                             if has_side_effects(&instr.instruction) {
                                 // This instruction has side effects, cannot eliminate its uses

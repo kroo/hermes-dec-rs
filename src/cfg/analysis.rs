@@ -30,6 +30,80 @@ impl PostDominatorAnalysis {
     }
 }
 
+/// Check if a branch is empty (contains no meaningful instructions)
+pub fn is_branch_empty(graph: &DiGraph<Block, EdgeKind>, branch_blocks: &[NodeIndex]) -> bool {
+    if branch_blocks.is_empty() {
+        return true;
+    }
+
+    // Check if all blocks in the branch have only jump instructions or default behavior patterns
+    for &block_id in branch_blocks {
+        if let Some(block) = graph.node_weight(block_id) {
+            if block.instructions.is_empty() {
+                continue; // Empty block is considered empty
+            }
+
+            // Check for default behavior patterns that should be considered "empty"
+            if is_default_behavior_block(block) {
+                continue; // Default behavior is considered empty
+            }
+
+            // Check if the block only contains jump instructions
+            let non_jump_instructions = block.instructions.iter().filter(|inst| {
+                !matches!(
+                    inst.instruction,
+                    crate::generated::unified_instructions::UnifiedInstruction::Jmp { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JmpLong { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JmpTrue { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JmpTrueLong { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JmpFalse { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JmpFalseLong { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JEqual { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JEqualLong { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JNotEqual { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JNotEqualLong { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JGreater { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JGreaterLong { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JLess { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::JLessLong { .. }
+                    | crate::generated::unified_instructions::UnifiedInstruction::Ret { .. }
+                )
+            }).count();
+
+            if non_jump_instructions > 0 {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// Check if a block contains only default behavior that should be considered "empty"
+/// for conditional inversion purposes
+fn is_default_behavior_block(block: &Block) -> bool {
+    // Pattern 1: LoadConstUndefined + Ret (implicit return undefined)
+    if block.instructions.len() == 2 {
+        if let (Some(first), Some(second)) = (block.instructions.get(0), block.instructions.get(1))
+        {
+            if matches!(
+                first.instruction,
+                crate::generated::unified_instructions::UnifiedInstruction::LoadConstUndefined { .. }
+            ) && matches!(
+                second.instruction,
+                crate::generated::unified_instructions::UnifiedInstruction::Ret { .. }
+            ) {
+                return true;
+            }
+        }
+    }
+
+    // Could add more patterns here for other types of default behavior
+    // Pattern 2: Just a Ret with undefined register, etc.
+
+    false
+}
+
 /// Loop type classification
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoopType {
@@ -107,6 +181,7 @@ pub struct ConditionalBranch {
     pub condition_block: NodeIndex,    // Block containing condition evaluation
     pub branch_entry: NodeIndex,       // First block of branch body
     pub branch_blocks: Vec<NodeIndex>, // All blocks in this branch
+    pub is_empty: bool,                // True if branch contains no meaningful instructions
 }
 
 /// Type of conditional branch
@@ -127,6 +202,8 @@ pub struct ConditionalChain {
     pub nesting_depth: usize,
     /// Chains nested within this chain's branches
     pub nested_chains: Vec<ConditionalChain>,
+    /// True if condition should be inverted (empty if-branch with non-empty else)
+    pub should_invert: bool,
 }
 
 /// Type of conditional chain pattern
@@ -268,20 +345,30 @@ fn analyze_conditionals_in_blocks(
                     branch_type: BranchType::If,
                     condition_block: cond_node,
                     branch_entry: true_target,
-                    branch_blocks: true_blocks,
+                    branch_blocks: true_blocks.clone(),
+                    is_empty: is_branch_empty(graph, &true_blocks),
                 },
                 ConditionalBranch {
                     condition_source: cond_node,
                     branch_type: BranchType::Else,
                     condition_block: cond_node,
                     branch_entry: false_target,
-                    branch_blocks: false_blocks,
+                    branch_blocks: false_blocks.clone(),
+                    is_empty: is_branch_empty(graph, &false_blocks),
                 },
             ];
 
             // Find a simple join block (common successor)
             let join_block = find_immediate_convergence(graph, true_target, false_target)
                 .unwrap_or(false_target); // Fallback to false target
+
+            // Determine if we should invert this conditional
+            // Invert if: if-branch is empty AND else-branch has content
+            let should_invert = branches.len() == 2
+                && branches[0].branch_type == BranchType::If
+                && branches[1].branch_type == BranchType::Else
+                && branches[0].is_empty
+                && !branches[1].is_empty;
 
             let chain = ConditionalChain {
                 chain_id: idx,
@@ -290,6 +377,7 @@ fn analyze_conditionals_in_blocks(
                 chain_type: ChainType::SimpleIfElse,
                 nesting_depth: 1,
                 nested_chains: vec![],
+                should_invert,
             };
 
             // Add to node mappings

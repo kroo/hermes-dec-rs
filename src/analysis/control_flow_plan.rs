@@ -9,6 +9,7 @@ use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, UseStrategy};
 use crate::cfg::ssa::types::DuplicationContext;
 use crate::cfg::ssa::{DuplicatedSSAValue, RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey, SetupInstruction, SwitchInfo};
+use crate::generated::generated_traits::BinaryOperator;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
@@ -107,6 +108,118 @@ pub struct DuplicationInfo {
     pub context: DuplicationContext,
 }
 
+/// Represents a comparison expression from jump instructions
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ComparisonExpression {
+    /// Simple register condition (JmpTrue, JmpFalse, etc.)
+    SimpleCondition {
+        operand: SSAValue,
+        operand_use: RegisterUse,
+    },
+    /// Binary comparison (JEqual, JLess, etc.)
+    BinaryComparison {
+        operator: BinaryOperator,
+        left: SSAValue,
+        left_use: RegisterUse,
+        right: SSAValue,
+        right_use: RegisterUse,
+    },
+}
+
+/// Format a comparison expression for debug output
+fn format_comparison_expression(expr: &ComparisonExpression) -> String {
+    match expr {
+        ComparisonExpression::SimpleCondition { operand, .. } => {
+            format!("r{}_v{}", operand.register, operand.version)
+        }
+        ComparisonExpression::BinaryComparison {
+            operator,
+            left,
+            right,
+            ..
+        } => {
+            let op_str = match operator {
+                BinaryOperator::Equality => "==",
+                BinaryOperator::Inequality => "!=",
+                BinaryOperator::StrictEquality => "===",
+                BinaryOperator::StrictInequality => "!==",
+                BinaryOperator::LessThan => "<",
+                BinaryOperator::LessEqualThan => "<=",
+                BinaryOperator::GreaterThan => ">",
+                BinaryOperator::GreaterEqualThan => ">=",
+                _ => "?", // Other operators not typically used in conditionals
+            };
+            format!(
+                "r{}_v{} {} r{}_v{}",
+                left.register, left.version, op_str, right.register, right.version
+            )
+        }
+    }
+}
+
+impl ComparisonExpression {
+    /// Extract SSAValue and RegisterUse for backward compatibility with AST converter
+    /// This is temporary until the AST converter is updated to handle full comparison expressions
+    pub fn extract_legacy_format(&self) -> (Option<SSAValue>, Option<RegisterUse>) {
+        match self {
+            ComparisonExpression::SimpleCondition {
+                operand,
+                operand_use,
+            } => (Some(operand.clone()), Some(operand_use.clone())),
+            ComparisonExpression::BinaryComparison { left, left_use, .. } => {
+                // For backward compatibility, just return the left operand
+                (Some(left.clone()), Some(left_use.clone()))
+            }
+        }
+    }
+
+    /// Create an inverted version of this comparison expression
+    /// This is used for conditional inversion when empty if-branches should be negated
+    pub fn invert(&self) -> ComparisonExpression {
+        match self {
+            ComparisonExpression::SimpleCondition {
+                operand,
+                operand_use,
+            } => {
+                // Simple conditions become negated - we'll represent this the same way
+                // The AST converter will need to add the logical NOT
+                ComparisonExpression::SimpleCondition {
+                    operand: operand.clone(),
+                    operand_use: operand_use.clone(),
+                }
+            }
+            ComparisonExpression::BinaryComparison {
+                operator,
+                left,
+                left_use,
+                right,
+                right_use,
+            } => {
+                let inverted_operator = match operator {
+                    BinaryOperator::Equality => BinaryOperator::Inequality,
+                    BinaryOperator::Inequality => BinaryOperator::Equality,
+                    BinaryOperator::StrictEquality => BinaryOperator::StrictInequality,
+                    BinaryOperator::StrictInequality => BinaryOperator::StrictEquality,
+                    BinaryOperator::LessThan => BinaryOperator::GreaterEqualThan,
+                    BinaryOperator::LessEqualThan => BinaryOperator::GreaterThan,
+                    BinaryOperator::GreaterThan => BinaryOperator::LessEqualThan,
+                    BinaryOperator::GreaterEqualThan => BinaryOperator::LessThan,
+                    // For other operators, we don't have a direct inversion
+                    _ => *operator,
+                };
+
+                ComparisonExpression::BinaryComparison {
+                    operator: inverted_operator,
+                    left: left.clone(),
+                    left_use: left_use.clone(),
+                    right: right.clone(),
+                    right_use: right_use.clone(),
+                }
+            }
+        }
+    }
+}
+
 /// Specific control flow patterns
 #[derive(Debug, Clone)]
 pub enum ControlFlowKind {
@@ -126,8 +239,7 @@ pub enum ControlFlowKind {
     /// Conditional (if-else) structure
     Conditional {
         condition_block: NodeIndex,
-        condition_expr: Option<SSAValue>,
-        condition_use: Option<RegisterUse>, // The specific use of the condition value
+        condition_expr: Option<ComparisonExpression>,
         true_branch: StructureId,
         false_branch: Option<StructureId>,
     },
@@ -918,11 +1030,19 @@ impl ControlFlowPlan {
             }
             ControlFlowKind::Conditional {
                 condition_block,
+                condition_expr,
                 true_branch,
                 false_branch,
-                ..
             } => {
                 writeln!(f, "Conditional (condition: {})", condition_block.index())?;
+                if let Some(expr) = condition_expr {
+                    writeln!(
+                        f,
+                        "{}  Expression: {}",
+                        indent_str,
+                        format_comparison_expression(expr)
+                    )?;
+                }
                 writeln!(f, "{}  True branch:", indent_str)?;
                 if let Some(branch) = self.get_structure(*true_branch) {
                     self.fmt_structure(f, branch, indent + 2)?;

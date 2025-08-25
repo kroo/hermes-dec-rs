@@ -261,7 +261,8 @@ impl<'a> ConditionalDetector<'a> {
                 branch_type,
                 condition_block: current_node,
                 branch_entry: true_target,
-                branch_blocks: true_blocks,
+                branch_blocks: true_blocks.clone(),
+                is_empty: crate::cfg::analysis::is_branch_empty(self.graph, &true_blocks),
             });
 
             // Mark as processed
@@ -287,7 +288,8 @@ impl<'a> ConditionalDetector<'a> {
                     branch_type: BranchType::Else,
                     condition_block: current_node,
                     branch_entry: false_target,
-                    branch_blocks: false_blocks,
+                    branch_blocks: false_blocks.clone(),
+                    is_empty: crate::cfg::analysis::is_branch_empty(self.graph, &false_blocks),
                 });
             }
             break;
@@ -297,6 +299,17 @@ impl<'a> ConditionalDetector<'a> {
         let chain_id = self.chain_id_counter;
         self.chain_id_counter += 1;
 
+        // Determine if we should invert this conditional
+        // Invert if: if-branch is empty AND else-branch has content
+        let should_invert = branches.len() == 2
+            && branches[0].branch_type == crate::cfg::analysis::BranchType::If
+            && branches
+                .get(1)
+                .map(|b| b.branch_type == crate::cfg::analysis::BranchType::Else)
+                .unwrap_or(false)
+            && branches[0].is_empty
+            && branches.get(1).map(|b| !b.is_empty).unwrap_or(false);
+
         Some(ConditionalChain {
             chain_id,
             branches,
@@ -304,6 +317,7 @@ impl<'a> ConditionalDetector<'a> {
             chain_type,
             nesting_depth: depth,
             nested_chains: Vec::new(),
+            should_invert,
         })
     }
 

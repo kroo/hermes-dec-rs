@@ -4,8 +4,8 @@
 //! with a unified approach that works directly from the analyzed ControlFlowPlan.
 
 use crate::analysis::control_flow_plan::{
-    CaseGroupStructure, CatchClause, ControlFlowKind, ControlFlowPlan, LoopType, SequentialElement,
-    StructureId,
+    CaseGroupStructure, CatchClause, ComparisonExpression, ControlFlowKind, ControlFlowPlan,
+    LoopType, SequentialElement, StructureId,
 };
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, UseStrategy, VariableKind};
 use crate::analysis::value_tracker::ConstantValue;
@@ -168,7 +168,6 @@ impl<'a> ControlFlowPlanConverter<'a> {
             ControlFlowKind::Conditional {
                 condition_block,
                 condition_expr,
-                condition_use,
                 true_branch,
                 false_branch,
             } => {
@@ -176,7 +175,6 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     plan,
                     *condition_block,
                     condition_expr.as_ref(),
-                    condition_use.as_ref(),
                     *true_branch,
                     false_branch.as_ref(),
                     statements,
@@ -894,17 +892,48 @@ impl<'a> ControlFlowPlanConverter<'a> {
     fn convert_conditional(
         &mut self,
         plan: &ControlFlowPlan,
-        _condition_block: NodeIndex,
-        condition_expr: Option<&SSAValue>,
-        condition_use: Option<&RegisterUse>,
+        condition_block: NodeIndex,
+        condition_expr: Option<&ComparisonExpression>,
         true_branch: StructureId,
         false_branch: Option<&StructureId>,
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
+        // Convert the condition block as a basic block, but exclude the last instruction (the jump)
+        // First, determine how many instructions to convert (all but the last one)
+        let instruction_count = if let Some(function_analysis) = self
+            .hbc_analysis
+            .get_function_analysis_ref(self.function_index)
+        {
+            if let Some(block) = function_analysis.cfg.graph().node_weight(condition_block) {
+                // Convert all instructions except the last one (which is the jump)
+                if block.instructions().len() > 1 {
+                    block.instructions().len() - 1
+                } else {
+                    0 // Only has the jump, nothing to convert
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+
+        // Convert the setup instructions using the existing basic block logic
+        if instruction_count > 0 {
+            self.convert_basic_block(
+                plan,
+                condition_block,
+                instruction_count,
+                false, // not synthetic
+                statements,
+                context,
+            );
+        }
+
         // Get the test expression
-        let test = if let Some(cond) = condition_expr {
-            self.create_use_expression(cond, context, plan, condition_use.cloned())
+        let test = if let Some(comparison) = condition_expr {
+            self.create_comparison_expression(comparison, context, plan)
         } else {
             // Fallback condition
             self.ast_builder
@@ -935,6 +964,72 @@ impl<'a> ControlFlowPlanConverter<'a> {
             .ast_builder
             .statement_if(oxc_span::SPAN, test, consequent, alternate);
         statements.push(if_stmt);
+    }
+
+    /// Create an AST expression from a ComparisonExpression
+    fn create_comparison_expression(
+        &mut self,
+        comparison: &ComparisonExpression,
+        context: Option<&DuplicationContext>,
+        plan: &ControlFlowPlan,
+    ) -> Expression<'a> {
+        match comparison {
+            ComparisonExpression::SimpleCondition {
+                operand,
+                operand_use,
+            } => {
+                // Simple condition - just create a variable reference
+                self.create_use_expression(operand, context, plan, Some(operand_use.clone()))
+            }
+            ComparisonExpression::BinaryComparison {
+                operator,
+                left,
+                left_use,
+                right,
+                right_use,
+            } => {
+                // Binary comparison - create left op right expression
+                let left_expr =
+                    self.create_use_expression(left, context, plan, Some(left_use.clone()));
+                let right_expr =
+                    self.create_use_expression(right, context, plan, Some(right_use.clone()));
+
+                let binary_op = match operator {
+                    crate::generated::generated_traits::BinaryOperator::Equality => {
+                        oxc_syntax::operator::BinaryOperator::Equality
+                    }
+                    crate::generated::generated_traits::BinaryOperator::Inequality => {
+                        oxc_syntax::operator::BinaryOperator::Inequality
+                    }
+                    crate::generated::generated_traits::BinaryOperator::StrictEquality => {
+                        oxc_syntax::operator::BinaryOperator::StrictEquality
+                    }
+                    crate::generated::generated_traits::BinaryOperator::StrictInequality => {
+                        oxc_syntax::operator::BinaryOperator::StrictInequality
+                    }
+                    crate::generated::generated_traits::BinaryOperator::LessThan => {
+                        oxc_syntax::operator::BinaryOperator::LessThan
+                    }
+                    crate::generated::generated_traits::BinaryOperator::LessEqualThan => {
+                        oxc_syntax::operator::BinaryOperator::LessEqualThan
+                    }
+                    crate::generated::generated_traits::BinaryOperator::GreaterThan => {
+                        oxc_syntax::operator::BinaryOperator::GreaterThan
+                    }
+                    crate::generated::generated_traits::BinaryOperator::GreaterEqualThan => {
+                        oxc_syntax::operator::BinaryOperator::GreaterEqualThan
+                    }
+                    _ => {
+                        // For unsupported operators, fall back to equality
+                        log::warn!("Unsupported binary operator in conditional: {:?}", operator);
+                        oxc_syntax::operator::BinaryOperator::Equality
+                    }
+                };
+
+                self.ast_builder
+                    .expression_binary(oxc_span::SPAN, left_expr, binary_op, right_expr)
+            }
+        }
     }
 
     /// Convert a loop structure
@@ -1485,6 +1580,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             },
                             DeclarationStrategy::AssignOnly => "assign",
                             DeclarationStrategy::Skip => "skip",
+                            DeclarationStrategy::SideEffectOnly => "side-effect",
                         }
                     } else {
                         ""
@@ -1573,6 +1669,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             },
                             DeclarationStrategy::AssignOnly => "assign/dup",
                             DeclarationStrategy::Skip => "skip/dup",
+                            DeclarationStrategy::SideEffectOnly => "side-effect/dup",
                         }
                     } else {
                         "dup"

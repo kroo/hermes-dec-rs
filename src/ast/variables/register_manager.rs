@@ -5,7 +5,7 @@
 
 use super::variable_mapper::VariableMapping;
 use crate::analysis::control_flow_plan::ControlFlowPlan;
-use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext};
+use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext, SSAValue};
 use crate::hbc::InstructionIndex;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -210,6 +210,14 @@ impl RegisterManager {
         }
         // For undefined registers used in expressions, create a placeholder
         format!("/* undefined var{} */", register)
+    }
+
+    /// Get the current SSA value for a register at the current PC
+    pub fn get_current_ssa_value(&self, register: u8) -> Option<SSAValue> {
+        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            return mapping.register_at_pc.get(&(register, pc)).cloned();
+        }
+        None
     }
 
     /// Create a new variable name when a register is written to (for definitions)
