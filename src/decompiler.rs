@@ -7,20 +7,60 @@ use crate::analysis::{
     DefaultParameterAnalyzer, FunctionClassifier, FunctionType, GlobalAnalysisResult,
     GlobalSSAAnalyzer,
 };
-use crate::ast::{BlockToStatementConverter, ExpressionContext};
-use crate::cfg::Cfg;
+use crate::ast::{
+    build_function_program, generate_code_with_comments, AddressCommentManager, ExpressionContext,
+    InstructionIndex,
+};
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
 use crate::{DecompilerError, DecompilerResult};
 use oxc_allocator::Allocator;
 use oxc_ast::AstBuilder as OxcAstBuilder;
-use oxc_codegen::Codegen;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Main decompiler struct
 pub struct Decompiler {
     /// Cached global analysis result
     global_analysis: Option<Arc<GlobalAnalysisResult>>,
+    /// Cache of decompiled functions
+    function_cache: HashMap<u32, String>,
+}
+
+/// Result of function decompilation - AST node and metadata
+pub struct FunctionDecompilationResult<'a> {
+    /// The function body statements
+    pub body_statements: oxc_allocator::Vec<'a, oxc_ast::ast::Statement<'a>>,
+    /// Function name
+    pub function_name: String,
+    /// Function type (standalone, method, etc.)
+    pub function_type: FunctionType,
+    /// Default parameter information
+    pub default_params: std::collections::HashMap<u32, crate::analysis::DefaultParameterInfo>,
+    /// Parameter names (including default values)
+    pub param_names: Vec<String>,
+    /// Comment manager for the function
+    pub comment_manager: Option<AddressCommentManager>,
+    /// Nested function indices found during decompilation
+    pub nested_functions: Vec<u32>,
+}
+
+/// Decompiler for a single function
+pub struct FunctionDecompiler<'a> {
+    /// Reference to the HBC file
+    hbc_file: &'a HbcFile<'a>,
+    /// Function index to decompile
+    function_index: u32,
+    /// Global analysis result (shared)
+    global_analysis: Arc<GlobalAnalysisResult>,
+    /// Whether to include instruction comments
+    include_instruction_comments: bool,
+    /// Whether to include SSA comments
+    include_ssa_comments: bool,
+    /// Whether to skip validation
+    skip_validation: bool,
+    /// Whether to decompile nested functions
+    decompile_nested: bool,
 }
 
 impl Decompiler {
@@ -28,6 +68,7 @@ impl Decompiler {
     pub fn new() -> DecompilerResult<Self> {
         Ok(Decompiler {
             global_analysis: None,
+            function_cache: HashMap::new(),
         })
     }
 
@@ -59,8 +100,8 @@ impl Decompiler {
                 message: "No functions found in HBC file".to_string(),
             })?;
 
-        // Generate JavaScript code
-        self.generate_code(&module)
+        // For now, just return the first module
+        Ok(module)
     }
 
     /// Decompile a single function
@@ -79,6 +120,40 @@ impl Decompiler {
         function_index: u32,
         comments: &str,
     ) -> DecompilerResult<String> {
+        self.decompile_function_with_full_options(hbc_file, function_index, comments, false)
+    }
+
+    /// Decompile a single function with full options
+    pub fn decompile_function_with_full_options(
+        &mut self,
+        hbc_file: &HbcFile,
+        function_index: u32,
+        comments: &str,
+        skip_validation: bool,
+    ) -> DecompilerResult<String> {
+        self.decompile_function_with_full_options_and_nested(
+            hbc_file,
+            function_index,
+            comments,
+            skip_validation,
+            false, // default: don't decompile nested functions
+        )
+    }
+
+    /// Decompile a single function with full options and nested function support
+    pub fn decompile_function_with_full_options_and_nested(
+        &mut self,
+        hbc_file: &HbcFile,
+        function_index: u32,
+        comments: &str,
+        skip_validation: bool,
+        decompile_nested: bool,
+    ) -> DecompilerResult<String> {
+        // Check cache first
+        if !decompile_nested && self.function_cache.contains_key(&function_index) {
+            return Ok(self.function_cache[&function_index].clone());
+        }
+
         // Ensure global analysis is run
         if self.global_analysis.is_none() {
             let global_result = match GlobalSSAAnalyzer::analyze(hbc_file) {
@@ -92,113 +167,247 @@ impl Decompiler {
             self.global_analysis = Some(Arc::new(global_result));
         }
 
-        // Get the global analysis
-        let global_analysis = self.global_analysis.as_ref().unwrap();
+        let global_analysis = self.global_analysis.as_ref().unwrap().clone();
 
-        // Build CFG from instructions
-        let mut cfg = Cfg::new(hbc_file, function_index);
-        cfg.build();
+        // Parse comment types
+        let comment_types: Vec<&str> = comments.split(',').map(|s| s.trim()).collect();
+        let include_instruction_comments = comment_types.contains(&"instructions");
+        let include_ssa_comments = comment_types.contains(&"ssa");
 
-        // Create allocator and AST builder
+        // Create allocator and AST builder for this decompilation
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
 
+        // Create a function decompiler
+        let function_decompiler = FunctionDecompiler {
+            hbc_file,
+            function_index,
+            global_analysis,
+            include_instruction_comments,
+            include_ssa_comments,
+            skip_validation,
+            decompile_nested,
+        };
+
+        // Create HBC analysis for this file
+        let mut hbc_analysis = crate::analysis::HbcAnalysis::analyze(hbc_file).map_err(|e| {
+            DecompilerError::Internal {
+                message: format!("Failed to analyze HBC file: {}", e),
+            }
+        })?;
+
+        // Decompile the function to AST
+        let decompilation_result =
+            function_decompiler.decompile(&allocator, &ast_builder, &mut hbc_analysis)?;
+
+        // Convert AST to string
+        let result = self.ast_to_string(
+            &allocator,
+            &ast_builder,
+            decompilation_result,
+            hbc_file,
+            function_index,
+        )?;
+
+        // Cache the result if not decompiling nested functions
+        if !decompile_nested {
+            self.function_cache.insert(function_index, result.clone());
+        }
+
+        Ok(result)
+    }
+
+    /// Decompile a function from cache or create new decompilation
+    pub fn decompile_function_cached(&self, function_index: u32) -> Option<&String> {
+        self.function_cache.get(&function_index)
+    }
+
+    /// Convert AST to string
+    fn ast_to_string<'a>(
+        &self,
+        _allocator: &'a Allocator,
+        ast_builder: &'a OxcAstBuilder<'a>,
+        result: FunctionDecompilationResult<'a>,
+        hbc_file: &HbcFile,
+        _function_index: u32,
+    ) -> DecompilerResult<String> {
+        // Convert default_params to the format expected by build_function_program
+        let default_params_strings: HashMap<u32, String> = result
+            .default_params
+            .into_iter()
+            .map(|(k, v)| {
+                // Extract the default value from the instruction
+                let default_value = match &v.default_value_instruction {
+                    UnifiedInstruction::LoadConstString { operand_1, .. } => {
+                        // Look up the actual string from the string table
+                        hbc_file
+                            .strings
+                            .get(*operand_1 as u32)
+                            .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
+                            .unwrap_or_else(|_| "\"default\"".to_string())
+                    }
+                    UnifiedInstruction::LoadConstStringLongIndex { operand_1, .. } => hbc_file
+                        .strings
+                        .get(*operand_1)
+                        .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
+                        .unwrap_or_else(|_| "\"default\"".to_string()),
+                    UnifiedInstruction::LoadConstZero { .. } => "0".to_string(),
+                    UnifiedInstruction::LoadConstUInt8 { operand_1, .. } => operand_1.to_string(),
+                    UnifiedInstruction::LoadConstInt { operand_1, .. } => operand_1.to_string(),
+                    UnifiedInstruction::LoadConstDouble { operand_1, .. } => {
+                        format!("{}", operand_1)
+                    }
+                    UnifiedInstruction::LoadConstTrue { .. } => "true".to_string(),
+                    UnifiedInstruction::LoadConstFalse { .. } => "false".to_string(),
+                    UnifiedInstruction::LoadConstNull { .. } => "null".to_string(),
+                    UnifiedInstruction::LoadConstUndefined { .. } => "undefined".to_string(),
+                    UnifiedInstruction::LoadConstEmpty { .. } => "/* empty */".to_string(),
+                    UnifiedInstruction::LoadConstBigInt { operand_1, .. } => hbc_file
+                        .bigints
+                        .get(*operand_1 as u32)
+                        .map(|bi| format!("{}n", bi))
+                        .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1)),
+                    UnifiedInstruction::LoadConstBigIntLongIndex { operand_1, .. } => hbc_file
+                        .bigints
+                        .get(*operand_1)
+                        .map(|bi| format!("{}n", bi))
+                        .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1)),
+                    UnifiedInstruction::NewObject { .. } => "{}".to_string(),
+                    UnifiedInstruction::NewArray { .. } => "[]".to_string(),
+                    UnifiedInstruction::NewArrayWithBuffer { .. } => "[]".to_string(),
+                    UnifiedInstruction::NewArrayWithBufferLong { .. } => "[]".to_string(),
+                    UnifiedInstruction::GetGlobalObject { .. } => "globalThis".to_string(),
+                    _ => format!(
+                        "/* unsupported default: {:?} */",
+                        std::mem::discriminant(&v.default_value_instruction)
+                    ),
+                };
+                (k, default_value)
+            })
+            .collect();
+
+        // Build the full function program
+        let (program, synthetic_source) = build_function_program(
+            ast_builder,
+            &result.function_name,
+            result.param_names,
+            &default_params_strings,
+            result.body_statements,
+            &result.function_type,
+            result.comment_manager,
+        );
+
+        // Generate the final code
+        let output = generate_code_with_comments(&program, &synthetic_source);
+
+        Ok(output)
+    }
+}
+
+impl<'a> FunctionDecompiler<'a> {
+    /// Decompile the function to AST
+    pub fn decompile(
+        &self,
+        _allocator: &'a Allocator,
+        ast_builder: &'a OxcAstBuilder<'a>,
+        hbc_analysis: &'a mut crate::analysis::HbcAnalysis<'a>,
+    ) -> DecompilerResult<FunctionDecompilationResult<'a>> {
+        // First ensure the function analysis exists
+        hbc_analysis
+            .get_function_analysis(self.function_index)
+            .map_err(|e| DecompilerError::Internal {
+                message: format!("Failed to get function analysis: {}", e),
+            })?;
+
         // Create expression context with HBC file access
-        let expression_context = ExpressionContext::with_context(hbc_file, function_index, 0);
+        let expression_context = ExpressionContext::with_context(
+            self.hbc_file,
+            self.function_index,
+            InstructionIndex::zero(),
+        );
 
         // Get the actual function name from the HBC file before moving expression_context
         let function_name = expression_context
-            .lookup_function_name(function_index)
-            .unwrap_or_else(|_| format!("function_{}", function_index));
+            .lookup_function_name(self.function_index)
+            .unwrap_or_else(|_| format!("function_{}", self.function_index));
 
         // Get parameter count before moving expression_context
         let param_count = expression_context
-            .lookup_function_param_count(function_index)
+            .lookup_function_param_count(self.function_index)
             .unwrap_or(0);
 
-        // Determine if instruction comments should be included
-        let include_instruction_comments = comments == "instructions";
+        // Now get the function analysis reference (guaranteed to exist)
+        let function_analysis = hbc_analysis
+            .get_function_analysis_ref(self.function_index)
+            .ok_or_else(|| DecompilerError::Internal {
+                message: format!("Function analysis not found after creation"),
+            })?;
 
-        // Get the SSA analysis from global analyzer
-        let ssa_analysis = match global_analysis
-            .analyzer()
-            .get_function_analysis(function_index)
-        {
-            Some(analysis) => analysis.clone(),
-            None => {
-                // Fallback: run local SSA if not found in global analysis
-                match crate::cfg::ssa::construct_ssa(&cfg, function_index) {
-                    Ok(analysis) => analysis,
-                    Err(e) => {
-                        return Err(DecompilerError::Internal {
-                            message: format!("SSA analysis failed: {}", e),
-                        });
-                    }
-                }
-            }
-        };
-
-        // Determine if SSA comments should be included
-        let include_ssa_comments = comments == "ssa";
-
-        // Create block-to-statement converter with SSA analysis and global analyzer
-        let mut converter = BlockToStatementConverter::with_ssa_and_global_analysis(
-            &ast_builder,
-            expression_context,
-            include_instruction_comments,
-            include_ssa_comments,
-            ssa_analysis,
-            &cfg,
-            global_analysis.clone(),
+        // Build and analyze the control flow plan
+        let plan_builder = crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(
+            &function_analysis.cfg,
+            function_analysis,
         );
+        let mut plan = plan_builder.build();
 
-        // Process all blocks in the CFG with proper ordering and labeling
-        let all_statements = match converter.convert_blocks_from_cfg(&cfg) {
-            Ok(statements) => statements,
-            Err(e) => {
-                return Err(DecompilerError::Internal {
-                    message: format!("Failed to convert blocks: {}", e),
-                });
-            }
-        };
+        // Analyze the plan to determine declaration and use strategies
+        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
+            &mut plan,
+            function_analysis,
+        );
+        analyzer.analyze();
+
+        // Convert the plan to AST
+        let mut converter = crate::ast::ControlFlowPlanConverter::new(
+            ast_builder,
+            self.hbc_file,
+            hbc_analysis,
+            self.function_index,
+            function_analysis,
+            plan,
+            self.include_ssa_comments,
+            self.include_instruction_comments,
+        );
+        let all_statements = converter.convert_to_ast();
+
+        // Take the comment manager back from the converter
+        let comment_manager = converter.take_comment_manager();
 
         // Analyze the function for patterns
-        let (default_params, function_type) =
-            match hbc_file.functions.get(function_index, hbc_file) {
-                Ok(func) => {
-                    // Extract UnifiedInstruction from HbcFunctionInstruction
-                    let unified_instructions: Vec<UnifiedInstruction> = func
-                        .instructions
-                        .iter()
-                        .map(|instr| instr.instruction.clone())
-                        .collect();
+        let (default_params, function_type) = match self
+            .hbc_file
+            .functions
+            .get(self.function_index, self.hbc_file)
+        {
+            Ok(func) => {
+                // Extract UnifiedInstruction from HbcFunctionInstruction
+                let unified_instructions: Vec<UnifiedInstruction> = func
+                    .instructions
+                    .iter()
+                    .map(|instr| instr.instruction.clone())
+                    .collect();
 
-                    let defaults = DefaultParameterAnalyzer::analyze(&unified_instructions);
+                let defaults = DefaultParameterAnalyzer::analyze(&unified_instructions);
 
-                    // Get global analysis - it should always be available at this point
-                    let global_analysis = self.global_analysis.as_ref().expect(
-                        "Global analysis should be available during function classification",
-                    );
-
-                    let func_type = FunctionClassifier::classify(
-                        function_index,
-                        &unified_instructions,
-                        hbc_file,
-                        global_analysis,
-                    );
-                    (defaults, func_type)
-                }
-                Err(_) => {
-                    // No function found, return empty results
-                    (std::collections::HashMap::new(), FunctionType::Standalone)
-                }
-            };
+                let func_type = FunctionClassifier::classify(
+                    self.function_index,
+                    &unified_instructions,
+                    self.hbc_file,
+                    &self.global_analysis,
+                );
+                (defaults, func_type)
+            }
+            Err(_) => {
+                // No function found, return empty results
+                (std::collections::HashMap::new(), FunctionType::Standalone)
+            }
+        };
 
         // Subtract 1 to account for implicit 'this' parameter
         let metadata_param_count = if param_count > 0 { param_count - 1 } else { 0 };
 
         // For the global function (function_index 0), never show parameters
-        let is_global_function = function_index == 0;
+        let is_global_function = self.function_index == 0;
 
         // When functions have default parameters, we need to check the actual parameter
         // indices used in LoadParam instructions to ensure we show all parameters.
@@ -211,19 +420,18 @@ impl Decompiler {
             metadata_param_count.max(max_param_idx + 1) as usize
         };
 
-        // Generate parameter names with default values
-        let params = if actual_param_count > 0 {
-            let param_names: Vec<String> = (0..actual_param_count)
+        // Convert param_names vector to vector of strings
+        let param_names: Vec<String> = if actual_param_count > 0 {
+            (0..actual_param_count)
                 .map(|i| {
                     let param_name = format!("arg{}", i);
-
                     // Check if this parameter has a default value
                     if let Some(default_info) = default_params.get(&(i as u32)) {
                         // Extract the default value from the instruction
                         let default_value = match &default_info.default_value_instruction {
                             UnifiedInstruction::LoadConstString { operand_1, .. } => {
                                 // Look up the actual string from the string table
-                                hbc_file
+                                self.hbc_file
                                     .strings
                                     .get(*operand_1 as u32)
                                     .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
@@ -231,7 +439,7 @@ impl Decompiler {
                             }
                             UnifiedInstruction::LoadConstStringLongIndex { operand_1, .. } => {
                                 // Look up the actual string from the string table (long index version)
-                                hbc_file
+                                self.hbc_file
                                     .strings
                                     .get(*operand_1)
                                     .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
@@ -257,19 +465,18 @@ impl Decompiler {
                             UnifiedInstruction::LoadConstEmpty { .. } => "/* empty */".to_string(),
                             UnifiedInstruction::LoadConstBigInt { operand_1, .. } => {
                                 // Look up the actual bigint value from the bigint table
-                                hbc_file
+                                self.hbc_file
                                     .bigints
                                     .get(*operand_1 as u32)
                                     .map(|bi| format!("{}n", bi))
                                     .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1))
                             }
-                            UnifiedInstruction::LoadConstBigIntLongIndex { operand_1, .. } => {
-                                hbc_file
-                                    .bigints
-                                    .get(*operand_1)
-                                    .map(|bi| format!("{}n", bi))
-                                    .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1))
-                            }
+                            UnifiedInstruction::LoadConstBigIntLongIndex { operand_1, .. } => self
+                                .hbc_file
+                                .bigints
+                                .get(*operand_1)
+                                .map(|bi| format!("{}n", bi))
+                                .unwrap_or_else(|_| format!("/* bigint[{}] */", operand_1)),
                             UnifiedInstruction::NewObject { .. } => "{}".to_string(),
                             UnifiedInstruction::NewArray { .. } => "[]".to_string(),
                             UnifiedInstruction::NewArrayWithBuffer { .. } => "[]".to_string(),
@@ -285,119 +492,19 @@ impl Decompiler {
                         param_name
                     }
                 })
-                .collect();
-            format!("({})", param_names.join(", "))
+                .collect()
         } else {
-            "()".to_string()
+            vec![]
         };
 
-        // Create a temporary program with just the statements
-        let program = ast_builder.program(
-            oxc_span::Span::default(),
-            oxc_ast::ast::SourceType::default(),
-            "",                                     // source text
-            oxc_allocator::Vec::new_in(&allocator), // directives
-            None,                                   // hashbang
-            oxc_allocator::Vec::new_in(&allocator), // body
-            all_statements,                         // statements
-        );
-
-        // Generate JavaScript code using oxc_codegen
-        let codegen = Codegen::new();
-        let result = codegen.build(&program);
-
-        // Post-process the generated code to convert void expressions to comments
-        let processed_code = self.convert_void_expressions_to_comments(&result.code);
-
-        // Add function type comment
-        let function_comment = match &function_type {
-            FunctionType::Constructor {
-                property_count,
-                has_methods,
-            } => {
-                format!(
-                    "/* Constructor: {} properties{} */\n",
-                    property_count,
-                    if *has_methods {
-                        ", includes methods"
-                    } else {
-                        ""
-                    }
-                )
-            }
-            FunctionType::Method {
-                is_prototype_method,
-            } => {
-                if *is_prototype_method {
-                    "/* Prototype method */\n".to_string()
-                } else {
-                    "/* Method */\n".to_string()
-                }
-            }
-            FunctionType::Anonymous { context } => match context {
-                crate::analysis::function_classifier::AnonymousContext::IIFE => {
-                    "/* IIFE (Immediately Invoked Function Expression) */\n".to_string()
-                }
-                crate::analysis::function_classifier::AnonymousContext::Callback => {
-                    "/* Callback function */\n".to_string()
-                }
-                crate::analysis::function_classifier::AnonymousContext::Unknown => String::new(),
-            },
-            FunctionType::Standalone => String::new(),
-        };
-
-        // Wrap the processed code in a function declaration with parameters
-        let code = format!(
-            "{}function {}{} {{\n{}\n}}",
-            function_comment,
+        Ok(FunctionDecompilationResult {
+            body_statements: all_statements,
             function_name,
-            params,
-            processed_code.trim()
-        );
-
-        Ok(code)
-    }
-
-    /// Generate JavaScript code from AST
-    fn generate_code(&self, code: &str) -> DecompilerResult<String> {
-        // For now, just return the code as-is
-        Ok(code.to_string())
-    }
-
-    /// Convert void expressions in generated code to JavaScript comments
-    /// Looks for patterns like `void "/* comment */";` and converts them to `/* comment */`
-    fn convert_void_expressions_to_comments(&self, code: &str) -> String {
-        use regex::Regex;
-
-        // Pattern to match void expressions with string literals containing comment markers
-        let void_comment_regex = Regex::new(r#"void\s+"(/\*[^"]*\*/)"\s*;"#).unwrap();
-
-        // Replace void expressions with actual comments
-        let processed = void_comment_regex.replace_all(code, |caps: &regex::Captures| {
-            // Extract the comment content from the captured group
-            let comment = &caps[1];
-            format!("{}", comment)
-        });
-
-        processed.to_string()
-    }
-
-    /// Decompile HBC file with options
-    pub fn decompile_with_options(
-        &mut self,
-        _hbc_file: &HbcFile,
-        _minify: bool,
-        _include_comments: bool,
-    ) -> DecompilerResult<String> {
-        // TODO: Implement decompilation with options
-        // 1. Parse HBC file
-        // 2. Build CFG for each function
-        // 3. Structure control flow
-        // 4. Generate AST
-        // 5. Apply minification if requested
-        // 6. Add comments if requested
-        // 7. Generate code
-
-        Ok("// TODO: Implement decompilation".to_string())
+            function_type,
+            default_params,
+            param_names,
+            comment_manager,
+            nested_functions: Vec::new(), // TODO: Collect from converter
+        })
     }
 }

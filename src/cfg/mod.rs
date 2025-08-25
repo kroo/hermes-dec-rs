@@ -5,8 +5,10 @@
 pub mod analysis;
 pub mod block;
 pub mod builder;
+pub mod conditional_analysis;
 pub mod regions;
 pub mod ssa;
+pub mod switch_analysis;
 pub mod visualization;
 
 use crate::hbc::HbcFile;
@@ -79,6 +81,16 @@ impl<'a> Cfg<'a> {
         &mut self.builder
     }
 
+    /// Get the HBC file reference
+    pub fn hbc_file(&self) -> &'a HbcFile<'a> {
+        self.builder.hbc_file()
+    }
+
+    /// Get the function index
+    pub fn function_index(&self) -> u32 {
+        self.builder.function_index()
+    }
+
     /// Analyze dominators for the CFG
     pub fn analyze_dominators(&self) -> Option<Dominators<NodeIndex>> {
         self.builder.analyze_dominators(&self.graph)
@@ -123,6 +135,13 @@ impl<'a> Cfg<'a> {
     /// Get the entry node for the function (first block)
     pub fn entry_node(&self) -> Option<NodeIndex> {
         self.graph.node_indices().next()
+    }
+
+    /// Get blocks in original order
+    pub fn block_order(&self) -> Vec<NodeIndex> {
+        let mut result: Vec<NodeIndex> = self.graph.node_indices().collect();
+        result.sort();
+        result
     }
 
     /// Get blocks in execution-friendly order (depth-first from entry, handling loops appropriately)
@@ -218,6 +237,32 @@ impl<'a> Cfg<'a> {
         }
     }
 
+    /// Analyze conditional chains in the CFG
+    pub fn analyze_conditional_chains(&self) -> Option<analysis::ConditionalAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::analyze_conditional_chains(
+            &self.graph,
+            &post_doms,
+        ))
+    }
+
+    /// Analyze switch regions in the CFG
+    /// Requires SSA analysis for accurate constant propagation
+    pub fn analyze_switch_regions(
+        &self,
+        ssa_analysis: &ssa::SSAAnalysis,
+    ) -> Option<analysis::SwitchAnalysis> {
+        let post_doms = self.analyze_post_dominators()?;
+        Some(analysis::find_switch_regions_with_ssa(
+            &self.graph,
+            &post_doms,
+            self.hbc_file(),
+            &ssa_analysis.ssa_values,
+            self,
+            ssa_analysis,
+        ))
+    }
+
     /// Get blocks that need labels (are targets of jumps that aren't simple fall-through)
     pub fn blocks_needing_labels(&self) -> std::collections::HashSet<NodeIndex> {
         let mut needs_labels = std::collections::HashSet::new();
@@ -231,7 +276,11 @@ impl<'a> Cfg<'a> {
                 | EdgeKind::Switch(_)
                 | EdgeKind::Default
                 | EdgeKind::GeneratorResume => {
-                    needs_labels.insert(edge.target());
+                    let target = edge.target();
+                    // Don't add labels for EXIT blocks - they won't be rendered
+                    if !self.graph[target].is_exit() {
+                        needs_labels.insert(target);
+                    }
                 }
                 // Fall-through and generator fallthrough are sequential, no label needed
                 EdgeKind::Fall | EdgeKind::GeneratorFallthrough => {}
@@ -240,6 +289,11 @@ impl<'a> Cfg<'a> {
 
         // Also include blocks that have multiple incoming edges (potential merge points)
         for node in self.graph.node_indices() {
+            // Skip EXIT blocks
+            if self.graph[node].is_exit() {
+                continue;
+            }
+
             let incoming_count = self
                 .graph
                 .neighbors_directed(node, petgraph::Direction::Incoming)
@@ -338,21 +392,6 @@ impl<'a> Cfg<'a> {
     /// Analyze post-dominators for the CFG
     pub fn analyze_post_dominators(&self) -> Option<analysis::PostDominatorAnalysis> {
         self.builder.analyze_post_dominators(&self.graph)
-    }
-
-    /// Analyze conditional chains including if/else-if/else patterns
-    pub fn analyze_conditional_chains(&self) -> Option<analysis::ConditionalAnalysis> {
-        let post_doms = self.analyze_post_dominators()?;
-        Some(analysis::analyze_conditional_chains(
-            &self.graph,
-            &post_doms,
-        ))
-    }
-
-    /// Analyze switch regions in the CFG
-    pub fn analyze_switch_regions(&self) -> Option<analysis::SwitchAnalysis> {
-        let post_doms = self.analyze_post_dominators()?;
-        Some(analysis::find_switch_regions(&self.graph, &post_doms))
     }
 
     /// Export CFG to DOT format with comprehensive analysis visualization

@@ -67,6 +67,14 @@ enum Commands {
         /// HBC version (auto-detected if not specified)
         #[arg(long)]
         hbc_version: Option<u32>,
+
+        /// Skip validation of block processing
+        #[arg(long)]
+        skip_validation: bool,
+
+        /// Decompile nested function definitions (experimental)
+        #[arg(long)]
+        decompile_nested: bool,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -101,6 +109,9 @@ enum Commands {
         /// Function index to analyze
         #[arg(short, long)]
         function: usize,
+        /// Show verbose analysis (dominance frontiers, liveness)
+        #[arg(short, long)]
+        verbose: bool,
     },
 }
 
@@ -124,9 +135,20 @@ fn main() -> Result<()> {
             function,
             output,
             comments,
-            ..
-        } => cli::decompile::decompile(&input, function, output.as_ref().map(|v| &**v), &comments)
-            .map_err(|e| miette!("{}", e)),
+            skip_validation,
+            decompile_nested,
+            format: _,
+            minify: _,
+            hbc_version: _,
+        } => cli::decompile::decompile(
+            &input,
+            function,
+            output.as_ref().map(|v| &**v),
+            &comments,
+            skip_validation,
+            decompile_nested,
+        )
+        .map_err(|e| miette!("{}", e)),
         Commands::Generate { force: _ } => {
             cli::generate::generate_instructions().map_err(|e| miette!("{}", e))
         }
@@ -144,8 +166,10 @@ fn main() -> Result<()> {
             analysis.as_ref().map(|v| &**v),
         )
         .map_err(|e| miette!("{}", e)),
-        Commands::AnalyzeCfg { input, function } => {
-            cli::analyze_cfg::analyze_cfg(&input, function).map_err(|e| miette!("{}", e))
-        }
+        Commands::AnalyzeCfg {
+            input,
+            function,
+            verbose,
+        } => cli::analyze_cfg::analyze_cfg(&input, function, verbose).map_err(|e| miette!("{}", e)),
     }
 }

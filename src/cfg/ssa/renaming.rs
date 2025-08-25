@@ -71,7 +71,12 @@ fn rename_block(
             *version += 1;
 
             phi.result.version = *version;
-            phi.result.def_site.pc = cfg.graph()[block_id].start_pc();
+            // PHI functions logically execute before any instruction in the block
+            // Use a special marker to distinguish them from regular instructions
+            // We subtract 1 from the block start PC to ensure PHI definitions
+            // don't collide with instruction definitions at the same PC
+            phi.result.def_site.instruction_idx =
+                cfg.graph()[block_id].start_pc().saturating_sub(1);
 
             let ssa_value = phi.result.clone();
             analysis
@@ -99,8 +104,7 @@ fn rename_block(
                     let use_site = RegisterUse {
                         register: source_reg,
                         block_id,
-                        instruction_idx: inst_idx,
-                        pc,
+                        instruction_idx: pc,
                     };
                     analysis
                         .use_def_chains
@@ -124,8 +128,7 @@ fn rename_block(
             let def_site = RegisterDef {
                 register: target_reg,
                 block_id,
-                instruction_idx: inst_idx,
-                pc,
+                instruction_idx: pc,
             };
 
             let ssa_value = SSAValue {

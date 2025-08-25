@@ -1,8 +1,8 @@
 Bytecode File Information:
-  Bytecode version number: 90
-  Source hash: 473da7adb50a014739fe743daa715cde6ffff72b
-  Function count: 3
-  String count: 31
+  Bytecode version number: 96
+  Source hash: 5746055d12230839cba0fab64cfcbfc81ff06992
+  Function count: 17
+  String count: 108
   BigInt count: 0
   String Kind Entry count: 2
   RegExp count: 0
@@ -15,55 +15,293 @@ Bytecode File Information:
     cjsModulesStaticallyResolved: 0
 
 Global String Table:
-s0[ASCII, 0..6] #29DC03AC: fifteen
-s1[ASCII, 6..19] #F2708BE8: negative three
-s2[ASCII, 15..19] three
-s3[ASCII, 19..24] eleven
-s4[ASCII, 24..35] negative one
-s5[ASCII, 33..35] one
-s6[ASCII, 34..46] negative five
-s7[ASCII, 43..46] five
-s8[ASCII, 46..50] eight
-s9[ASCII, 46..53] eighteen
-s10[ASCII, 53..65] negative four
-s11[ASCII, 62..65] four
-s12[ASCII, 62..69] fourteen
-s13[ASCII, 69..80] negative two
-s14[ASCII, 78..80] two
-s15[ASCII, 80..84] other
-s16[ASCII, 85..90] global
-s17[ASCII, 104..111] thirteen
-s18[ASCII, 112..116] seven
-s19[ASCII, 112..120] seventeen
-s20[ASCII, 120..123] nine
-s21[ASCII, 120..127] nineteen
-s22[ASCII, 128..130] six
-s23[ASCII, 128..134] sixteen
-s24[ASCII, 149..151] ten
-s25[ASCII, 152..157] twelve
-s26[ASCII, 158..163] twenty
-s27[ASCII, 164..170] unknown
-s28[ASCII, 171..174] zero
-s29[ASCII, 90..104] largeSwitchTest
-s30[ASCII, 135..149] denseSwitchTest
+s0[ASCII, 0..-1] #00018270: 
+s1[ASCII, 0..9] #2D334AB0: -processed
+s2[ASCII, 9..9] #DE0F2B3D: d
+s3[ASCII, 9..17] #9102A3D0: default-1
+s4[ASCII, 18..28] #1C35E808: a=0,b>0,c=1
+s5[ASCII, 28..30] #29DC03AC: 1-1
+s6[ASCII, 30..32] #58181A3C: 1-0
+s7[ASCII, 32..34] #0DA8F6EA: 0-0
+s8[ASCII, 34..36] #2FD735CE: 0-1
+s9[ASCII, 36..38] #00018E43: 1-2
+s10[ASCII, 39..46] #00018A52: a=0,b<=0
+s11[ASCII, 46..48] #C966DC8A: 0-2
+s12[ASCII, 49..59] #F2708BE8: a=0,b>0,c=0
+s13[ASCII, 59..65] #39232421: 0-other
+s14[ASCII, 61..65] #A4661605: other
+s15[ASCII, 61..66] #973712F5: other 
+s16[ASCII, 67..73] #A7B90D10: a=1,b=1
+s17[ASCII, 73..79] #1C182460: 1-other
+s18[ASCII, 80..84] #4C29DE53: seven
+s19[ASCII, 80..88] #F8448D4A: seventeen
+s20[ASCII, 89..104] #9615E9FA: Division by zero
+s21[ASCII, 101..104] #1680F809: zero
+s22[ASCII, 104..109] #629A2BFD: object
+s23[ASCII, 109..114] #CA7E4EA0: twelve
+s24[ASCII, 119..125] #6C748C85: Error: 
+s25[ASCII, 126..136] #6539A9B8: Invalid log
+s26[ASCII, 136..141] #06952F11: global
+s27[ASCII, 156..168] #5A39B07E: Negative sqrt
+s28[ASCII, 168..170] #807C5F3D: ten
+s29[ASCII, 171..185] #63D87C1C: a=0,b>0,c=other
+s30[ASCII, 191..197] #DF50693D: a=1,b=0
+s31[ASCII, 198..212] #2074F516: a=1,b=other,c=2
+s32[ASCII, 213..231] #8CC871FE: a=1,b=other,c=other
+s33[ASCII, 235..241] #EF03A676: a=other
+s34[ASCII, 242..246] #769B8915: array
+s35[ASCII, 247..257] bad request
+s36[ASCII, 257..261] three
+s37[ASCII, 257..262] three 
+s38[ASCII, 263..270] continue
+s39[ASCII, 270..274] eight
+s40[ASCII, 270..277] eighteen
+s41[ASCII, 277..280] nine
+s42[ASCII, 277..284] nineteen
+s43[ASCII, 285..291] created
+s44[ASCII, 291..303] default-other
+s45[ASCII, 304..307] five
+s46[ASCII, 307..312] eleven
+s47[ASCII, 312..320] not found
+s48[ASCII, 320..325] divide
+s49[ASCII, 324..330] default
+s50[ASCII, 324..332] default-0
+s51[ASCII, 333..344] unauthorized
+s52[ASCII, 344..347] done
+s53[ASCII, 345..347] one
+s54[ASCII, 345..348] one 
+s55[ASCII, 349..355] fifteen
+s56[ASCII, 366..369] high
+s57[ASCII, 370..378] forbidden
+s58[ASCII, 390..395] twenty
+s59[ASCII, 396..399] four
+s60[ASCII, 396..403] fourteen
+s61[ASCII, 419..422] low 
+s62[ASCII, 423..426] mid 
+s63[ASCII, 427..431] mixed
+s64[ASCII, 443..444] ok
+s65[ASCII, 447..458] server error
+s66[ASCII, 459..465] outer-2
+s67[ASCII, 488..490] six
+s68[ASCII, 488..494] sixteen
+s69[ASCII, 497..504] thirteen
+s70[ASCII, 509..511] two
+s71[ASCII, 509..512] two 
+s72[ASCII, 513..519] unknown
+s73[ASCII, 39..39] a
+s74[ASCII, 75..80] others
+s75[ASCII, 114..118] every
+s76[ASCII, 119..123] Error
+s77[ASCII, 134..136] log
+s78[ASCII, 141..155] largeSwitchTest
+s79[ASCII, 165..168] sqrt
+s80[ASCII, 185..190] reduce
+s81[ASCII, 231..234] rest
+s82[ASCII, 247..247] b
+s83[ASCII, 263..263] c
+s84[ASCII, 355..366] nestedSwitch
+s85[ASCII, 376..390] denseSwitchTest
+s86[ASCII, 404..421] complexControlFlow
+s87[ASCII, 427..442] mixedBreakReturn
+s88[ASCII, 444..447] keys
+s89[ASCII, 466..488] switchWithFunctionCalls
+s90[ASCII, 495..498] Math
+s91[ASCII, 505..509] first
+s92[ASCII, 520..536] switchWithObjects
+s93[ASCII, 530..535] Object
+s94[ASCII, 536..540] slice
+s95[ASCII, 541..547] console
+s96[ASCII, 547..555] extracted
+s97[ASCII, 556..561] filter
+s98[ASCII, 562..565] find
+s99[ASCII, 566..567] id
+s100[ASCII, 568..570] map
+s101[ASCII, 570..578] prototype
+s102[ASCII, 579..585] message
+s103[ASCII, 586..590] value
+s104[ASCII, 586..591] values
+s105[ASCII, 591..605] switchWithBreak
+s106[ASCII, 606..626] switchWithFallthrough
+s107[ASCII, 627..644] switchWithTryCatch
 
 Array Buffer:
+Integer(1)
+Integer(2)
+Integer(3)
+Integer(4)
+Integer(5)
+Object Key Buffer:
+[String 73]
+[String 82]
+[String 83]
+[String 99]
+[String 103]
+Object Value Buffer:
+[int 1]
+[int 2]
+[int 3]
+[int 1]
+[String 73]
+[int 2]
+[String 82]
 
-Function<global>0(1 params, 12 registers, 0 symbols):
+Function<global>0(1 params, 20 registers, 0 symbols):
   DeclareGlobalVar  "denseSwitchTest"
   DeclareGlobalVar  "largeSwitchTest"
+  DeclareGlobalVar  "switchWithBreak"
+  DeclareGlobalVar  "switchWithFallthrough"
+  DeclareGlobalVar  "nestedSwitch"
+  DeclareGlobalVar  "mixedBreakReturn"
+  DeclareGlobalVar  "switchWithFunctionCalls"
+  DeclareGlobalVar  "complexControlFlow"
+  DeclareGlobalVar  "switchWithTryCatch"
+  DeclareGlobalVar  "switchWithObjects"
   CreateEnvironment r1
   CreateClosure     r2, r1, Function<denseSwitchTest>1
   GetGlobalObject   r0
   PutById           r0, r2, 1, "denseSwitchTest"
-  CreateClosure     r1, r1, Function<largeSwitchTest>2
-  PutById           r0, r1, 2, "largeSwitchTest"
-  GetByIdShort      r3, r0, 1, "denseSwitchTest"
-  LoadConstUndefined r2
+  CreateClosure     r2, r1, Function<largeSwitchTest>2
+  PutById           r0, r2, 2, "largeSwitchTest"
+  CreateClosure     r2, r1, Function<switchWithBreak>3
+  PutById           r0, r2, 3, "switchWithBreak"
+  CreateClosure     r2, r1, Function<switchWithFallthrough>4
+  PutById           r0, r2, 4, "switchWithFallthrough"
+  CreateClosure     r2, r1, Function<nestedSwitch>5
+  PutById           r0, r2, 5, "nestedSwitch"
+  CreateClosure     r2, r1, Function<mixedBreakReturn>6
+  PutById           r0, r2, 6, "mixedBreakReturn"
+  CreateClosure     r2, r1, Function<switchWithFunctionCalls>7
+  PutById           r0, r2, 7, "switchWithFunctionCalls"
+  CreateClosure     r2, r1, Function<complexControlFlow>8
+  PutById           r0, r2, 8, "complexControlFlow"
+  CreateClosure     r2, r1, Function<switchWithTryCatch>9
+  PutById           r0, r2, 9, "switchWithTryCatch"
+  CreateClosure     r1, r1, Function<switchWithObjects>10
+  PutById           r0, r1, 10, "switchWithObjects"
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r4, r0, 3, "denseSwitchTest"
+  LoadConstUndefined r5
   LoadConstUInt8    r1, 15
-  Call2             r1, r3, r2, r1
-  GetByIdShort      r1, r0, 2, "largeSwitchTest"
-  LoadConstUInt8    r0, 7
+  Call2             r1, r4, r5, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r4, r0, 4, "largeSwitchTest"
+  LoadConstInt      r1, 404
+  Call2             r1, r4, r5, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 5, "switchWithBreak"
+  LoadConstUInt8    r6, 2
+  Call2             r1, r1, r5, r6
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 6, "switchWithFallthrough"
+  LoadConstUInt8    r4, 1
+  Call2             r1, r1, r5, r4
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 6, "switchWithFallthrough"
+  LoadConstUInt8    r8, 4
+  Call2             r1, r1, r5, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r7, r0, 6, "switchWithFallthrough"
+  LoadConstUInt8    r1, 6
+  Call2             r1, r7, r5, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 7, "nestedSwitch"
+  LoadConstZero     r7
+  Call3             r1, r1, r5, r7, r4
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 7, "nestedSwitch"
+  Call3             r1, r1, r5, r4, r6
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 7, "nestedSwitch"
+  Call3             r1, r1, r5, r6, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 8, "mixedBreakReturn"
+  Call2             r1, r1, r5, r4
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 8, "mixedBreakReturn"
+  Call2             r1, r1, r5, r6
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 8, "mixedBreakReturn"
+  Call2             r1, r1, r5, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 9, "switchWithFunctionCalls"
+  LoadConstUInt8    r9, 5
+  LoadConstUInt8    r8, 3
+  Call4             r1, r1, r5, r7, r9, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 9, "switchWithFunctionCalls"
+  Call4             r1, r1, r5, r4, r9, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 9, "switchWithFunctionCalls"
+  Call4             r1, r1, r5, r6, r9, r8
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 10, "complexControlFlow"
+  Call4             r1, r1, r5, r7, r4, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 10, "complexControlFlow"
+  Call4             r1, r1, r5, r4, r7, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 10, "complexControlFlow"
+  Call4             r1, r1, r5, r4, r6, r6
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r6, r0, 11, "switchWithTryCatch"
+  LoadConstString   r1, "divide"
+  Call3             r1, r6, r5, r1, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r8, r0, 11, "switchWithTryCatch"
+  LoadConstString   r6, "sqrt"
+  LoadConstInt      r1, -4
+  Call3             r1, r8, r5, r6, r1
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r6, r0, 12, "switchWithObjects"
+  LoadConstString   r1, "array"
+  Call3             r1, r6, r5, r1, r7
+  Call2             r1, r2, r3, r1
+  TryGetById        r2, r0, 1, "console"
+  GetByIdShort      r1, r2, 2, "log"
+  GetByIdShort      r3, r0, 12, "switchWithObjects"
+  LoadConstString   r0, "mixed"
+  Call3             r0, r3, r5, r0, r4
   Call2             r0, r1, r2, r0
   Ret               r0
 
@@ -117,86 +355,483 @@ Function<denseSwitchTest>1(2 params, 1 registers, 0 symbols):
 
 Function<largeSwitchTest>2(2 params, 2 registers, 0 symbols):
   LoadParam         r1, 1
-  LoadConstInt      r0, -5
-  JStrictEqualLong  L1, r0, r1
-  LoadConstInt      r0, -4
-  JStrictEqualLong  L2, r0, r1
-  LoadConstInt      r0, -3
-  JStrictEqualLong  L3, r0, r1
-  LoadConstInt      r0, -2
-  JStrictEqualLong  L4, r0, r1
-  LoadConstInt      r0, -1
-  JStrictEqualLong  L5, r0, r1
-  LoadConstZero     r0
-  JStrictEqualLong  L6, r0, r1
-  LoadConstUInt8    r0, 1
-  JStrictEqualLong  L7, r0, r1
-  LoadConstUInt8    r0, 2
+  LoadConstUInt8    r0, 100
+  JStrictEqual      L1, r0, r1
+  LoadConstUInt8    r0, 200
+  JStrictEqual      L2, r0, r1
+  LoadConstUInt8    r0, 201
+  JStrictEqual      L3, r0, r1
+  LoadConstInt      r0, 400
+  JStrictEqual      L4, r0, r1
+  LoadConstInt      r0, 401
+  JStrictEqual      L5, r0, r1
+  LoadConstInt      r0, 403
+  JStrictEqual      L6, r0, r1
+  LoadConstInt      r0, 404
+  JStrictEqual      L7, r0, r1
+  LoadConstInt      r0, 500
   JStrictEqual      L8, r0, r1
-  LoadConstUInt8    r0, 3
-  JStrictEqual      L9, r0, r1
-  LoadConstUInt8    r0, 4
-  JStrictEqual      L10, r0, r1
-  LoadConstUInt8    r0, 5
-  JStrictEqual      L11, r0, r1
-  LoadConstUInt8    r0, 6
-  JStrictEqual      L12, r0, r1
-  LoadConstUInt8    r0, 7
-  JStrictEqual      L13, r0, r1
-  LoadConstUInt8    r0, 8
-  JStrictEqual      L14, r0, r1
-  LoadConstUInt8    r0, 9
-  JStrictEqual      L15, r0, r1
-  LoadConstUInt8    r0, 10
-  JStrictEqual      L16, r0, r1
   LoadConstString   r0, "unknown"
   Ret               r0
-L16:
-  LoadConstString   r0, "ten"
-  Ret               r0
-L15:
-  LoadConstString   r0, "nine"
-  Ret               r0
-L14:
-  LoadConstString   r0, "eight"
-  Ret               r0
-L13:
-  LoadConstString   r0, "seven"
-  Ret               r0
-L12:
-  LoadConstString   r0, "six"
-  Ret               r0
-L11:
-  LoadConstString   r0, "five"
-  Ret               r0
-L10:
-  LoadConstString   r0, "four"
-  Ret               r0
-L9:
-  LoadConstString   r0, "three"
-  Ret               r0
 L8:
-  LoadConstString   r0, "two"
+  LoadConstString   r0, "server error"
   Ret               r0
 L7:
-  LoadConstString   r0, "one"
+  LoadConstString   r0, "not found"
   Ret               r0
 L6:
-  LoadConstString   r0, "zero"
+  LoadConstString   r0, "forbidden"
   Ret               r0
 L5:
-  LoadConstString   r0, "negative one"
+  LoadConstString   r0, "unauthorized"
   Ret               r0
 L4:
-  LoadConstString   r0, "negative two"
+  LoadConstString   r0, "bad request"
   Ret               r0
 L3:
-  LoadConstString   r0, "negative three"
+  LoadConstString   r0, "created"
   Ret               r0
 L2:
-  LoadConstString   r0, "negative four"
+  LoadConstString   r0, "ok"
   Ret               r0
 L1:
-  LoadConstString   r0, "negative five"
+  LoadConstString   r0, "continue"
+  Ret               r0
+
+Function<switchWithBreak>3(2 params, 3 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadConstString   r1, "one "
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L1, r0, r2
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L2, r0, r2
+  LoadConstUInt8    r0, 3
+  JStrictEqual      L3, r0, r2
+  LoadConstString   r1, "other "
+  Jmp               L1
+L3:
+  LoadConstString   r1, "three "
+  Jmp               L1
+L2:
+  LoadConstString   r1, "two "
+L1:
+  LoadConstString   r0, "done"
+  Add               r0, r1, r0
+  Ret               r0
+
+Function<switchWithFallthrough>4(2 params, 5 registers, 0 symbols):
+  LoadParam         r3, 1
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r3
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L1, r0, r3
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L1, r0, r3
+  LoadConstString   r1, ""
+  LoadConstUInt8    r0, 3
+  Mov               r2, r1
+  JStrictEqual      L2, r0, r3
+  LoadConstUInt8    r0, 4
+  Mov               r2, r1
+  JStrictEqual      L2, r0, r3
+  LoadConstString   r4, "high"
+  LoadConstUInt8    r1, 5
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstUInt8    r1, 6
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstUInt8    r1, 7
+  Mov               r0, r4
+  JStrictEqual      L3, r1, r3
+  LoadConstString   r0, "unknown"
+  Jmp               L3
+L1:
+  LoadConstString   r2, "low "
+L2:
+  LoadConstString   r1, "mid "
+  Add               r0, r2, r1
+L3:
+  Ret               r0
+
+Function<nestedSwitch>5(3 params, 5 registers, 0 symbols):
+  LoadParam         r4, 1
+  LoadParam         r1, 2
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r4
+  LoadConstUInt8    r2, 1
+  JStrictEqual      L2, r2, r4
+  LoadConstUInt8    r3, 2
+  JStrictEqual      L3, r3, r4
+  JStrictEqual      L4, r0, r1
+  JStrictEqual      L5, r2, r1
+  LoadConstString   r3, "default-other"
+  Ret               r3
+L5:
+  LoadConstString   r3, "default-1"
+  Ret               r3
+L4:
+  LoadConstString   r3, "default-0"
+  Ret               r3
+L3:
+  LoadConstString   r3, "outer-2"
+  Ret               r3
+L2:
+  JStrictEqual      L6, r0, r1
+  JStrictEqual      L7, r2, r1
+  LoadConstUInt8    r2, 2
+  JStrictEqual      L8, r2, r1
+  LoadConstString   r2, "1-other"
+  Ret               r2
+L8:
+  LoadConstString   r2, "1-2"
+  Ret               r2
+L7:
+  LoadConstString   r2, "1-1"
+  Ret               r2
+L6:
+  LoadConstString   r2, "1-0"
+  Ret               r2
+L1:
+  JStrictEqual      L9, r0, r1
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L10, r0, r1
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L11, r0, r1
+  LoadConstString   r0, "0-other"
+  Ret               r0
+L11:
+  LoadConstString   r0, "0-2"
+  Ret               r0
+L10:
+  LoadConstString   r0, "0-1"
+  Ret               r0
+L9:
+  LoadConstString   r0, "0-0"
+  Ret               r0
+
+Function<mixedBreakReturn>6(2 params, 3 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadConstString   r1, "one"
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L1, r0, r2
+  LoadConstUInt8    r0, 2
+  JStrictEqual      L2, r0, r2
+  LoadConstUInt8    r0, 3
+  JStrictEqual      L3, r0, r2
+  LoadConstUInt8    r0, 4
+  JStrictEqual      L4, r0, r2
+  LoadConstString   r1, "default"
+  Jmp               L1
+L4:
+  LoadConstString   r0, "four"
+  Ret               r0
+L3:
+  LoadConstString   r1, "three"
+  Jmp               L1
+L2:
+  LoadConstString   r0, "two"
+  Ret               r0
+L1:
+  LoadConstString   r0, "-processed"
+  Add               r0, r1, r0
+  Ret               r0
+
+Function<switchWithFunctionCalls>7(4 params, 5 registers, 0 symbols):
+  LoadParam         r4, 1
+  LoadParam         r1, 2
+  LoadParam         r0, 3
+  LoadConstZero     r2
+  JStrictEqual      L1, r2, r4
+  LoadConstUInt8    r3, 1
+  JStrictEqual      L2, r3, r4
+  LoadConstUInt8    r3, 2
+  JStrictEqual      L3, r3, r4
+  LoadConstUInt8    r3, 3
+  JStrictEqual      L4, r3, r4
+  Ret               r2
+L4:
+  Div               r2, r1, r0
+  Ret               r2
+L3:
+  Mul               r2, r1, r0
+  Ret               r2
+L2:
+  Sub               r2, r1, r0
+  Ret               r2
+L1:
+  Add               r0, r1, r0
+  Ret               r0
+
+Function<complexControlFlow>8(4 params, 5 registers, 0 symbols):
+  LoadParam         r4, 1
+  LoadParam         r2, 2
+  LoadParam         r1, 3
+  LoadConstZero     r0
+  JStrictEqual      L1, r0, r4
+  LoadConstUInt8    r3, 1
+  JStrictEqual      L2, r3, r4
+  LoadConstString   r4, "a=other"
+  Ret               r4
+L2:
+  JStrictEqual      L3, r2, r0
+  JStrictEqual      L4, r2, r3
+  LoadConstUInt8    r3, 2
+  JStrictEqual      L5, r3, r1
+  LoadConstString   r3, "a=1,b=other,c=other"
+  Ret               r3
+L5:
+  LoadConstString   r3, "a=1,b=other,c=2"
+  Ret               r3
+L4:
+  LoadConstString   r3, "a=1,b=1"
+  Ret               r3
+L3:
+  LoadConstString   r3, "a=1,b=0"
+  Ret               r3
+L1:
+  JGreater          L6, r2, r0
+  LoadConstString   r2, "a=0,b<=0"
+  Ret               r2
+L6:
+  JStrictEqual      L7, r0, r1
+  LoadConstUInt8    r0, 1
+  JStrictEqual      L8, r0, r1
+  LoadConstString   r0, "a=0,b>0,c=other"
+  Ret               r0
+L8:
+  LoadConstString   r0, "a=0,b>0,c=1"
+  Ret               r0
+L7:
+  LoadConstString   r0, "a=0,b>0,c=0"
+  Ret               r0
+
+Function<switchWithTryCatch>9(3 params, 13 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadParam         r1, 2
+  LoadConstUndefined r0
+L8:
+  Mov               r3, r2
+  LoadConstString   r2, "divide"
+  JStrictEqualLong  L1, r2, r3
+  LoadConstString   r2, "sqrt"
+  JStrictEqual      L2, r2, r3
+  LoadConstString   r2, "log"
+  JStrictEqual      L3, r2, r3
+  Mov               r0, r1
+  JmpLong           L4
+L3:
+  Mov               r3, r1
+  LoadConstZero     r2
+  JLessEqual        L5, r3, r2
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 1, "Math"
+  GetByIdShort      r3, r4, 2, "log"
+  Mov               r2, r1
+  Call2             r0, r3, r4, r2
+  Jmp               L4
+L5:
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 3, "Error"
+  GetByIdShort      r2, r4, 4, "prototype"
+  CreateThis        r3, r2, r4
+  LoadConstString   r5, "Invalid log"
+  Mov               r6, r3
+  Construct         r2, r4, 2
+  SelectObject      r2, r3, r2
+  Throw             r2
+L2:
+  Mov               r3, r1
+  LoadConstZero     r2
+  JLess             L6, r3, r2
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 1, "Math"
+  GetByIdShort      r3, r4, 5, "sqrt"
+  Mov               r2, r1
+  Call2             r0, r3, r4, r2
+  Jmp               L4
+L6:
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 3, "Error"
+  GetByIdShort      r2, r4, 4, "prototype"
+  CreateThis        r3, r2, r4
+  LoadConstString   r5, "Negative sqrt"
+  Mov               r6, r3
+  Construct         r2, r4, 2
+  SelectObject      r2, r3, r2
+  Throw             r2
+L1:
+  Mov               r3, r1
+  LoadConstZero     r2
+  JStrictEqual      L7, r3, r2
+  Mov               r2, r1
+  LoadConstUInt8    r1, 100
+  Div               r0, r1, r2
+L4:
+  Ret               r0
+L7:
+  GetGlobalObject   r0
+  TryGetById        r2, r0, 3, "Error"
+  GetByIdShort      r0, r2, 4, "prototype"
+  CreateThis        r1, r0, r2
+  LoadConstString   r5, "Division by zero"
+  Mov               r6, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L9:
+  Catch             r0
+  GetByIdShort      r1, r0, 6, "message"
+  LoadConstString   r0, "Error: "
+  Add               r0, r0, r1
+  Ret               r0
+
+Exception Handlers:
+0: start = L8, end = L4, target = L9
+1: start = L7, end = L9, target = L9
+
+Function<switchWithObjects>10(3 params, 17 registers, 0 symbols):
+  CreateEnvironment r0
+  LoadParam         r2, 1
+  LoadParam         r5, 2
+  LoadConstString   r1, "array"
+  JStrictEqualLong  L1, r1, r2
+  LoadConstString   r1, "object"
+  JStrictEqual      L2, r1, r2
+  LoadConstString   r1, "mixed"
+  JStrictEqual      L3, r1, r2
+  LoadConstNull     r1
+  Ret               r1
+L3:
+  LoadConstUInt8    r1, 1
+  NewArray          r3, 2
+  NewObjectWithBuffer r2, 2, 2, 4, 13
+  PutOwnByIndex     r3, r2, 0
+  NewObjectWithBuffer r2, 2, 2, 4, 20
+  PutOwnByIndex     r3, r2, 1
+  LoadConstZero     r2
+  JStrictEqual      L4, r2, r5
+  JStrictEqual      L5, r1, r5
+  GetByIdShort      r2, r3, 1, "every"
+  CreateClosure     r1, r0, Function<>16
+  Call2             r1, r2, r3, r1
+  Ret               r1
+L5:
+  GetByIdShort      r2, r3, 2, "map"
+  CreateClosure     r1, r0, Function<>15
+  Call2             r1, r2, r3, r1
+  Ret               r1
+L4:
+  GetByIdShort      r2, r3, 3, "find"
+  CreateClosure     r1, r0, Function<>14
+  Call2             r1, r2, r3, r1
+  Ret               r1
+L2:
+  NewObjectWithBuffer r3, 3, 3, 0, 0
+  LoadConstUInt8    r4, 1
+  LoadConstUInt8    r2, 2
+  LoadConstZero     r1
+  JStrictEqual      L6, r1, r5
+  JStrictEqual      L7, r4, r5
+  JStrictEqual      L8, r2, r5
+  NewObject         r2
+  Mov               r9, r2
+  Mov               r8, r3
+  CallBuiltin       r4, 44, 3
+  LoadConstUInt8    r6, 4
+  LoadConstString   r4, "d"
+  PutOwnByVal       r2, r6, r4, 1
+  Ret               r2
+L8:
+  GetByIdShort      r4, r3, 4, "a"
+  LoadConstNull     r2
+  NewObjectWithParent r2, r2
+  PutNewOwnByIdShort r2, r1, "a"
+  NewObject         r9
+  Mov               r8, r3
+  Mov               r7, r2
+  CallBuiltin       r2, 44, 4
+  NewObject         r1
+  PutNewOwnByIdShort r1, r4, "extracted"
+  PutNewOwnByIdShort r1, r2, "others"
+  Ret               r1
+L7:
+  GetGlobalObject   r1
+  TryGetById        r2, r1, 5, "Object"
+  GetByIdShort      r1, r2, 6, "values"
+  Call2             r1, r1, r2, r3
+  Ret               r1
+L6:
+  GetGlobalObject   r1
+  TryGetById        r2, r1, 5, "Object"
+  GetByIdShort      r1, r2, 7, "keys"
+  Call2             r1, r1, r2, r3
+  Ret               r1
+L1:
+  NewArrayWithBuffer r2, 5, 5, 0
+  LoadConstZero     r3
+  JStrictEqual      L9, r3, r5
+  LoadConstUInt8    r4, 1
+  JStrictEqual      L10, r4, r5
+  LoadConstUInt8    r1, 2
+  JStrictEqual      L11, r1, r5
+  GetByIdShort      r5, r2, 8, "reduce"
+  CreateClosure     r1, r0, Function<>13
+  Call3             r1, r5, r2, r1, r3
+  Ret               r1
+L11:
+  NewObject         r1
+  GetByVal          r3, r2, r3
+  PutNewOwnByIdShort r1, r3, "first"
+  GetByIdShort      r3, r2, 9, "slice"
+  Call2             r3, r3, r2, r4
+  PutNewOwnByIdShort r1, r3, "rest"
+  Ret               r1
+L10:
+  GetByIdShort      r3, r2, 10, "filter"
+  CreateClosure     r1, r0, Function<>12
+  Call2             r1, r3, r2, r1
+  Ret               r1
+L9:
+  GetByIdShort      r1, r2, 2, "map"
+  CreateClosure     r0, r0, Function<>11
+  Call2             r0, r1, r2, r0
+  Ret               r0
+
+NCFunction<>11(2 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadConstUInt8    r0, 2
+  Mul               r0, r1, r0
+  Ret               r0
+
+NCFunction<>12(2 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadConstUInt8    r0, 2
+  Mod               r0, r1, r0
+  Ret               r0
+
+NCFunction<>13(3 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadParam         r0, 2
+  Add               r0, r1, r0
+  Ret               r0
+
+NCFunction<>14(2 params, 2 registers, 0 symbols):
+  LoadParam         r0, 1
+  GetByIdShort      r1, r0, 1, "id"
+  LoadConstUInt8    r0, 1
+  StrictEq          r0, r1, r0
+  Ret               r0
+
+NCFunction<>15(2 params, 1 registers, 0 symbols):
+  LoadParam         r0, 1
+  GetByIdShort      r0, r0, 1, "value"
+  Ret               r0
+
+NCFunction<>16(2 params, 2 registers, 0 symbols):
+  LoadParam         r0, 1
+  GetByIdShort      r1, r0, 1, "id"
+  LoadConstZero     r0
+  Greater           r0, r1, r0
   Ret               r0
 

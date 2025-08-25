@@ -51,257 +51,229 @@ impl RegisterUsage {
 /// Analyzes an instruction to determine its register usage
 pub fn analyze_register_usage(instruction: &UnifiedInstruction) -> RegisterUsage {
     match instruction {
-        UnifiedInstruction::JNotGreaterLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::NewArrayWithBufferLong {
-            operand_0,
-            operand_1: _,
-            operand_2: _,
-            operand_3: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JEqualLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JNotLess {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Loadu8 {
+        UnifiedInstruction::Store16 {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CallDirectLongIndex {
+        UnifiedInstruction::ThrowIfHasRestrictedGlobalProperty { operand_0: _ } => {
+            RegisterUsage::new()
+        }
+        UnifiedInstruction::Call1 {
             operand_0,
-            operand_1: _,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JNotLessEqualNLong {
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JNotLessEqualN {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Loadi8 {
-            operand_0,
+        UnifiedInstruction::JNotGreaterEqualLong {
+            operand_0: _,
             operand_1,
             operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CreateGenerator {
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Inc {
             operand_0,
             operand_1,
-            operand_2: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::Loadi16 {
+        UnifiedInstruction::ToNumber {
             operand_0,
             operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CallDirect {
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::LoadConstStringLongIndex {
             operand_0,
             operand_1: _,
-            operand_2: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::ConstructLong {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::CreateClosureLongIndex {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
         UnifiedInstruction::CreateRegExp {
             operand_0,
             operand_1: _,
             operand_2: _,
             operand_3: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::AsyncBreakCheck {} => RegisterUsage::new(),
-        UnifiedInstruction::GetEnvironment {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::LoadConstUndefined { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::LoadConstNull { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::JLess {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JNotGreaterEqualNLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::GetNextPName {
-            operand_0,
-            operand_1,
-            operand_2,
-            operand_3,
-            operand_4,
-        } => RegisterUsage::new_with(
-            Some(*operand_0),
-            vec![*operand_1, *operand_2, *operand_3, *operand_4],
-        ),
-        UnifiedInstruction::JEqual {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Sub {
+        UnifiedInstruction::Div {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::LoadConstString {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::NewObjectWithParent {
+        UnifiedInstruction::PutOwnByIndexL {
             operand_0,
             operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::JGreaterEqualNLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::AddEmptyString {
+            operand_2: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::StartGenerator {} => RegisterUsage::new(),
+        UnifiedInstruction::DelById {
             operand_0,
             operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::JNotLessN {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::IteratorNext {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Loadu16 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+            operand_2: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
         UnifiedInstruction::PutById {
             operand_0,
             operand_1,
             operand_2: _,
             operand_3: _,
         } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::Unreachable {} => RegisterUsage::new(),
-        UnifiedInstruction::LoadFromEnvironmentL {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::Ret { operand_0 } => RegisterUsage::new_with(None, vec![*operand_0]),
-        UnifiedInstruction::JNotGreaterN {
+        UnifiedInstruction::JmpFalseLong {
             operand_0: _,
             operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JNotLessEqual {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::PutOwnByIndexL {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::Not {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::Loadi32 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::LoadConstTrue { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::ProfilePoint { operand_0: _ } => RegisterUsage::new(),
-        UnifiedInstruction::JNotEqualLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CompleteGenerator {} => RegisterUsage::new(),
-        UnifiedInstruction::Throw { operand_0 } => RegisterUsage::new_with(None, vec![*operand_0]),
-        UnifiedInstruction::CoerceThisNS {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::StoreToEnvironment {
+        } => RegisterUsage::new_with(None, vec![*operand_1]),
+        UnifiedInstruction::SaveGenerator { operand_0: _ } => RegisterUsage::new(),
+        UnifiedInstruction::NewObjectWithBuffer {
             operand_0,
             operand_1: _,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_2]),
+            operand_2: _,
+            operand_3: _,
+            operand_4: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
         UnifiedInstruction::Add {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Mod {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::DelByIdLong {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::JGreaterN {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JLess {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JGreaterEqual {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JNotGreaterN {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::CompleteGenerator {} => RegisterUsage::new(),
+        UnifiedInstruction::SaveGeneratorLong { operand_0: _ } => RegisterUsage::new(),
+        UnifiedInstruction::LoadConstEmpty { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::Loadu32 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Ret { operand_0 } => RegisterUsage::new_with(None, vec![*operand_0]),
         UnifiedInstruction::JStrictNotEqual {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CreateGeneratorLongIndex {
+        UnifiedInstruction::StrictNeq {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::StrictEq {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::CallLong {
             operand_0,
             operand_1,
             operand_2: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::SaveGeneratorLong { operand_0: _ } => RegisterUsage::new(),
-        UnifiedInstruction::GetGlobalObject { operand_0 } => {
+        UnifiedInstruction::NewObject { operand_0 } => {
             RegisterUsage::new_with(Some(*operand_0), vec![])
         }
-        UnifiedInstruction::LoadConstBigIntLongIndex {
+        UnifiedInstruction::GetArgumentsPropByVal {
             operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JGreater {
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::ConstructLong {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::CreateGeneratorClosure {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::JNotLessN {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JNotGreaterEqualN {
-            operand_0: _,
+        UnifiedInstruction::Jmp { operand_0: _ } => RegisterUsage::new(),
+        UnifiedInstruction::BitOr {
+            operand_0,
             operand_1,
             operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::LoadThisNS { operand_0 } => {
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Greater {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::CreateEnvironment { operand_0 } => {
             RegisterUsage::new_with(Some(*operand_0), vec![])
         }
-        UnifiedInstruction::TryPutByIdLong {
+        UnifiedInstruction::AddN {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::GetByIdLong {
             operand_0,
             operand_1,
             operand_2: _,
             operand_3: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::StartGenerator {} => RegisterUsage::new(),
-        UnifiedInstruction::CreateInnerEnvironment {
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::GetArgumentsLength {
             operand_0,
             operand_1,
-            operand_2: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::SelectObject {
+        UnifiedInstruction::ThrowIfEmpty {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::Divi32 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Mul {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Mul32 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JStrictEqualLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Divu32 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::IsIn {
             operand_0,
             operand_1,
             operand_2,
@@ -311,147 +283,6 @@ pub fn analyze_register_usage(instruction: &UnifiedInstruction) -> RegisterUsage
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Negate {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::JmpFalse {
-            operand_0: _,
-            operand_1,
-        } => RegisterUsage::new_with(None, vec![*operand_1]),
-        UnifiedInstruction::LoadParam {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JGreaterNLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::DelByVal {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1, *operand_2]),
-        UnifiedInstruction::JNotGreater {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::StoreToEnvironmentL {
-            operand_0,
-            operand_1: _,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_2]),
-        UnifiedInstruction::DirectEval {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::LessEq {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CreateAsyncClosureLongIndex {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::LoadConstFalse { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::NewObject { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::MovLong {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0 as u8), vec![*operand_1 as u8]),
-        UnifiedInstruction::ThrowIfHasRestrictedGlobalProperty { operand_0: _ } => {
-            RegisterUsage::new()
-        }
-        UnifiedInstruction::JNotLessNLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::LoadFromEnvironment {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::CreateGeneratorClosureLongIndex {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::Neq {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::PutByVal {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1, *operand_2]),
-        UnifiedInstruction::LoadConstBigInt {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::Jmp { operand_0: _ } => RegisterUsage::new(),
-        UnifiedInstruction::Inc {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::NewObjectWithBufferLong {
-            operand_0,
-            operand_1: _,
-            operand_2: _,
-            operand_3: _,
-            operand_4: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::GetArgumentsPropByVal {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CreateClosure {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::LoadConstZero { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::JmpUndefinedLong {
-            operand_0: _,
-            operand_1,
-        } => RegisterUsage::new_with(None, vec![*operand_1]),
-        UnifiedInstruction::LoadConstDouble {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JGreaterEqual {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::PutNewOwnNEById {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::PutNewOwnById {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::StoreNPToEnvironmentL {
-            operand_0,
-            operand_1: _,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_2]),
         UnifiedInstruction::Call4 {
             operand_0,
             operand_1,
@@ -463,84 +294,365 @@ pub fn analyze_register_usage(instruction: &UnifiedInstruction) -> RegisterUsage
             Some(*operand_0),
             vec![*operand_1, *operand_2, *operand_3, *operand_4, *operand_5],
         ),
-        UnifiedInstruction::Call1 {
+        UnifiedInstruction::CallDirect {
+            operand_0,
+            operand_1: _,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::JNotEqualLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::LoadParam {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::LoadConstTrue { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::Loadi32 {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::GetPNameList {
+            operand_0,
+            operand_1,
+            operand_2,
+            operand_3,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2, *operand_3]),
+        UnifiedInstruction::PutNewOwnNEByIdLong {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::Negate {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::LoadConstUndefined { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::NewObjectWithParent {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
         UnifiedInstruction::PutNewOwnByIdShort {
             operand_0,
             operand_1,
             operand_2: _,
         } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::CallBuiltin {
+        UnifiedInstruction::NewArrayWithBufferLong {
             operand_0,
             operand_1: _,
             operand_2: _,
+            operand_3: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::IsIn {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CreateEnvironment { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::GreaterEq {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JmpTrueLong {
-            operand_0: _,
-            operand_1,
-        } => RegisterUsage::new_with(None, vec![*operand_1]),
-        UnifiedInstruction::PutOwnByIndex {
+        UnifiedInstruction::PutNewOwnNEById {
             operand_0,
             operand_1,
             operand_2: _,
         } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::JmpUndefined {
-            operand_0: _,
-            operand_1,
-        } => RegisterUsage::new_with(None, vec![*operand_1]),
-        UnifiedInstruction::JLessEqualNLong {
+        UnifiedInstruction::JStrictNotEqualLong {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Sub {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::MovLong {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0 as u8), vec![*operand_1 as u8]),
+        UnifiedInstruction::StoreToEnvironmentL {
+            operand_0,
+            operand_1: _,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_2]),
+        UnifiedInstruction::JNotLessEqual {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::SelectObject {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JNotGreaterLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::SubN {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::LoadFromEnvironment {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::NewArray {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::DelByVal {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1, *operand_2]),
+        UnifiedInstruction::LoadConstString {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::JNotGreaterEqual {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::ThrowIfUndefinedInst { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::Loadi16 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::ToNumeric {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::TryPutById {
+            operand_0,
+            operand_1,
+            operand_2: _,
+            operand_3: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::LoadConstInt {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
         UnifiedInstruction::JLessNLong {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Divi32 {
+        UnifiedInstruction::StoreToEnvironment {
+            operand_0,
+            operand_1: _,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_2]),
+        UnifiedInstruction::GetBuiltinClosure {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::ToInt32 {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::Sub32 {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::GetArgumentsLength {
+        UnifiedInstruction::PutNewOwnByIdLong {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::URshift {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::CreateGeneratorClosureLongIndex {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::CreateAsyncClosure {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::JNotEqual {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JmpFalse {
+            operand_0: _,
+            operand_1,
+        } => RegisterUsage::new_with(None, vec![*operand_1]),
+        UnifiedInstruction::SwitchImm {
+            operand_0,
+            operand_1: _,
+            operand_2: _,
+            operand_3: _,
+            operand_4: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0]),
+        UnifiedInstruction::CallBuiltinLong {
+            operand_0,
+            operand_1: _,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::DeclareGlobalVar { operand_0: _ } => RegisterUsage::new(),
+        UnifiedInstruction::StoreNPToEnvironment {
+            operand_0,
+            operand_1: _,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_2]),
+        UnifiedInstruction::Debugger {} => RegisterUsage::new(),
+        UnifiedInstruction::CoerceThisNS {
             operand_0,
             operand_1,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::DeclareGlobalVar { operand_0: _ } => RegisterUsage::new(),
+        UnifiedInstruction::RShift {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
         UnifiedInstruction::Call2 {
             operand_0,
             operand_1,
             operand_2,
             operand_3,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2, *operand_3]),
-        UnifiedInstruction::CreateAsyncClosure {
+        UnifiedInstruction::Throw { operand_0 } => RegisterUsage::new_with(None, vec![*operand_0]),
+        UnifiedInstruction::BitXor {
             operand_0,
             operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::JStrictEqual {
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::CreateThis {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JmpUndefinedLong {
+            operand_0: _,
+            operand_1,
+        } => RegisterUsage::new_with(None, vec![*operand_1]),
+        UnifiedInstruction::JLessEqualN {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::BitXor {
+        UnifiedInstruction::JGreaterEqualN {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JGreaterNLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Catch { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::PutOwnByVal {
+            operand_0,
+            operand_1,
+            operand_2,
+            operand_3: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1, *operand_2]),
+        UnifiedInstruction::Loadi8 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Construct {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::TryGetById {
+            operand_0,
+            operand_1,
+            operand_2: _,
+            operand_3: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::IteratorNext {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JEqualLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Loadu16 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::CreateInnerEnvironment {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::JGreaterLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::CreateGenerator {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::CreateGeneratorLongIndex {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::NewObjectWithBufferLong {
+            operand_0,
+            operand_1: _,
+            operand_2: _,
+            operand_3: _,
+            operand_4: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::CreateClosure {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::LoadThisNS { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::GetNextPName {
+            operand_0,
+            operand_1,
+            operand_2,
+            operand_3,
+            operand_4,
+        } => RegisterUsage::new_with(
+            Some(*operand_0),
+            vec![*operand_1, *operand_2, *operand_3, *operand_4],
+        ),
+        UnifiedInstruction::ReifyArguments { operand_0 } => {
+            RegisterUsage::new_with(None, vec![*operand_0])
+        }
+        UnifiedInstruction::JNotLessLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::MulN {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::LessEq {
             operand_0,
             operand_1,
             operand_2,
@@ -550,150 +662,30 @@ pub fn analyze_register_usage(instruction: &UnifiedInstruction) -> RegisterUsage
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::IteratorBegin {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::Add32 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Mul {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::ThrowIfUndefinedInst { operand_0 } => {
+        UnifiedInstruction::LoadConstFalse { operand_0 } => {
             RegisterUsage::new_with(Some(*operand_0), vec![])
         }
-        UnifiedInstruction::Loadu32 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Store16 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::GetBuiltinClosure {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::LoadConstUInt8 {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JmpFalseLong {
-            operand_0: _,
-            operand_1,
-        } => RegisterUsage::new_with(None, vec![*operand_1]),
-        UnifiedInstruction::LoadConstEmpty { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::SaveGenerator { operand_0: _ } => RegisterUsage::new(),
-        UnifiedInstruction::ReifyArguments { operand_0 } => {
-            RegisterUsage::new_with(None, vec![*operand_0])
-        }
-        UnifiedInstruction::Catch { operand_0 } => {
-            RegisterUsage::new_with(Some(*operand_0), vec![])
-        }
-        UnifiedInstruction::PutNewOwnByIdLong {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::PutByIdLong {
-            operand_0,
-            operand_1,
-            operand_2: _,
-            operand_3: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::JGreaterEqualLong {
+        UnifiedInstruction::JNotGreaterEqualN {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Divu32 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::TryGetById {
-            operand_0,
-            operand_1,
-            operand_2: _,
-            operand_3: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::NewArrayWithBuffer {
-            operand_0,
-            operand_1: _,
-            operand_2: _,
-            operand_3: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::StrictEq {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::BitAnd {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::NewArray {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::LoadConstStringLongIndex {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::Greater {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JNotGreaterNLong {
+        UnifiedInstruction::JNotGreaterEqualNLong {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::TryPutById {
-            operand_0,
-            operand_1,
-            operand_2: _,
-            operand_3: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::GetByVal {
+        UnifiedInstruction::Less {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::NewObjectWithBuffer {
+        UnifiedInstruction::CallDirectLongIndex {
             operand_0,
             operand_1: _,
             operand_2: _,
-            operand_3: _,
-            operand_4: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::StoreNPToEnvironment {
-            operand_0,
-            operand_1: _,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_2]),
-        UnifiedInstruction::JmpLong { operand_0: _ } => RegisterUsage::new(),
-        UnifiedInstruction::BitNot {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::JGreaterLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Eq {
+        UnifiedInstruction::GreaterEq {
             operand_0,
             operand_1,
             operand_2,
@@ -703,32 +695,102 @@ pub fn analyze_register_usage(instruction: &UnifiedInstruction) -> RegisterUsage
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::GetById {
-            operand_0,
-            operand_1,
-            operand_2: _,
-            operand_3: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::TypeOf {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::GetByIdLong {
-            operand_0,
-            operand_1,
-            operand_2: _,
-            operand_3: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::DelById {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::LoadConstInt {
+        UnifiedInstruction::LoadConstDouble {
             operand_0,
             operand_1: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JLessEqualLong {
+        UnifiedInstruction::CreateAsyncClosureLongIndex {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::LoadConstBigIntLongIndex {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::TryPutByIdLong {
+            operand_0,
+            operand_1,
+            operand_2: _,
+            operand_3: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::DirectEval {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::AddEmptyString {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::GetByVal {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JEqual {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::IteratorClose {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0]),
+        UnifiedInstruction::JNotLessEqualNLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::DebuggerCheckBreak {} => RegisterUsage::new(),
+        UnifiedInstruction::LoadConstBigInt {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::JStrictEqual {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JLessEqual {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Dec {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::JmpLong { operand_0: _ } => RegisterUsage::new(),
+        UnifiedInstruction::StoreNPToEnvironmentL {
+            operand_0,
+            operand_1: _,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_2]),
+        UnifiedInstruction::Store32 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::GetNewTarget { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::AsyncBreakCheck {} => RegisterUsage::new(),
+        UnifiedInstruction::JGreaterEqualNLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JmpTrue {
+            operand_0: _,
+            operand_1,
+        } => RegisterUsage::new_with(None, vec![*operand_1]),
+        UnifiedInstruction::Unreachable {} => RegisterUsage::new(),
+        UnifiedInstruction::JLessLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JLessEqualNLong {
             operand_0: _,
             operand_1,
             operand_2,
@@ -738,30 +800,44 @@ pub fn analyze_register_usage(instruction: &UnifiedInstruction) -> RegisterUsage
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JmpTrue {
-            operand_0: _,
-            operand_1,
-        } => RegisterUsage::new_with(None, vec![*operand_1]),
-        UnifiedInstruction::JLessEqualN {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JNotEqual {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::IteratorClose {
+        UnifiedInstruction::LoadConstUInt8 {
             operand_0,
             operand_1: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0]),
-        UnifiedInstruction::BitOr {
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::Call {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::CallBuiltin {
+            operand_0,
+            operand_1: _,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::ProfilePoint { operand_0: _ } => RegisterUsage::new(),
+        UnifiedInstruction::BitAnd {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Mod {
+        UnifiedInstruction::CreateClosureLongIndex {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::PutOwnGetterSetterByVal {
+            operand_0,
+            operand_1,
+            operand_2,
+            operand_3,
+            operand_4: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1, *operand_2, *operand_3]),
+        UnifiedInstruction::JLessN {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Neq {
             operand_0,
             operand_1,
             operand_2,
@@ -772,185 +848,81 @@ pub fn analyze_register_usage(instruction: &UnifiedInstruction) -> RegisterUsage
             operand_2: _,
             operand_3: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::Less {
+        UnifiedInstruction::PutNewOwnById {
             operand_0,
             operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Div {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JLessLong {
+            operand_2: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::JNotLessNLong {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::PutNewOwnNEByIdLong {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::URshift {
+        UnifiedInstruction::Eq {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::PutOwnByVal {
-            operand_0,
+        UnifiedInstruction::JLessEqualLong {
+            operand_0: _,
             operand_1,
             operand_2,
-            operand_3: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1, *operand_2]),
-        UnifiedInstruction::Call {
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::ResumeGenerator {
             operand_0,
             operand_1,
-            operand_2: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::GetNewTarget { operand_0 } => {
+        UnifiedInstruction::GetGlobalObject { operand_0 } => {
             RegisterUsage::new_with(Some(*operand_0), vec![])
         }
-        UnifiedInstruction::DelByIdLong {
+        UnifiedInstruction::IteratorBegin {
             operand_0,
             operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
-        UnifiedInstruction::GetPNameList {
-            operand_0,
-            operand_1,
-            operand_2,
-            operand_3,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2, *operand_3]),
-        UnifiedInstruction::SwitchImm {
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::NewArrayWithBuffer {
             operand_0,
             operand_1: _,
             operand_2: _,
             operand_3: _,
-            operand_4: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JNotGreaterEqualLong {
-            operand_0: _,
+        UnifiedInstruction::TypeOf {
+            operand_0,
             operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
         UnifiedInstruction::Store8 {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::StrictNeq {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Dec {
+        UnifiedInstruction::BitNot {
             operand_0,
             operand_1,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::ThrowIfEmpty {
+        UnifiedInstruction::GetEnvironment {
+            operand_0,
+            operand_1: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
+        UnifiedInstruction::Mov {
             operand_0,
             operand_1,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::DebuggerCheckBreak {} => RegisterUsage::new(),
+        UnifiedInstruction::GetById {
+            operand_0,
+            operand_1,
+            operand_2: _,
+            operand_3: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
         UnifiedInstruction::TryGetByIdLong {
             operand_0,
             operand_1,
             operand_2: _,
             operand_3: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::RShift {
+        UnifiedInstruction::PutByVal {
             operand_0,
             operand_1,
             operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Mul32 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Store32 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::MulN {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::ToInt32 {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::JNotLessLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CallLong {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::CreateThis {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JStrictEqualLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::SubN {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::LoadParamLong {
-            operand_0,
-            operand_1: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JLessN {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JGreaterEqualN {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::Mov {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::JNotGreaterEqual {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::PutOwnGetterSetterByVal {
-            operand_0,
-            operand_1,
-            operand_2,
-            operand_3,
-            operand_4: _,
-        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1, *operand_2, *operand_3]),
-        UnifiedInstruction::ResumeGenerator {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::JLessEqual {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::ToNumber {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1, *operand_2]),
         UnifiedInstruction::Call3 {
             operand_0,
             operand_1,
@@ -961,51 +933,79 @@ pub fn analyze_register_usage(instruction: &UnifiedInstruction) -> RegisterUsage
             Some(*operand_0),
             vec![*operand_1, *operand_2, *operand_3, *operand_4],
         ),
-        UnifiedInstruction::Sub32 {
-            operand_0,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CreateGeneratorClosure {
+        UnifiedInstruction::PutByIdLong {
             operand_0,
             operand_1,
             operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::ToNumeric {
-            operand_0,
-            operand_1,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::Construct {
-            operand_0,
-            operand_1,
-            operand_2: _,
-        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
-        UnifiedInstruction::Debugger {} => RegisterUsage::new(),
-        UnifiedInstruction::JNotLessEqualN {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::JStrictNotEqualLong {
-            operand_0: _,
-            operand_1,
-            operand_2,
-        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::CallBuiltinLong {
+            operand_3: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::LoadParamLong {
             operand_0,
             operand_1: _,
-            operand_2: _,
         } => RegisterUsage::new_with(Some(*operand_0), vec![]),
-        UnifiedInstruction::JGreaterN {
+        UnifiedInstruction::LoadConstNull { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::LoadConstZero { operand_0 } => {
+            RegisterUsage::new_with(Some(*operand_0), vec![])
+        }
+        UnifiedInstruction::JmpUndefined {
+            operand_0: _,
+            operand_1,
+        } => RegisterUsage::new_with(None, vec![*operand_1]),
+        UnifiedInstruction::JGreater {
             operand_0: _,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
-        UnifiedInstruction::AddN {
+        UnifiedInstruction::Not {
+            operand_0,
+            operand_1,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::LoadFromEnvironmentL {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1]),
+        UnifiedInstruction::JNotGreater {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Add32 {
             operand_0,
             operand_1,
             operand_2,
         } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::Loadu8 {
+            operand_0,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(Some(*operand_0), vec![*operand_1, *operand_2]),
+        UnifiedInstruction::PutOwnByIndex {
+            operand_0,
+            operand_1,
+            operand_2: _,
+        } => RegisterUsage::new_with(None, vec![*operand_0, *operand_1]),
+        UnifiedInstruction::JGreaterEqualLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JmpTrueLong {
+            operand_0: _,
+            operand_1,
+        } => RegisterUsage::new_with(None, vec![*operand_1]),
+        UnifiedInstruction::JNotLess {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
+        UnifiedInstruction::JNotGreaterNLong {
+            operand_0: _,
+            operand_1,
+            operand_2,
+        } => RegisterUsage::new_with(None, vec![*operand_1, *operand_2]),
     }
 }
 

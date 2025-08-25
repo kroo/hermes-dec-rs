@@ -3,6 +3,7 @@
 //! This module contains the Block struct and related functionality.
 
 use crate::hbc::function_table::HbcFunctionInstruction;
+use crate::hbc::InstructionIndex;
 use serde::{Deserialize, Serialize};
 
 /// Basic block containing a sequence of instructions
@@ -11,20 +12,20 @@ pub struct Block {
     /// Instructions in this block
     pub instructions: Vec<HbcFunctionInstruction>,
     /// Start PC of this block
-    pub start_pc: u32,
+    pub start_pc: InstructionIndex,
     /// End PC of this block
-    pub end_pc: u32,
+    pub end_pc: InstructionIndex,
     /// Whether this is a synthetic EXIT block
     pub is_exit: bool,
 }
 
 impl Block {
     /// Create a new basic block
-    pub fn new(start_pc: u32, instructions: Vec<HbcFunctionInstruction>) -> Self {
+    pub fn new(start_pc: InstructionIndex, instructions: Vec<HbcFunctionInstruction>) -> Self {
         let end_pc = if instructions.is_empty() {
             start_pc
         } else {
-            start_pc + instructions.len() as u32
+            start_pc + instructions.len()
         };
         Self {
             instructions,
@@ -38,8 +39,8 @@ impl Block {
     pub fn new_exit() -> Self {
         Self {
             instructions: Vec::new(),
-            start_pc: u32::MAX, // Use MAX to indicate synthetic
-            end_pc: u32::MAX,
+            start_pc: InstructionIndex::MAX, // Use MAX to indicate synthetic
+            end_pc: InstructionIndex::MAX,
             is_exit: true,
         }
     }
@@ -60,16 +61,16 @@ impl Block {
     }
 
     /// Get the start PC of this block
-    pub fn start_pc(&self) -> u32 {
+    pub fn start_pc(&self) -> InstructionIndex {
         self.start_pc
     }
 
     /// Get the end PC of this block
-    pub fn end_pc(&self) -> u32 {
+    pub fn end_pc(&self) -> InstructionIndex {
         self.end_pc
     }
 
-    pub fn contains_pc(&self, pc: u32) -> bool {
+    pub fn contains_pc(&self, pc: InstructionIndex) -> bool {
         pc >= self.start_pc && pc < self.end_pc
     }
 

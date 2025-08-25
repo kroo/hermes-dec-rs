@@ -1,12 +1,13 @@
-//! Shared infrastructure for control flow AST generation
+//! Control flow handling and conversion
 //!
-//! This module provides common functionality for converting CFG control flow
-//! structures (loops, switches, try-catch) into JavaScript AST nodes.
+//! This module provides utilities for handling control flow structures during AST generation.
 
+// Infrastructure modules
 pub mod block_sequencer;
 pub mod control_flow_builder;
 pub mod region_analyzer;
 
+// Re-export infrastructure types
 pub use block_sequencer::BlockSequencer;
 pub use control_flow_builder::ControlFlowBuilder;
 pub use region_analyzer::RegionAnalyzer;

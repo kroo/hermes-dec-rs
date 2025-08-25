@@ -9,6 +9,8 @@ pub fn decompile(
     function_index: usize,
     output_path: Option<&std::path::Path>,
     comments: &str,
+    skip_validation: bool,
+    decompile_nested: bool,
 ) -> DecompilerResult<()> {
     // Read the input file
     let data = match fs::read(input_path) {
@@ -35,10 +37,12 @@ pub fn decompile(
     let mut decompiler = Decompiler::new()?;
 
     // Decompile the specific function
-    let output = match decompiler.decompile_function_with_options(
+    let output = match decompiler.decompile_function_with_full_options_and_nested(
         &hbc_file,
         function_index as u32,
         comments,
+        skip_validation,
+        decompile_nested,
     ) {
         Ok(output) => output,
         Err(e) => {

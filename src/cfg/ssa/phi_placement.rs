@@ -5,7 +5,7 @@ use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
 /// Place phi functions at appropriate merge points
-pub fn place_phi_functions(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Result<(), SSAError> {
+pub fn place_phi_functions(_cfg: &Cfg, analysis: &mut SSAAnalysis) -> Result<(), SSAError> {
     // Group definitions by register
     let mut reg_def_blocks: HashMap<u8, HashSet<NodeIndex>> = HashMap::new();
     for def in &analysis.definitions {
@@ -38,8 +38,7 @@ pub fn place_phi_functions(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Result<(), 
                                 let def_site = RegisterDef {
                                     register,
                                     block_id: df_block,
-                                    instruction_idx: 0, // Phi at block start
-                                    pc: cfg.graph()[df_block].start_pc(),
+                                    instruction_idx: crate::hbc::InstructionIndex::zero(), // Phi at block start
                                 };
 
                                 let result = SSAValue {
@@ -145,6 +144,7 @@ pub fn needs_phi(analysis: &SSAAnalysis, register: u8, block_id: NodeIndex) -> b
 mod tests {
     use super::*;
     use crate::cfg::ssa::types::RegisterDef;
+    use crate::hbc::InstructionIndex;
     use petgraph::graph::NodeIndex;
     use std::collections::HashSet;
 
@@ -155,7 +155,9 @@ mod tests {
         let block1 = NodeIndex::new(1);
 
         // Add single definition for register 1
-        analysis.definitions.push(RegisterDef::new(1, block0, 0, 0));
+        analysis
+            .definitions
+            .push(RegisterDef::new(1, block0, InstructionIndex::new(0)));
 
         // Add liveness info - register 1 is live-in at block1
         let mut live_in = HashSet::new();
@@ -174,8 +176,12 @@ mod tests {
         let block2 = NodeIndex::new(2); // merge block
 
         // Add multiple definitions for register 1
-        analysis.definitions.push(RegisterDef::new(1, block0, 0, 0));
-        analysis.definitions.push(RegisterDef::new(1, block1, 0, 1));
+        analysis
+            .definitions
+            .push(RegisterDef::new(1, block0, InstructionIndex::new(0)));
+        analysis
+            .definitions
+            .push(RegisterDef::new(1, block1, InstructionIndex::new(1)));
 
         // Add liveness info - register 1 is live-in at merge block
         let mut live_in = HashSet::new();
@@ -203,8 +209,12 @@ mod tests {
         let block2 = NodeIndex::new(2);
 
         // Add multiple definitions for register 1
-        analysis.definitions.push(RegisterDef::new(1, block0, 0, 0));
-        analysis.definitions.push(RegisterDef::new(1, block1, 0, 1));
+        analysis
+            .definitions
+            .push(RegisterDef::new(1, block0, InstructionIndex::new(0)));
+        analysis
+            .definitions
+            .push(RegisterDef::new(1, block1, InstructionIndex::new(1)));
 
         // Register 1 is NOT live-in at block2
         analysis.live_in.insert(block2, HashSet::new());
@@ -226,8 +236,12 @@ mod tests {
         let block2 = NodeIndex::new(2);
 
         // Add multiple definitions for register 1
-        analysis.definitions.push(RegisterDef::new(1, block0, 0, 0));
-        analysis.definitions.push(RegisterDef::new(1, block1, 0, 1));
+        analysis
+            .definitions
+            .push(RegisterDef::new(1, block0, InstructionIndex(0)));
+        analysis
+            .definitions
+            .push(RegisterDef::new(1, block1, InstructionIndex(1)));
 
         // Add liveness info
         let mut live_in = HashSet::new();
@@ -240,7 +254,7 @@ mod tests {
         analysis.dominance_frontiers.insert(block0, frontier0);
 
         // Add existing phi function for register 1 at block2
-        let def_site = RegisterDef::new(1, block2, 0, 2);
+        let def_site = RegisterDef::new(1, block2, InstructionIndex(2));
         let result = SSAValue::new(1, 1, def_site.clone());
         let phi = PhiFunction::new(1, block2, result);
         analysis.phi_functions.entry(block2).or_default().push(phi);

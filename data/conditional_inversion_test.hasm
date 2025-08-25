@@ -1,0 +1,109 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 052835fd049e3d8e660c0e441b7efb5d9447aab8
+  Function count: 4
+  String count: 10
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..10] #1C35E808: Processing:
+s1[ASCII, 11..23] #629A2BFD: b is negative
+s2[ASCII, 24..30] #B36F97FD: default
+s3[ASCII, 31..35] #F4506E8D: small
+s4[ASCII, 37..42] #EAB30455: global
+s5[ASCII, 35..37] log
+s6[ASCII, 43..49] console
+s7[ASCII, 50..60] guardClause
+s8[ASCII, 61..75] simpleInversion
+s9[ASCII, 75..89] nestedInversion
+
+Array Buffer:
+
+Function<global>0(1 params, 14 registers, 0 symbols):
+  DeclareGlobalVar  "simpleInversion"
+  DeclareGlobalVar  "guardClause"
+  DeclareGlobalVar  "nestedInversion"
+  CreateEnvironment r1
+  CreateClosure     r2, r1, Function<simpleInversion>1
+  GetGlobalObject   r0
+  PutById           r0, r2, 1, "simpleInversion"
+  CreateClosure     r2, r1, Function<guardClause>2
+  PutById           r0, r2, 2, "guardClause"
+  CreateClosure     r1, r1, Function<nestedInversion>3
+  PutById           r0, r1, 3, "nestedInversion"
+  GetByIdShort      r1, r0, 1, "simpleInversion"
+  LoadConstUndefined r3
+  LoadConstUInt8    r4, 5
+  Call2             r1, r1, r3, r4
+  GetByIdShort      r2, r0, 1, "simpleInversion"
+  LoadConstUInt8    r1, 15
+  Call2             r1, r2, r3, r1
+  GetByIdShort      r2, r0, 2, "guardClause"
+  LoadConstNull     r1
+  Call2             r1, r2, r3, r1
+  GetByIdShort      r2, r0, 2, "guardClause"
+  LoadConstUInt8    r1, 42
+  Call2             r1, r2, r3, r1
+  GetByIdShort      r2, r0, 3, "nestedInversion"
+  LoadConstInt      r1, -3
+  Call3             r1, r2, r3, r4, r1
+  GetByIdShort      r2, r0, 3, "nestedInversion"
+  LoadConstInt      r1, -2
+  LoadConstUInt8    r0, 4
+  Call3             r0, r2, r3, r1, r0
+  Ret               r0
+
+Function<simpleInversion>1(2 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadConstUInt8    r0, 10
+  JGreater          L1, r1, r0
+  LoadConstString   r0, "small"
+  Ret               r0
+L1:
+  LoadConstString   r0, "default"
+  Ret               r0
+
+Function<guardClause>2(2 params, 13 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadConstNull     r0
+  JEqual            L1, r1, r0
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r0, "Processing:"
+  Call3             r0, r2, r3, r0, r1
+  LoadConstUInt8    r0, 2
+  Mul               r0, r1, r0
+  Ret               r0
+L1:
+  LoadConstZero     r0
+  Ret               r0
+
+Function<nestedInversion>3(3 params, 14 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadParam         r1, 2
+  LoadConstZero     r0
+  JGreater          L1, r2, r0
+  Negate            r3, r2
+  Ret               r3
+L1:
+  JGreater          L2, r1, r0
+  GetGlobalObject   r3
+  TryGetById        r5, r3, 1, "console"
+  GetByIdShort      r4, r5, 2, "log"
+  LoadConstString   r3, "b is negative"
+  Call2             r3, r4, r5, r3
+  Sub               r1, r2, r1
+  Ret               r1
+L2:
+  Ret               r0
+

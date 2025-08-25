@@ -3,9 +3,11 @@
 pub mod environment;
 pub mod frontiers;
 pub mod liveness;
+pub mod phi_declarations;
 pub mod phi_placement;
 pub mod renaming;
 pub mod types;
+pub mod variable_analysis;
 
 pub use types::*;
 
@@ -48,6 +50,15 @@ pub fn construct_ssa(cfg: &Cfg, function_id: u32) -> Result<SSAAnalysis, SSAErro
     // Step 6: Analyze environment operations
     environment::analyze_environments(cfg, &mut analysis)?;
 
+    // Step 7: Perform variable analysis (coalescing, scopes, usage)
+    let var_analysis = variable_analysis::analyze_variables(&analysis, cfg)
+        .map_err(|e| SSAError::RegisterAnalysisError(e.to_string()))?;
+    analysis.variable_analysis = Some(var_analysis);
+
+    // Step 8: Analyze phi declarations (where to place variable declarations)
+    phi_declarations::analyze_phi_declarations(cfg, &mut analysis)
+        .map_err(|e| SSAError::PhiPlacementError(e.to_string()))?;
+
     Ok(analysis)
 }
 
@@ -67,8 +78,7 @@ fn collect_defs_and_uses(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Result<(), SS
                 let def = RegisterDef {
                     register: target_reg,
                     block_id,
-                    instruction_idx: inst_idx,
-                    pc,
+                    instruction_idx: pc,
                 };
                 analysis.definitions.push(def);
             }
@@ -78,8 +88,7 @@ fn collect_defs_and_uses(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Result<(), SS
                 let use_site = RegisterUse {
                     register: source_reg,
                     block_id,
-                    instruction_idx: inst_idx,
-                    pc,
+                    instruction_idx: pc,
                 };
                 analysis.uses.push(use_site);
             }
@@ -99,9 +108,9 @@ mod tests {
     fn create_test_instruction(instruction: UnifiedInstruction) -> HbcFunctionInstruction {
         HbcFunctionInstruction {
             instruction,
-            offset: 0,
+            offset: crate::hbc::InstructionOffset(0),
             function_index: 0,
-            instruction_index: 0,
+            instruction_index: crate::hbc::InstructionIndex::zero(),
         }
     }
 
@@ -124,13 +133,13 @@ mod tests {
             }),
         ];
 
-        let block = Block::new(0, instructions);
+        let block = Block::new(crate::hbc::InstructionIndex::zero(), instructions);
         let mut analysis = SSAAnalysis::new(0);
         let block_id = petgraph::graph::NodeIndex::new(0);
 
         // Test each instruction individually
         for (inst_idx, hbc_instruction) in block.instructions().iter().enumerate() {
-            let pc = block.start_pc() + inst_idx as u32;
+            let pc = block.start_pc() + (inst_idx as u32);
 
             let usage = crate::generated::instruction_analysis::analyze_register_usage(
                 &hbc_instruction.instruction,
@@ -140,8 +149,7 @@ mod tests {
                 analysis.definitions.push(RegisterDef {
                     register: target_reg,
                     block_id,
-                    instruction_idx: inst_idx,
-                    pc,
+                    instruction_idx: pc,
                 });
             }
 
@@ -149,8 +157,7 @@ mod tests {
                 analysis.uses.push(RegisterUse {
                     register: source_reg,
                     block_id,
-                    instruction_idx: inst_idx,
-                    pc,
+                    instruction_idx: pc,
                 });
             }
         }
@@ -177,6 +184,7 @@ mod tests {
 
     #[test]
     fn test_ssa_analysis_structure() {
+        use crate::hbc::InstructionIndex;
         use petgraph::graph::NodeIndex;
 
         let mut analysis = SSAAnalysis::new(0);
@@ -186,16 +194,20 @@ mod tests {
         // Manually add some definitions and uses to test the structure
         analysis
             .definitions
-            .push(RegisterDef::new(1, block0_id, 0, 0));
+            .push(RegisterDef::new(1, block0_id, InstructionIndex::new(0)));
         analysis
             .definitions
-            .push(RegisterDef::new(2, block0_id, 1, 1));
+            .push(RegisterDef::new(2, block0_id, InstructionIndex::new(1)));
         analysis
             .definitions
-            .push(RegisterDef::new(3, block1_id, 0, 10));
+            .push(RegisterDef::new(3, block1_id, InstructionIndex::new(0)));
 
-        analysis.uses.push(RegisterUse::new(1, block1_id, 0, 10));
-        analysis.uses.push(RegisterUse::new(2, block1_id, 0, 10));
+        analysis
+            .uses
+            .push(RegisterUse::new(1, block1_id, InstructionIndex::new(0)));
+        analysis
+            .uses
+            .push(RegisterUse::new(2, block1_id, InstructionIndex::new(0)));
 
         // Test that we can create the analysis structure
         assert_eq!(analysis.definitions.len(), 3);

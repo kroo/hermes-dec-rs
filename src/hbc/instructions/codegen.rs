@@ -1180,6 +1180,7 @@ fn is_no_output_instruction(name: &str) -> bool {
         // Control flow
         "Jmp" | "JmpLong" | "JmpTrue" | "JmpTrueLong" | "JmpFalse" | "JmpFalseLong" |
         "JmpUndefined" | "JmpUndefinedLong" | "SaveGenerator" | "SaveGeneratorLong" |
+        "SwitchImm" |  // SwitchImm uses operand_0 as branch condition, not as output
         "JLess" | "JLessLong" | "JNotLess" | "JNotLessLong" |
         "JLessN" | "JLessNLong" | "JNotLessN" | "JNotLessNLong" |
         "JLessEqual" | "JLessEqualLong" | "JNotLessEqual" | "JNotLessEqualLong" |
