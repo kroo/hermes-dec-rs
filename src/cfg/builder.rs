@@ -294,7 +294,12 @@ impl<'a> CfgBuilder<'a> {
 
                                 for (_, &block_node) in blocks_in_range {
                                     // This block is within the try range, add exception edge to catch block
-                                    graph.add_edge(block_node, catch_node, EdgeKind::Uncond);
+                                    // Only add if not already connected (to avoid duplicate edges)
+                                    if !graph.edges_connecting(block_node, catch_node).any(|_| true) {
+                                        log::debug!("Adding exception edge from block {} to catch block {}", 
+                                                   block_node.index(), catch_node.index());
+                                        graph.add_edge(block_node, catch_node, EdgeKind::Exception);
+                                    }
                                 }
                             }
                         }
@@ -793,6 +798,7 @@ impl<'a> CfgBuilder<'a> {
                 EdgeKind::Fall => to_title_case("fall"),
                 EdgeKind::GeneratorFallthrough => "Generator Fallthrough".to_string(),
                 EdgeKind::GeneratorResume => "Generator Resume".to_string(),
+                EdgeKind::Exception => "Exception".to_string(),
             };
 
             dot.push_str(&format!(
@@ -876,6 +882,7 @@ impl<'a> CfgBuilder<'a> {
                 EdgeKind::Fall => to_title_case("fall"),
                 EdgeKind::GeneratorFallthrough => "Generator Fallthrough".to_string(),
                 EdgeKind::GeneratorResume => "Generator Resume".to_string(),
+                EdgeKind::Exception => "Exception".to_string(),
             };
 
             dot.push_str(&format!(
@@ -973,6 +980,7 @@ impl<'a> CfgBuilder<'a> {
                 EdgeKind::Fall => to_title_case("fall"),
                 EdgeKind::GeneratorFallthrough => "Generator Fallthrough".to_string(),
                 EdgeKind::GeneratorResume => "Generator Resume".to_string(),
+                EdgeKind::Exception => "Exception".to_string(),
             };
             edge_attrs.push(format!("label=\"{}\"", label));
 
@@ -1106,6 +1114,7 @@ impl<'a> CfgBuilder<'a> {
                 EdgeKind::Fall => to_title_case("fall"),
                 EdgeKind::GeneratorFallthrough => "Generator Fallthrough".to_string(),
                 EdgeKind::GeneratorResume => "Generator Resume".to_string(),
+                EdgeKind::Exception => "Exception".to_string(),
             };
 
             dot.push_str(&format!(
@@ -1224,6 +1233,7 @@ impl<'a> CfgBuilder<'a> {
                 EdgeKind::Fall => to_title_case("fall"),
                 EdgeKind::GeneratorFallthrough => "Generator Fallthrough".to_string(),
                 EdgeKind::GeneratorResume => "Generator Resume".to_string(),
+                EdgeKind::Exception => "Exception".to_string(),
             };
             edge_attrs.push(format!("label=\"{}\"", label));
 
@@ -1452,6 +1462,7 @@ impl<'a> CfgBuilder<'a> {
                     ("Generator Fallthrough".to_string(), "lightblue")
                 }
                 EdgeKind::GeneratorResume => ("Generator Resume".to_string(), "cyan"),
+                EdgeKind::Exception => ("Exception Handler".to_string(), "purple"),
             };
             edge_attrs.push(format!("label=\"{}\"", label));
             edge_attrs.push(format!("color={}", edge_style));

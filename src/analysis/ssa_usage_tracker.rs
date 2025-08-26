@@ -4,9 +4,12 @@
 //! enabling smart decisions about variable declaration and constant folding.
 
 use crate::analysis::{ConstantValue, FunctionAnalysis, TrackedValue};
-use crate::cfg::ssa::types::{DuplicatedSSAValue, RegisterUse, SSAAnalysis, SSAValue};
+use crate::cfg::ssa::types::{
+    DuplicatedSSAValue, DuplicationContext, RegisterUse, SSAAnalysis, SSAValue,
+};
 use log::debug;
 use petgraph::algo::dominators::Dominators;
+use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
 /// Tracks the usage status of SSA values during AST generation
@@ -108,11 +111,31 @@ impl<'a> SSAUsageTracker<'a> {
     }
 
     /// Mark a specific use of an SSA value as consumed (inlined)
+    /// Note: This method assumes the original (non-duplicated) context.
+    /// Use mark_use_consumed_with_context for duplicated contexts.
     pub fn mark_use_consumed(&mut self, ssa_value: &SSAValue, use_site: &RegisterUse) {
         self.mark_duplicated_use_consumed(
             &DuplicatedSSAValue::original(ssa_value.clone()),
             use_site,
         );
+    }
+
+    /// Mark a specific use of an SSA value as consumed with an optional duplication context
+    pub fn mark_use_consumed_with_context(
+        &mut self,
+        ssa_value: &SSAValue,
+        use_site: &RegisterUse,
+        context: Option<&DuplicationContext>,
+    ) {
+        let dup_value = if let Some(ctx) = context {
+            DuplicatedSSAValue {
+                original: ssa_value.clone(),
+                duplication_context: Some(ctx.clone()),
+            }
+        } else {
+            DuplicatedSSAValue::original(ssa_value.clone())
+        };
+        self.mark_duplicated_use_consumed(&dup_value, use_site);
     }
 
     /// Mark all uses in a list as consumed
@@ -141,10 +164,25 @@ impl<'a> SSAUsageTracker<'a> {
             use_site.instruction_idx.value()
         );
 
-        self.consumed_uses
+        let was_new = self.consumed_uses
             .entry(dup_ssa_value.clone())
             .or_default()
             .insert(use_site.clone());
+        
+        let name = dup_ssa_value.original_ssa_value().name();
+        if name.contains("r1") && name.contains("5") {
+            log::debug!(
+                "Marking {} use as consumed (was_new={}) (context: {}) at block {} instruction {}",
+                name,
+                was_new,
+                dup_ssa_value.context_description(),
+                use_site.block_id.index(),
+                use_site.instruction_idx.value()
+            );
+            if was_new {
+                log::debug!("Stack trace: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
     }
 
     /// Mark all uses in a list as consumed for a duplicated SSA value
@@ -391,8 +429,9 @@ impl<'a> SSAUsageTracker<'a> {
         // Side effects were already checked above
         if self.is_duplicated_fully_eliminated(dup_ssa_value) {
             debug!(
-                "SSA value {} is fully eliminated with no side effects, using Skip",
-                ssa_value
+                "SSA value {} (context: {}) is fully eliminated with no side effects, using Skip",
+                ssa_value,
+                dup_ssa_value.context_description()
             );
             return DeclarationStrategy::Skip;
         }
@@ -439,7 +478,10 @@ impl<'a> SSAUsageTracker<'a> {
         }
 
         // After marking uses as consumed, perform cascading elimination
-        self.perform_cascading_elimination();
+        // Note: This method doesn't have access to duplicated blocks info,
+        // so we pass an empty map. This is safe since the method is currently unused.
+        let empty_duplicated_blocks = HashMap::new();
+        self.perform_cascading_elimination(&empty_duplicated_blocks);
     }
 
     /// Check if an SSA value is a PHI result
@@ -607,7 +649,13 @@ impl<'a> SSAUsageTracker<'a> {
     ///
     /// When an SSA value becomes fully consumed, check if it was the only use of another value.
     /// If so, that value can also be eliminated. This process cascades transitively.
-    pub fn perform_cascading_elimination(&mut self) {
+    /// 
+    /// The duplicated_blocks parameter provides information about which blocks are duplicated
+    /// and in what contexts, allowing us to mark uses as consumed in the correct context.
+    pub fn perform_cascading_elimination(
+        &mut self,
+        duplicated_blocks: &HashMap<NodeIndex, Vec<DuplicationContext>>,
+    ) {
         let mut changed = true;
         let max_iterations = 10; // Prevent infinite loops
         let mut iterations = 0;
@@ -629,6 +677,20 @@ impl<'a> SSAUsageTracker<'a> {
                 if let Some(def_instruction) = self.ssa().get_defining_instruction(ssa_value) {
                     let block_id = def_instruction.block_id;
                     let instr_idx = def_instruction.instruction_idx;
+                    
+                    // Check if this value is an input to any PHI function
+                    // If so, don't cascade eliminate its sources
+                    let is_phi_input = self.ssa().phi_functions.values().flatten().any(|phi| {
+                        phi.operands.values().any(|operand| operand == ssa_value)
+                    });
+                    
+                    if is_phi_input {
+                        log::debug!(
+                            "Not cascading elimination for sources of {} - it's a PHI function input",
+                            ssa_value.name()
+                        );
+                        continue;
+                    }
 
                     // Get the instruction
                     if let Some(block) = self.function_analysis.cfg.graph().node_weight(block_id) {
@@ -672,13 +734,31 @@ impl<'a> SSAUsageTracker<'a> {
                 }
             }
 
-            // Mark newly eliminated values as consumed
+            // Mark newly eliminated values as consumed with appropriate context
             for (ssa_value, uses) in newly_eliminated {
+                // Check if ANY of the uses are in duplicated blocks
+                let has_duplicated_use = uses.iter().any(|use_site| {
+                    duplicated_blocks.contains_key(&use_site.block_id)
+                });
+                
+                if has_duplicated_use {
+                    log::debug!(
+                        "Skipping cascading elimination for {} - has uses in duplicated blocks",
+                        ssa_value.name()
+                    );
+                    // Don't mark as changed since we didn't actually eliminate anything
+                    continue;
+                }
+                
                 log::debug!(
                     "Cascading elimination: marking SSA {} as fully consumed (was only used by eliminated values)",
                     ssa_value.name()
                 );
-                self.mark_uses_consumed(&ssa_value, &uses);
+                
+                // All uses are in non-duplicated blocks, safe to mark as consumed
+                for use_site in &uses {
+                    self.mark_use_consumed(&ssa_value, use_site);
+                }
                 changed = true;
             }
         }

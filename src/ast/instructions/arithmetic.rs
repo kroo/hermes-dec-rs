@@ -49,6 +49,12 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
         right_reg: u8,
         op_name: &str,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if we should inline the operands based on use strategies
+        let current_pc = self.register_manager.current_pc()
+            .ok_or(StatementConversionError::NoCurrentPC)?;
+        let current_block = self.register_manager.current_block()
+            .ok_or(StatementConversionError::NoCurrentBlock)?;
+        
         // Get source operand names using the "before" lookup to avoid self-references
         let left_var = self.register_manager.get_source_variable_name(left_reg);
         let right_var = self.register_manager.get_source_variable_name(right_reg);
@@ -60,12 +66,62 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let span = Span::default();
 
-        // Create operand expressions
-        let left_atom = self.ast_builder.allocator.alloc_str(&left_var);
-        let left_expr = self.ast_builder.expression_identifier(span, left_atom);
+        // Create operand expressions, checking for inline values
+        let left_expr = if let Some(ssa_value) = self.register_manager.get_current_ssa_for_register(left_reg) {
+            let use_site = crate::cfg::ssa::RegisterUse {
+                register: left_reg,
+                block_id: current_block,
+                instruction_idx: current_pc,
+            };
+            let dup_value = crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone());
+            
+            if let Some(strategy) = self.control_flow_plan.use_strategies.get(&(dup_value, use_site)) {
+                match strategy {
+                    crate::analysis::ssa_usage_tracker::UseStrategy::InlineValue(constant) => {
+                        // Create a constant expression
+                        self.create_constant_expression(constant)?
+                    }
+                    crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
+                        let left_atom = self.ast_builder.allocator.alloc_str(&left_var);
+                        self.ast_builder.expression_identifier(span, left_atom)
+                    }
+                }
+            } else {
+                let left_atom = self.ast_builder.allocator.alloc_str(&left_var);
+                self.ast_builder.expression_identifier(span, left_atom)
+            }
+        } else {
+            let left_atom = self.ast_builder.allocator.alloc_str(&left_var);
+            self.ast_builder.expression_identifier(span, left_atom)
+        };
 
-        let right_atom = self.ast_builder.allocator.alloc_str(&right_var);
-        let right_expr = self.ast_builder.expression_identifier(span, right_atom);
+        let right_expr = if let Some(ssa_value) = self.register_manager.get_current_ssa_for_register(right_reg) {
+            let use_site = crate::cfg::ssa::RegisterUse {
+                register: right_reg,
+                block_id: current_block,
+                instruction_idx: current_pc,
+            };
+            let dup_value = crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone());
+            
+            if let Some(strategy) = self.control_flow_plan.use_strategies.get(&(dup_value, use_site)) {
+                match strategy {
+                    crate::analysis::ssa_usage_tracker::UseStrategy::InlineValue(constant) => {
+                        // Create a constant expression
+                        self.create_constant_expression(constant)?
+                    }
+                    crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
+                        let right_atom = self.ast_builder.allocator.alloc_str(&right_var);
+                        self.ast_builder.expression_identifier(span, right_atom)
+                    }
+                }
+            } else {
+                let right_atom = self.ast_builder.allocator.alloc_str(&right_var);
+                self.ast_builder.expression_identifier(span, right_atom)
+            }
+        } else {
+            let right_atom = self.ast_builder.allocator.alloc_str(&right_var);
+            self.ast_builder.expression_identifier(span, right_atom)
+        };
 
         // Create binary expression
         let binary_op = match op_name {

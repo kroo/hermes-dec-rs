@@ -82,15 +82,8 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
     let control_flow_plan = func_analysis.as_ref().map(|fa| {
         let builder =
             crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(&cfg, fa);
-        let mut plan = builder.build();
-
-        // Analyze the plan to determine declaration and use strategies
-        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
-            &mut plan, fa,
-        );
-        analyzer.analyze();
-
-        plan
+        // The builder.build() method already analyzes the plan internally
+        builder.build()
     });
 
     println!("=== CFG Analysis for Function {} ===", function_index);

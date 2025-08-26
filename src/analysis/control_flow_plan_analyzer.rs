@@ -67,10 +67,29 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         // Second pass: Mark consumed uses (e.g., switch discriminators, inlined constants)
         self.mark_consumed_uses();
 
-        // Perform cascading elimination to find transitively eliminated values
-        self.usage_tracker.perform_cascading_elimination();
+        // Perform cascading elimination with duplication context awareness
+        self.usage_tracker.perform_cascading_elimination(&self.duplicated_blocks);
 
         // Transfer consumed uses from tracker to plan before reusing the tracker
+        log::debug!(
+            "Transferring {} consumed uses from tracker to plan",
+            self.usage_tracker.get_consumed_uses().len()
+        );
+        for (dup_ssa, uses) in self.usage_tracker.get_consumed_uses() {
+            log::debug!(
+                "  {} (context: {}) has {} consumed uses",
+                dup_ssa.original_ssa_value().name(),
+                dup_ssa.context_description(),
+                uses.len()
+            );
+            for use_site in uses {
+                log::debug!(
+                    "    - Block {}, Instruction {}",
+                    use_site.block_id.index(),
+                    use_site.instruction_idx.value()
+                );
+            }
+        }
         self.plan
             .consumed_uses
             .extend(self.usage_tracker.get_consumed_uses().clone());
@@ -98,13 +117,29 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
     /// Recursively mark consumed uses in a structure
     fn mark_consumed_uses_in_structure(&mut self, structure_id: StructureId) {
+        self.mark_consumed_uses_in_structure_with_context(structure_id, None);
+    }
+    
+    fn mark_consumed_uses_in_structure_with_context(
+        &mut self, 
+        structure_id: StructureId,
+        context: Option<&DuplicationContext>
+    ) {
         debug!(
-            "mark_consumed_uses_in_structure called for structure {}",
-            structure_id.0
+            "mark_consumed_uses_in_structure called for structure {} with context {:?}",
+            structure_id.0,
+            context
         );
         let structure = match self.plan.get_structure(structure_id) {
             Some(s) => s.clone(),
             None => return,
+        };
+        
+        // If the structure itself has duplication info, use that context
+        let effective_context = if let Some(ref dup_info) = structure.duplication_info {
+            Some(&dup_info.context)
+        } else {
+            context
         };
 
         match &structure.kind {
@@ -189,15 +224,23 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
                                     if is_case_value {
                                         debug!(
-                                            "Marking {} as consumed at Block {}, Instruction {}",
+                                            "Marking {} as consumed at Block {}, Instruction {} (context: {:?})",
                                             ssa_value,
                                             use_site.block_id.index(),
-                                            use_site.instruction_idx.value()
+                                            use_site.instruction_idx.value(),
+                                            effective_context
                                         );
+                                        // Create the appropriate DuplicatedSSAValue based on context
+                                        let dup_value = if let Some(ctx) = effective_context {
+                                            DuplicatedSSAValue {
+                                                original: ssa_value.clone(),
+                                                duplication_context: Some(ctx.clone()),
+                                            }
+                                        } else {
+                                            DuplicatedSSAValue::original(ssa_value.clone())
+                                        };
                                         // Mark in both the tracker and the plan
-                                        self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
-                                        let dup_value =
-                                            DuplicatedSSAValue::original(ssa_value.clone());
+                                        self.usage_tracker.mark_duplicated_use_consumed(&dup_value, &use_site);
                                         self.plan.mark_use_consumed(dup_value, use_site.clone());
                                     }
                                 }
@@ -209,12 +252,18 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
                 // Recursively analyze case bodies
                 for group in case_groups {
-                    self.mark_consumed_uses_in_structure(group.body);
+                    // Check if this case group has fallthrough duplication
+                    let case_context = if let Some(ref fallthrough) = group.fallthrough {
+                        Some(&fallthrough.duplication_context)
+                    } else {
+                        effective_context
+                    };
+                    self.mark_consumed_uses_in_structure_with_context(group.body, case_context);
                 }
 
                 // Analyze default case
                 if let Some(default_id) = default_case {
-                    self.mark_consumed_uses_in_structure(*default_id);
+                    self.mark_consumed_uses_in_structure_with_context(*default_id, effective_context);
                 }
             }
 
@@ -223,10 +272,10 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 false_branch,
                 ..
             } => {
-                // Recursively analyze branches
-                self.mark_consumed_uses_in_structure(*true_branch);
+                // Recursively analyze branches with context
+                self.mark_consumed_uses_in_structure_with_context(*true_branch, effective_context);
                 if let Some(false_id) = false_branch {
-                    self.mark_consumed_uses_in_structure(*false_id);
+                    self.mark_consumed_uses_in_structure_with_context(*false_id, effective_context);
                 }
             }
 
@@ -237,24 +286,24 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 continue_target,
                 ..
             } => {
-                // Recursively analyze loop components
-                self.mark_consumed_uses_in_structure(*body);
+                // Recursively analyze loop components with context
+                self.mark_consumed_uses_in_structure_with_context(*body, effective_context);
                 if let Some(update_id) = update {
-                    self.mark_consumed_uses_in_structure(*update_id);
+                    self.mark_consumed_uses_in_structure_with_context(*update_id, effective_context);
                 }
                 if let Some(break_id) = break_target {
-                    self.mark_consumed_uses_in_structure(*break_id);
+                    self.mark_consumed_uses_in_structure_with_context(*break_id, effective_context);
                 }
                 if let Some(continue_id) = continue_target {
-                    self.mark_consumed_uses_in_structure(*continue_id);
+                    self.mark_consumed_uses_in_structure_with_context(*continue_id, effective_context);
                 }
             }
 
             ControlFlowKind::Sequential { elements } => {
-                // Analyze nested structures
+                // Analyze nested structures with context
                 for element in elements {
                     if let super::control_flow_plan::SequentialElement::Structure(id) = element {
-                        self.mark_consumed_uses_in_structure(*id);
+                        self.mark_consumed_uses_in_structure_with_context(*id, effective_context);
                     }
                 }
             }
@@ -262,14 +311,15 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             ControlFlowKind::TryCatch {
                 try_body,
                 catch_clause,
-                finally_body,
+                finally_clause,
             } => {
-                self.mark_consumed_uses_in_structure(*try_body);
+                // Recursively analyze try-catch-finally with context
+                self.mark_consumed_uses_in_structure_with_context(*try_body, effective_context);
                 if let Some(catch) = catch_clause {
-                    self.mark_consumed_uses_in_structure(catch.body);
+                    self.mark_consumed_uses_in_structure_with_context(catch.body, effective_context);
                 }
-                if let Some(finally_id) = finally_body {
-                    self.mark_consumed_uses_in_structure(*finally_id);
+                if let Some(finally) = finally_clause {
+                    self.mark_consumed_uses_in_structure_with_context(finally.body, effective_context);
                 }
             }
 
@@ -325,11 +375,18 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                     );
 
                                 if is_constant {
-                                    debug!("BasicBlock {} comparison uses constant {}, marking as consumed",
-                                           block.index(), ssa_value);
-                                    // Mark this constant use as consumed
-                                    self.usage_tracker.mark_use_consumed(&ssa_value, &use_site);
-                                    let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+                                    debug!("BasicBlock {} comparison uses constant {}, marking as consumed (context: {:?})",
+                                           block.index(), ssa_value, effective_context);
+                                    // Mark this constant use as consumed with appropriate context
+                                    let dup_value = if let Some(ctx) = effective_context {
+                                        DuplicatedSSAValue {
+                                            original: ssa_value.clone(),
+                                            duplication_context: Some(ctx.clone()),
+                                        }
+                                    } else {
+                                        DuplicatedSSAValue::original(ssa_value.clone())
+                                    };
+                                    self.usage_tracker.mark_duplicated_use_consumed(&dup_value, &use_site);
                                     self.plan.mark_use_consumed(dup_value, use_site.clone());
                                 }
                             }
@@ -429,14 +486,14 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             ControlFlowKind::TryCatch {
                 try_body,
                 catch_clause,
-                finally_body,
+                finally_clause,
             } => {
                 self.collect_duplicated_blocks_helper(*try_body, duplicated_blocks);
                 if let Some(catch) = catch_clause {
                     self.collect_duplicated_blocks_helper(catch.body, duplicated_blocks);
                 }
-                if let Some(finally_id) = finally_body {
-                    self.collect_duplicated_blocks_helper(*finally_id, duplicated_blocks);
+                if let Some(finally) = finally_clause {
+                    self.collect_duplicated_blocks_helper(finally.body, duplicated_blocks);
                 }
             }
 

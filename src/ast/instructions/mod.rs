@@ -5,6 +5,7 @@
 //! This is the first phase of decompilation - direct translation without optimization.
 
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, VariableKind};
+use crate::analysis::value_tracker::ConstantValue;
 use crate::ast::{
     context::{ExpressionContext, ExpressionContextError},
     variables::RegisterManager,
@@ -49,6 +50,10 @@ pub enum StatementConversionError {
     },
     #[error("Register {0} not found")]
     RegisterNotFound(u8),
+    #[error("No current PC available")]
+    NoCurrentPC,
+    #[error("No current block available")]
+    NoCurrentBlock,
     #[error("Expression context error: {0}")]
     ContextError(#[from] ExpressionContextError),
     #[error("Operand extraction failed: {0}")]
@@ -1810,6 +1815,37 @@ impl<'a> InstructionToStatementConverter<'a> {
                 Ok(self.ast_builder.statement_empty(oxc_span::Span::default()))
             }
         }
+    }
+
+    /// Create a constant expression from a ConstantValue
+    pub fn create_constant_expression(
+        &self,
+        value: &ConstantValue,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        let span = oxc_span::Span::default();
+        let expr = match value {
+            ConstantValue::Number(n) => self.ast_builder.expression_numeric_literal(
+                span,
+                *n,
+                None,
+                oxc_ast::ast::NumberBase::Decimal,
+            ),
+            ConstantValue::String(s) => {
+                let string_atom = self.ast_builder.allocator.alloc_str(s);
+                self.ast_builder
+                    .expression_string_literal(span, string_atom, None)
+            }
+            ConstantValue::Boolean(b) => self
+                .ast_builder
+                .expression_boolean_literal(span, *b),
+            ConstantValue::Null => self.ast_builder.expression_null_literal(span),
+            ConstantValue::Undefined => {
+                let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                self.ast_builder
+                    .expression_identifier(span, undefined_atom)
+            }
+        };
+        Ok(expr)
     }
 
     /// Create a return statement: `return expression;`

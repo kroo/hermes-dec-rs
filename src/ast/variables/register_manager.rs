@@ -28,6 +28,8 @@ pub struct RegisterManager {
     variable_mapping: Option<VariableMapping>,
     /// Current program counter for lookup
     current_pc: Option<InstructionIndex>,
+    /// Current block for lookup
+    current_block: Option<petgraph::graph::NodeIndex>,
     /// Track register lifetime for optimization/statistics
     register_lifetimes: HashMap<u8, RegisterLifetime>,
     /// Current duplication context for switch case processing
@@ -41,6 +43,7 @@ impl RegisterManager {
         Self {
             variable_mapping: None,
             current_pc: None,
+            current_block: None,
             register_lifetimes: HashMap::new(),
             current_duplication_context: None,
             control_flow_plan,
@@ -65,6 +68,31 @@ impl RegisterManager {
     /// Get the current PC
     pub fn current_pc(&self) -> Option<InstructionIndex> {
         self.current_pc
+    }
+    
+    /// Set the current block
+    pub fn set_current_block(&mut self, block: petgraph::graph::NodeIndex) {
+        self.current_block = Some(block);
+    }
+    
+    /// Get the current block
+    pub fn current_block(&self) -> Option<petgraph::graph::NodeIndex> {
+        self.current_block
+    }
+    
+    /// Get the current SSA value for a register (for source operands)
+    pub fn get_current_ssa_for_register(&self, register: u8) -> Option<SSAValue> {
+        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            // First try to get the value before the current PC (for source operands)
+            if let Some(ssa) = mapping.register_before_pc.get(&(register, pc)) {
+                return Some(ssa.clone());
+            }
+            // Fall back to the value at the current PC
+            if let Some(ssa) = mapping.register_at_pc.get(&(register, pc)) {
+                return Some(ssa.clone());
+            }
+        }
+        None
     }
 
     /// Set the current duplication context

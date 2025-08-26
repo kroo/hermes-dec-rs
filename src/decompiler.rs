@@ -412,12 +412,32 @@ impl<'a> FunctionDecompiler<'a> {
         // When functions have default parameters, we need to check the actual parameter
         // indices used in LoadParam instructions to ensure we show all parameters.
         let max_param_idx = default_params.keys().max().copied().unwrap_or(0);
+        
+        // Also check all LoadParam instructions to find the maximum parameter index
+        let max_load_param_idx = if let Ok(func) = self
+            .hbc_file
+            .functions
+            .get(self.function_index, self.hbc_file)
+        {
+            func.instructions
+                .iter()
+                .filter_map(|instr| match &instr.instruction {
+                    UnifiedInstruction::LoadParam { operand_1, .. } => Some(*operand_1 as u32),
+                    _ => None,
+                })
+                .max()
+                .unwrap_or(0)
+        } else {
+            0
+        };
 
         // Use the maximum of the metadata count and the highest parameter index found
         let actual_param_count = if is_global_function {
             0 // Global function should never show parameters
         } else {
-            metadata_param_count.max(max_param_idx + 1) as usize
+            metadata_param_count
+                .max(max_param_idx + 1)
+                .max(max_load_param_idx + 1) as usize
         };
 
         // Convert param_names vector to vector of strings

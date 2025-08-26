@@ -260,7 +260,7 @@ pub enum ControlFlowKind {
     TryCatch {
         try_body: StructureId,
         catch_clause: Option<CatchClause>,
-        finally_body: Option<StructureId>,
+        finally_clause: Option<FinallyClause>,
     },
 
     /// A single basic block
@@ -347,7 +347,19 @@ pub struct FallthroughInfo {
 pub struct CatchClause {
     pub catch_block: NodeIndex,
     pub error_register: u8,
+    pub error_ssa_value: SSAValue,  // The SSA value assigned by the Catch instruction (first instruction)
     pub body: StructureId,
+}
+
+/// A finally clause in a try-catch-finally
+#[derive(Debug, Clone)]
+pub struct FinallyClause {
+    pub finally_block: NodeIndex,
+    pub body: StructureId,
+    /// Instructions to skip at start (e.g., Catch in exception handler version)
+    pub skip_start: usize,
+    /// Instructions to skip at end (e.g., Throw in exception handler version)
+    pub skip_end: usize,
 }
 
 /// Type of loop
@@ -596,6 +608,13 @@ impl ControlFlowPlan {
 
     /// Mark a use as consumed (will be inlined)
     pub fn mark_use_consumed(&mut self, ssa_value: DuplicatedSSAValue, use_site: RegisterUse) {
+        log::debug!(
+            "ControlFlowPlan::mark_use_consumed: {} (context: {}) at block {} instruction {}",
+            ssa_value.original_ssa_value().name(),
+            ssa_value.context_description(),
+            use_site.block_id.index(),
+            use_site.instruction_idx.value()
+        );
         self.consumed_uses
             .entry(ssa_value)
             .or_default()
@@ -845,13 +864,14 @@ impl fmt::Display for ControlFlowPlan {
             self.fmt_structure(f, root_structure, 2)?;
         }
 
-        // Display declaration strategies
-        if !self.declaration_strategies.is_empty() {
-            writeln!(f, "\n  Declaration Strategies:")?;
-            for (ssa_value, strategy) in &self.declaration_strategies {
-                writeln!(f, "    {} -> {:?}", ssa_value, strategy)?;
-            }
-        }
+        // Declaration strategies are displayed separately by the CLI with better formatting
+        // Commenting out to avoid duplication
+        // if !self.declaration_strategies.is_empty() {
+        //     writeln!(f, "\n  Declaration Strategies:")?;
+        //     for (ssa_value, strategy) in &self.declaration_strategies {
+        //         writeln!(f, "    {} -> {:?}", ssa_value, strategy)?;
+        //     }
+        // }
 
         // Display block declarations
         if !self.block_declarations.is_empty() {
@@ -1073,7 +1093,7 @@ impl ControlFlowPlan {
             ControlFlowKind::TryCatch {
                 try_body,
                 catch_clause,
-                finally_body,
+                finally_clause,
             } => {
                 writeln!(f, "TryCatch")?;
                 writeln!(f, "{}  Try:", indent_str)?;
@@ -1086,9 +1106,9 @@ impl ControlFlowPlan {
                         self.fmt_structure(f, catch_structure, indent + 2)?;
                     }
                 }
-                if let Some(finally) = finally_body {
+                if let Some(finally) = finally_clause {
                     writeln!(f, "{}  Finally:", indent_str)?;
-                    if let Some(finally_structure) = self.get_structure(*finally) {
+                    if let Some(finally_structure) = self.get_structure(finally.body) {
                         self.fmt_structure(f, finally_structure, indent + 2)?;
                     }
                 }
