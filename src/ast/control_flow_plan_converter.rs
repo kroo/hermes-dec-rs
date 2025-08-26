@@ -714,84 +714,90 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             // Check if this SSA value should be skipped
                             let dup_ssa =
                                 DuplicatedSSAValue::original(setup_instr.ssa_value.clone());
-                            if let Some(DeclarationStrategy::Skip) =
-                                plan.get_declaration_strategy(&dup_ssa)
-                            {
+                            
+                            // Get the declaration strategy for this setup instruction
+                            let declaration_strategy = plan.get_declaration_strategy(&dup_ssa);
+                            
+                            if let Some(DeclarationStrategy::Skip) = declaration_strategy {
                                 // Skip this setup instruction as its SSA value is eliminated
                                 continue;
                             }
 
-                            // Create an assignment statement for the setup instruction
-                            // The SSA value tells us what variable is being assigned
-                            let var_name = self.get_variable_name(&DuplicatedSSAValue::original(
-                                setup_instr.ssa_value.clone(),
-                            ));
-
-                            // Create the value expression based on the setup instruction
-                            let value_expr = if let Some(ref const_value) = setup_instr.value {
-                                // It's a constant value
-                                self.create_constant_expression(const_value)
-                            } else {
-                                // For non-constant setup instructions, we need to convert the instruction
-                                // This is more complex and might need the actual instruction
-                                continue; // Skip for now if we can't handle it
-                            };
-
-                            // Create the assignment: var_name = value_expr
-                            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-                            let left = oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
-                                self.ast_builder.alloc(
-                                    self.ast_builder
-                                        .identifier_reference(oxc_span::SPAN, var_atom),
-                                ),
+                            // Convert the setup instruction using the regular instruction converter
+                            // This ensures we use the same logic as for normal basic blocks
+                            let block_id = setup_instr.ssa_value.def_site.block_id;
+                            let instruction_idx = setup_instr.ssa_value.def_site.instruction_idx;
+                            
+                            // Set the current block and PC for the instruction converter
+                            self.instruction_converter
+                                .register_manager_mut()
+                                .set_current_block(block_id);
+                            self.instruction_converter
+                                .register_manager_mut()
+                                .set_current_pc(instruction_idx);
+                            
+                            // The setup instruction's HbcFunctionInstruction contains the UnifiedInstruction
+                            let unified_instr = &setup_instr.instruction.instruction;
+                            
+                            // Convert the instruction to a statement
+                            let stmt_result = self.instruction_converter.convert_instruction(
+                                unified_instr,
                             );
-                            let assign = self.ast_builder.expression_assignment(
-                                oxc_span::SPAN,
-                                oxc_ast::ast::AssignmentOperator::Assign,
-                                left,
-                                value_expr,
-                            );
-                            let stmt = self
-                                .ast_builder
-                                .statement_expression(oxc_span::SPAN, assign);
-
-                            // Add comment for setup instruction
-                            if let Some(ref mut comment_manager) = self.comment_manager {
-                                // Add instruction comment
-                                if self.include_instruction_comments {
-                                    let instr_comment = format!(
-                                        "PC {}: {}",
-                                        setup_instr.instruction.instruction_index.0,
-                                        setup_instr
-                                            .instruction
-                                            .format_instruction(self.hbc_analysis.hbc_file)
-                                    );
-                                    comment_manager.add_comment(
-                                        &stmt,
-                                        instr_comment,
-                                        CommentKind::Line,
-                                        CommentPosition::Leading,
-                                    );
+                            
+                            match stmt_result {
+                                Ok(instr_result) => {
+                                    // Handle the instruction result
+                                    match instr_result {
+                                        crate::ast::InstructionResult::Statement(stmt) => {
+                                            // Prepare the setup comment before borrowing comment_manager
+                                            let setup_comment = if self.include_ssa_comments {
+                                                let var_name = self.get_variable_name(&dup_ssa);
+                                                Some(format!(
+                                                    "Setup: {} [r{}_{}]",
+                                                    var_name,
+                                                    setup_instr.ssa_value.register,
+                                                    setup_instr.ssa_value.version
+                                                ))
+                                            } else {
+                                                None
+                                            };
+                                            
+                                            // Add setup comment to the statement
+                                            if let Some(ref mut comment_manager) = self.comment_manager {
+                                                if let Some(ssa_comment) = setup_comment {
+                                                    comment_manager.add_comment(
+                                                        &stmt,
+                                                        ssa_comment,
+                                                        CommentKind::Line,
+                                                        CommentPosition::Leading,
+                                                    );
+                                                }
+                                            }
+                                            
+                                            // Add the statement to the case
+                                            case_statements.push(stmt);
+                                        }
+                                        crate::ast::InstructionResult::JumpCondition(_) => {
+                                            // Setup instructions shouldn't be jumps
+                                            log::warn!(
+                                                "Unexpected jump instruction in setup at PC {}: {:?}",
+                                                instruction_idx.0,
+                                                setup_instr.instruction.instruction.name()
+                                            );
+                                        }
+                                        crate::ast::InstructionResult::None => {
+                                            // No-op, skip
+                                        }
+                                    }
                                 }
-
-                                // Add SSA comment
-                                if self.include_ssa_comments {
-                                    let ssa_comment = format!(
-                                        "Setup: {} [r{}_{}]",
-                                        var_name,
-                                        setup_instr.ssa_value.register,
-                                        setup_instr.ssa_value.version
-                                    );
-                                    comment_manager.add_comment(
-                                        &stmt,
-                                        ssa_comment,
-                                        CommentKind::Line,
-                                        CommentPosition::Leading,
+                                Err(e) => {
+                                    log::warn!(
+                                        "Failed to convert setup instruction at PC {}: {:?}",
+                                        instruction_idx.0,
+                                        e
                                     );
                                 }
                             }
-
-                            case_statements.push(stmt);
                         }
                     }
 
