@@ -5,7 +5,9 @@
 //! - Global variable tracking
 //! - Module boundary detection
 //! - Bundle analysis
+//! - Call site analysis for tracking argument registers
 
+pub mod call_site_analysis;
 pub mod constructor_detector;
 pub mod control_flow_plan;
 pub mod control_flow_plan_analyzer;
@@ -18,6 +20,7 @@ pub mod hbc_analysis;
 pub mod ssa_usage_tracker;
 pub mod value_tracker;
 
+pub use call_site_analysis::{CallSiteAnalysis, CallSiteInfo};
 pub use constructor_detector::{ConstructorDetector, ConstructorInfo};
 pub use control_flow_plan::{ControlFlowPlan, ControlFlowStructure};
 pub use default_params::{DefaultParameterAnalyzer, DefaultParameterInfo};

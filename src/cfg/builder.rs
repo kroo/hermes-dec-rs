@@ -295,9 +295,13 @@ impl<'a> CfgBuilder<'a> {
                                 for (_, &block_node) in blocks_in_range {
                                     // This block is within the try range, add exception edge to catch block
                                     // Only add if not already connected (to avoid duplicate edges)
-                                    if !graph.edges_connecting(block_node, catch_node).any(|_| true) {
-                                        log::debug!("Adding exception edge from block {} to catch block {}", 
-                                                   block_node.index(), catch_node.index());
+                                    if !graph.edges_connecting(block_node, catch_node).any(|_| true)
+                                    {
+                                        log::debug!(
+                                            "Adding exception edge from block {} to catch block {}",
+                                            block_node.index(),
+                                            catch_node.index()
+                                        );
                                         graph.add_edge(block_node, catch_node, EdgeKind::Exception);
                                     }
                                 }

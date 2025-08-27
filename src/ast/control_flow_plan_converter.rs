@@ -714,10 +714,10 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             // Check if this SSA value should be skipped
                             let dup_ssa =
                                 DuplicatedSSAValue::original(setup_instr.ssa_value.clone());
-                            
+
                             // Get the declaration strategy for this setup instruction
                             let declaration_strategy = plan.get_declaration_strategy(&dup_ssa);
-                            
+
                             if let Some(DeclarationStrategy::Skip) = declaration_strategy {
                                 // Skip this setup instruction as its SSA value is eliminated
                                 continue;
@@ -727,7 +727,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             // This ensures we use the same logic as for normal basic blocks
                             let block_id = setup_instr.ssa_value.def_site.block_id;
                             let instruction_idx = setup_instr.ssa_value.def_site.instruction_idx;
-                            
+
                             // Set the current block and PC for the instruction converter
                             self.instruction_converter
                                 .register_manager_mut()
@@ -735,15 +735,15 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             self.instruction_converter
                                 .register_manager_mut()
                                 .set_current_pc(instruction_idx);
-                            
+
                             // The setup instruction's HbcFunctionInstruction contains the UnifiedInstruction
                             let unified_instr = &setup_instr.instruction.instruction;
-                            
+
                             // Convert the instruction to a statement
-                            let stmt_result = self.instruction_converter.convert_instruction(
-                                unified_instr,
-                            );
-                            
+                            let stmt_result = self
+                                .instruction_converter
+                                .convert_instruction(unified_instr);
+
                             match stmt_result {
                                 Ok(instr_result) => {
                                     // Handle the instruction result
@@ -761,9 +761,11 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                             } else {
                                                 None
                                             };
-                                            
+
                                             // Add setup comment to the statement
-                                            if let Some(ref mut comment_manager) = self.comment_manager {
+                                            if let Some(ref mut comment_manager) =
+                                                self.comment_manager
+                                            {
                                                 if let Some(ssa_comment) = setup_comment {
                                                     comment_manager.add_comment(
                                                         &stmt,
@@ -773,7 +775,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                                     );
                                                 }
                                             }
-                                            
+
                                             // Add the statement to the case
                                             case_statements.push(stmt);
                                         }
@@ -1132,7 +1134,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         // Convert catch clause if present
         let handler = if let Some(catch) = catch_clause {
             let mut catch_stmts = self.ast_builder.vec();
-            
+
             // Convert the catch body, but we need to skip the first instruction (the Catch instruction)
             // We'll handle this by converting the body structure which should already account for this
             self.convert_structure_id(plan, catch.body, &mut catch_stmts, context);
@@ -1174,7 +1176,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         // Convert finally block if present
         let finalizer = if let Some(finally) = finally_clause {
             let mut finally_stmts = self.ast_builder.vec();
-            
+
             // Convert the finally body, respecting skip_start and skip_end
             // We need special handling to skip the Catch at the start and Throw at the end
             self.convert_finally_block(
@@ -1185,7 +1187,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                 &mut finally_stmts,
                 context,
             );
-            
+
             Some(
                 self.ast_builder
                     .block_statement(oxc_span::SPAN, finally_stmts),
@@ -1223,18 +1225,18 @@ impl<'a> ControlFlowPlanConverter<'a> {
 
                 let instructions = block.instructions();
                 let total_count = instructions.len();
-                
+
                 // Calculate the range of instructions to convert
                 let start_idx = skip_start;
                 let end_idx = total_count.saturating_sub(skip_end);
-                
+
                 // Convert only the instructions in the range
                 for (idx, hbc_instruction) in instructions.iter().enumerate() {
                     // Skip instructions outside our range
                     if idx < start_idx || idx >= end_idx {
                         continue;
                     }
-                    
+
                     // Set the current PC for context
                     self.instruction_converter
                         .set_current_pc(hbc_instruction.instruction_index.0 as u32);
@@ -1404,7 +1406,10 @@ impl<'a> ControlFlowPlanConverter<'a> {
 
                 // Check if this is a catch block and skip the first instruction (Catch)
                 let skip_first = if let Some(first_instr) = block.instructions.first() {
-                    matches!(&first_instr.instruction, crate::generated::unified_instructions::UnifiedInstruction::Catch { .. })
+                    matches!(
+                        &first_instr.instruction,
+                        crate::generated::unified_instructions::UnifiedInstruction::Catch { .. }
+                    )
                 } else {
                     false
                 };
@@ -1664,17 +1669,24 @@ impl<'a> ControlFlowPlanConverter<'a> {
             .instruction_converter
             .register_manager()
             .get_variable_name_for_duplicated(value);
-        
+
         // Fix parameter names: convert param{register} to arg{param_index}
         // This is a workaround for the fact that parameters are named based on register
         // instead of parameter index
-        log::debug!("get_variable_name: Got name '{}' for SSA value {:?}", name, value);
+        log::debug!(
+            "get_variable_name: Got name '{}' for SSA value {:?}",
+            name,
+            value
+        );
         if name.starts_with("param") {
             // Try to extract the register number
             if let Some(reg_str) = name.strip_prefix("param") {
                 if let Ok(reg_num) = reg_str.parse::<u8>() {
                     // Look for LoadParam instructions in Block 0 that load to this register
-                    if let Some(function_analysis) = self.hbc_analysis.get_function_analysis_ref(self.function_index) {
+                    if let Some(function_analysis) = self
+                        .hbc_analysis
+                        .get_function_analysis_ref(self.function_index)
+                    {
                         let cfg = &function_analysis.cfg;
                         // Block 0 contains the LoadParam instructions
                         let block_0 = petgraph::graph::NodeIndex::new(0);
@@ -1682,7 +1694,11 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             // Search through instructions in Block 0 for LoadParam to this register
                             for instr in block.instructions() {
                                 use crate::generated::unified_instructions::UnifiedInstruction;
-                                if let UnifiedInstruction::LoadParam { operand_0, operand_1 } = &instr.instruction {
+                                if let UnifiedInstruction::LoadParam {
+                                    operand_0,
+                                    operand_1,
+                                } = &instr.instruction
+                                {
                                     // Check if this LoadParam loads to our register
                                     if *operand_0 == reg_num {
                                         // operand_1 is the parameter index

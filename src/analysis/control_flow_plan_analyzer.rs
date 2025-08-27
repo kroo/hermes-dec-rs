@@ -38,6 +38,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
     /// Create a new analyzer
     pub fn new(plan: &'a mut ControlFlowPlan, function_analysis: &'a FunctionAnalysis<'a>) -> Self {
         let usage_tracker = SSAUsageTracker::new(function_analysis);
+        // Note: We'll set the call site analysis from the plan later during analysis
+        // to avoid borrowing issues
         Self {
             plan,
             function_analysis,
@@ -68,7 +70,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         self.mark_consumed_uses();
 
         // Perform cascading elimination with duplication context awareness
-        self.usage_tracker.perform_cascading_elimination(&self.duplicated_blocks);
+        self.usage_tracker
+            .perform_cascading_elimination(&self.duplicated_blocks);
 
         // Transfer consumed uses from tracker to plan before reusing the tracker
         log::debug!(
@@ -119,22 +122,21 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
     fn mark_consumed_uses_in_structure(&mut self, structure_id: StructureId) {
         self.mark_consumed_uses_in_structure_with_context(structure_id, None);
     }
-    
+
     fn mark_consumed_uses_in_structure_with_context(
-        &mut self, 
+        &mut self,
         structure_id: StructureId,
-        context: Option<&DuplicationContext>
+        context: Option<&DuplicationContext>,
     ) {
         debug!(
             "mark_consumed_uses_in_structure called for structure {} with context {:?}",
-            structure_id.0,
-            context
+            structure_id.0, context
         );
         let structure = match self.plan.get_structure(structure_id) {
             Some(s) => s.clone(),
             None => return,
         };
-        
+
         // If the structure itself has duplication info, use that context
         let effective_context = if let Some(ref dup_info) = structure.duplication_info {
             Some(&dup_info.context)
@@ -240,7 +242,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                             DuplicatedSSAValue::original(ssa_value.clone())
                                         };
                                         // Mark in both the tracker and the plan
-                                        self.usage_tracker.mark_duplicated_use_consumed(&dup_value, &use_site);
+                                        self.usage_tracker
+                                            .mark_duplicated_use_consumed(&dup_value, &use_site);
                                         self.plan.mark_use_consumed(dup_value, use_site.clone());
                                     }
                                 }
@@ -263,7 +266,10 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
                 // Analyze default case
                 if let Some(default_id) = default_case {
-                    self.mark_consumed_uses_in_structure_with_context(*default_id, effective_context);
+                    self.mark_consumed_uses_in_structure_with_context(
+                        *default_id,
+                        effective_context,
+                    );
                 }
             }
 
@@ -289,13 +295,19 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 // Recursively analyze loop components with context
                 self.mark_consumed_uses_in_structure_with_context(*body, effective_context);
                 if let Some(update_id) = update {
-                    self.mark_consumed_uses_in_structure_with_context(*update_id, effective_context);
+                    self.mark_consumed_uses_in_structure_with_context(
+                        *update_id,
+                        effective_context,
+                    );
                 }
                 if let Some(break_id) = break_target {
                     self.mark_consumed_uses_in_structure_with_context(*break_id, effective_context);
                 }
                 if let Some(continue_id) = continue_target {
-                    self.mark_consumed_uses_in_structure_with_context(*continue_id, effective_context);
+                    self.mark_consumed_uses_in_structure_with_context(
+                        *continue_id,
+                        effective_context,
+                    );
                 }
             }
 
@@ -316,10 +328,16 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 // Recursively analyze try-catch-finally with context
                 self.mark_consumed_uses_in_structure_with_context(*try_body, effective_context);
                 if let Some(catch) = catch_clause {
-                    self.mark_consumed_uses_in_structure_with_context(catch.body, effective_context);
+                    self.mark_consumed_uses_in_structure_with_context(
+                        catch.body,
+                        effective_context,
+                    );
                 }
                 if let Some(finally) = finally_clause {
-                    self.mark_consumed_uses_in_structure_with_context(finally.body, effective_context);
+                    self.mark_consumed_uses_in_structure_with_context(
+                        finally.body,
+                        effective_context,
+                    );
                 }
             }
 
@@ -386,7 +404,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                     } else {
                                         DuplicatedSSAValue::original(ssa_value.clone())
                                     };
-                                    self.usage_tracker.mark_duplicated_use_consumed(&dup_value, &use_site);
+                                    self.usage_tracker
+                                        .mark_duplicated_use_consumed(&dup_value, &use_site);
                                     self.plan.mark_use_consumed(dup_value, use_site.clone());
                                 }
                             }
@@ -846,9 +865,12 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                         .get_declaration_strategy(&dup_replacement)
                         .is_none()
                     {
-                        let replacement_strategy = self
-                            .usage_tracker
-                            .get_declaration_strategy(&dup_replacement);
+                        let call_site_analysis = &self.plan.call_site_analysis;
+                        let replacement_strategy =
+                            self.usage_tracker.get_declaration_strategy_with_context(
+                                &dup_replacement,
+                                Some(call_site_analysis),
+                            );
                         self.plan
                             .set_declaration_strategy(dup_replacement, replacement_strategy);
                     }
@@ -878,7 +900,10 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         for ssa_value in self.function_analysis.ssa.all_values() {
             // Always analyze the original version
             let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
-            let strategy = self.usage_tracker.get_declaration_strategy(&dup_value);
+            let call_site_analysis = &self.plan.call_site_analysis;
+            let strategy = self
+                .usage_tracker
+                .get_declaration_strategy_with_context(&dup_value, Some(call_site_analysis));
 
             match &strategy {
                 DeclarationStrategy::DeclareAtDominator {
@@ -910,7 +935,11 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                     };
 
                     // Normal duplicated value
-                    let dup_strategy = self.usage_tracker.get_declaration_strategy(&dup_value);
+                    let call_site_analysis = &self.plan.call_site_analysis;
+                    let dup_strategy = self.usage_tracker.get_declaration_strategy_with_context(
+                        &dup_value,
+                        Some(call_site_analysis),
+                    );
                     self.plan.set_declaration_strategy(dup_value, dup_strategy);
                 }
             }

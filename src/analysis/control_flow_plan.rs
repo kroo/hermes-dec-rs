@@ -5,6 +5,7 @@
 //! all important decisions (declaration points, duplication contexts, value elimination)
 //! during the analysis phase rather than during AST generation.
 
+use crate::analysis::call_site_analysis::CallSiteAnalysis;
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, UseStrategy};
 use crate::cfg::ssa::types::DuplicationContext;
 use crate::cfg::ssa::{DuplicatedSSAValue, RegisterUse, SSAValue};
@@ -72,6 +73,9 @@ pub struct ControlFlowPlan {
     /// Set of SSA values that are PHI results
     /// These should not use duplicated names even when in duplicated blocks
     pub phi_results: HashSet<SSAValue>,
+
+    /// Call site analysis with argument registers for each Call/Construct
+    pub call_site_analysis: CallSiteAnalysis,
 
     /// Next available structure ID
     next_structure_id: usize,
@@ -347,7 +351,7 @@ pub struct FallthroughInfo {
 pub struct CatchClause {
     pub catch_block: NodeIndex,
     pub error_register: u8,
-    pub error_ssa_value: SSAValue,  // The SSA value assigned by the Catch instruction (first instruction)
+    pub error_ssa_value: SSAValue, // The SSA value assigned by the Catch instruction (first instruction)
     pub body: StructureId,
 }
 
@@ -448,6 +452,7 @@ impl ControlFlowPlan {
             phi_deconstructions: HashMap::new(),
             phi_results: HashSet::new(),
             next_structure_id: 1,
+            call_site_analysis: CallSiteAnalysis::new(),
         }
     }
 

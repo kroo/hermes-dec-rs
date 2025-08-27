@@ -250,16 +250,16 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
     fn create_this_statement(
         &mut self,
         dest_reg: u8,
-        constructor_reg: u8,
+        prototype_reg: u8, // Note: This register already contains the prototype!
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let constructor_var = self.register_manager.get_variable_name(constructor_reg);
+        let prototype_var = self.register_manager.get_variable_name(prototype_reg);
 
         let span = Span::default();
 
-        // Create Object.create call with constructor.prototype
+        // Create Object.create call with the prototype (already a prototype, not a constructor!)
         let object_atom = self.ast_builder.allocator.alloc_str("Object");
         let object_expr = self.ast_builder.expression_identifier(span, object_atom);
 
@@ -269,26 +269,13 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             self.ast_builder
                 .alloc_static_member_expression(span, object_expr, create_name, false);
 
-        // Create constructor.prototype
-        let constructor_atom = self.ast_builder.allocator.alloc_str(&constructor_var);
-        let constructor_expr = self
-            .ast_builder
-            .expression_identifier(span, constructor_atom);
-
-        let prototype_atom = self.ast_builder.allocator.alloc_str("prototype");
-        let prototype_name = self.ast_builder.identifier_name(span, prototype_atom);
-        let prototype_expr = self.ast_builder.alloc_static_member_expression(
-            span,
-            constructor_expr,
-            prototype_name,
-            false,
-        );
+        // Use the prototype directly (it's already Error.prototype, not Error constructor)
+        let prototype_atom = self.ast_builder.allocator.alloc_str(&prototype_var);
+        let prototype_expr = self.ast_builder.expression_identifier(span, prototype_atom);
 
         // Create call
         let mut args = self.ast_builder.vec();
-        args.push(oxc_ast::ast::Argument::from(
-            oxc_ast::ast::Expression::StaticMemberExpression(prototype_expr),
-        ));
+        args.push(oxc_ast::ast::Argument::from(prototype_expr));
 
         let call_expr = self.ast_builder.expression_call(
             span,
@@ -360,33 +347,57 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let span = Span::default();
 
-        // Create test expression
+        // Create typeof test === 'object'
         let test_atom = self.ast_builder.allocator.alloc_str(&test_var);
         let test_expr = self.ast_builder.expression_identifier(span, test_atom);
+        let typeof_expr =
+            self.ast_builder
+                .expression_unary(span, oxc_ast::ast::UnaryOperator::Typeof, test_expr);
 
-        // Create null literal
-        let null_expr = self.ast_builder.expression_null_literal(span);
+        let object_str = self.ast_builder.allocator.alloc_str("object");
+        let object_literal = self
+            .ast_builder
+            .expression_string_literal(span, object_str, None);
 
-        // Create second test expression for conditional
+        let typeof_check = self.ast_builder.expression_binary(
+            span,
+            typeof_expr,
+            oxc_ast::ast::BinaryOperator::StrictEquality,
+            object_literal,
+        );
+
+        // Create test !== null
         let test_atom2 = self.ast_builder.allocator.alloc_str(&test_var);
         let test_expr2 = self.ast_builder.expression_identifier(span, test_atom2);
+        let null_expr = self.ast_builder.expression_null_literal(span);
 
-        // Create test != null
-        let condition = self.ast_builder.expression_binary(
+        let not_null_check = self.ast_builder.expression_binary(
             span,
-            test_expr,
-            oxc_ast::ast::BinaryOperator::Inequality,
+            test_expr2,
+            oxc_ast::ast::BinaryOperator::StrictInequality,
             null_expr,
         );
+
+        // Combine with &&: (typeof test === 'object' && test !== null)
+        let condition = self.ast_builder.expression_logical(
+            span,
+            typeof_check,
+            oxc_ast::ast::LogicalOperator::And,
+            not_null_check,
+        );
+
+        // Create test expression for the true branch
+        let test_atom3 = self.ast_builder.allocator.alloc_str(&test_var);
+        let test_expr3 = self.ast_builder.expression_identifier(span, test_atom3);
 
         // Create alternative expression
         let alt_atom = self.ast_builder.allocator.alloc_str(&alt_var);
         let alt_expr = self.ast_builder.expression_identifier(span, alt_atom);
 
-        // Create conditional expression
+        // Create conditional expression: (typeof test === 'object' && test !== null) ? test : alt
         let conditional_expr = self
             .ast_builder
-            .expression_conditional(span, condition, test_expr2, alt_expr);
+            .expression_conditional(span, condition, test_expr3, alt_expr);
 
         let stmt =
             self.create_variable_declaration_or_assignment(&dest_var, Some(conditional_expr))?;

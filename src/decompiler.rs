@@ -412,7 +412,7 @@ impl<'a> FunctionDecompiler<'a> {
         // When functions have default parameters, we need to check the actual parameter
         // indices used in LoadParam instructions to ensure we show all parameters.
         let max_param_idx = default_params.keys().max().copied().unwrap_or(0);
-        
+
         // Also check all LoadParam instructions to find the maximum parameter index
         let max_load_param_idx = if let Ok(func) = self
             .hbc_file
