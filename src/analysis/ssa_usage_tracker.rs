@@ -23,7 +23,7 @@ pub struct SSAUsageTracker<'a> {
     /// Cache of constant values for duplicated SSA values
     /// This is populated when we first analyze an SSA value
     constant_cache: HashMap<DuplicatedSSAValue, ConstantValue>,
-    
+
     /// Cache of SSA values that are implicit arguments (pre-computed for performance)
     implicit_arguments_cache: Option<HashSet<SSAValue>>,
 }
@@ -107,7 +107,7 @@ impl<'a> SSAUsageTracker<'a> {
         call_site_analysis: &crate::analysis::call_site_analysis::CallSiteAnalysis,
     ) {
         let mut implicit_args = HashSet::new();
-        
+
         // For each call site, find which SSA values are implicit arguments
         for ((_block_id, instr_idx), call_info) in &call_site_analysis.call_sites {
             // For each argument register at this call site
@@ -121,8 +121,11 @@ impl<'a> SSAUsageTracker<'a> {
                 }
             }
         }
-        
-        log::debug!("Pre-computed {} implicit argument SSA values", implicit_args.len());
+
+        log::debug!(
+            "Pre-computed {} implicit argument SSA values",
+            implicit_args.len()
+        );
         self.implicit_arguments_cache = Some(implicit_args);
     }
 
@@ -136,7 +139,7 @@ impl<'a> SSAUsageTracker<'a> {
         if let Some(ref cache) = self.implicit_arguments_cache {
             return cache.contains(ssa_value);
         }
-        
+
         // Otherwise, fall back to the old implementation (for backwards compatibility)
         // If we don't have call site analysis, assume not an implicit argument
         let Some(call_site_analysis) = call_site_analysis else {
@@ -502,7 +505,8 @@ impl<'a> SSAUsageTracker<'a> {
             if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
                 trace!(
                     "{} is part of PHI group with representative {}",
-                    ssa_value, coalesced_rep
+                    ssa_value,
+                    coalesced_rep
                 );
                 // This is part of a PHI group (coalesced values)
                 if self.is_declaration_point(ssa_value, coalesced_rep) {
@@ -767,8 +771,11 @@ impl<'a> SSAUsageTracker<'a> {
     ) {
         let start_time = std::time::Instant::now();
         let total_ssa_values = self.ssa().all_ssa_values().count();
-        log::debug!("Starting cascading elimination for {} SSA values", total_ssa_values);
-        
+        log::debug!(
+            "Starting cascading elimination for {} SSA values",
+            total_ssa_values
+        );
+
         let mut changed = true;
         let max_iterations = 10; // Prevent infinite loops
         let mut iterations = 0;
@@ -786,8 +793,12 @@ impl<'a> SSAUsageTracker<'a> {
             for ssa_value in self.ssa().all_ssa_values() {
                 values_checked += 1;
                 if values_checked % 1000 == 0 {
-                    log::trace!("  Checked {}/{} values in iteration {}", 
-                               values_checked, total_ssa_values, iterations);
+                    log::trace!(
+                        "  Checked {}/{} values in iteration {}",
+                        values_checked,
+                        total_ssa_values,
+                        iterations
+                    );
                 }
                 if !self.is_fully_eliminated(ssa_value) {
                     continue;
@@ -885,16 +896,24 @@ impl<'a> SSAUsageTracker<'a> {
                 }
                 changed = true;
             }
-            
+
             let iteration_time = iteration_start.elapsed();
-            log::debug!("  Iteration {} completed in {:?}, {} values eliminated", 
-                       iterations, iteration_time, num_eliminated);
+            log::debug!(
+                "  Iteration {} completed in {:?}, {} values eliminated",
+                iterations,
+                iteration_time,
+                num_eliminated
+            );
         }
 
         let total_time = start_time.elapsed();
-        log::info!("Cascading elimination completed in {:?} ({} iterations, {} SSA values)", 
-                  total_time, iterations, total_ssa_values);
-        
+        log::info!(
+            "Cascading elimination completed in {:?} ({} iterations, {} SSA values)",
+            total_time,
+            iterations,
+            total_ssa_values
+        );
+
         if iterations >= max_iterations {
             log::warn!("Cascading elimination reached maximum iterations - possible cycle");
         }

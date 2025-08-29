@@ -62,15 +62,19 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
     /// Build the control flow plan
     pub fn build(self) -> ControlFlowPlan {
-        log::debug!("ControlFlowPlanBuilder::build starting for function {}", 
-                   self.cfg.function_index());
-        
+        log::debug!(
+            "ControlFlowPlanBuilder::build starting for function {}",
+            self.cfg.function_index()
+        );
+
         // Run call site analysis first
         log::debug!("Starting call site analysis...");
         let call_site_analysis =
             crate::analysis::call_site_analysis::CallSiteAnalysis::analyze(&self.cfg);
-        log::debug!("Call site analysis complete: {} call sites found", 
-                   call_site_analysis.call_sites.len());
+        log::debug!(
+            "Call site analysis complete: {} call sites found",
+            call_site_analysis.call_sites.len()
+        );
 
         // First build the structure
         let function_analysis = self.function_analysis;
@@ -228,51 +232,64 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         analysis: &crate::cfg::analysis::ConditionalAnalysis,
     ) -> StructureId {
         log::debug!("Building from {} conditional chains", analysis.chains.len());
-        
+
         // Build a sequence containing all conditional chains and unprocessed blocks
         let mut structures = Vec::new();
-        
+
         // Process each conditional chain
         for (i, chain) in analysis.chains.iter().enumerate() {
-            log::debug!("Processing conditional chain {}/{}", i + 1, analysis.chains.len());
-            
+            log::debug!(
+                "Processing conditional chain {}/{}",
+                i + 1,
+                analysis.chains.len()
+            );
+
             // Skip if this chain's blocks have already been processed
             // Check the first branch's condition block since chains don't have a single condition_block
-            let chain_already_processed = chain.branches.iter().any(|branch| {
-                self.processed_blocks.contains(&branch.condition_block)
-            });
-            
+            let chain_already_processed = chain
+                .branches
+                .iter()
+                .any(|branch| self.processed_blocks.contains(&branch.condition_block));
+
             if chain_already_processed {
                 log::debug!("  Chain {} already processed, skipping", i);
                 continue;
             }
-            
+
             let structure = self.build_conditional_structure(chain.clone());
             structures.push(structure);
         }
-        
+
         // Now collect any remaining unprocessed blocks
-        let all_blocks: Vec<NodeIndex> = self.cfg.graph().node_indices()
+        let all_blocks: Vec<NodeIndex> = self
+            .cfg
+            .graph()
+            .node_indices()
             .filter(|&idx| !self.cfg.graph()[idx].is_exit())
             .collect();
-        
-        log::debug!("Checking {} total blocks for unprocessed ones", all_blocks.len());
-        
+
+        log::debug!(
+            "Checking {} total blocks for unprocessed ones",
+            all_blocks.len()
+        );
+
         for &block in &all_blocks {
             if !self.processed_blocks.contains(&block) && !self.stop_blocks.contains(&block) {
                 log::debug!("  Found unprocessed block {}", block.index());
-                
+
                 // Create a basic block structure for this unprocessed block
                 if let Some(structure) = self.try_build_basic_block(block) {
                     structures.push(structure);
                 }
             } else if block.index() == 3 {
-                log::debug!("  Block 3 status: processed={}, stop={}", 
+                log::debug!(
+                    "  Block 3 status: processed={}, stop={}",
                     self.processed_blocks.contains(&block),
-                    self.stop_blocks.contains(&block));
+                    self.stop_blocks.contains(&block)
+                );
             }
         }
-        
+
         // If we have multiple structures, wrap them in a sequence
         match structures.len() {
             0 => self.plan.create_structure(ControlFlowKind::Empty),
@@ -284,7 +301,8 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                     .into_iter()
                     .map(|id| SequentialElement::Structure(id))
                     .collect();
-                self.plan.create_structure(ControlFlowKind::Sequential { elements })
+                self.plan
+                    .create_structure(ControlFlowKind::Sequential { elements })
             }
         }
     }
@@ -2266,9 +2284,10 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     /// Try to build a basic block structure if it hasn't been processed yet
     fn try_build_basic_block(&mut self, block: NodeIndex) -> Option<StructureId> {
         // Check if this block exists and hasn't been processed
-        if block.index() < self.cfg.graph().node_count() && !self.processed_blocks.contains(&block) {
+        if block.index() < self.cfg.graph().node_count() && !self.processed_blocks.contains(&block)
+        {
             self.processed_blocks.insert(block);
-            
+
             let instruction_count = self.cfg.graph()[block].instructions().len();
             Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
                 block,

@@ -174,7 +174,7 @@ fn test_golden_patterns() {
 
     // Validate that test framework compiles and runs
     assert_eq!(GOLDEN_TEST_CASES.len(), 7);
-    
+
     // Use all fields to avoid warnings
     for tc in GOLDEN_TEST_CASES.iter() {
         println!("Test case: {} - {}", tc.name, tc.description);
@@ -184,9 +184,15 @@ fn test_golden_patterns() {
             println!("  Bail out reason: {}", reason);
         }
         match &tc.expected_pattern {
-            ExpectedPattern::Switch { case_count, has_default, discriminator_register } => {
-                println!("  Expected switch with {} cases, default: {}, discriminator: r{}", 
-                        case_count, has_default, discriminator_register);
+            ExpectedPattern::Switch {
+                case_count,
+                has_default,
+                discriminator_register,
+            } => {
+                println!(
+                    "  Expected switch with {} cases, default: {}, discriminator: r{}",
+                    case_count, has_default, discriminator_register
+                );
             }
             ExpectedPattern::BailOut(msg) => {
                 println!("  Expected to bail out: {}", msg);
@@ -196,7 +202,7 @@ fn test_golden_patterns() {
             }
         }
     }
-    
+
     assert!(GOLDEN_TEST_CASES.iter().any(|tc| !tc.should_bail_out));
     assert!(GOLDEN_TEST_CASES.iter().any(|tc| tc.should_bail_out));
 }
@@ -304,14 +310,15 @@ fn test_comprehensive_bailouts() {
     ];
 
     for scenario in &bailout_scenarios {
-        let test_case = EDGE_CASE_TESTS
-            .iter()
-            .find(|t| t.name == *scenario);
-        
+        let test_case = EDGE_CASE_TESTS.iter().find(|t| t.name == *scenario);
+
         // Just validate the test data exists and is marked as bail-out
         if let Some(test_case) = test_case {
-            assert!(test_case.should_bail_out, 
-                   "Scenario {} should be marked as bail-out", scenario);
+            assert!(
+                test_case.should_bail_out,
+                "Scenario {} should be marked as bail-out",
+                scenario
+            );
         }
     }
 }

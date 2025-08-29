@@ -920,8 +920,12 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
         // Pre-compute implicit arguments for better performance
         let implicit_args_start = std::time::Instant::now();
-        self.usage_tracker.precompute_implicit_arguments(&self.plan.call_site_analysis);
-        log::debug!("Pre-computed implicit arguments in {:?}", implicit_args_start.elapsed());
+        self.usage_tracker
+            .precompute_implicit_arguments(&self.plan.call_site_analysis);
+        log::debug!(
+            "Pre-computed implicit arguments in {:?}",
+            implicit_args_start.elapsed()
+        );
 
         // Track which SSA values need declarations and where
         let mut declaration_points: HashMap<NodeIndex, Vec<DuplicatedSSAValue>> = HashMap::new();

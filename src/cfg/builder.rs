@@ -96,7 +96,10 @@ impl<'a> CfgBuilder<'a> {
         self.add_edges(&mut graph, jump_table);
 
         // Add exception handler edges
-        log::debug!("Adding exception handler edges for function {}...", self.function_index);
+        log::debug!(
+            "Adding exception handler edges for function {}...",
+            self.function_index
+        );
         self.add_exception_handler_edges(&mut graph);
         log::debug!("Exception handler edges added, CFG build complete for function {} - {} nodes, {} edges", 
                    self.function_index, graph.node_count(), graph.edge_count());
@@ -262,12 +265,19 @@ impl<'a> CfgBuilder<'a> {
             .get_parsed_header(self.function_index)
         {
             let total_handlers = parsed_header.exc_handlers.len();
-            log::debug!("Processing {} exception handlers for function {}", 
-                       total_handlers, self.function_index);
-            
+            log::debug!(
+                "Processing {} exception handlers for function {}",
+                total_handlers,
+                self.function_index
+            );
+
             for (handler_idx, handler) in parsed_header.exc_handlers.iter().enumerate() {
-                log::debug!("Processing exception handler {}/{} for function {}", 
-                           handler_idx + 1, total_handlers, self.function_index);
+                log::debug!(
+                    "Processing exception handler {}/{} for function {}",
+                    handler_idx + 1,
+                    total_handlers,
+                    self.function_index
+                );
                 // Convert byte offsets to instruction indices using jump table
                 if let Some(try_start_idx) = self
                     .hbc_file

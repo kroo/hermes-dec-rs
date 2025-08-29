@@ -55,8 +55,11 @@ impl<'a> HbcAnalysis<'a> {
         &mut self,
         function_index: u32,
     ) -> Result<&FunctionAnalysis<'a>, String> {
-        log::debug!("HbcAnalysis::get_function_analysis for function {}", function_index);
-        
+        log::debug!(
+            "HbcAnalysis::get_function_analysis for function {}",
+            function_index
+        );
+
         // Check cache first
         if self.function_analyses.contains_key(&function_index) {
             log::debug!("Function {} already in cache", function_index);
@@ -70,13 +73,21 @@ impl<'a> HbcAnalysis<'a> {
             .functions
             .get(function_index, self.hbc_file)
             .map_err(|e| format!("Function {} not found: {:?}", function_index, e))?;
-        log::debug!("Got function {} with {} instructions", function_index, function.instructions.len());
+        log::debug!(
+            "Got function {} with {} instructions",
+            function_index,
+            function.instructions.len()
+        );
 
         // Build CFG
         log::debug!("Building CFG for function {}...", function_index);
         let mut cfg = crate::cfg::Cfg::new(self.hbc_file, function_index);
         cfg.build();
-        log::debug!("CFG built for function {} - {} nodes", function_index, cfg.graph().node_count());
+        log::debug!(
+            "CFG built for function {} - {} nodes",
+            function_index,
+            cfg.graph().node_count()
+        );
 
         // Build SSA
         log::debug!("Building SSA for function {}...", function_index);
@@ -85,12 +96,18 @@ impl<'a> HbcAnalysis<'a> {
         log::debug!("SSA built for function {}", function_index);
 
         // Create function analysis
-        log::debug!("Creating function analysis for function {}...", function_index);
+        log::debug!(
+            "Creating function analysis for function {}...",
+            function_index
+        );
         let analysis = FunctionAnalysis::new(function, cfg, ssa, self.hbc_file, function_index);
 
         // Cache it
         self.function_analyses.insert(function_index, analysis);
-        log::debug!("Function analysis created and cached for function {}", function_index);
+        log::debug!(
+            "Function analysis created and cached for function {}",
+            function_index
+        );
 
         // Return reference
         Ok(&self.function_analyses[&function_index])

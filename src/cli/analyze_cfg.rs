@@ -34,7 +34,8 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
     // Build SSA for the function (lazy analysis)
     let ssa = GlobalSSAAnalyzer::analyze(&hbc_file)?;
     // Force analysis of the requested function
-    ssa.analyzer().ensure_function_analyzed_lazy(function_index as u32);
+    ssa.analyzer()
+        .ensure_function_analyzed_lazy(function_index as u32);
     let fn_ssa = ssa.analyzer().get_function_analysis(function_index as u32);
 
     // Perform variable analysis
@@ -275,7 +276,8 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
         } else {
             String::new()
         };
-        let phi_functions = fn_ssa.as_ref()
+        let phi_functions = fn_ssa
+            .as_ref()
             .map(|ssa| ssa.get_phi_functions(block_idx).to_vec())
             .unwrap_or_default();
 
