@@ -154,9 +154,9 @@ impl Decompiler {
             return Ok(self.function_cache[&function_index].clone());
         }
 
-        // Ensure global analysis is run
+        // Ensure global analysis is run (lazy - functions analyzed on demand)
         if self.global_analysis.is_none() {
-            log::debug!("Running global analysis for decompiler...");
+            log::debug!("Running global analysis for decompiler");
             let global_result = match GlobalSSAAnalyzer::analyze(hbc_file) {
                 Ok(result) => result,
                 Err(e) => {

@@ -31,8 +31,10 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
     let mut cfg = Cfg::new(&hbc_file, function_index as u32);
     cfg.build();
 
-    // Build SSA for the function
+    // Build SSA for the function (lazy analysis)
     let ssa = GlobalSSAAnalyzer::analyze(&hbc_file)?;
+    // Force analysis of the requested function
+    ssa.analyzer().ensure_function_analyzed_lazy(function_index as u32);
     let fn_ssa = ssa.analyzer().get_function_analysis(function_index as u32);
 
     // Perform variable analysis
@@ -122,7 +124,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
 
         // Print detailed switch information
         for (i, region) in analysis.regions.iter().enumerate() {
-            print_switch_region(&region, i, &cfg, fn_ssa, &hbc_file);
+            print_switch_region(&region, i, &cfg, fn_ssa.as_ref(), &hbc_file);
         }
     } else {
         println!("\nNo switch patterns found in this function.");
@@ -130,7 +132,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
 
     // Print verbose analysis if requested
     if verbose && fn_ssa.is_some() {
-        let ssa = fn_ssa.unwrap();
+        let ssa = fn_ssa.clone().unwrap();
 
         println!("Dominance Frontiers:");
         for block_idx in cfg.block_order() {
@@ -245,7 +247,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                     if let Some(switch_info) = analyzer.detect_switch_pattern(
                         region.dispatch,
                         &cfg,
-                        fn_ssa.unwrap(),
+                        &fn_ssa.clone().unwrap(),
                         &postdom,
                     ) {
                         all_switch_infos.push(Some(switch_info));
@@ -273,11 +275,9 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
         } else {
             String::new()
         };
-        let phi_functions = if let Some(ssa) = &fn_ssa {
-            ssa.get_phi_functions(block_idx)
-        } else {
-            &[]
-        };
+        let phi_functions = fn_ssa.as_ref()
+            .map(|ssa| ssa.get_phi_functions(block_idx).to_vec())
+            .unwrap_or_default();
 
         if block.is_exit() {
             println!("Block {} (EXIT)", block_idx.index());
@@ -347,7 +347,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
             }
         }
 
-        for phi_function in phi_functions {
+        for phi_function in &phi_functions {
             println!("  Phi function: {}", phi_function.format_phi_function());
         }
 
@@ -389,7 +389,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
 
             println!("{}", instruction_line);
 
-            if let Some(func_ssa) = fn_ssa {
+            if let Some(ref func_ssa) = fn_ssa {
                 let definition = func_ssa
                     .definitions
                     .iter()
