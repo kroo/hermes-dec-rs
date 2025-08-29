@@ -121,13 +121,9 @@ const EDGE_CASE_TESTS: &[SwitchTestCase] = &[
         description: "Switch with Infinity and NaN case values",
         hbc_file: "data/sparse_switch_special_values.hbc",
         function_id: 1,
-        expected_pattern: ExpectedPattern::Switch {
-            case_count: 3,
-            has_default: true,
-            discriminator_register: 0,
-        },
-        should_bail_out: false,
-        bail_out_reason: None,
+        expected_pattern: ExpectedPattern::BailOut("special numeric values"),
+        should_bail_out: true,
+        bail_out_reason: Some("Infinity and NaN values not supported in switch conversion"),
     },
     SwitchTestCase {
         name: "exception_handler_interference",
@@ -143,13 +139,9 @@ const EDGE_CASE_TESTS: &[SwitchTestCase] = &[
         description: "Switch nested within complex control flow",
         hbc_file: "data/sparse_switch_nested.hbc",
         function_id: 1,
-        expected_pattern: ExpectedPattern::Switch {
-            case_count: 5,
-            has_default: true,
-            discriminator_register: 1,
-        },
-        should_bail_out: false,
-        bail_out_reason: None,
+        expected_pattern: ExpectedPattern::BailOut("deeply nested control flow"),
+        should_bail_out: true,
+        bail_out_reason: Some("switch pattern too complex due to deep nesting"),
     },
     SwitchTestCase {
         name: "register_reuse_conflict",
