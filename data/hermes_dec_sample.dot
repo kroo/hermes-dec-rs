@@ -137,12 +137,12 @@ digraph {
     f5_n13 -> f5_n16 [label="Uncond"]
     f5_n14 -> f5_n16 [label="Uncond"]
     f5_n15 -> f5_n16 [label="Uncond"]
-    f5_n4 -> f5_n6 [label="Uncond"]
-    f5_n4 -> f5_n8 [label="Uncond"]
-    f5_n5 -> f5_n8 [label="Uncond"]
-    f5_n6 -> f5_n8 [label="Uncond"]
-    f5_n9 -> f5_n12 [label="Uncond"]
-    f5_n10 -> f5_n12 [label="Uncond"]
+    f5_n4 -> f5_n6 [label="Exception"]
+    f5_n4 -> f5_n8 [label="Exception"]
+    f5_n5 -> f5_n8 [label="Exception"]
+    f5_n6 -> f5_n8 [label="Exception"]
+    f5_n9 -> f5_n12 [label="Exception"]
+    f5_n10 -> f5_n12 [label="Exception"]
   }
 
   subgraph cluster_function_6 {

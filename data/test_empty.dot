@@ -1,0 +1,39 @@
+// CFG analysis for test_empty
+// Generated from data/test_empty.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-7)\l  0: DeclareGlobalVar  \"testEmpty\"\l  1: CreateEnvironment r0\l  2: CreateClosure     r1, r0, Function<testEmpty>1\l  3: GetGlobalObject   r0\l  4: PutById           r0, r1, 1, \"testEmpty\"\l  5: LoadConstUndefined r0\l  6: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstUInt8    r0, 10\l  2: JGreater          L1, r1, r0\l" ]
+    f1_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstString   r0, \"small\"\l  1: Ret               r0\l" ]
+    f1_n2 [ label = "Block 2 (PC 5-7) [L1]\l  0: LoadConstUndefined r0\l  1: Ret               r0\l" ]
+    f1_n3 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n2 [label="True"]
+    f1_n0 -> f1_n1 [label="False"]
+    f1_n1 -> f1_n3 [label="Uncond"]
+    f1_n2 -> f1_n3 [label="Uncond"]
+  }
+
+}
