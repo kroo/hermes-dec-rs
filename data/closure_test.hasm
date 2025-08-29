@@ -1,0 +1,228 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: ce71d615ce9e4b9ed5b4e28eeca589a8d8fc4ab5
+  Function count: 15
+  String count: 30
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 4
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..-1] #5CDBDF2B: 
+s1[ASCII, 0..25] #D21EC39E: ?anon_0_?anon_0_asyncInner
+s2[ASCII, 8..25] #AB2B14D4: ?anon_0_asyncInner
+s3[ASCII, 16..20] #1C35E808: async
+s4[ASCII, 16..25] #F3091991: asyncInner
+s5[ASCII, 26..51] #2094DEA9: ?anon_0_?anon_0_asyncOuter
+s6[ASCII, 34..51] #9D007186: ?anon_0_asyncOuter
+s7[ASCII, 52..73] #500B50F7: ?anon_0_generatorInner
+s8[ASCII, 60..68] #F682B53A: generator
+s9[ASCII, 60..73] #629A2BFD: generatorInner
+s10[ASCII, 74..95] #807C5F3D: ?anon_0_generatorOuter
+s11[ASCII, 96..107] #B94C2B21: anotherInner
+s12[ASCII, 110..115] #713A6BCE: global
+s13[ASCII, 120..124] hello
+s14[ASCII, 120..125] hello 
+s15[ASCII, 120..130] hello world
+s16[ASCII, 131..143] innerFunction
+s17[ASCII, 42..51] asyncOuter
+s18[ASCII, 82..95] generatorOuter
+s19[ASCII, 96..102] another
+s20[ASCII, 108..110] log
+s21[ASCII, 110..119] globalThis
+s22[ASCII, 131..135] inner
+s23[ASCII, 144..150] Promise
+s24[ASCII, 149..158] setTimeout
+s25[ASCII, 156..168] outerFunction
+s26[ASCII, 169..175] console
+s27[ASCII, 176..184] prototype
+s28[ASCII, 185..196] testClosures
+s29[ASCII, 197..207] toUpperCase
+
+Array Buffer:
+
+Function Source Table:
+  Function ID 6 -> s0
+  Function ID 9 -> s0
+  Function ID 12 -> s0
+  Function ID 14 -> s0
+
+Function<global>0(1 params, 4 registers, 0 symbols):
+  DeclareGlobalVar  "outerFunction"
+  DeclareGlobalVar  "asyncOuter"
+  DeclareGlobalVar  "generatorOuter"
+  CreateEnvironment r0
+  CreateClosure     r1, r0, Function<outerFunction>1
+  GetGlobalObject   r2
+  PutById           r2, r1, 1, "outerFunction"
+  CreateAsyncClosure r1, r0, Function<asyncOuter>4
+  PutById           r2, r1, 2, "asyncOuter"
+  CreateGeneratorClosure r0, r0, Function<generatorOuter>11
+  PutById           r2, r0, 3, "generatorOuter"
+  TryGetById        r1, r2, 1, "globalThis"
+  NewObject         r0
+  GetByIdShort      r3, r2, 2, "outerFunction"
+  PutNewOwnByIdShort r0, r3, "outerFunction"
+  GetByIdShort      r3, r2, 3, "asyncOuter"
+  PutNewOwnByIdShort r0, r3, "asyncOuter"
+  GetByIdShort      r2, r2, 4, "generatorOuter"
+  PutNewOwnByIdShort r0, r2, "generatorOuter"
+  PutById           r1, r0, 4, "testClosures"
+  Ret               r0
+
+Function<outerFunction>1(1 params, 3 registers, 0 symbols):
+  CreateEnvironment r1
+  NewObject         r0
+  CreateClosure     r2, r1, Function<innerFunction>2
+  PutNewOwnByIdShort r0, r2, "inner"
+  CreateClosure     r1, r1, Function<anotherInner>3
+  PutNewOwnByIdShort r0, r1, "another"
+  Ret               r0
+
+Function<innerFunction>2(1 params, 11 registers, 0 symbols):
+  GetGlobalObject   r0
+  TryGetById        r2, r0, 1, "console"
+  GetByIdShort      r1, r2, 2, "log"
+  LoadConstString   r0, "hello world"
+  Call2             r0, r1, r2, r0
+  LoadConstUInt8    r0, 42
+  Ret               r0
+
+Function<anotherInner>3(1 params, 9 registers, 0 symbols):
+  LoadConstString   r1, "hello"
+  GetByIdShort      r0, r1, 1, "toUpperCase"
+  Call1             r1, r0, r1
+  LoadConstString   r0, "hello "
+  Add               r0, r0, r1
+  Ret               r0
+
+NCFunction<asyncOuter>4(1 params, 15 registers, 0 symbols):
+  LoadConstUndefined r4
+  LoadConstUndefined r0
+  ReifyArguments    r0
+  Mov               r3, r0
+  GetBuiltinClosure r2, 52
+  CreateEnvironment r0
+  CreateGeneratorClosure r1, r0, Function<?anon_0_asyncOuter>5
+  LoadThisNS        r0
+  Call4             r0, r2, r4, r1, r0, r3
+  Ret               r0
+
+NCFunction<?anon_0_asyncOuter>5(1 params, 1 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateGenerator   r0, r0, Function<?anon_0_?anon_0_asyncOuter>6
+  Ret               r0
+
+Function<?anon_0_?anon_0_asyncOuter>6(1 params, 2 registers, 0 symbols):
+  StartGenerator    
+  ResumeGenerator   r0, r1
+  JmpTrue           L1, r1
+  CreateEnvironment r1
+  CreateAsyncClosure r1, r1, Function<asyncInner>7
+  CompleteGenerator 
+  Ret               r1
+L1:
+  CompleteGenerator 
+  Ret               r0
+
+NCFunction<asyncInner>7(1 params, 15 registers, 0 symbols):
+  LoadConstUndefined r4
+  LoadConstUndefined r0
+  ReifyArguments    r0
+  Mov               r3, r0
+  GetBuiltinClosure r2, 52
+  CreateEnvironment r0
+  CreateGeneratorClosure r1, r0, Function<?anon_0_asyncInner>8
+  LoadThisNS        r0
+  Call4             r0, r2, r4, r1, r0, r3
+  Ret               r0
+
+NCFunction<?anon_0_asyncInner>8(1 params, 1 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateGenerator   r0, r0, Function<?anon_0_?anon_0_asyncInner>9
+  Ret               r0
+
+Function<?anon_0_?anon_0_asyncInner>9(1 params, 12 registers, 0 symbols):
+  StartGenerator    
+  ResumeGenerator   r0, r1
+  JmpTrue           L1, r1
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "Promise"
+  GetByIdShort      r1, r3, 2, "prototype"
+  CreateThis        r2, r1, r3
+  CreateEnvironment r1
+  CreateClosure     r4, r1, Function<>10
+  Mov               r5, r2
+  Construct         r1, r3, 2
+  SelectObject      r1, r2, r1
+  SaveGenerator     [4]
+  Ret               r1
+  ResumeGenerator   r1, r2
+  JmpTrue           L2, r2
+  LoadConstString   r2, "async"
+  CompleteGenerator 
+  Ret               r2
+L2:
+  CompleteGenerator 
+  Ret               r1
+L1:
+  CompleteGenerator 
+  Ret               r0
+
+NCFunction<>10(2 params, 13 registers, 0 symbols):
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "setTimeout"
+  LoadConstUndefined r2
+  LoadParam         r1, 1
+  LoadConstUInt8    r0, 100
+  Call3             r0, r3, r2, r1, r0
+  Ret               r0
+
+NCFunction<generatorOuter>11(1 params, 1 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateGenerator   r0, r0, Function<?anon_0_generatorOuter>12
+  Ret               r0
+
+Function<?anon_0_generatorOuter>12(1 params, 2 registers, 0 symbols):
+  StartGenerator    
+  ResumeGenerator   r0, r1
+  JmpTrue           L1, r1
+  CreateEnvironment r1
+  CreateGeneratorClosure r1, r1, Function<generatorInner>13
+  CompleteGenerator 
+  Ret               r1
+L1:
+  CompleteGenerator 
+  Ret               r0
+
+NCFunction<generatorInner>13(1 params, 1 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateGenerator   r0, r0, Function<?anon_0_generatorInner>14
+  Ret               r0
+
+Function<?anon_0_generatorInner>14(1 params, 3 registers, 0 symbols):
+  StartGenerator    
+  ResumeGenerator   r0, r1
+  JmpTrue           L1, r1
+  LoadConstString   r1, "generator"
+  SaveGenerator     [4]
+  Ret               r1
+  ResumeGenerator   r1, r2
+  JmpTrue           L2, r2
+  LoadConstUndefined r2
+  CompleteGenerator 
+  Ret               r2
+L2:
+  CompleteGenerator 
+  Ret               r1
+L1:
+  CompleteGenerator 
+  Ret               r0
+

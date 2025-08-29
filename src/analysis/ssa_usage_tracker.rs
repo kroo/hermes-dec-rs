@@ -7,7 +7,7 @@ use crate::analysis::{ConstantValue, FunctionAnalysis, TrackedValue};
 use crate::cfg::ssa::types::{
     DuplicatedSSAValue, DuplicationContext, RegisterUse, SSAAnalysis, SSAValue,
 };
-use log::debug;
+use log::{debug, trace};
 use petgraph::algo::dominators::Dominators;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
@@ -23,6 +23,9 @@ pub struct SSAUsageTracker<'a> {
     /// Cache of constant values for duplicated SSA values
     /// This is populated when we first analyze an SSA value
     constant_cache: HashMap<DuplicatedSSAValue, ConstantValue>,
+    
+    /// Cache of SSA values that are implicit arguments (pre-computed for performance)
+    implicit_arguments_cache: Option<HashSet<SSAValue>>,
 }
 
 /// The usage status of an SSA value
@@ -88,6 +91,7 @@ impl<'a> SSAUsageTracker<'a> {
             function_analysis,
             consumed_uses: HashMap::new(),
             constant_cache: HashMap::new(),
+            implicit_arguments_cache: None,
         }
     }
 
@@ -96,12 +100,44 @@ impl<'a> SSAUsageTracker<'a> {
         &self.function_analysis.ssa
     }
 
+    /// Pre-compute all SSA values that are implicit arguments
+    /// This significantly improves performance for functions with many SSA values
+    pub fn precompute_implicit_arguments(
+        &mut self,
+        call_site_analysis: &crate::analysis::call_site_analysis::CallSiteAnalysis,
+    ) {
+        let mut implicit_args = HashSet::new();
+        
+        // For each call site, find which SSA values are implicit arguments
+        for ((_block_id, instr_idx), call_info) in &call_site_analysis.call_sites {
+            // For each argument register at this call site
+            for &arg_register in &call_info.argument_registers {
+                // Find the SSA value that's active at this register at this call
+                if let Some(ssa_value) = self
+                    .ssa()
+                    .get_value_before_instruction(arg_register, *instr_idx)
+                {
+                    implicit_args.insert(ssa_value.clone());
+                }
+            }
+        }
+        
+        log::debug!("Pre-computed {} implicit argument SSA values", implicit_args.len());
+        self.implicit_arguments_cache = Some(implicit_args);
+    }
+
     /// Check if an SSA value is used as an implicit argument in a Call/Construct instruction
     fn is_implicit_argument(
         &self,
         ssa_value: &SSAValue,
         call_site_analysis: Option<&crate::analysis::call_site_analysis::CallSiteAnalysis>,
     ) -> bool {
+        // If we have a pre-computed cache, use it
+        if let Some(ref cache) = self.implicit_arguments_cache {
+            return cache.contains(ssa_value);
+        }
+        
+        // Otherwise, fall back to the old implementation (for backwards compatibility)
         // If we don't have call site analysis, assume not an implicit argument
         let Some(call_site_analysis) = call_site_analysis else {
             return false;
@@ -121,7 +157,7 @@ impl<'a> SSAUsageTracker<'a> {
                     // This SSA value is active at this call site
                     // Check if its register is in the argument list
                     if call_info.argument_registers.contains(&register) {
-                        debug!(
+                        trace!(
                             "SSA value {} (r{}) is used as implicit argument at block {:?} instruction {:?}",
                             ssa_value.name(), register, block_id, instr_idx.0
                         );
@@ -352,7 +388,7 @@ impl<'a> SSAUsageTracker<'a> {
     ) -> bool {
         // First check if this value is used as an implicit argument in a Call/Construct
         if self.is_implicit_argument(dup_ssa_value.original_ssa_value(), call_site_analysis) {
-            debug!(
+            trace!(
                 "{} is used as an implicit argument, not eliminated",
                 dup_ssa_value.original_ssa_value()
             );
@@ -362,7 +398,7 @@ impl<'a> SSAUsageTracker<'a> {
         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
 
         if all_uses.is_empty() {
-            debug!(
+            trace!(
                 "{} has no uses, eliminated",
                 dup_ssa_value.original_ssa_value()
             );
@@ -373,7 +409,7 @@ impl<'a> SSAUsageTracker<'a> {
         // Check if all uses have been consumed
         if let Some(consumed) = self.consumed_uses.get(dup_ssa_value) {
             let is_eliminated = all_uses.iter().all(|use_site| consumed.contains(use_site));
-            debug!(
+            trace!(
                 "{} has {} uses, {} consumed, eliminated: {}",
                 dup_ssa_value.original_ssa_value(),
                 all_uses.len(),
@@ -382,7 +418,7 @@ impl<'a> SSAUsageTracker<'a> {
             );
             is_eliminated
         } else {
-            debug!(
+            trace!(
                 "{} has {} uses, 0 consumed, not eliminated",
                 dup_ssa_value.original_ssa_value(),
                 all_uses.len()
@@ -432,7 +468,7 @@ impl<'a> SSAUsageTracker<'a> {
                                 call_site_analysis,
                             )
                         {
-                            debug!(
+                            trace!(
                                 "SSA value {} has side effects but no uses, using SideEffectOnly",
                                 ssa_value
                             );
@@ -464,7 +500,7 @@ impl<'a> SSAUsageTracker<'a> {
         // might have no direct uses but still need to generate assignments
         if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
             if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
-                debug!(
+                trace!(
                     "{} is part of PHI group with representative {}",
                     ssa_value, coalesced_rep
                 );
@@ -729,19 +765,30 @@ impl<'a> SSAUsageTracker<'a> {
         &mut self,
         duplicated_blocks: &HashMap<NodeIndex, Vec<DuplicationContext>>,
     ) {
+        let start_time = std::time::Instant::now();
+        let total_ssa_values = self.ssa().all_ssa_values().count();
+        log::debug!("Starting cascading elimination for {} SSA values", total_ssa_values);
+        
         let mut changed = true;
         let max_iterations = 10; // Prevent infinite loops
         let mut iterations = 0;
 
         while changed && iterations < max_iterations {
+            let iteration_start = std::time::Instant::now();
             changed = false;
             iterations += 1;
 
             // Collect SSA values that are now fully eliminated
             let mut newly_eliminated = Vec::new();
+            let mut values_checked = 0;
 
             // Check all SSA values to see if they've become fully eliminated
             for ssa_value in self.ssa().all_ssa_values() {
+                values_checked += 1;
+                if values_checked % 1000 == 0 {
+                    log::trace!("  Checked {}/{} values in iteration {}", 
+                               values_checked, total_ssa_values, iterations);
+                }
                 if !self.is_fully_eliminated(ssa_value) {
                     continue;
                 }
@@ -811,6 +858,7 @@ impl<'a> SSAUsageTracker<'a> {
             }
 
             // Mark newly eliminated values as consumed with appropriate context
+            let num_eliminated = newly_eliminated.len();
             for (ssa_value, uses) in newly_eliminated {
                 // Check if ANY of the uses are in duplicated blocks
                 let has_duplicated_use = uses
@@ -837,8 +885,16 @@ impl<'a> SSAUsageTracker<'a> {
                 }
                 changed = true;
             }
+            
+            let iteration_time = iteration_start.elapsed();
+            log::debug!("  Iteration {} completed in {:?}, {} values eliminated", 
+                       iterations, iteration_time, num_eliminated);
         }
 
+        let total_time = start_time.elapsed();
+        log::info!("Cascading elimination completed in {:?} ({} iterations, {} SSA values)", 
+                  total_time, iterations, total_ssa_values);
+        
         if iterations >= max_iterations {
             log::warn!("Cascading elimination reached maximum iterations - possible cycle");
         }

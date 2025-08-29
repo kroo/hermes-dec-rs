@@ -1,0 +1,170 @@
+Disassembled to test_closure_real.hasm
+ersion number: 96
+  Source hash: 7b3034eb67de4459dd958c03be45f0995fb7764a
+  Function count: 11
+  String count: 21
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..0] #AB2B14D4:  
+s1[ASCII, 1..12] #20D8E712: anotherInner
+s2[ASCII, 13..17] #B94C2B21: world
+s3[ASCII, 17..28] #F3091991: deeplyNested
+s4[ASCII, 48..53] #1C35E808: global
+s5[ASCII, 58..62] #CC29D6D5: hello
+s6[ASCII, 79..91] #2D543DB8: innerFunction
+s7[ASCII, 1..7] #D5D571C5: another
+s8[ASCII, 28..36] #2094DEA9: decrement
+s9[ASCII, 36..47] #629A2BFD: testClosures
+s10[ASCII, 48..57] #039161D5: globalThis
+s11[ASCII, 61..63] #24B6CCBE: log
+s12[ASCII, 63..65] #713A6BCE: get
+s13[ASCII, 63..68] #F682B53A: getNum
+s14[ASCII, 68..78] makeCounter
+s15[ASCII, 79..83] inner
+s16[ASCII, 92..98] console
+s17[ASCII, 99..106] getOuter
+s18[ASCII, 107..115] increment
+s19[ASCII, 115..125] toUpperCase
+s20[ASCII, 126..138] outerFunction
+
+Array Buffer:
+
+Function<global>0(1 params, 4 registers, 0 symbols):
+  DeclareGlobalVar  "outerFunction"
+  DeclareGlobalVar  "makeCounter"
+  CreateEnvironment r0
+  CreateClosure     r1, r0, Function<outerFunction>1
+  GetGlobalObject   r2
+  PutById           r2, r1, 1, "outerFunction"
+  CreateClosure     r0, r0, Function<makeCounter>7
+  PutById           r2, r0, 2, "makeCounter"
+  TryGetById        r1, r2, 1, "globalThis"
+  NewObject         r0
+  GetByIdShort      r3, r2, 2, "outerFunction"
+  PutNewOwnByIdShort r0, r3, "outerFunction"
+  GetByIdShort      r2, r2, 3, "makeCounter"
+  PutNewOwnByIdShort r0, r2, "makeCounter"
+  PutById           r1, r0, 3, "testClosures"
+  Ret               r0
+
+Function<outerFunction>1(2 params, 3 registers, 2 symbols):
+  CreateEnvironment r1
+  LoadParam         r2, 1
+  LoadConstString   r0, "hello"
+  Add               r0, r0, r2
+  StoreToEnvironment r1, 0, r0
+  LoadConstUInt8    r0, 42
+  Add               r0, r0, r2
+  StoreToEnvironment r1, 1, r0
+  NewObject         r0
+  CreateClosure     r2, r1, Function<innerFunction>2
+  PutNewOwnByIdShort r0, r2, "inner"
+  CreateClosure     r2, r1, Function<anotherInner>3
+  PutNewOwnByIdShort r0, r2, "another"
+  CreateClosure     r2, r1, Function<getOuter>5
+  PutNewOwnByIdShort r0, r2, "getOuter"
+  CreateClosure     r1, r1, Function<getNum>6
+  PutNewOwnByIdShort r0, r1, "getNum"
+  Ret               r0
+
+Function<innerFunction>2(2 params, 14 registers, 0 symbols):
+  LoadParam         r1, 1
+  GetEnvironment    r0, 0
+  LoadFromEnvironment r2, r0, 0
+  Add               r2, r2, r1
+  StoreToEnvironment r0, 0, r2
+  GetGlobalObject   r2
+  TryGetById        r4, r2, 1, "console"
+  GetByIdShort      r3, r4, 2, "log"
+  LoadFromEnvironment r5, r0, 0
+  LoadConstString   r2, " "
+  Add               r5, r5, r2
+  LoadConstString   r2, "world"
+  Add               r2, r5, r2
+  Call2             r2, r3, r4, r2
+  LoadFromEnvironment r0, r0, 1
+  Add               r0, r0, r1
+  Ret               r0
+
+Function<anotherInner>3(2 params, 11 registers, 1 symbols):
+  CreateEnvironment r0
+  GetEnvironment    r2, 0
+  LoadFromEnvironment r3, r2, 0
+  GetByIdShort      r1, r3, 1, "toUpperCase"
+  Call1             r1, r1, r3
+  StoreToEnvironment r0, 0, r1
+  LoadFromEnvironment r3, r2, 1
+  LoadParam         r1, 1
+  Mul               r1, r3, r1
+  StoreToEnvironment r2, 1, r1
+  CreateClosure     r0, r0, Function<deeplyNested>4
+  Ret               r0
+
+Function<deeplyNested>4(2 params, 4 registers, 0 symbols):
+  GetEnvironment    r1, 1
+  LoadFromEnvironment r2, r1, 0
+  LoadParam         r0, 1
+  Add               r0, r2, r0
+  StoreToEnvironment r1, 0, r0
+  GetEnvironment    r2, 0
+  LoadFromEnvironment r3, r2, 0
+  LoadConstString   r2, " "
+  Add               r0, r0, r2
+  Add               r0, r0, r3
+  LoadFromEnvironment r1, r1, 1
+  Add               r0, r0, r2
+  Add               r0, r0, r1
+  Ret               r0
+
+Function<getOuter>5(1 params, 1 registers, 0 symbols):
+  GetEnvironment    r0, 0
+  LoadFromEnvironment r0, r0, 0
+  Ret               r0
+
+Function<getNum>6(1 params, 1 registers, 0 symbols):
+  GetEnvironment    r0, 0
+  LoadFromEnvironment r0, r0, 1
+  Ret               r0
+
+Function<makeCounter>7(1 params, 3 registers, 1 symbols):
+  CreateEnvironment r1
+  LoadConstZero     r0
+  StoreNPToEnvironment r1, 0, r0
+  NewObject         r0
+  CreateClosure     r2, r1, Function<increment>8
+  PutNewOwnByIdShort r0, r2, "increment"
+  CreateClosure     r2, r1, Function<decrement>9
+  PutNewOwnByIdShort r0, r2, "decrement"
+  CreateClosure     r1, r1, Function<get>10
+  PutNewOwnByIdShort r0, r1, "get"
+  Ret               r0
+
+Function<increment>8(1 params, 2 registers, 0 symbols):
+  GetEnvironment    r1, 0
+  LoadFromEnvironment r0, r1, 0
+  Inc               r0, r0
+  StoreToEnvironment r1, 0, r0
+  Ret               r0
+
+Function<decrement>9(1 params, 2 registers, 0 symbols):
+  GetEnvironment    r1, 0
+  LoadFromEnvironment r0, r1, 0
+  Dec               r0, r0
+  StoreToEnvironment r1, 0, r0
+  Ret               r0
+
+Function<get>10(1 params, 1 registers, 0 symbols):
+  GetEnvironment    r0, 0
+  LoadFromEnvironment r0, r0, 0
+  Ret               r0
+
