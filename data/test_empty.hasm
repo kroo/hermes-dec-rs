@@ -1,0 +1,42 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 49e6712ba9bbe4f5e28bc231350f729e54b0e6aa
+  Function count: 2
+  String count: 3
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..5] #A35D7E58: global
+s1[ASCII, 6..10] small
+s2[ASCII, 11..19] testEmpty
+
+Array Buffer:
+
+Function<global>0(1 params, 2 registers, 0 symbols):
+  DeclareGlobalVar  "testEmpty"
+  CreateEnvironment r0
+  CreateClosure     r1, r0, Function<testEmpty>1
+  GetGlobalObject   r0
+  PutById           r0, r1, 1, "testEmpty"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<testEmpty>1(2 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadConstUInt8    r0, 10
+  JGreater          L1, r1, r0
+  LoadConstString   r0, "small"
+  Ret               r0
+L1:
+  LoadConstUndefined r0
+  Ret               r0
+

@@ -4,9 +4,12 @@
 //! enabling smart decisions about variable declaration and constant folding.
 
 use crate::analysis::{ConstantValue, FunctionAnalysis, TrackedValue};
-use crate::cfg::ssa::types::{DuplicatedSSAValue, RegisterUse, SSAAnalysis, SSAValue};
-use log::debug;
+use crate::cfg::ssa::types::{
+    DuplicatedSSAValue, DuplicationContext, RegisterUse, SSAAnalysis, SSAValue,
+};
+use log::{debug, trace};
 use petgraph::algo::dominators::Dominators;
+use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
 /// Tracks the usage status of SSA values during AST generation
@@ -20,6 +23,9 @@ pub struct SSAUsageTracker<'a> {
     /// Cache of constant values for duplicated SSA values
     /// This is populated when we first analyze an SSA value
     constant_cache: HashMap<DuplicatedSSAValue, ConstantValue>,
+
+    /// Cache of SSA values that are implicit arguments (pre-computed for performance)
+    implicit_arguments_cache: Option<HashSet<SSAValue>>,
 }
 
 /// The usage status of an SSA value
@@ -85,12 +91,86 @@ impl<'a> SSAUsageTracker<'a> {
             function_analysis,
             consumed_uses: HashMap::new(),
             constant_cache: HashMap::new(),
+            implicit_arguments_cache: None,
         }
     }
 
     /// Get the SSA analysis
     fn ssa(&self) -> &SSAAnalysis {
         &self.function_analysis.ssa
+    }
+
+    /// Pre-compute all SSA values that are implicit arguments
+    /// This significantly improves performance for functions with many SSA values
+    pub fn precompute_implicit_arguments(
+        &mut self,
+        call_site_analysis: &crate::analysis::call_site_analysis::CallSiteAnalysis,
+    ) {
+        let mut implicit_args = HashSet::new();
+
+        // For each call site, find which SSA values are implicit arguments
+        for ((_block_id, instr_idx), call_info) in &call_site_analysis.call_sites {
+            // For each argument register at this call site
+            for &arg_register in &call_info.argument_registers {
+                // Find the SSA value that's active at this register at this call
+                if let Some(ssa_value) = self
+                    .ssa()
+                    .get_value_before_instruction(arg_register, *instr_idx)
+                {
+                    implicit_args.insert(ssa_value.clone());
+                }
+            }
+        }
+
+        log::debug!(
+            "Pre-computed {} implicit argument SSA values",
+            implicit_args.len()
+        );
+        self.implicit_arguments_cache = Some(implicit_args);
+    }
+
+    /// Check if an SSA value is used as an implicit argument in a Call/Construct instruction
+    fn is_implicit_argument(
+        &self,
+        ssa_value: &SSAValue,
+        call_site_analysis: Option<&crate::analysis::call_site_analysis::CallSiteAnalysis>,
+    ) -> bool {
+        // If we have a pre-computed cache, use it
+        if let Some(ref cache) = self.implicit_arguments_cache {
+            return cache.contains(ssa_value);
+        }
+
+        // Otherwise, fall back to the old implementation (for backwards compatibility)
+        // If we don't have call site analysis, assume not an implicit argument
+        let Some(call_site_analysis) = call_site_analysis else {
+            return false;
+        };
+
+        // Get the definition site of this SSA value to find its register
+        let register = ssa_value.def_site.register;
+
+        // Check all call sites to see if this register is used as an implicit argument
+        for ((block_id, instr_idx), call_info) in &call_site_analysis.call_sites {
+            // Check if this SSA value is defined before this call site and still active
+            if let Some(value_at_call) = self
+                .ssa()
+                .get_value_before_instruction(register, *instr_idx)
+            {
+                if *value_at_call == *ssa_value {
+                    // This SSA value is active at this call site
+                    // Check if its register is in the argument list
+                    if call_info.argument_registers.contains(&register) {
+                        trace!(
+                            "SSA value {} (r{}) is used as implicit argument at block {:?} instruction {:?}",
+                            ssa_value.name(), register, block_id, instr_idx.0
+                        );
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
     }
 
     /// Get all uses of an SSA value
@@ -108,11 +188,31 @@ impl<'a> SSAUsageTracker<'a> {
     }
 
     /// Mark a specific use of an SSA value as consumed (inlined)
+    /// Note: This method assumes the original (non-duplicated) context.
+    /// Use mark_use_consumed_with_context for duplicated contexts.
     pub fn mark_use_consumed(&mut self, ssa_value: &SSAValue, use_site: &RegisterUse) {
         self.mark_duplicated_use_consumed(
             &DuplicatedSSAValue::original(ssa_value.clone()),
             use_site,
         );
+    }
+
+    /// Mark a specific use of an SSA value as consumed with an optional duplication context
+    pub fn mark_use_consumed_with_context(
+        &mut self,
+        ssa_value: &SSAValue,
+        use_site: &RegisterUse,
+        context: Option<&DuplicationContext>,
+    ) {
+        let dup_value = if let Some(ctx) = context {
+            DuplicatedSSAValue {
+                original: ssa_value.clone(),
+                duplication_context: Some(ctx.clone()),
+            }
+        } else {
+            DuplicatedSSAValue::original(ssa_value.clone())
+        };
+        self.mark_duplicated_use_consumed(&dup_value, use_site);
     }
 
     /// Mark all uses in a list as consumed
@@ -141,10 +241,26 @@ impl<'a> SSAUsageTracker<'a> {
             use_site.instruction_idx.value()
         );
 
-        self.consumed_uses
+        let was_new = self
+            .consumed_uses
             .entry(dup_ssa_value.clone())
             .or_default()
             .insert(use_site.clone());
+
+        let name = dup_ssa_value.original_ssa_value().name();
+        if name.contains("r1") && name.contains("5") {
+            log::debug!(
+                "Marking {} use as consumed (was_new={}) (context: {}) at block {} instruction {}",
+                name,
+                was_new,
+                dup_ssa_value.context_description(),
+                use_site.block_id.index(),
+                use_site.instruction_idx.value()
+            );
+            if was_new {
+                log::debug!("Stack trace: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
     }
 
     /// Mark all uses in a list as consumed for a duplicated SSA value
@@ -263,10 +379,29 @@ impl<'a> SSAUsageTracker<'a> {
 
     /// Check if a duplicated SSA value has been fully eliminated (all uses consumed)
     pub fn is_duplicated_fully_eliminated(&self, dup_ssa_value: &DuplicatedSSAValue) -> bool {
+        self.is_duplicated_fully_eliminated_with_context(dup_ssa_value, None)
+    }
+
+    /// Check if a duplicated SSA value has been fully eliminated (all uses consumed)
+    /// with optional call site analysis for detecting implicit arguments
+    pub fn is_duplicated_fully_eliminated_with_context(
+        &self,
+        dup_ssa_value: &DuplicatedSSAValue,
+        call_site_analysis: Option<&crate::analysis::call_site_analysis::CallSiteAnalysis>,
+    ) -> bool {
+        // First check if this value is used as an implicit argument in a Call/Construct
+        if self.is_implicit_argument(dup_ssa_value.original_ssa_value(), call_site_analysis) {
+            trace!(
+                "{} is used as an implicit argument, not eliminated",
+                dup_ssa_value.original_ssa_value()
+            );
+            return false;
+        }
+
         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
 
         if all_uses.is_empty() {
-            debug!(
+            trace!(
                 "{} has no uses, eliminated",
                 dup_ssa_value.original_ssa_value()
             );
@@ -277,7 +412,7 @@ impl<'a> SSAUsageTracker<'a> {
         // Check if all uses have been consumed
         if let Some(consumed) = self.consumed_uses.get(dup_ssa_value) {
             let is_eliminated = all_uses.iter().all(|use_site| consumed.contains(use_site));
-            debug!(
+            trace!(
                 "{} has {} uses, {} consumed, eliminated: {}",
                 dup_ssa_value.original_ssa_value(),
                 all_uses.len(),
@@ -286,7 +421,7 @@ impl<'a> SSAUsageTracker<'a> {
             );
             is_eliminated
         } else {
-            debug!(
+            trace!(
                 "{} has {} uses, 0 consumed, not eliminated",
                 dup_ssa_value.original_ssa_value(),
                 all_uses.len()
@@ -307,6 +442,14 @@ impl<'a> SSAUsageTracker<'a> {
         &self,
         dup_ssa_value: &DuplicatedSSAValue,
     ) -> DeclarationStrategy {
+        self.get_declaration_strategy_with_context(dup_ssa_value, None)
+    }
+
+    pub fn get_declaration_strategy_with_context(
+        &self,
+        dup_ssa_value: &DuplicatedSSAValue,
+        call_site_analysis: Option<&crate::analysis::call_site_analysis::CallSiteAnalysis>,
+    ) -> DeclarationStrategy {
         let ssa_value = dup_ssa_value.original_ssa_value();
 
         // Check for side effects first - even if a value has no uses,
@@ -322,9 +465,13 @@ impl<'a> SSAUsageTracker<'a> {
                     if has_side_effects(&instr.instruction) {
                         // Check if this value has any uses
                         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
-                        if all_uses.is_empty() || self.is_duplicated_fully_eliminated(dup_ssa_value)
+                        if all_uses.is_empty()
+                            || self.is_duplicated_fully_eliminated_with_context(
+                                dup_ssa_value,
+                                call_site_analysis,
+                            )
                         {
-                            debug!(
+                            trace!(
                                 "SSA value {} has side effects but no uses, using SideEffectOnly",
                                 ssa_value
                             );
@@ -356,14 +503,18 @@ impl<'a> SSAUsageTracker<'a> {
         // might have no direct uses but still need to generate assignments
         if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
             if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
-                debug!(
+                trace!(
                     "{} is part of PHI group with representative {}",
-                    ssa_value, coalesced_rep
+                    ssa_value,
+                    coalesced_rep
                 );
                 // This is part of a PHI group (coalesced values)
                 if self.is_declaration_point(ssa_value, coalesced_rep) {
                     // Check if fully eliminated even for declaration points
-                    if self.is_duplicated_fully_eliminated(dup_ssa_value) {
+                    if self.is_duplicated_fully_eliminated_with_context(
+                        dup_ssa_value,
+                        call_site_analysis,
+                    ) {
                         return DeclarationStrategy::Skip;
                     }
 
@@ -389,10 +540,11 @@ impl<'a> SSAUsageTracker<'a> {
         // 2. Check if fully eliminated (considering duplication context)
         // Only check this AFTER checking for PHI operands
         // Side effects were already checked above
-        if self.is_duplicated_fully_eliminated(dup_ssa_value) {
+        if self.is_duplicated_fully_eliminated_with_context(dup_ssa_value, call_site_analysis) {
             debug!(
-                "SSA value {} is fully eliminated with no side effects, using Skip",
-                ssa_value
+                "SSA value {} (context: {}) is fully eliminated with no side effects, using Skip",
+                ssa_value,
+                dup_ssa_value.context_description()
             );
             return DeclarationStrategy::Skip;
         }
@@ -439,7 +591,10 @@ impl<'a> SSAUsageTracker<'a> {
         }
 
         // After marking uses as consumed, perform cascading elimination
-        self.perform_cascading_elimination();
+        // Note: This method doesn't have access to duplicated blocks info,
+        // so we pass an empty map. This is safe since the method is currently unused.
+        let empty_duplicated_blocks = HashMap::new();
+        self.perform_cascading_elimination(&empty_duplicated_blocks);
     }
 
     /// Check if an SSA value is a PHI result
@@ -607,20 +762,44 @@ impl<'a> SSAUsageTracker<'a> {
     ///
     /// When an SSA value becomes fully consumed, check if it was the only use of another value.
     /// If so, that value can also be eliminated. This process cascades transitively.
-    pub fn perform_cascading_elimination(&mut self) {
+    ///
+    /// The duplicated_blocks parameter provides information about which blocks are duplicated
+    /// and in what contexts, allowing us to mark uses as consumed in the correct context.
+    pub fn perform_cascading_elimination(
+        &mut self,
+        duplicated_blocks: &HashMap<NodeIndex, Vec<DuplicationContext>>,
+    ) {
+        let start_time = std::time::Instant::now();
+        let total_ssa_values = self.ssa().all_ssa_values().count();
+        log::debug!(
+            "Starting cascading elimination for {} SSA values",
+            total_ssa_values
+        );
+
         let mut changed = true;
         let max_iterations = 10; // Prevent infinite loops
         let mut iterations = 0;
 
         while changed && iterations < max_iterations {
+            let iteration_start = std::time::Instant::now();
             changed = false;
             iterations += 1;
 
             // Collect SSA values that are now fully eliminated
             let mut newly_eliminated = Vec::new();
+            let mut values_checked = 0;
 
             // Check all SSA values to see if they've become fully eliminated
             for ssa_value in self.ssa().all_ssa_values() {
+                values_checked += 1;
+                if values_checked % 1000 == 0 {
+                    log::trace!(
+                        "  Checked {}/{} values in iteration {}",
+                        values_checked,
+                        total_ssa_values,
+                        iterations
+                    );
+                }
                 if !self.is_fully_eliminated(ssa_value) {
                     continue;
                 }
@@ -629,6 +808,23 @@ impl<'a> SSAUsageTracker<'a> {
                 if let Some(def_instruction) = self.ssa().get_defining_instruction(ssa_value) {
                     let block_id = def_instruction.block_id;
                     let instr_idx = def_instruction.instruction_idx;
+
+                    // Check if this value is an input to any PHI function
+                    // If so, don't cascade eliminate its sources
+                    let is_phi_input = self
+                        .ssa()
+                        .phi_functions
+                        .values()
+                        .flatten()
+                        .any(|phi| phi.operands.values().any(|operand| operand == ssa_value));
+
+                    if is_phi_input {
+                        log::debug!(
+                            "Not cascading elimination for sources of {} - it's a PHI function input",
+                            ssa_value.name()
+                        );
+                        continue;
+                    }
 
                     // Get the instruction
                     if let Some(block) = self.function_analysis.cfg.graph().node_weight(block_id) {
@@ -672,16 +868,51 @@ impl<'a> SSAUsageTracker<'a> {
                 }
             }
 
-            // Mark newly eliminated values as consumed
+            // Mark newly eliminated values as consumed with appropriate context
+            let num_eliminated = newly_eliminated.len();
             for (ssa_value, uses) in newly_eliminated {
+                // Check if ANY of the uses are in duplicated blocks
+                let has_duplicated_use = uses
+                    .iter()
+                    .any(|use_site| duplicated_blocks.contains_key(&use_site.block_id));
+
+                if has_duplicated_use {
+                    log::debug!(
+                        "Skipping cascading elimination for {} - has uses in duplicated blocks",
+                        ssa_value.name()
+                    );
+                    // Don't mark as changed since we didn't actually eliminate anything
+                    continue;
+                }
+
                 log::debug!(
                     "Cascading elimination: marking SSA {} as fully consumed (was only used by eliminated values)",
                     ssa_value.name()
                 );
-                self.mark_uses_consumed(&ssa_value, &uses);
+
+                // All uses are in non-duplicated blocks, safe to mark as consumed
+                for use_site in &uses {
+                    self.mark_use_consumed(&ssa_value, use_site);
+                }
                 changed = true;
             }
+
+            let iteration_time = iteration_start.elapsed();
+            log::debug!(
+                "  Iteration {} completed in {:?}, {} values eliminated",
+                iterations,
+                iteration_time,
+                num_eliminated
+            );
         }
+
+        let total_time = start_time.elapsed();
+        log::info!(
+            "Cascading elimination completed in {:?} ({} iterations, {} SSA values)",
+            total_time,
+            iterations,
+            total_ssa_values
+        );
 
         if iterations >= max_iterations {
             log::warn!("Cascading elimination reached maximum iterations - possible cycle");

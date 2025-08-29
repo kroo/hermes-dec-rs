@@ -49,23 +49,16 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
         right_reg: u8,
         op_name: &str,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Get source operand names using the "before" lookup to avoid self-references
-        let left_var = self.register_manager.get_source_variable_name(left_reg);
-        let right_var = self.register_manager.get_source_variable_name(right_reg);
-
-        // Now create the new variable for the destination
+        // Create the destination variable
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
 
         let span = Span::default();
 
-        // Create operand expressions
-        let left_atom = self.ast_builder.allocator.alloc_str(&left_var);
-        let left_expr = self.ast_builder.expression_identifier(span, left_atom);
-
-        let right_atom = self.ast_builder.allocator.alloc_str(&right_var);
-        let right_expr = self.ast_builder.expression_identifier(span, right_atom);
+        // Use the helper to create operand expressions with proper use strategy handling
+        let left_expr = self.source_register_to_expression(left_reg)?;
+        let right_expr = self.source_register_to_expression(right_reg)?;
 
         // Create binary expression
         let binary_op = match op_name {
@@ -110,13 +103,11 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let operand_var = self.register_manager.get_source_variable_name(operand_reg);
 
         let span = Span::default();
 
-        // Create operand expression
-        let operand_atom = self.ast_builder.allocator.alloc_str(&operand_var);
-        let operand_expr = self.ast_builder.expression_identifier(span, operand_atom);
+        // Use the helper to create operand expression with proper use strategy handling
+        let operand_expr = self.source_register_to_expression(operand_reg)?;
 
         // Create unary expression
         let unary_op = match op_name {
@@ -206,17 +197,12 @@ impl<'a> ArithmeticHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let left_var = self.register_manager.get_source_variable_name(left_reg);
-        let right_var = self.register_manager.get_source_variable_name(right_reg);
 
         let span = Span::default();
 
-        // Create operand expressions
-        let left_atom = self.ast_builder.allocator.alloc_str(&left_var);
-        let left_expr = self.ast_builder.expression_identifier(span, left_atom);
-
-        let right_atom = self.ast_builder.allocator.alloc_str(&right_var);
-        let right_expr = self.ast_builder.expression_identifier(span, right_atom);
+        // Use the helper to create operand expressions with proper use strategy handling
+        let left_expr = self.source_register_to_expression(left_reg)?;
+        let right_expr = self.source_register_to_expression(right_reg)?;
 
         // Create comparison expression
         let comparison_op = match op_name {

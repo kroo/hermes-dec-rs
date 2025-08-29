@@ -1,0 +1,80 @@
+// CFG analysis for conditional_inversion_test
+// Generated from data/conditional_inversion_test.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-32)\l  0: DeclareGlobalVar  \"simpleInversion\"\l  1: DeclareGlobalVar  \"guardClause\"\l  2: DeclareGlobalVar  \"nestedInversion\"\l  3: CreateEnvironment r1\l  4: CreateClosure     r2, r1, Function<simpleInversion>1\l  5: GetGlobalObject   r0\l  6: PutById           r0, r2, 1, \"simpleInversion\"\l  7: CreateClosure     r2, r1, Function<guardClause>2\l  8: PutById           r0, r2, 2, \"guardClause\"\l  9: CreateClosure     r1, r1, Function<nestedInversion>3\l  10: PutById           r0, r1, 3, \"nestedInversion\"\l  11: GetByIdShort      r1, r0, 1, \"simpleInversion\"\l  12: LoadConstUndefined r3\l  13: LoadConstUInt8    r4, 5\l  14: Call2             r1, r1, r3, r4\l  15: GetByIdShort      r2, r0, 1, \"simpleInversion\"\l  16: LoadConstUInt8    r1, 15\l  17: Call2             r1, r2, r3, r1\l  18: GetByIdShort      r2, r0, 2, \"guardClause\"\l  19: LoadConstNull     r1\l  20: Call2             r1, r2, r3, r1\l  21: GetByIdShort      r2, r0, 2, \"guardClause\"\l  22: LoadConstUInt8    r1, 42\l  23: Call2             r1, r2, r3, r1\l  24: GetByIdShort      r2, r0, 3, \"nestedInversion\"\l  25: LoadConstInt      r1, -3\l  26: Call3             r1, r2, r3, r4, r1\l  27: GetByIdShort      r2, r0, 3, \"nestedInversion\"\l  28: LoadConstInt      r1, -2\l  29: LoadConstUInt8    r0, 4\l  30: Call3             r0, r2, r3, r1, r0\l  31: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstUInt8    r0, 10\l  2: JGreater          L1, r1, r0\l" ]
+    f1_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstString   r0, \"small\"\l  1: Ret               r0\l" ]
+    f1_n2 [ label = "Block 2 (PC 5-7) [L1]\l  0: LoadConstString   r0, \"default\"\l  1: Ret               r0\l" ]
+    f1_n3 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n2 [label="True"]
+    f1_n0 -> f1_n1 [label="False"]
+    f1_n1 -> f1_n3 [label="Uncond"]
+    f1_n2 -> f1_n3 [label="Uncond"]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [ label = "Block 0 (PC 0-3)\l  0: LoadParam         r1, 1\l  1: LoadConstNull     r0\l  2: JEqual            L1, r1, r0\l" ]
+    f2_n1 [ label = "Block 1 (PC 3-11)\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"console\"\l  2: GetByIdShort      r2, r3, 2, \"log\"\l  3: LoadConstString   r0, \"Processing:\"\l  4: Call3             r0, r2, r3, r0, r1\l  5: LoadConstUInt8    r0, 2\l  6: Mul               r0, r1, r0\l  7: Ret               r0\l" ]
+    f2_n2 [ label = "Block 2 (PC 11-13) [L1]\l  0: LoadConstZero     r0\l  1: Ret               r0\l" ]
+    f2_n3 [ label = "EXIT" ]
+
+    f2_n0 -> f2_n2 [label="True"]
+    f2_n0 -> f2_n1 [label="False"]
+    f2_n1 -> f2_n3 [label="Uncond"]
+    f2_n2 -> f2_n3 [label="Uncond"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-4)\l  0: LoadParam         r2, 1\l  1: LoadParam         r1, 2\l  2: LoadConstZero     r0\l  3: JGreater          L1, r2, r0\l" ]
+    f3_n1 [ label = "Block 1 (PC 4-6)\l  0: Negate            r3, r2\l  1: Ret               r3\l" ]
+    f3_n2 [ label = "Block 2 (PC 6-7) [L1]\l  0: JGreater          L2, r1, r0\l" ]
+    f3_n3 [ label = "Block 3 (PC 7-14)\l  0: GetGlobalObject   r3\l  1: TryGetById        r5, r3, 1, \"console\"\l  2: GetByIdShort      r4, r5, 2, \"log\"\l  3: LoadConstString   r3, \"b is negative\"\l  4: Call2             r3, r4, r5, r3\l  5: Sub               r1, r2, r1\l  6: Ret               r1\l" ]
+    f3_n4 [ label = "Block 4 (PC 14-15) [L2]\l  0: Ret               r0\l" ]
+    f3_n5 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n2 [label="True"]
+    f3_n0 -> f3_n1 [label="False"]
+    f3_n1 -> f3_n5 [label="Uncond"]
+    f3_n2 -> f3_n4 [label="True"]
+    f3_n2 -> f3_n3 [label="False"]
+    f3_n3 -> f3_n5 [label="Uncond"]
+    f3_n4 -> f3_n5 [label="Uncond"]
+  }
+
+}

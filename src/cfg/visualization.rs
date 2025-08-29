@@ -101,6 +101,7 @@ fn get_edge_label(edge_kind: &EdgeKind) -> Option<String> {
         EdgeKind::Fall => Some("Fall".to_string()),
         EdgeKind::GeneratorFallthrough => Some("GenF".to_string()),
         EdgeKind::GeneratorResume => Some("GenR".to_string()),
+        EdgeKind::Exception => Some("Exc".to_string()),
         EdgeKind::Uncond => None, // No label for unconditional edges
     }
 }
@@ -115,6 +116,7 @@ fn get_edge_color(edge_kind: &EdgeKind) -> Option<&'static str> {
         EdgeKind::Fall => Some("gray"),
         EdgeKind::GeneratorFallthrough => Some("lightblue"),
         EdgeKind::GeneratorResume => Some("cyan"),
+        EdgeKind::Exception => Some("purple"),
         EdgeKind::Uncond => Some("black"),
     }
 }

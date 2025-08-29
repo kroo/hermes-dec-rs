@@ -1,0 +1,146 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: cf6d17ba5e7544ba0eb2fe4d15e899caf4030a1d
+  Function count: 4
+  String count: 15
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..5] #40231E32: Catch:
+s1[ASCII, 10..16] #807C5F3D: Finally
+s2[ASCII, 10..24] #FBA19361: Finally cleanup
+s3[ASCII, 33..36] #1C35E808: Test
+s4[ASCII, 51..53] #9102A3D0: Try
+s5[ASCII, 54..61] #629A2BFD: Uncaught
+s6[ASCII, 64..69] #6264A439: global
+s7[ASCII, 6..16] #63D87C1C: justFinally
+s8[ASCII, 24..32] prototype
+s9[ASCII, 36..50] tryCatchFinally
+s10[ASCII, 62..64] log
+s11[ASCII, 70..74] Error
+s12[ASCII, 75..81] console
+s13[ASCII, 82..101] finallyWithException
+s14[ASCII, 102..108] message
+
+Array Buffer:
+
+Function<global>0(1 params, 3 registers, 0 symbols):
+  DeclareGlobalVar  "justFinally"
+  DeclareGlobalVar  "tryCatchFinally"
+  DeclareGlobalVar  "finallyWithException"
+  CreateEnvironment r0
+  CreateClosure     r2, r0, Function<justFinally>1
+  GetGlobalObject   r1
+  PutById           r1, r2, 1, "justFinally"
+  CreateClosure     r2, r0, Function<tryCatchFinally>2
+  PutById           r1, r2, 2, "tryCatchFinally"
+  CreateClosure     r0, r0, Function<finallyWithException>3
+  PutById           r1, r0, 3, "finallyWithException"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<justFinally>1(1 params, 12 registers, 0 symbols):
+L1:
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Try"
+  Call2             r1, r2, r3, r1
+L2:
+  TryGetById        r2, r0, 1, "console"
+  GetByIdShort      r1, r2, 2, "log"
+  LoadConstString   r0, "Finally"
+  Call2             r0, r1, r2, r0
+  LoadConstUInt8    r0, 1
+  Ret               r0
+L3:
+  Catch             r0
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Finally"
+  Call2             r1, r2, r3, r1
+  Throw             r0
+
+Exception Handlers:
+0: start = L1, end = L2, target = L3
+
+Function<tryCatchFinally>2(1 params, 14 registers, 0 symbols):
+L1:
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Try"
+  Call2             r1, r2, r3, r1
+  TryGetById        r2, r0, 3, "Error"
+  GetByIdShort      r0, r2, 4, "prototype"
+  CreateThis        r1, r0, r2
+  LoadConstString   r6, "Test"
+  Mov               r7, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L2:
+  Catch             r1
+  GetGlobalObject   r0
+  TryGetById        r4, r0, 1, "console"
+  GetByIdShort      r3, r4, 2, "log"
+  GetByIdShort      r2, r1, 5, "message"
+  LoadConstString   r1, "Catch:"
+  Call3             r1, r3, r4, r1, r2
+L3:
+  TryGetById        r2, r0, 1, "console"
+  GetByIdShort      r1, r2, 2, "log"
+  LoadConstString   r0, "Finally"
+  Call2             r0, r1, r2, r0
+  LoadConstUInt8    r0, 2
+  Ret               r0
+L4:
+  Catch             r0
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Finally"
+  Call2             r1, r2, r3, r1
+  Throw             r0
+
+Exception Handlers:
+0: start = L1, end = L2, target = L2
+1: start = L1, end = L3, target = L4
+
+Function<finallyWithException>3(1 params, 12 registers, 0 symbols):
+L1:
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Try"
+  Call2             r1, r2, r3, r1
+  TryGetById        r2, r0, 3, "Error"
+  GetByIdShort      r0, r2, 4, "prototype"
+  CreateThis        r1, r0, r2
+  LoadConstString   r4, "Uncaught"
+  Mov               r5, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L2:
+  Catch             r0
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Finally cleanup"
+  Call2             r1, r2, r3, r1
+  Throw             r0
+
+Exception Handlers:
+0: start = L1, end = L2, target = L2
+

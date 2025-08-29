@@ -1,0 +1,241 @@
+// CFG analysis for closure_test
+// Generated from data/closure_test.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-21)\l  0: DeclareGlobalVar  \"outerFunction\"\l  1: DeclareGlobalVar  \"asyncOuter\"\l  2: DeclareGlobalVar  \"generatorOuter\"\l  3: CreateEnvironment r0\l  4: CreateClosure     r1, r0, Function<outerFunction>1\l  5: GetGlobalObject   r2\l  6: PutById           r2, r1, 1, \"outerFunction\"\l  7: CreateAsyncClosure r1, r0, Function<asyncOuter>4\l  8: PutById           r2, r1, 2, \"asyncOuter\"\l  9: CreateGeneratorClosure r0, r0, Function<generatorOuter>11\l  10: PutById           r2, r0, 3, \"generatorOuter\"\l  11: TryGetById        r1, r2, 1, \"globalThis\"\l  12: NewObject         r0\l  13: GetByIdShort      r3, r2, 2, \"outerFunction\"\l  14: PutNewOwnByIdShort r0, r3, \"outerFunction\"\l  15: GetByIdShort      r3, r2, 3, \"asyncOuter\"\l  16: PutNewOwnByIdShort r0, r3, \"asyncOuter\"\l  17: GetByIdShort      r2, r2, 4, \"generatorOuter\"\l  18: PutNewOwnByIdShort r0, r2, \"generatorOuter\"\l  19: PutById           r1, r0, 4, \"testClosures\"\l  20: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-7)\l  0: CreateEnvironment r1\l  1: NewObject         r0\l  2: CreateClosure     r2, r1, Function<innerFunction>2\l  3: PutNewOwnByIdShort r0, r2, \"inner\"\l  4: CreateClosure     r1, r1, Function<anotherInner>3\l  5: PutNewOwnByIdShort r0, r1, \"another\"\l  6: Ret               r0\l" ]
+    f1_n1 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [ label = "Block 0 (PC 0-7)\l  0: GetGlobalObject   r0\l  1: TryGetById        r2, r0, 1, \"console\"\l  2: GetByIdShort      r1, r2, 2, \"log\"\l  3: LoadConstString   r0, \"hello world\"\l  4: Call2             r0, r1, r2, r0\l  5: LoadConstUInt8    r0, 42\l  6: Ret               r0\l" ]
+    f2_n1 [ label = "EXIT" ]
+
+    f2_n0 -> f2_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-6)\l  0: LoadConstString   r1, \"hello\"\l  1: GetByIdShort      r0, r1, 1, \"toUpperCase\"\l  2: Call1             r1, r0, r1\l  3: LoadConstString   r0, \"hello \"\l  4: Add               r0, r0, r1\l  5: Ret               r0\l" ]
+    f3_n1 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_4 {
+    label = "Function 4";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f4_n0 [ label = "Block 0 (PC 0-10)\l  0: LoadConstUndefined r4\l  1: LoadConstUndefined r0\l  2: ReifyArguments    r0\l  3: Mov               r3, r0\l  4: GetBuiltinClosure r2, 52\l  5: CreateEnvironment r0\l  6: CreateGeneratorClosure r1, r0, Function<?anon_0_asyncOuter>5\l  7: LoadThisNS        r0\l  8: Call4             r0, r2, r4, r1, r0, r3\l  9: Ret               r0\l" ]
+    f4_n1 [ label = "EXIT" ]
+
+    f4_n0 -> f4_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_5 {
+    label = "Function 5";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f5_n0 [ label = "Block 0 (PC 0-3)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_?anon_0_asyncOuter>6\l  2: Ret               r0\l" ]
+    f5_n1 [ label = "EXIT" ]
+
+    f5_n0 -> f5_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_6 {
+    label = "Function 6";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f6_n0 [ label = "Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l" ]
+    f6_n1 [ label = "Block 1 (PC 3-7)\l  0: CreateEnvironment r1\l  1: CreateAsyncClosure r1, r1, Function<asyncInner>7\l  2: CompleteGenerator \l  3: Ret               r1\l" ]
+    f6_n2 [ label = "Block 2 (PC 7-9) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l" ]
+    f6_n3 [ label = "EXIT" ]
+
+    f6_n0 -> f6_n2 [label="True"]
+    f6_n0 -> f6_n1 [label="False"]
+    f6_n1 -> f6_n3 [label="Uncond"]
+    f6_n2 -> f6_n3 [label="Uncond"]
+  }
+
+  subgraph cluster_function_7 {
+    label = "Function 7";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f7_n0 [ label = "Block 0 (PC 0-10)\l  0: LoadConstUndefined r4\l  1: LoadConstUndefined r0\l  2: ReifyArguments    r0\l  3: Mov               r3, r0\l  4: GetBuiltinClosure r2, 52\l  5: CreateEnvironment r0\l  6: CreateGeneratorClosure r1, r0, Function<?anon_0_asyncInner>8\l  7: LoadThisNS        r0\l  8: Call4             r0, r2, r4, r1, r0, r3\l  9: Ret               r0\l" ]
+    f7_n1 [ label = "EXIT" ]
+
+    f7_n0 -> f7_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_8 {
+    label = "Function 8";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f8_n0 [ label = "Block 0 (PC 0-3)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_?anon_0_asyncInner>9\l  2: Ret               r0\l" ]
+    f8_n1 [ label = "EXIT" ]
+
+    f8_n0 -> f8_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_9 {
+    label = "Function 9";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f9_n0 [ label = "Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l" ]
+    f9_n1 [ label = "Block 1 (PC 3-13)\l  0: GetGlobalObject   r1\l  1: TryGetById        r3, r1, 1, \"Promise\"\l  2: GetByIdShort      r1, r3, 2, \"prototype\"\l  3: CreateThis        r2, r1, r3\l  4: CreateEnvironment r1\l  5: CreateClosure     r4, r1, Function<>10\l  6: Mov               r5, r2\l  7: Construct         r1, r3, 2\l  8: SelectObject      r1, r2, r1\l  9: SaveGenerator     [4]\l" ]
+    f9_n2 [ label = "Block 2 (PC 13-14)\l  0: Ret               r1\l" ]
+    f9_n3 [ label = "Block 3 (PC 14-16)\l  0: ResumeGenerator   r1, r2\l  1: JmpTrue           L2, r2\l" ]
+    f9_n4 [ label = "Block 4 (PC 16-19)\l  0: LoadConstString   r2, \"async\"\l  1: CompleteGenerator \l  2: Ret               r2\l" ]
+    f9_n5 [ label = "Block 5 (PC 19-21) [L2]\l  0: CompleteGenerator \l  1: Ret               r1\l" ]
+    f9_n6 [ label = "Block 6 (PC 21-23) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l" ]
+    f9_n7 [ label = "EXIT" ]
+
+    f9_n0 -> f9_n6 [label="True"]
+    f9_n0 -> f9_n1 [label="False"]
+    f9_n1 -> f9_n2 [label="Generator Fallthrough"]
+    f9_n2 -> f9_n7 [label="Uncond"]
+    f9_n3 -> f9_n5 [label="True"]
+    f9_n3 -> f9_n4 [label="False"]
+    f9_n4 -> f9_n7 [label="Uncond"]
+    f9_n5 -> f9_n7 [label="Uncond"]
+    f9_n6 -> f9_n7 [label="Uncond"]
+  }
+
+  subgraph cluster_function_10 {
+    label = "Function 10";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f10_n0 [ label = "Block 0 (PC 0-7)\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"setTimeout\"\l  2: LoadConstUndefined r2\l  3: LoadParam         r1, 1\l  4: LoadConstUInt8    r0, 100\l  5: Call3             r0, r3, r2, r1, r0\l  6: Ret               r0\l" ]
+    f10_n1 [ label = "EXIT" ]
+
+    f10_n0 -> f10_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_11 {
+    label = "Function 11";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f11_n0 [ label = "Block 0 (PC 0-3)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_generatorOuter>12\l  2: Ret               r0\l" ]
+    f11_n1 [ label = "EXIT" ]
+
+    f11_n0 -> f11_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_12 {
+    label = "Function 12";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f12_n0 [ label = "Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l" ]
+    f12_n1 [ label = "Block 1 (PC 3-7)\l  0: CreateEnvironment r1\l  1: CreateGeneratorClosure r1, r1, Function<generatorInner>13\l  2: CompleteGenerator \l  3: Ret               r1\l" ]
+    f12_n2 [ label = "Block 2 (PC 7-9) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l" ]
+    f12_n3 [ label = "EXIT" ]
+
+    f12_n0 -> f12_n2 [label="True"]
+    f12_n0 -> f12_n1 [label="False"]
+    f12_n1 -> f12_n3 [label="Uncond"]
+    f12_n2 -> f12_n3 [label="Uncond"]
+  }
+
+  subgraph cluster_function_13 {
+    label = "Function 13";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f13_n0 [ label = "Block 0 (PC 0-3)\l  0: CreateEnvironment r0\l  1: CreateGenerator   r0, r0, Function<?anon_0_generatorInner>14\l  2: Ret               r0\l" ]
+    f13_n1 [ label = "EXIT" ]
+
+    f13_n0 -> f13_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_14 {
+    label = "Function 14";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f14_n0 [ label = "Block 0 (PC 0-3)\l  0: StartGenerator    \l  1: ResumeGenerator   r0, r1\l  2: JmpTrue           L1, r1\l" ]
+    f14_n1 [ label = "Block 1 (PC 3-5)\l  0: LoadConstString   r1, \"generator\"\l  1: SaveGenerator     [4]\l" ]
+    f14_n2 [ label = "Block 2 (PC 5-6)\l  0: Ret               r1\l" ]
+    f14_n3 [ label = "Block 3 (PC 6-8)\l  0: ResumeGenerator   r1, r2\l  1: JmpTrue           L2, r2\l" ]
+    f14_n4 [ label = "Block 4 (PC 8-11)\l  0: LoadConstUndefined r2\l  1: CompleteGenerator \l  2: Ret               r2\l" ]
+    f14_n5 [ label = "Block 5 (PC 11-13) [L2]\l  0: CompleteGenerator \l  1: Ret               r1\l" ]
+    f14_n6 [ label = "Block 6 (PC 13-15) [L1]\l  0: CompleteGenerator \l  1: Ret               r0\l" ]
+    f14_n7 [ label = "EXIT" ]
+
+    f14_n0 -> f14_n6 [label="True"]
+    f14_n0 -> f14_n1 [label="False"]
+    f14_n1 -> f14_n2 [label="Generator Fallthrough"]
+    f14_n2 -> f14_n7 [label="Uncond"]
+    f14_n3 -> f14_n5 [label="True"]
+    f14_n3 -> f14_n4 [label="False"]
+    f14_n4 -> f14_n7 [label="Uncond"]
+    f14_n5 -> f14_n7 [label="Uncond"]
+    f14_n6 -> f14_n7 [label="Uncond"]
+  }
+
+}

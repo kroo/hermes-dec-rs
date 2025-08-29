@@ -1,0 +1,77 @@
+// CFG analysis for finally_test
+// Generated from data/finally_test.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-13)\l  0: DeclareGlobalVar  \"justFinally\"\l  1: DeclareGlobalVar  \"tryCatchFinally\"\l  2: DeclareGlobalVar  \"finallyWithException\"\l  3: CreateEnvironment r0\l  4: CreateClosure     r2, r0, Function<justFinally>1\l  5: GetGlobalObject   r1\l  6: PutById           r1, r2, 1, \"justFinally\"\l  7: CreateClosure     r2, r0, Function<tryCatchFinally>2\l  8: PutById           r1, r2, 2, \"tryCatchFinally\"\l  9: CreateClosure     r0, r0, Function<finallyWithException>3\l  10: PutById           r1, r0, 3, \"finallyWithException\"\l  11: LoadConstUndefined r0\l  12: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-5) [L1]\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"console\"\l  2: GetByIdShort      r2, r3, 2, \"log\"\l  3: LoadConstString   r1, \"Try\"\l  4: Call2             r1, r2, r3, r1\l" ]
+    f1_n1 [ label = "Block 1 (PC 5-11) [L2]\l  0: TryGetById        r2, r0, 1, \"console\"\l  1: GetByIdShort      r1, r2, 2, \"log\"\l  2: LoadConstString   r0, \"Finally\"\l  3: Call2             r0, r1, r2, r0\l  4: LoadConstUInt8    r0, 1\l  5: Ret               r0\l" ]
+    f1_n2 [ label = "Block 2 (PC 11-18) [L3]\l  0: Catch             r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"console\"\l  3: GetByIdShort      r2, r3, 2, \"log\"\l  4: LoadConstString   r1, \"Finally\"\l  5: Call2             r1, r2, r3, r1\l  6: Throw             r0\l" ]
+    f1_n3 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n1 [label="Fall"]
+    f1_n1 -> f1_n3 [label="Uncond"]
+    f1_n2 -> f1_n3 [label="Uncond"]
+    f1_n0 -> f1_n2 [label="Exception"]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [ label = "Block 0 (PC 0-13) [L1]\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"console\"\l  2: GetByIdShort      r2, r3, 2, \"log\"\l  3: LoadConstString   r1, \"Try\"\l  4: Call2             r1, r2, r3, r1\l  5: TryGetById        r2, r0, 3, \"Error\"\l  6: GetByIdShort      r0, r2, 4, \"prototype\"\l  7: CreateThis        r1, r0, r2\l  8: LoadConstString   r6, \"Test\"\l  9: Mov               r7, r1\l  10: Construct         r0, r2, 2\l  11: SelectObject      r0, r1, r0\l  12: Throw             r0\l" ]
+    f2_n1 [ label = "Block 1 (PC 13-20) [L2]\l  0: Catch             r1\l  1: GetGlobalObject   r0\l  2: TryGetById        r4, r0, 1, \"console\"\l  3: GetByIdShort      r3, r4, 2, \"log\"\l  4: GetByIdShort      r2, r1, 5, \"message\"\l  5: LoadConstString   r1, \"Catch:\"\l  6: Call3             r1, r3, r4, r1, r2\l" ]
+    f2_n2 [ label = "Block 2 (PC 20-26) [L3]\l  0: TryGetById        r2, r0, 1, \"console\"\l  1: GetByIdShort      r1, r2, 2, \"log\"\l  2: LoadConstString   r0, \"Finally\"\l  3: Call2             r0, r1, r2, r0\l  4: LoadConstUInt8    r0, 2\l  5: Ret               r0\l" ]
+    f2_n3 [ label = "Block 3 (PC 26-33) [L4]\l  0: Catch             r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"console\"\l  3: GetByIdShort      r2, r3, 2, \"log\"\l  4: LoadConstString   r1, \"Finally\"\l  5: Call2             r1, r2, r3, r1\l  6: Throw             r0\l" ]
+    f2_n4 [ label = "EXIT" ]
+
+    f2_n0 -> f2_n4 [label="Uncond"]
+    f2_n1 -> f2_n2 [label="Fall"]
+    f2_n2 -> f2_n4 [label="Uncond"]
+    f2_n3 -> f2_n4 [label="Uncond"]
+    f2_n0 -> f2_n1 [label="Exception"]
+    f2_n0 -> f2_n3 [label="Exception"]
+    f2_n1 -> f2_n3 [label="Exception"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-13) [L1]\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"console\"\l  2: GetByIdShort      r2, r3, 2, \"log\"\l  3: LoadConstString   r1, \"Try\"\l  4: Call2             r1, r2, r3, r1\l  5: TryGetById        r2, r0, 3, \"Error\"\l  6: GetByIdShort      r0, r2, 4, \"prototype\"\l  7: CreateThis        r1, r0, r2\l  8: LoadConstString   r4, \"Uncaught\"\l  9: Mov               r5, r1\l  10: Construct         r0, r2, 2\l  11: SelectObject      r0, r1, r0\l  12: Throw             r0\l" ]
+    f3_n1 [ label = "Block 1 (PC 13-20) [L2]\l  0: Catch             r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"console\"\l  3: GetByIdShort      r2, r3, 2, \"log\"\l  4: LoadConstString   r1, \"Finally cleanup\"\l  5: Call2             r1, r2, r3, r1\l  6: Throw             r0\l" ]
+    f3_n2 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n2 [label="Uncond"]
+    f3_n1 -> f3_n2 [label="Uncond"]
+    f3_n0 -> f3_n1 [label="Exception"]
+  }
+
+}

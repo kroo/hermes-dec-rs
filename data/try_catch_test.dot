@@ -1,0 +1,137 @@
+// CFG analysis for try_catch_test
+// Generated from data/try_catch_test.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-19)\l  0: DeclareGlobalVar  \"simpleTryCatch\"\l  1: DeclareGlobalVar  \"tryWithFinally\"\l  2: DeclareGlobalVar  \"nestedTryCatch\"\l  3: DeclareGlobalVar  \"tryInLoop\"\l  4: DeclareGlobalVar  \"multipleCatchVariables\"\l  5: CreateEnvironment r0\l  6: CreateClosure     r2, r0, Function<simpleTryCatch>1\l  7: GetGlobalObject   r1\l  8: PutById           r1, r2, 1, \"simpleTryCatch\"\l  9: CreateClosure     r2, r0, Function<tryWithFinally>2\l  10: PutById           r1, r2, 2, \"tryWithFinally\"\l  11: CreateClosure     r2, r0, Function<nestedTryCatch>3\l  12: PutById           r1, r2, 3, \"nestedTryCatch\"\l  13: CreateClosure     r2, r0, Function<tryInLoop>4\l  14: PutById           r1, r2, 4, \"tryInLoop\"\l  15: CreateClosure     r0, r0, Function<multipleCatchVariables>5\l  16: PutById           r1, r0, 5, \"multipleCatchVariables\"\l  17: LoadConstUndefined r0\l  18: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-13) [L1]\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"console\"\l  2: GetByIdShort      r2, r3, 2, \"log\"\l  3: LoadConstString   r1, \"In try block\"\l  4: Call2             r1, r2, r3, r1\l  5: TryGetById        r2, r0, 3, \"Error\"\l  6: GetByIdShort      r0, r2, 4, \"prototype\"\l  7: CreateThis        r1, r0, r2\l  8: LoadConstString   r5, \"Test error\"\l  9: Mov               r6, r1\l  10: Construct         r0, r2, 2\l  11: SelectObject      r0, r1, r0\l  12: Throw             r0\l" ]
+    f1_n1 [ label = "Block 1 (PC 13-22) [L2]\l  0: Catch             r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"console\"\l  3: GetByIdShort      r2, r3, 2, \"log\"\l  4: GetByIdShort      r1, r0, 5, \"message\"\l  5: LoadConstString   r0, \"Caught error:\"\l  6: Call3             r0, r2, r3, r0, r1\l  7: LoadConstUndefined r0\l  8: Ret               r0\l" ]
+    f1_n2 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n2 [label="Uncond"]
+    f1_n1 -> f1_n2 [label="Uncond"]
+    f1_n0 -> f1_n1 [label="Exception"]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [ label = "Block 0 (PC 0-5) [L1]\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"console\"\l  2: GetByIdShort      r2, r3, 2, \"log\"\l  3: LoadConstString   r1, \"Try block\"\l  4: Call2             r1, r2, r3, r1\l" ]
+    f2_n1 [ label = "Block 1 (PC 5-11) [L2]\l  0: TryGetById        r2, r0, 1, \"console\"\l  1: GetByIdShort      r1, r2, 2, \"log\"\l  2: LoadConstString   r0, \"Finally block\"\l  3: Call2             r0, r1, r2, r0\l  4: LoadConstUInt8    r0, 1\l  5: Ret               r0\l" ]
+    f2_n2 [ label = "Block 2 (PC 11-17) [L3]\l  0: Catch             r0\l  1: GetGlobalObject   r0\l  2: TryGetById        r3, r0, 1, \"console\"\l  3: GetByIdShort      r2, r3, 2, \"log\"\l  4: LoadConstString   r1, \"Catch block\"\l  5: Call2             r1, r2, r3, r1\l" ]
+    f2_n3 [ label = "Block 3 (PC 17-23) [L5]\l  0: TryGetById        r2, r0, 1, \"console\"\l  1: GetByIdShort      r1, r2, 2, \"log\"\l  2: LoadConstString   r0, \"Finally block\"\l  3: Call2             r0, r1, r2, r0\l  4: LoadConstUInt8    r0, 2\l  5: Ret               r0\l" ]
+    f2_n4 [ label = "Block 4 (PC 23-30) [L4]\l  0: Catch             r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"console\"\l  3: GetByIdShort      r2, r3, 2, \"log\"\l  4: LoadConstString   r1, \"Finally block\"\l  5: Call2             r1, r2, r3, r1\l  6: Throw             r0\l" ]
+    f2_n5 [ label = "EXIT" ]
+
+    f2_n0 -> f2_n1 [label="Fall"]
+    f2_n1 -> f2_n5 [label="Uncond"]
+    f2_n2 -> f2_n3 [label="Fall"]
+    f2_n3 -> f2_n5 [label="Uncond"]
+    f2_n4 -> f2_n5 [label="Uncond"]
+    f2_n0 -> f2_n2 [label="Exception"]
+    f2_n0 -> f2_n4 [label="Exception"]
+    f2_n2 -> f2_n4 [label="Exception"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-5) [L3]\l  0: GetGlobalObject   r0\l  1: TryGetById        r3, r0, 1, \"console\"\l  2: GetByIdShort      r2, r3, 2, \"log\"\l  3: LoadConstString   r1, \"Outer try\"\l  4: Call2             r1, r2, r3, r1\l" ]
+    f3_n1 [ label = "Block 1 (PC 5-17) [L1]\l  0: TryGetById        r3, r0, 1, \"console\"\l  1: GetByIdShort      r2, r3, 2, \"log\"\l  2: LoadConstString   r1, \"Inner try\"\l  3: Call2             r1, r2, r3, r1\l  4: TryGetById        r3, r0, 3, \"Error\"\l  5: GetByIdShort      r1, r3, 4, \"prototype\"\l  6: CreateThis        r2, r1, r3\l  7: LoadConstString   r6, \"Inner error\"\l  8: Mov               r7, r2\l  9: Construct         r1, r3, 2\l  10: SelectObject      r1, r2, r1\l  11: Throw             r1\l" ]
+    f3_n2 [ label = "Block 2 (PC 17-31) [L2]\l  0: Catch             r1\l  1: TryGetById        r4, r0, 1, \"console\"\l  2: GetByIdShort      r3, r4, 2, \"log\"\l  3: GetByIdShort      r2, r1, 5, \"message\"\l  4: LoadConstString   r1, \"Inner catch:\"\l  5: Call3             r1, r3, r4, r1, r2\l  6: TryGetById        r2, r0, 3, \"Error\"\l  7: GetByIdShort      r0, r2, 4, \"prototype\"\l  8: CreateThis        r1, r0, r2\l  9: LoadConstString   r6, \"Rethrow\"\l  10: Mov               r7, r1\l  11: Construct         r0, r2, 2\l  12: SelectObject      r0, r1, r0\l  13: Throw             r0\l" ]
+    f3_n3 [ label = "Block 3 (PC 31-40) [L4]\l  0: Catch             r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"console\"\l  3: GetByIdShort      r2, r3, 2, \"log\"\l  4: GetByIdShort      r1, r0, 5, \"message\"\l  5: LoadConstString   r0, \"Outer catch:\"\l  6: Call3             r0, r2, r3, r0, r1\l  7: LoadConstUndefined r0\l  8: Ret               r0\l" ]
+    f3_n4 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n1 [label="Fall"]
+    f3_n1 -> f3_n4 [label="Uncond"]
+    f3_n2 -> f3_n4 [label="Uncond"]
+    f3_n3 -> f3_n4 [label="Uncond"]
+    f3_n1 -> f3_n2 [label="Exception"]
+    f3_n0 -> f3_n3 [label="Exception"]
+    f3_n1 -> f3_n3 [label="Exception"]
+    f3_n2 -> f3_n3 [label="Exception"]
+  }
+
+  subgraph cluster_function_4 {
+    label = "Function 4";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f4_n0 [ label = "Block 0 (PC 0-6)\l  0: LoadConstZero     r6\l  1: LoadConstUInt8    r5, 3\l  2: GetGlobalObject   r4\l  3: LoadConstString   r3, \"Caught in loop:\"\l  4: LoadConstString   r2, \"Loop iteration:\"\l  5: LoadConstUInt8    r1, 1\l" ]
+    f4_n1 [ label = "Block 1 (PC 6-8) [L3]\l  0: Mov               r0, r6\l  1: JStrictEqual      L1, r0, r1\l" ]
+    f4_n2 [ label = "Block 2 (PC 8-12)\l  0: TryGetById        r8, r4, 1, \"console\"\l  1: GetByIdShort      r7, r8, 2, \"log\"\l  2: Mov               r0, r6\l  3: Call3             r0, r7, r8, r2, r0\l" ]
+    f4_n3 [ label = "Block 3 (PC 12-13) [L4]\l  0: Jmp               L2\l" ]
+    f4_n4 [ label = "Block 4 (PC 13-21) [L1]\l  0: TryGetById        r8, r4, 3, \"Error\"\l  1: GetByIdShort      r0, r8, 4, \"prototype\"\l  2: CreateThis        r7, r0, r8\l  3: LoadConstString   r10, \"Loop error\"\l  4: Mov               r11, r7\l  5: Construct         r0, r8, 2\l  6: SelectObject      r0, r7, r0\l  7: Throw             r0\l" ]
+    f4_n5 [ label = "Block 5 (PC 21-26) [L5]\l  0: Catch             r0\l  1: TryGetById        r8, r4, 1, \"console\"\l  2: GetByIdShort      r7, r8, 2, \"log\"\l  3: GetByIdShort      r0, r0, 5, \"message\"\l  4: Call3             r0, r7, r8, r3, r0\l" ]
+    f4_n6 [ label = "Block 6 (PC 26-30) [L2]\l  0: Mov               r0, r6\l  1: Inc               r0, r0\l  2: Mov               r6, r0\l  3: JLess             L3, r0, r5\l" ]
+    f4_n7 [ label = "Block 7 (PC 30-32)\l  0: LoadConstUndefined r0\l  1: Ret               r0\l" ]
+    f4_n8 [ label = "EXIT" ]
+
+    f4_n0 -> f4_n1 [label="Fall"]
+    f4_n1 -> f4_n4 [label="True"]
+    f4_n1 -> f4_n2 [label="False"]
+    f4_n2 -> f4_n3 [label="Fall"]
+    f4_n3 -> f4_n6 [label="Uncond"]
+    f4_n4 -> f4_n8 [label="Uncond"]
+    f4_n5 -> f4_n6 [label="Fall"]
+    f4_n6 -> f4_n1 [label="True"]
+    f4_n6 -> f4_n7 [label="False"]
+    f4_n7 -> f4_n8 [label="Uncond"]
+    f4_n1 -> f4_n5 [label="Exception"]
+    f4_n2 -> f4_n5 [label="Exception"]
+    f4_n4 -> f4_n5 [label="Exception"]
+  }
+
+  subgraph cluster_function_5 {
+    label = "Function 5";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f5_n0 [ label = "Block 0 (PC 0-9) [L1]\l  0: GetGlobalObject   r0\l  1: TryGetById        r2, r0, 1, \"Error\"\l  2: GetByIdShort      r0, r2, 2, \"prototype\"\l  3: CreateThis        r1, r0, r2\l  4: LoadConstString   r6, \"First error\"\l  5: Mov               r7, r1\l  6: Construct         r0, r2, 2\l  7: SelectObject      r0, r1, r0\l  8: Throw             r0\l" ]
+    f5_n1 [ label = "Block 1 (PC 9-16) [L2]\l  0: Catch             r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r4, r1, 3, \"console\"\l  3: GetByIdShort      r3, r4, 4, \"log\"\l  4: GetByIdShort      r2, r0, 5, \"message\"\l  5: LoadConstString   r0, \"First catch:\"\l  6: Call3             r0, r3, r4, r0, r2\l" ]
+    f5_n2 [ label = "Block 2 (PC 16-24) [L3]\l  0: TryGetById        r3, r1, 1, \"Error\"\l  1: GetByIdShort      r0, r3, 2, \"prototype\"\l  2: CreateThis        r2, r0, r3\l  3: LoadConstString   r6, \"Second error\"\l  4: Mov               r7, r2\l  5: Construct         r0, r3, 2\l  6: SelectObject      r0, r2, r0\l  7: Throw             r0\l" ]
+    f5_n3 [ label = "Block 3 (PC 24-32) [L4]\l  0: Catch             r0\l  1: TryGetById        r3, r1, 3, \"console\"\l  2: GetByIdShort      r2, r3, 4, \"log\"\l  3: GetByIdShort      r1, r0, 5, \"message\"\l  4: LoadConstString   r0, \"Second catch:\"\l  5: Call3             r0, r2, r3, r0, r1\l  6: LoadConstUndefined r0\l  7: Ret               r0\l" ]
+    f5_n4 [ label = "EXIT" ]
+
+    f5_n0 -> f5_n4 [label="Uncond"]
+    f5_n1 -> f5_n2 [label="Fall"]
+    f5_n2 -> f5_n4 [label="Uncond"]
+    f5_n3 -> f5_n4 [label="Uncond"]
+    f5_n0 -> f5_n1 [label="Exception"]
+    f5_n2 -> f5_n3 [label="Exception"]
+  }
+
+}

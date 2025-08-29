@@ -1,0 +1,151 @@
+// CFG analysis for closure_capture_test
+// Generated from data/closure_capture_test.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-16)\l  0: DeclareGlobalVar  \"outerFunction\"\l  1: DeclareGlobalVar  \"makeCounter\"\l  2: CreateEnvironment r0\l  3: CreateClosure     r1, r0, Function<outerFunction>1\l  4: GetGlobalObject   r2\l  5: PutById           r2, r1, 1, \"outerFunction\"\l  6: CreateClosure     r0, r0, Function<makeCounter>7\l  7: PutById           r2, r0, 2, \"makeCounter\"\l  8: TryGetById        r1, r2, 1, \"globalThis\"\l  9: NewObject         r0\l  10: GetByIdShort      r3, r2, 2, \"outerFunction\"\l  11: PutNewOwnByIdShort r0, r3, \"outerFunction\"\l  12: GetByIdShort      r2, r2, 3, \"makeCounter\"\l  13: PutNewOwnByIdShort r0, r2, \"makeCounter\"\l  14: PutById           r1, r0, 3, \"testClosures\"\l  15: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-18)\l  0: CreateEnvironment r1\l  1: LoadParam         r2, 1\l  2: LoadConstString   r0, \"hello\"\l  3: Add               r0, r0, r2\l  4: StoreToEnvironment r1, 0, r0\l  5: LoadConstUInt8    r0, 42\l  6: Add               r0, r0, r2\l  7: StoreToEnvironment r1, 1, r0\l  8: NewObject         r0\l  9: CreateClosure     r2, r1, Function<innerFunction>2\l  10: PutNewOwnByIdShort r0, r2, \"inner\"\l  11: CreateClosure     r2, r1, Function<anotherInner>3\l  12: PutNewOwnByIdShort r0, r2, \"another\"\l  13: CreateClosure     r2, r1, Function<getOuter>5\l  14: PutNewOwnByIdShort r0, r2, \"getOuter\"\l  15: CreateClosure     r1, r1, Function<getNum>6\l  16: PutNewOwnByIdShort r0, r1, \"getNum\"\l  17: Ret               r0\l" ]
+    f1_n1 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [ label = "Block 0 (PC 0-17)\l  0: LoadParam         r1, 1\l  1: GetEnvironment    r0, 0\l  2: LoadFromEnvironment r2, r0, 0\l  3: Add               r2, r2, r1\l  4: StoreToEnvironment r0, 0, r2\l  5: GetGlobalObject   r2\l  6: TryGetById        r4, r2, 1, \"console\"\l  7: GetByIdShort      r3, r4, 2, \"log\"\l  8: LoadFromEnvironment r5, r0, 0\l  9: LoadConstString   r2, \" \"\l  10: Add               r5, r5, r2\l  11: LoadConstString   r2, \"world\"\l  12: Add               r2, r5, r2\l  13: Call2             r2, r3, r4, r2\l  14: LoadFromEnvironment r0, r0, 1\l  15: Add               r0, r0, r1\l  16: Ret               r0\l" ]
+    f2_n1 [ label = "EXIT" ]
+
+    f2_n0 -> f2_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-12)\l  0: CreateEnvironment r0\l  1: GetEnvironment    r2, 0\l  2: LoadFromEnvironment r3, r2, 0\l  3: GetByIdShort      r1, r3, 1, \"toUpperCase\"\l  4: Call1             r1, r1, r3\l  5: StoreToEnvironment r0, 0, r1\l  6: LoadFromEnvironment r3, r2, 1\l  7: LoadParam         r1, 1\l  8: Mul               r1, r3, r1\l  9: StoreToEnvironment r2, 1, r1\l  10: CreateClosure     r0, r0, Function<deeplyNested>4\l  11: Ret               r0\l" ]
+    f3_n1 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_4 {
+    label = "Function 4";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f4_n0 [ label = "Block 0 (PC 0-14)\l  0: GetEnvironment    r1, 1\l  1: LoadFromEnvironment r2, r1, 0\l  2: LoadParam         r0, 1\l  3: Add               r0, r2, r0\l  4: StoreToEnvironment r1, 0, r0\l  5: GetEnvironment    r2, 0\l  6: LoadFromEnvironment r3, r2, 0\l  7: LoadConstString   r2, \" \"\l  8: Add               r0, r0, r2\l  9: Add               r0, r0, r3\l  10: LoadFromEnvironment r1, r1, 1\l  11: Add               r0, r0, r2\l  12: Add               r0, r0, r1\l  13: Ret               r0\l" ]
+    f4_n1 [ label = "EXIT" ]
+
+    f4_n0 -> f4_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_5 {
+    label = "Function 5";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f5_n0 [ label = "Block 0 (PC 0-3)\l  0: GetEnvironment    r0, 0\l  1: LoadFromEnvironment r0, r0, 0\l  2: Ret               r0\l" ]
+    f5_n1 [ label = "EXIT" ]
+
+    f5_n0 -> f5_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_6 {
+    label = "Function 6";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f6_n0 [ label = "Block 0 (PC 0-3)\l  0: GetEnvironment    r0, 0\l  1: LoadFromEnvironment r0, r0, 1\l  2: Ret               r0\l" ]
+    f6_n1 [ label = "EXIT" ]
+
+    f6_n0 -> f6_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_7 {
+    label = "Function 7";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f7_n0 [ label = "Block 0 (PC 0-11)\l  0: CreateEnvironment r1\l  1: LoadConstZero     r0\l  2: StoreNPToEnvironment r1, 0, r0\l  3: NewObject         r0\l  4: CreateClosure     r2, r1, Function<increment>8\l  5: PutNewOwnByIdShort r0, r2, \"increment\"\l  6: CreateClosure     r2, r1, Function<decrement>9\l  7: PutNewOwnByIdShort r0, r2, \"decrement\"\l  8: CreateClosure     r1, r1, Function<get>10\l  9: PutNewOwnByIdShort r0, r1, \"get\"\l  10: Ret               r0\l" ]
+    f7_n1 [ label = "EXIT" ]
+
+    f7_n0 -> f7_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_8 {
+    label = "Function 8";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f8_n0 [ label = "Block 0 (PC 0-5)\l  0: GetEnvironment    r1, 0\l  1: LoadFromEnvironment r0, r1, 0\l  2: Inc               r0, r0\l  3: StoreToEnvironment r1, 0, r0\l  4: Ret               r0\l" ]
+    f8_n1 [ label = "EXIT" ]
+
+    f8_n0 -> f8_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_9 {
+    label = "Function 9";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f9_n0 [ label = "Block 0 (PC 0-5)\l  0: GetEnvironment    r1, 0\l  1: LoadFromEnvironment r0, r1, 0\l  2: Dec               r0, r0\l  3: StoreToEnvironment r1, 0, r0\l  4: Ret               r0\l" ]
+    f9_n1 [ label = "EXIT" ]
+
+    f9_n0 -> f9_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_10 {
+    label = "Function 10";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f10_n0 [ label = "Block 0 (PC 0-3)\l  0: GetEnvironment    r0, 0\l  1: LoadFromEnvironment r0, r0, 0\l  2: Ret               r0\l" ]
+    f10_n1 [ label = "EXIT" ]
+
+    f10_n0 -> f10_n1 [label="Uncond"]
+  }
+
+}

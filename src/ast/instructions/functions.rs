@@ -184,12 +184,40 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         // Read all variable names BEFORE creating destination variable to avoid conflicts
         let func_var = self.register_manager.get_source_variable_name(func_reg);
 
-        // Collect argument variable names
+        // Collect argument variable names - use call site analysis if available
         let mut arg_vars = Vec::new();
-        for i in 0..arg_count {
-            let arg_reg = func_reg + 1 + i;
-            let arg_var = self.register_manager.get_source_variable_name(arg_reg);
-            arg_vars.push(arg_var);
+
+        // Try to get argument registers from call site analysis
+        if let Some(current_block) = self.register_manager.current_block() {
+            let current_pc = self.expression_context.current_pc;
+            let call_site_key = (current_block, current_pc);
+
+            if let Some(call_site_info) = self
+                .control_flow_plan
+                .call_site_analysis
+                .call_sites
+                .get(&call_site_key)
+            {
+                // Use the actual argument registers from the analysis
+                for &arg_reg in &call_site_info.argument_registers {
+                    let arg_var = self.register_manager.get_source_variable_name(arg_reg);
+                    arg_vars.push(arg_var);
+                }
+            } else {
+                // Fallback to heuristic: sequential registers after func_reg
+                for i in 0..arg_count {
+                    let arg_reg = func_reg + 1 + i;
+                    let arg_var = self.register_manager.get_source_variable_name(arg_reg);
+                    arg_vars.push(arg_var);
+                }
+            }
+        } else {
+            // Fallback to heuristic: sequential registers after func_reg
+            for i in 0..arg_count {
+                let arg_reg = func_reg + 1 + i;
+                let arg_var = self.register_manager.get_source_variable_name(arg_reg);
+                arg_vars.push(arg_var);
+            }
         }
 
         // Now create the destination variable (this updates register mappings)
@@ -797,7 +825,9 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         Ok(InstructionResult::Statement(stmt))
     }
 
-    /// Create constructor call: `let var0_1 = new Constructor(arg1, arg2);`
+    /// Create constructor call: `let var0_1 = Constructor.call(thisObj, arg1, arg2);`
+    /// The Construct bytecode instruction manually implements the 'new' operator:
+    /// it expects a 'this' object to be created by CreateThis and passed as the first argument
     fn create_constructor_call(
         &mut self,
         dest_reg: u8,
@@ -811,29 +841,87 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let span = Span::default();
 
-        // Create constructor expression
+        // Create constructor.call expression
         let constructor_atom = self.ast_builder.allocator.alloc_str(&constructor_var);
         let constructor_expr = self
             .ast_builder
             .expression_identifier(span, constructor_atom);
 
-        // Create arguments (simplified - using placeholder args)
-        let mut arguments = self.ast_builder.vec();
-        for i in 0..arg_count {
-            let arg_name = format!("arg{}", i);
-            let arg_atom = self.ast_builder.allocator.alloc_str(&arg_name);
-            let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
-            arguments.push(oxc_ast::ast::Argument::from(arg_expr));
-        }
-
-        let new_expr = self.ast_builder.expression_new(
+        // Create the .call member expression
+        let call_atom = self.ast_builder.allocator.alloc_str("call");
+        let call_name = self.ast_builder.identifier_name(span, call_atom);
+        let constructor_call = self.ast_builder.alloc_static_member_expression(
             span,
             constructor_expr,
-            None::<oxc_ast::ast::TSTypeParameterInstantiation>,
-            arguments,
+            call_name,
+            false,
         );
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(new_expr))?;
+        // Look up the actual argument registers from call site analysis
+        let mut arguments = self.ast_builder.vec();
+
+        // Get the current block ID and instruction index from register manager
+        // We need to find this constructor call in the call site analysis
+        if let Some(current_block) = self.register_manager.current_block() {
+            let current_pc = self.expression_context.current_pc;
+            let call_site_key = (current_block, current_pc);
+
+            if let Some(call_site_info) = self
+                .control_flow_plan
+                .call_site_analysis
+                .call_sites
+                .get(&call_site_key)
+            {
+                // Use the actual argument registers from the analysis
+                // The first argument is 'this', followed by the constructor's actual arguments
+                for &arg_reg in &call_site_info.argument_registers {
+                    let arg_var = self.register_manager.get_variable_name(arg_reg);
+                    let arg_atom = self.ast_builder.allocator.alloc_str(&arg_var);
+                    let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
+                    arguments.push(oxc_ast::ast::Argument::from(arg_expr));
+                }
+            } else {
+                // Fallback: create placeholder arguments if call site analysis is missing
+                log::warn!(
+                    "Call site analysis not found for constructor at block {:?}, PC {:?}",
+                    current_block,
+                    current_pc.0
+                );
+                // First argument is 'this', rest are constructor arguments
+                for i in 0..arg_count {
+                    let arg_name = if i == 0 {
+                        "this".to_string()
+                    } else {
+                        format!("arg{}", i - 1)
+                    };
+                    let arg_atom = self.ast_builder.allocator.alloc_str(&arg_name);
+                    let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
+                    arguments.push(oxc_ast::ast::Argument::from(arg_expr));
+                }
+            }
+        } else {
+            // No current block context - use placeholder arguments
+            for i in 0..arg_count {
+                let arg_name = if i == 0 {
+                    "this".to_string()
+                } else {
+                    format!("arg{}", i - 1)
+                };
+                let arg_atom = self.ast_builder.allocator.alloc_str(&arg_name);
+                let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
+                arguments.push(oxc_ast::ast::Argument::from(arg_expr));
+            }
+        }
+
+        let call_expr = self.ast_builder.expression_call(
+            span,
+            oxc_ast::ast::Expression::StaticMemberExpression(constructor_call),
+            None::<oxc_ast::ast::TSTypeParameterInstantiation>,
+            arguments,
+            false,
+        );
+
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }

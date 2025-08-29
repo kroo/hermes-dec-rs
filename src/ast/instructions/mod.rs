@@ -5,6 +5,7 @@
 //! This is the first phase of decompilation - direct translation without optimization.
 
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, VariableKind};
+use crate::analysis::value_tracker::ConstantValue;
 use crate::ast::{
     context::{ExpressionContext, ExpressionContextError},
     variables::RegisterManager,
@@ -49,6 +50,10 @@ pub enum StatementConversionError {
     },
     #[error("Register {0} not found")]
     RegisterNotFound(u8),
+    #[error("No current PC available")]
+    NoCurrentPC,
+    #[error("No current block available")]
+    NoCurrentBlock,
     #[error("Expression context error: {0}")]
     ContextError(#[from] ExpressionContextError),
     #[error("Operand extraction failed: {0}")]
@@ -218,6 +223,64 @@ impl<'a> InstructionToStatementConverter<'a> {
     /// Get the variable mapping from the register manager
     pub fn get_variable_mapping(&self) -> Option<&crate::ast::variables::VariableMapping> {
         self.register_manager.variable_mapping()
+    }
+
+    /// Convert a register operand to an expression, respecting use strategies
+    /// This handles both variable references and inline constant values based on SSA analysis
+    pub fn register_to_expression(
+        &mut self,
+        register: u8,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        let span = oxc_span::Span::default();
+        let var_name = self.register_manager.get_variable_name(register);
+
+        // Check if we have SSA information and use strategies
+        if let (Some(current_pc), Some(current_block)) = (
+            self.register_manager.current_pc(),
+            self.register_manager.current_block(),
+        ) {
+            if let Some(ssa_value) = self.register_manager.get_current_ssa_for_register(register) {
+                let use_site = crate::cfg::ssa::RegisterUse {
+                    register,
+                    block_id: current_block,
+                    instruction_idx: current_pc,
+                };
+                let dup_value = crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone());
+
+                if let Some(strategy) = self
+                    .control_flow_plan
+                    .use_strategies
+                    .get(&(dup_value, use_site))
+                {
+                    match strategy {
+                        crate::analysis::ssa_usage_tracker::UseStrategy::InlineValue(constant) => {
+                            // Create a constant expression
+                            return self.create_constant_expression(constant);
+                        }
+                        crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
+                            // Use the variable reference
+                            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+                            return Ok(self.ast_builder.expression_identifier(span, var_atom));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Default: use variable reference
+        let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+        Ok(self.ast_builder.expression_identifier(span, var_atom))
+    }
+
+    /// Convert a source register operand to an expression (for reading values)
+    /// This is a convenience wrapper that handles SSA tracking for source operands
+    pub fn source_register_to_expression(
+        &mut self,
+        register: u8,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        // Get the source variable name to ensure proper SSA tracking
+        let _ = self.register_manager.get_source_variable_name(register);
+        self.register_to_expression(register)
     }
 
     /// Convert a unified instruction to a JavaScript statement or jump condition
@@ -1810,6 +1873,34 @@ impl<'a> InstructionToStatementConverter<'a> {
                 Ok(self.ast_builder.statement_empty(oxc_span::Span::default()))
             }
         }
+    }
+
+    /// Create a constant expression from a ConstantValue
+    pub fn create_constant_expression(
+        &self,
+        value: &ConstantValue,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        let span = oxc_span::Span::default();
+        let expr = match value {
+            ConstantValue::Number(n) => self.ast_builder.expression_numeric_literal(
+                span,
+                *n,
+                None,
+                oxc_ast::ast::NumberBase::Decimal,
+            ),
+            ConstantValue::String(s) => {
+                let string_atom = self.ast_builder.allocator.alloc_str(s);
+                self.ast_builder
+                    .expression_string_literal(span, string_atom, None)
+            }
+            ConstantValue::Boolean(b) => self.ast_builder.expression_boolean_literal(span, *b),
+            ConstantValue::Null => self.ast_builder.expression_null_literal(span),
+            ConstantValue::Undefined => {
+                let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                self.ast_builder.expression_identifier(span, undefined_atom)
+            }
+        };
+        Ok(expr)
     }
 
     /// Create a return statement: `return expression;`

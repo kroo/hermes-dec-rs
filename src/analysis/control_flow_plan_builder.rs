@@ -32,6 +32,8 @@ pub struct ControlFlowPlanBuilder<'a> {
     stop_blocks: HashSet<NodeIndex>,
     /// Cached post-dominator analysis for nested pattern detection
     post_dominators: Option<PostDominatorAnalysis>,
+    /// Set of catch blocks to exclude from normal control flow
+    catch_blocks: HashSet<NodeIndex>,
 }
 
 impl<'a> ControlFlowPlanBuilder<'a> {
@@ -40,6 +42,13 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Pre-compute post-dominators for pattern detection
         let post_dominators = cfg.analyze_post_dominators();
 
+        // Identify catch blocks from exception analysis
+        let catch_blocks = if let Some(exception_analysis) = cfg.analyze_exception_handlers() {
+            crate::cfg::exception_analysis::get_catch_blocks(&exception_analysis)
+        } else {
+            HashSet::new()
+        };
+
         Self {
             plan: ControlFlowPlan::new(),
             cfg,
@@ -47,18 +56,40 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             processed_blocks: HashSet::new(),
             stop_blocks: HashSet::new(),
             post_dominators,
+            catch_blocks,
         }
     }
 
     /// Build the control flow plan
     pub fn build(self) -> ControlFlowPlan {
+        log::debug!(
+            "ControlFlowPlanBuilder::build starting for function {}",
+            self.cfg.function_index()
+        );
+
+        // Run call site analysis first
+        log::debug!("Starting call site analysis...");
+        let call_site_analysis =
+            crate::analysis::call_site_analysis::CallSiteAnalysis::analyze(&self.cfg);
+        log::debug!(
+            "Call site analysis complete: {} call sites found",
+            call_site_analysis.call_sites.len()
+        );
+
         // First build the structure
         let function_analysis = self.function_analysis;
+        log::debug!("Building control flow structure...");
         let mut plan = self.build_structure();
+        log::debug!("Control flow structure built");
+
+        // Add the call site analysis to the plan
+        plan.call_site_analysis = call_site_analysis;
 
         // Then analyze it to compute SSA strategies
+        log::debug!("Starting SSA strategy analysis...");
         let analyzer = ControlFlowPlanAnalyzer::new(&mut plan, function_analysis);
         analyzer.analyze();
+        log::debug!("SSA strategy analysis complete");
 
         plan
     }
@@ -66,6 +97,24 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     /// Build just the control flow structure without SSA analysis
     fn build_structure(mut self) -> ControlFlowPlan {
         // Use existing CFG analyses instead of reimplementing
+
+        // Check for exception handlers first
+        if let Some(exception_analysis) = self.cfg.analyze_exception_handlers() {
+            if !exception_analysis.regions.is_empty() {
+                log::debug!(
+                    "Found {} exception regions",
+                    exception_analysis.regions.len()
+                );
+                let root = self.build_from_exception_analysis(&exception_analysis);
+                self.plan.set_root(root);
+                return self.plan;
+            }
+        } else {
+            log::debug!(
+                "No exception analysis found for function {}",
+                self.cfg.function_index()
+            );
+        }
 
         // Get switch regions if any
         if let Some(switch_analysis) = self.cfg.analyze_switch_regions(&self.function_analysis.ssa)
@@ -115,6 +164,11 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
         while let Some(block) = current_block {
             if self.processed_blocks.contains(&block) || self.stop_blocks.contains(&block) {
+                break;
+            }
+
+            // Skip catch blocks from sequential structures
+            if self.catch_blocks.contains(&block) {
                 break;
             }
 
@@ -177,12 +231,79 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         &mut self,
         analysis: &crate::cfg::analysis::ConditionalAnalysis,
     ) -> StructureId {
-        // For now, just handle the first chain
-        // TODO: Handle multiple chains properly
-        if let Some(chain) = analysis.chains.first() {
-            self.build_conditional_structure(chain.clone())
-        } else {
-            self.plan.create_structure(ControlFlowKind::Empty)
+        log::debug!("Building from {} conditional chains", analysis.chains.len());
+
+        // Build a sequence containing all conditional chains and unprocessed blocks
+        let mut structures = Vec::new();
+
+        // Process each conditional chain
+        for (i, chain) in analysis.chains.iter().enumerate() {
+            log::debug!(
+                "Processing conditional chain {}/{}",
+                i + 1,
+                analysis.chains.len()
+            );
+
+            // Skip if this chain's blocks have already been processed
+            // Check the first branch's condition block since chains don't have a single condition_block
+            let chain_already_processed = chain
+                .branches
+                .iter()
+                .any(|branch| self.processed_blocks.contains(&branch.condition_block));
+
+            if chain_already_processed {
+                log::debug!("  Chain {} already processed, skipping", i);
+                continue;
+            }
+
+            let structure = self.build_conditional_structure(chain.clone());
+            structures.push(structure);
+        }
+
+        // Now collect any remaining unprocessed blocks
+        let all_blocks: Vec<NodeIndex> = self
+            .cfg
+            .graph()
+            .node_indices()
+            .filter(|&idx| !self.cfg.graph()[idx].is_exit())
+            .collect();
+
+        log::debug!(
+            "Checking {} total blocks for unprocessed ones",
+            all_blocks.len()
+        );
+
+        for &block in &all_blocks {
+            if !self.processed_blocks.contains(&block) && !self.stop_blocks.contains(&block) {
+                log::debug!("  Found unprocessed block {}", block.index());
+
+                // Create a basic block structure for this unprocessed block
+                if let Some(structure) = self.try_build_basic_block(block) {
+                    structures.push(structure);
+                }
+            } else if block.index() == 3 {
+                log::debug!(
+                    "  Block 3 status: processed={}, stop={}",
+                    self.processed_blocks.contains(&block),
+                    self.stop_blocks.contains(&block)
+                );
+            }
+        }
+
+        // If we have multiple structures, wrap them in a sequence
+        match structures.len() {
+            0 => self.plan.create_structure(ControlFlowKind::Empty),
+            1 => structures[0],
+            _ => {
+                log::debug!("Creating sequence with {} structures", structures.len());
+                // Convert StructureId elements to SequentialElement
+                let elements: Vec<SequentialElement> = structures
+                    .into_iter()
+                    .map(|id| SequentialElement::Structure(id))
+                    .collect();
+                self.plan
+                    .create_structure(ControlFlowKind::Sequential { elements })
+            }
         }
     }
 
@@ -577,8 +698,16 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         let mut elements = Vec::new();
         let mut processed_in_body = HashSet::new();
 
+        // Filter out catch blocks from the case body
+        let filtered_blocks: Vec<_> = analysis
+            .blocks
+            .iter()
+            .copied()
+            .filter(|b| !self.catch_blocks.contains(b))
+            .collect();
+
         // Sort blocks by index to process them in order
-        let mut sorted_blocks: Vec<_> = analysis.blocks.iter().copied().collect();
+        let mut sorted_blocks = filtered_blocks;
         sorted_blocks.sort_by_key(|b| b.index());
 
         // Process blocks in order, detecting nested control flow
@@ -786,12 +915,39 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             self.processed_blocks.insert(first_branch.condition_source);
             self.processed_blocks.insert(first_branch.condition_block);
 
-            // Build both branches first
-            let original_true_branch = self.build_sequential_structure(first_branch.branch_entry);
+            // Build the true branch - use all blocks identified in the branch
+            let original_true_branch = if first_branch.branch_blocks.is_empty() {
+                self.plan.create_structure(ControlFlowKind::Empty)
+            } else if first_branch.branch_blocks.len() == 1 {
+                // Single block branch
+                let block = first_branch.branch_blocks[0];
+                self.processed_blocks.insert(block);
+                self.plan.create_structure(ControlFlowKind::BasicBlock {
+                    block,
+                    instruction_count: self.cfg.graph()[block].instructions().len(),
+                    is_synthetic: false,
+                })
+            } else {
+                // Multiple blocks - build from the identified blocks
+                self.build_branch_from_blocks(&first_branch.branch_blocks)
+            };
 
+            // Build the false branch - handle else/else-if branches
             let original_false_branch = if chain.branches.len() > 1 {
                 if let Some(second_branch) = chain.branches.get(1) {
-                    Some(self.build_sequential_structure(second_branch.branch_entry))
+                    if second_branch.branch_blocks.is_empty() {
+                        Some(self.plan.create_structure(ControlFlowKind::Empty))
+                    } else if second_branch.branch_blocks.len() == 1 {
+                        let block = second_branch.branch_blocks[0];
+                        self.processed_blocks.insert(block);
+                        Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
+                            block,
+                            instruction_count: self.cfg.graph()[block].instructions().len(),
+                            is_synthetic: false,
+                        }))
+                    } else {
+                        Some(self.build_branch_from_blocks(&second_branch.branch_blocks))
+                    }
                 } else {
                     None
                 }
@@ -799,8 +955,9 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 None
             };
 
-            // Mark join block as processed
-            self.processed_blocks.insert(chain.join_block);
+            // Don't mark join block as processed here - it should be added as a separate block
+            // after the conditional structure
+            // self.processed_blocks.insert(chain.join_block);
 
             // Extract condition information from the condition block
             let condition_expr = self.extract_condition_info(first_branch.condition_block);
@@ -1261,8 +1418,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             .map(|edge| edge.target())
             .collect();
 
-        // If there's exactly one successor and it's not already processed, that's our next block
-        if successors.len() == 1 && !self.processed_blocks.contains(&successors[0]) {
+        // If there's exactly one successor and it's not already processed or a catch block,
+        // that's our next block
+        if successors.len() == 1
+            && !self.processed_blocks.contains(&successors[0])
+            && !self.catch_blocks.contains(&successors[0])
+        {
             Some(successors[0])
         } else {
             None
@@ -1667,6 +1828,474 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             default_head,
             join_block,
             case_analyses: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Build control flow plan from exception handler analysis
+    fn build_from_exception_analysis(
+        &mut self,
+        analysis: &crate::cfg::exception_analysis::ExceptionAnalysis,
+    ) -> StructureId {
+        // Find the earliest instruction covered by any exception region
+        let earliest_try_start = analysis
+            .regions
+            .iter()
+            .map(|r| r.try_start_idx)
+            .min()
+            .unwrap_or(0);
+
+        // Check if there are any blocks before the exception regions
+        let mut preamble_blocks = Vec::new();
+        for node in self.cfg.graph().node_indices() {
+            let block = &self.cfg.graph()[node];
+            // If this block ends before or at the earliest try start, it's a preamble block
+            if block.end_pc().0 <= earliest_try_start as usize {
+                preamble_blocks.push(node);
+            }
+        }
+
+        // Sort preamble blocks by their start PC
+        preamble_blocks.sort_by_key(|&node| self.cfg.graph()[node].start_pc());
+
+        // Build the exception structure
+        let exception_structure = if analysis.regions.len() == 1 {
+            let region = &analysis.regions[0];
+            self.build_try_catch_structure(region)
+        } else if analysis.regions.len() > 1 {
+            // Build nested exception regions recursively
+            self.build_nested_exception_structures(&analysis.regions)
+        } else {
+            // Fallback to sequential structure
+            let entry_block = NodeIndex::new(0);
+            self.build_sequential_structure(entry_block)
+        };
+
+        // If we have preamble blocks, create a sequential structure
+        if !preamble_blocks.is_empty() {
+            use crate::analysis::control_flow_plan::SequentialElement;
+            let mut elements = Vec::new();
+
+            // Add each preamble block as a structure
+            for block in preamble_blocks {
+                self.processed_blocks.insert(block);
+                let block_structure = self.plan.create_structure(ControlFlowKind::BasicBlock {
+                    block,
+                    instruction_count: self.cfg.graph()[block].instructions().len(),
+                    is_synthetic: false,
+                });
+                elements.push(SequentialElement::Structure(block_structure));
+            }
+
+            // Add the exception structure
+            elements.push(SequentialElement::Structure(exception_structure));
+
+            // Create and return the sequential structure
+            self.plan
+                .create_structure(ControlFlowKind::Sequential { elements })
+        } else {
+            exception_structure
+        }
+    }
+
+    /// Build nested exception structures
+    fn build_nested_exception_structures(
+        &mut self,
+        regions: &[crate::cfg::exception_analysis::ExceptionRegion],
+    ) -> StructureId {
+        // Sort regions by their start index (and reverse end index for proper nesting order)
+        let mut sorted_regions = regions.to_vec();
+        sorted_regions.sort_by_key(|r| (r.try_start_idx, std::cmp::Reverse(r.try_end_idx)));
+
+        // Find the outermost region (widest range)
+        let outermost = sorted_regions
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, r)| r.try_end_idx - r.try_start_idx)
+            .map(|(idx, _)| idx)
+            .unwrap_or(0);
+
+        // Build the outermost structure
+        self.build_try_catch_structure_with_nested(&sorted_regions[outermost], &sorted_regions)
+    }
+
+    /// Build try-catch structure with potential nested regions
+    fn build_try_catch_structure_with_nested(
+        &mut self,
+        region: &crate::cfg::exception_analysis::ExceptionRegion,
+        all_regions: &[crate::cfg::exception_analysis::ExceptionRegion],
+    ) -> StructureId {
+        // Find any regions nested inside this one
+        let nested_regions: Vec<_> = all_regions
+            .iter()
+            .filter(|r| {
+                // A region is nested if it's completely inside this region's try blocks
+                std::ptr::eq(*r, region) == false &&  // Not the same region
+                r.try_start_idx >= region.try_start_idx &&
+                r.try_end_idx <= region.try_end_idx
+            })
+            .cloned()
+            .collect();
+
+        if !nested_regions.is_empty() {
+            // Build the nested structure recursively
+            let nested_structure = if nested_regions.len() == 1 {
+                self.build_try_catch_structure(&nested_regions[0])
+            } else {
+                self.build_nested_exception_structures(&nested_regions)
+            };
+
+            // Now build this region with the nested structure as part of the try body
+            return self.build_try_catch_with_nested_structure(region, nested_structure);
+        }
+
+        // No nested regions, build normally
+        self.build_try_catch_structure(region)
+    }
+
+    /// Build try-catch with a nested structure in the try body
+    fn build_try_catch_with_nested_structure(
+        &mut self,
+        region: &crate::cfg::exception_analysis::ExceptionRegion,
+        nested_structure: StructureId,
+    ) -> StructureId {
+        use crate::analysis::control_flow_plan::CatchClause;
+
+        // Find blocks that belong to the outer try but not the nested region
+        // These are blocks that come before the nested try-catch
+        let mut outer_only_blocks = Vec::new();
+        for &block in &region.try_blocks {
+            // Check if this block is part of the nested structure's try blocks
+            // If not, it belongs to the outer try only
+            if !self.processed_blocks.contains(&block) {
+                outer_only_blocks.push(block);
+                self.processed_blocks.insert(block);
+            }
+        }
+
+        // Build the try body including both outer-only blocks and nested structure
+        let try_body = if outer_only_blocks.is_empty() {
+            nested_structure
+        } else {
+            use crate::analysis::control_flow_plan::SequentialElement;
+
+            // Create a sequential structure with outer blocks followed by nested structure
+            let mut elements = Vec::new();
+
+            // Add outer-only blocks
+            for block in outer_only_blocks {
+                let block_structure = self.plan.create_structure(ControlFlowKind::BasicBlock {
+                    block,
+                    instruction_count: self.cfg.graph()[block].instructions().len(),
+                    is_synthetic: false,
+                });
+                elements.push(SequentialElement::Structure(block_structure));
+            }
+
+            // Add the nested structure
+            elements.push(SequentialElement::Structure(nested_structure));
+
+            // Create sequential structure
+            self.plan
+                .create_structure(ControlFlowKind::Sequential { elements })
+        };
+
+        // Build catch clause if present
+        let catch_clause = if let Some(ref catch_handler) = region.catch_handler {
+            self.processed_blocks.insert(catch_handler.catch_block);
+
+            let catch_body = self.plan.create_structure(ControlFlowKind::BasicBlock {
+                block: catch_handler.catch_block,
+                instruction_count: self.cfg.graph()[catch_handler.catch_block]
+                    .instructions()
+                    .len()
+                    - 1, // Skip Catch instruction
+                is_synthetic: false,
+            });
+
+            // Look up the actual SSA value for the Catch instruction
+            let error_ssa_value =
+                self.find_catch_ssa_value(catch_handler.catch_block, catch_handler.error_register);
+
+            Some(CatchClause {
+                catch_block: catch_handler.catch_block,
+                error_register: catch_handler.error_register,
+                error_ssa_value,
+                body: catch_body,
+            })
+        } else {
+            None
+        };
+
+        // Build finally clause if present
+        let finally_clause = region
+            .finally_block
+            .map(|block| self.build_finally_clause(block));
+
+        // Create the try-catch structure
+        self.plan.create_structure(ControlFlowKind::TryCatch {
+            try_body,
+            catch_clause,
+            finally_clause,
+        })
+    }
+
+    /// Build a try-catch structure from exception region
+    fn build_try_catch_structure(
+        &mut self,
+        region: &crate::cfg::exception_analysis::ExceptionRegion,
+    ) -> StructureId {
+        use crate::analysis::control_flow_plan::CatchClause;
+
+        // Mark all try blocks and catch block as processed
+        for &block in &region.try_blocks {
+            self.processed_blocks.insert(block);
+        }
+
+        if let Some(ref catch_handler) = region.catch_handler {
+            self.processed_blocks.insert(catch_handler.catch_block);
+        }
+
+        // Build the try body - check for patterns within the try blocks
+        let try_body = if region.try_blocks.is_empty() {
+            self.plan.create_structure(ControlFlowKind::Empty)
+        } else {
+            // Analyze patterns within the try blocks
+            self.build_structure_from_blocks(&region.try_blocks)
+        };
+
+        // Build the catch clause
+        let catch_clause = region.catch_handler.as_ref().map(|handler| {
+            let catch_body = self.plan.create_structure(ControlFlowKind::BasicBlock {
+                block: handler.catch_block,
+                instruction_count: self.cfg.graph()[handler.catch_block].instructions().len(),
+                is_synthetic: false,
+            });
+
+            // Look up the actual SSA value for the Catch instruction
+            let error_ssa_value =
+                self.find_catch_ssa_value(handler.catch_block, handler.error_register);
+
+            CatchClause {
+                catch_block: handler.catch_block,
+                error_register: handler.error_register,
+                error_ssa_value,
+                body: catch_body,
+            }
+        });
+
+        // Handle finally block if detected
+        let finally_clause = if let Some(finally_block) = region.finally_block {
+            // Build the finally clause
+            Some(self.build_finally_clause(finally_block))
+        } else {
+            None
+        };
+
+        // Create the try-catch structure
+        self.plan.create_structure(ControlFlowKind::TryCatch {
+            try_body,
+            catch_clause,
+            finally_clause,
+        })
+    }
+
+    /// Build a branch structure from a set of blocks  
+    fn build_branch_from_blocks(&mut self, blocks: &[NodeIndex]) -> StructureId {
+        use crate::analysis::control_flow_plan::SequentialElement;
+
+        // Mark all blocks as processed
+        for &block in blocks {
+            self.processed_blocks.insert(block);
+        }
+
+        // Build sequential structure from the blocks
+        if blocks.is_empty() {
+            self.plan.create_structure(ControlFlowKind::Empty)
+        } else if blocks.len() == 1 {
+            let block = blocks[0];
+            self.plan.create_structure(ControlFlowKind::BasicBlock {
+                block,
+                instruction_count: self.cfg.graph()[block].instructions().len(),
+                is_synthetic: false,
+            })
+        } else {
+            // Create sequential elements for all blocks
+            let elements: Vec<SequentialElement> = blocks
+                .iter()
+                .map(|&block| SequentialElement::Block(block))
+                .collect();
+            self.plan
+                .create_structure(ControlFlowKind::Sequential { elements })
+        }
+    }
+
+    /// Build structure from a set of blocks, detecting patterns like switches
+    fn build_structure_from_blocks(&mut self, blocks: &[NodeIndex]) -> StructureId {
+        // Check if these blocks contain a switch pattern
+        if let Some(switch_analysis) = self.cfg.analyze_switch_regions(&self.function_analysis.ssa)
+        {
+            // Check if any switch region matches our blocks
+            for region in &switch_analysis.regions {
+                // Check if the switch dispatch block is in our blocks
+                if blocks.contains(&region.dispatch) {
+                    // Mark blocks as processed
+                    for &block in blocks {
+                        self.processed_blocks.insert(block);
+                    }
+                    // Build the switch structure
+                    return self.build_switch_from_region(region.clone());
+                }
+            }
+        }
+
+        // Check for conditional patterns
+        if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
+            for chain in &conditional_analysis.chains {
+                // Check if this chain's blocks overlap with our blocks
+                let has_overlap = chain.branches.iter().any(|branch| {
+                    blocks.contains(&branch.condition_block)
+                        || branch.branch_blocks.iter().any(|b| blocks.contains(b))
+                });
+
+                if has_overlap {
+                    // Mark blocks as processed
+                    for &block in blocks {
+                        self.processed_blocks.insert(block);
+                    }
+                    // Build the conditional structure
+                    return self.build_conditional_structure(chain.clone());
+                }
+            }
+        }
+
+        // Fallback: build sequential structure from blocks
+        if blocks.len() == 1 {
+            let block = blocks[0];
+            self.plan.create_structure(ControlFlowKind::BasicBlock {
+                block,
+                instruction_count: self.cfg.graph()[block].instructions().len(),
+                is_synthetic: false,
+            })
+        } else {
+            use crate::analysis::control_flow_plan::SequentialElement;
+            let elements: Vec<SequentialElement> = blocks
+                .iter()
+                .map(|&block| SequentialElement::Block(block))
+                .collect();
+            self.plan
+                .create_structure(ControlFlowKind::Sequential { elements })
+        }
+    }
+
+    /// Find the SSA value defined by the Catch instruction
+    fn find_catch_ssa_value(
+        &self,
+        catch_block: NodeIndex,
+        error_register: u8,
+    ) -> crate::cfg::ssa::SSAValue {
+        use crate::generated::unified_instructions::UnifiedInstruction;
+
+        let block = &self.cfg.graph()[catch_block];
+
+        // The Catch instruction is always the first instruction
+        if let Some(first_instr) = block.instructions().first() {
+            if matches!(&first_instr.instruction, UnifiedInstruction::Catch { .. }) {
+                // Look up the SSA value defined at this instruction
+                for (def, ssa_value) in &self.function_analysis.ssa.ssa_values {
+                    if def.block_id == catch_block
+                        && def.instruction_idx == first_instr.instruction_index.into()
+                        && def.register == error_register
+                    {
+                        return ssa_value.clone();
+                    }
+                }
+            }
+        }
+
+        // Fallback: create a synthetic SSA value if not found
+        // This shouldn't normally happen if SSA analysis is complete
+        let def_site = crate::cfg::ssa::RegisterDef::new(
+            error_register,
+            catch_block,
+            block
+                .instructions()
+                .first()
+                .map(|i| i.instruction_index.into())
+                .unwrap_or(0u32.into()),
+        );
+        crate::cfg::ssa::SSAValue::new(error_register, 1, def_site)
+    }
+
+    /// Build the finally clause structure
+    fn build_finally_clause(
+        &mut self,
+        finally_block: NodeIndex,
+    ) -> crate::analysis::control_flow_plan::FinallyClause {
+        use crate::analysis::control_flow_plan::FinallyClause;
+        use crate::generated::unified_instructions::UnifiedInstruction;
+
+        // The finally block in exception handler contains:
+        // 1. Catch instruction (first)
+        // 2. Finally code (middle)
+        // 3. Throw instruction (last)
+
+        self.processed_blocks.insert(finally_block);
+
+        let block = &self.cfg.graph()[finally_block];
+        let instructions = block.instructions();
+
+        // Determine how many instructions to skip
+        let skip_start = if matches!(
+            instructions.first().map(|i| &i.instruction),
+            Some(UnifiedInstruction::Catch { .. })
+        ) {
+            1 // Skip the Catch instruction
+        } else {
+            0
+        };
+
+        let skip_end = if matches!(
+            instructions.last().map(|i| &i.instruction),
+            Some(UnifiedInstruction::Throw { .. })
+        ) {
+            1 // Skip the Throw instruction
+        } else {
+            0
+        };
+
+        // Calculate the actual instruction count for the finally body
+        let total_instructions = instructions.len();
+        let actual_instruction_count = total_instructions.saturating_sub(skip_start + skip_end);
+
+        let body = self.plan.create_structure(ControlFlowKind::BasicBlock {
+            block: finally_block,
+            instruction_count: actual_instruction_count,
+            is_synthetic: false,
+        });
+
+        FinallyClause {
+            finally_block,
+            body,
+            skip_start,
+            skip_end,
+        }
+    }
+
+    /// Try to build a basic block structure if it hasn't been processed yet
+    fn try_build_basic_block(&mut self, block: NodeIndex) -> Option<StructureId> {
+        // Check if this block exists and hasn't been processed
+        if block.index() < self.cfg.graph().node_count() && !self.processed_blocks.contains(&block)
+        {
+            self.processed_blocks.insert(block);
+
+            let instruction_count = self.cfg.graph()[block].instructions().len();
+            Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
+                block,
+                instruction_count,
+                is_synthetic: false,
+            }))
+        } else {
+            None
         }
     }
 }

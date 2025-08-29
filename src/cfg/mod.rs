@@ -6,6 +6,7 @@ pub mod analysis;
 pub mod block;
 pub mod builder;
 pub mod conditional_analysis;
+pub mod exception_analysis;
 pub mod regions;
 pub mod ssa;
 pub mod switch_analysis;
@@ -36,6 +37,8 @@ pub enum EdgeKind {
     GeneratorFallthrough,
     /// Generator resume (resumes execution at suspension label)
     GeneratorResume,
+    /// Exception handler edge (from try block to catch/finally)
+    Exception,
 }
 
 /// Main CFG struct that provides high-level interface
@@ -234,6 +237,7 @@ impl<'a> Cfg<'a> {
             EdgeKind::Switch(_) => 5,            // Switch cases
             EdgeKind::Default => 6,              // Switch default
             EdgeKind::GeneratorResume => 7,      // Generator resume points
+            EdgeKind::Exception => 8,            // Exception handlers - lowest priority
         }
     }
 
@@ -275,7 +279,8 @@ impl<'a> Cfg<'a> {
                 | EdgeKind::False
                 | EdgeKind::Switch(_)
                 | EdgeKind::Default
-                | EdgeKind::GeneratorResume => {
+                | EdgeKind::GeneratorResume
+                | EdgeKind::Exception => {
                     let target = edge.target();
                     // Don't add labels for EXIT blocks - they won't be rendered
                     if !self.graph[target].is_exit() {

@@ -1,0 +1,277 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 2311470fbd911f5b42b332d7a7f55b915c896ef3
+  Function count: 6
+  String count: 30
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 9..19] #B3A9D9B4: Catch block
+s1[ASCII, 20..32] #A062409B: Caught error:
+s2[ASCII, 33..47] #B8631EB5: Caught in loop:
+s3[ASCII, 48..56] #1C35E808: Outer try
+s4[ASCII, 61..73] #9102A3D0: Finally block
+s5[ASCII, 74..85] #629A2BFD: First catch:
+s6[ASCII, 86..96] #63D87C1C: First error
+s7[ASCII, 97..108] #506D26DC: In try block
+s8[ASCII, 109..120] #4694952B: Inner catch:
+s9[ASCII, 121..131] #807C5F3D: Inner error
+s10[ASCII, 132..140] Inner try
+s11[ASCII, 143..152] Loop error
+s12[ASCII, 153..167] Loop iteration:
+s13[ASCII, 168..179] Outer catch:
+s14[ASCII, 180..186] Rethrow
+s15[ASCII, 187..199] Second catch:
+s16[ASCII, 200..211] Second error
+s17[ASCII, 212..221] Test error
+s18[ASCII, 222..230] Try block
+s19[ASCII, 233..238] global
+s20[ASCII, 0..13] nestedTryCatch
+s21[ASCII, 54..67] tryWithFinally
+s22[ASCII, 138..146] tryInLoop
+s23[ASCII, 231..233] log
+s24[ASCII, 239..243] Error
+s25[ASCII, 244..250] console
+s26[ASCII, 251..257] message
+s27[ASCII, 258..279] multipleCatchVariables
+s28[ASCII, 279..292] simpleTryCatch
+s29[ASCII, 293..301] prototype
+
+Array Buffer:
+
+Function<global>0(1 params, 3 registers, 0 symbols):
+  DeclareGlobalVar  "simpleTryCatch"
+  DeclareGlobalVar  "tryWithFinally"
+  DeclareGlobalVar  "nestedTryCatch"
+  DeclareGlobalVar  "tryInLoop"
+  DeclareGlobalVar  "multipleCatchVariables"
+  CreateEnvironment r0
+  CreateClosure     r2, r0, Function<simpleTryCatch>1
+  GetGlobalObject   r1
+  PutById           r1, r2, 1, "simpleTryCatch"
+  CreateClosure     r2, r0, Function<tryWithFinally>2
+  PutById           r1, r2, 2, "tryWithFinally"
+  CreateClosure     r2, r0, Function<nestedTryCatch>3
+  PutById           r1, r2, 3, "nestedTryCatch"
+  CreateClosure     r2, r0, Function<tryInLoop>4
+  PutById           r1, r2, 4, "tryInLoop"
+  CreateClosure     r0, r0, Function<multipleCatchVariables>5
+  PutById           r1, r0, 5, "multipleCatchVariables"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<simpleTryCatch>1(1 params, 13 registers, 0 symbols):
+L1:
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "In try block"
+  Call2             r1, r2, r3, r1
+  TryGetById        r2, r0, 3, "Error"
+  GetByIdShort      r0, r2, 4, "prototype"
+  CreateThis        r1, r0, r2
+  LoadConstString   r5, "Test error"
+  Mov               r6, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L2:
+  Catch             r0
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 5, "message"
+  LoadConstString   r0, "Caught error:"
+  Call3             r0, r2, r3, r0, r1
+  LoadConstUndefined r0
+  Ret               r0
+
+Exception Handlers:
+0: start = L1, end = L2, target = L2
+
+Function<tryWithFinally>2(1 params, 12 registers, 0 symbols):
+L1:
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Try block"
+  Call2             r1, r2, r3, r1
+L2:
+  TryGetById        r2, r0, 1, "console"
+  GetByIdShort      r1, r2, 2, "log"
+  LoadConstString   r0, "Finally block"
+  Call2             r0, r1, r2, r0
+  LoadConstUInt8    r0, 1
+  Ret               r0
+L3:
+  Catch             r0
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Catch block"
+  Call2             r1, r2, r3, r1
+L5:
+  TryGetById        r2, r0, 1, "console"
+  GetByIdShort      r1, r2, 2, "log"
+  LoadConstString   r0, "Finally block"
+  Call2             r0, r1, r2, r0
+  LoadConstUInt8    r0, 2
+  Ret               r0
+L4:
+  Catch             r0
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Finally block"
+  Call2             r1, r2, r3, r1
+  Throw             r0
+
+Exception Handlers:
+0: start = L1, end = L2, target = L3
+1: start = L1, end = L2, target = L4
+2: start = L3, end = L5, target = L4
+
+Function<nestedTryCatch>3(1 params, 14 registers, 0 symbols):
+L3:
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Outer try"
+  Call2             r1, r2, r3, r1
+L1:
+  TryGetById        r3, r0, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "Inner try"
+  Call2             r1, r2, r3, r1
+  TryGetById        r3, r0, 3, "Error"
+  GetByIdShort      r1, r3, 4, "prototype"
+  CreateThis        r2, r1, r3
+  LoadConstString   r6, "Inner error"
+  Mov               r7, r2
+  Construct         r1, r3, 2
+  SelectObject      r1, r2, r1
+  Throw             r1
+L2:
+  Catch             r1
+  TryGetById        r4, r0, 1, "console"
+  GetByIdShort      r3, r4, 2, "log"
+  GetByIdShort      r2, r1, 5, "message"
+  LoadConstString   r1, "Inner catch:"
+  Call3             r1, r3, r4, r1, r2
+  TryGetById        r2, r0, 3, "Error"
+  GetByIdShort      r0, r2, 4, "prototype"
+  CreateThis        r1, r0, r2
+  LoadConstString   r6, "Rethrow"
+  Mov               r7, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L4:
+  Catch             r0
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  GetByIdShort      r1, r0, 5, "message"
+  LoadConstString   r0, "Outer catch:"
+  Call3             r0, r2, r3, r0, r1
+  LoadConstUndefined r0
+  Ret               r0
+
+Exception Handlers:
+0: start = L1, end = L2, target = L2
+1: start = L3, end = L4, target = L4
+
+Function<tryInLoop>4(1 params, 18 registers, 0 symbols):
+  LoadConstZero     r6
+  LoadConstUInt8    r5, 3
+  GetGlobalObject   r4
+  LoadConstString   r3, "Caught in loop:"
+  LoadConstString   r2, "Loop iteration:"
+  LoadConstUInt8    r1, 1
+L3:
+  Mov               r0, r6
+  JStrictEqual      L1, r0, r1
+  TryGetById        r8, r4, 1, "console"
+  GetByIdShort      r7, r8, 2, "log"
+  Mov               r0, r6
+  Call3             r0, r7, r8, r2, r0
+L4:
+  Jmp               L2
+L1:
+  TryGetById        r8, r4, 3, "Error"
+  GetByIdShort      r0, r8, 4, "prototype"
+  CreateThis        r7, r0, r8
+  LoadConstString   r10, "Loop error"
+  Mov               r11, r7
+  Construct         r0, r8, 2
+  SelectObject      r0, r7, r0
+  Throw             r0
+L5:
+  Catch             r0
+  TryGetById        r8, r4, 1, "console"
+  GetByIdShort      r7, r8, 2, "log"
+  GetByIdShort      r0, r0, 5, "message"
+  Call3             r0, r7, r8, r3, r0
+L2:
+  Mov               r0, r6
+  Inc               r0, r0
+  Mov               r6, r0
+  JLess             L3, r0, r5
+  LoadConstUndefined r0
+  Ret               r0
+
+Exception Handlers:
+0: start = L3, end = L4, target = L5
+1: start = L1, end = L5, target = L5
+
+Function<multipleCatchVariables>5(1 params, 14 registers, 0 symbols):
+L1:
+  GetGlobalObject   r0
+  TryGetById        r2, r0, 1, "Error"
+  GetByIdShort      r0, r2, 2, "prototype"
+  CreateThis        r1, r0, r2
+  LoadConstString   r6, "First error"
+  Mov               r7, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L2:
+  Catch             r0
+  GetGlobalObject   r1
+  TryGetById        r4, r1, 3, "console"
+  GetByIdShort      r3, r4, 4, "log"
+  GetByIdShort      r2, r0, 5, "message"
+  LoadConstString   r0, "First catch:"
+  Call3             r0, r3, r4, r0, r2
+L3:
+  TryGetById        r3, r1, 1, "Error"
+  GetByIdShort      r0, r3, 2, "prototype"
+  CreateThis        r2, r0, r3
+  LoadConstString   r6, "Second error"
+  Mov               r7, r2
+  Construct         r0, r3, 2
+  SelectObject      r0, r2, r0
+  Throw             r0
+L4:
+  Catch             r0
+  TryGetById        r3, r1, 3, "console"
+  GetByIdShort      r2, r3, 4, "log"
+  GetByIdShort      r1, r0, 5, "message"
+  LoadConstString   r0, "Second catch:"
+  Call3             r0, r2, r3, r0, r1
+  LoadConstUndefined r0
+  Ret               r0
+
+Exception Handlers:
+0: start = L1, end = L2, target = L2
+1: start = L3, end = L4, target = L4
+
