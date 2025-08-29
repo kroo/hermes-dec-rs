@@ -415,6 +415,7 @@ impl<'a> FunctionDecompiler<'a> {
         let max_param_idx = default_params.keys().max().copied().unwrap_or(0);
 
         // Also check all LoadParam instructions to find the maximum parameter index
+        // Note: LoadParam indices include the implicit 'this' at index 0
         let max_load_param_idx = if let Ok(func) = self
             .hbc_file
             .functions
@@ -433,12 +434,14 @@ impl<'a> FunctionDecompiler<'a> {
         };
 
         // Use the maximum of the metadata count and the highest parameter index found
+        // Note: max_load_param_idx already includes 'this', so we don't add 1
+        // max_param_idx is for default parameters and needs +1 since it's 0-based
         let actual_param_count = if is_global_function {
             0 // Global function should never show parameters
         } else {
             metadata_param_count
                 .max(max_param_idx + 1)
-                .max(max_load_param_idx + 1) as usize
+                .max(max_load_param_idx) as usize
         };
 
         // Convert param_names vector to vector of strings

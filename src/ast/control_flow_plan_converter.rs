@@ -1670,52 +1670,6 @@ impl<'a> ControlFlowPlanConverter<'a> {
             .register_manager()
             .get_variable_name_for_duplicated(value);
 
-        // Fix parameter names: convert param{register} to arg{param_index}
-        // This is a workaround for the fact that parameters are named based on register
-        // instead of parameter index
-        log::debug!(
-            "get_variable_name: Got name '{}' for SSA value {:?}",
-            name,
-            value
-        );
-        if name.starts_with("param") {
-            // Try to extract the register number
-            if let Some(reg_str) = name.strip_prefix("param") {
-                if let Ok(reg_num) = reg_str.parse::<u8>() {
-                    // Look for LoadParam instructions in Block 0 that load to this register
-                    if let Some(function_analysis) = self
-                        .hbc_analysis
-                        .get_function_analysis_ref(self.function_index)
-                    {
-                        let cfg = &function_analysis.cfg;
-                        // Block 0 contains the LoadParam instructions
-                        let block_0 = petgraph::graph::NodeIndex::new(0);
-                        if let Some(block) = cfg.graph().node_weight(block_0) {
-                            // Search through instructions in Block 0 for LoadParam to this register
-                            for instr in block.instructions() {
-                                use crate::generated::unified_instructions::UnifiedInstruction;
-                                if let UnifiedInstruction::LoadParam {
-                                    operand_0,
-                                    operand_1,
-                                } = &instr.instruction
-                                {
-                                    // Check if this LoadParam loads to our register
-                                    if *operand_0 == reg_num {
-                                        // operand_1 is the parameter index
-                                        let new_name = format!("arg{}", operand_1);
-                                        log::debug!("Fixing parameter name: {} -> {} (register r{}, param index {})", 
-                                                  name, new_name, reg_num, operand_1);
-                                        name = new_name;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         self.variable_names.insert(value.clone(), name.clone());
         name
     }
