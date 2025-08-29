@@ -273,7 +273,11 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
         } else {
             String::new()
         };
-        let phi_functions = fn_ssa.unwrap().get_phi_functions(block_idx);
+        let phi_functions = if let Some(ssa) = &fn_ssa {
+            ssa.get_phi_functions(block_idx)
+        } else {
+            &[]
+        };
 
         if block.is_exit() {
             println!("Block {} (EXIT)", block_idx.index());

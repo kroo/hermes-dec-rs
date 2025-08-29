@@ -28,38 +28,29 @@ pub enum ClosureType {
     Generator,
 }
 
-/// Information about a captured environment
-#[derive(Debug, Clone)]
-pub struct CapturedEnvironment {
-    pub parent_function: u32,
-    pub env_register: u8,
-    pub capture_point: RegisterDef,
-}
-
 /// Global SSA analyzer that coordinates across functions
 pub struct GlobalSSAAnalyzer {
     /// Per-function SSA analyses
-    function_analyses: HashMap<u32, SSAAnalysis>,
+    pub function_analyses: HashMap<u32, SSAAnalysis>,
 
     /// Function parent-child relationships
-    function_relationships: Vec<FunctionRelationship>,
+    pub function_relationships: Vec<FunctionRelationship>,
 
     /// Map function index to its parent
-    function_parents: HashMap<u32, u32>,
-
-    /// Map function index to the environment it captures
-    _function_captured_environments: HashMap<u32, CapturedEnvironment>,
+    pub function_parents: HashMap<u32, u32>,
 
     /// Map function index to its environment register
-    function_environments: HashMap<u32, u8>,
+    pub function_environments: HashMap<u32, u8>,
 
     /// Global variable name resolver
-    variable_names: HashMap<(u32, u8, u8), String>, // (function, env_reg, slot) -> name
+    pub variable_names: HashMap<(u32, u8, u8), String>, // (function, env_reg, slot) -> name
 }
 
 /// Result of global analysis
 pub struct GlobalAnalysisResult {
     pub analyzer: GlobalSSAAnalyzer,
+    /// If true, this result was created with lazy analysis
+    pub is_lazy: bool,
 }
 
 impl GlobalSSAAnalyzer {
@@ -69,46 +60,35 @@ impl GlobalSSAAnalyzer {
             function_analyses: HashMap::new(),
             function_relationships: Vec::new(),
             function_parents: HashMap::new(),
-            _function_captured_environments: HashMap::new(),
             function_environments: HashMap::new(),
             variable_names: HashMap::new(),
         }
     }
 
-    /// Analyze all functions in an HBC file
+    /// Analyze all functions in an HBC file (lazy analysis for better performance)
     pub fn analyze(hbc_file: &HbcFile) -> Result<GlobalAnalysisResult, SSAError> {
+        log::debug!("GlobalSSAAnalyzer: Using lazy analysis for better performance");
+        
+        // Create a minimal analyzer with just the closure relationships scanned (which is fast)
         let mut analyzer = Self::new();
-
-        // Phase 1: First pass - scan all functions for closure creation
-        // This identifies parent-child relationships without needing SSA
+        
+        // Phase 1: Scan closure relationships (fast)
+        log::debug!("GlobalSSAAnalyzer Phase 1: Scanning closure relationships...");
         analyzer.scan_closure_relationships(hbc_file)?;
-
-        // Phase 2: Build function parent mapping
+        
+        // Phase 2: Build parent mapping (fast)
+        log::debug!("GlobalSSAAnalyzer Phase 2: Building parent mapping...");
         analyzer.build_parent_mapping();
-
-        // Phase 3: Run SSA on each function with parent context
-        for func_idx in 0..hbc_file.functions.count() {
-            let mut cfg = Cfg::new(hbc_file, func_idx);
-            cfg.build();
-
-            let mut ssa = construct_ssa(&cfg, func_idx)?;
-
-            // Extract function environment register
-            if let Some(env_reg) = ssa.environment_info.function_env_register {
-                analyzer.function_environments.insert(func_idx, env_reg);
-            }
-
-            // Update pending environment resolutions with actual source functions
-            analyzer.update_environment_resolutions(func_idx, &mut ssa);
-
-            analyzer.function_analyses.insert(func_idx, ssa);
-        }
-
-        // Phase 4: Resolve cross-function variable references
-        analyzer.resolve_closure_variables()?;
-
-        Ok(GlobalAnalysisResult { analyzer })
+        
+        // Phase 3: Skip analyzing functions - they'll be analyzed on-demand
+        log::debug!("GlobalSSAAnalyzer Phase 3: Functions will be analyzed on-demand");
+        
+        Ok(GlobalAnalysisResult { 
+            analyzer, 
+            is_lazy: true 
+        })
     }
+
 
     /// Scan all functions for closure creation instructions
     fn scan_closure_relationships(&mut self, hbc_file: &HbcFile) -> Result<(), SSAError> {
@@ -220,35 +200,6 @@ impl GlobalSSAAnalyzer {
         }
     }
 
-    /// Extract closure relationships from a function's SSA analysis
-    fn _extract_closure_relationships(&mut self, parent_func: u32, ssa: &SSAAnalysis) {
-        for (&dest_reg, &child_func) in &ssa.environment_info.closure_registers {
-            // Find the environment register that was passed to this closure
-            // This requires looking at the instruction that created the closure
-            // For now, we'll assume it's the function's main environment
-            let env_reg = ssa.environment_info.function_env_register.unwrap_or(0);
-
-            self.function_relationships.push(FunctionRelationship {
-                parent_function: parent_func,
-                child_function: child_func,
-                captured_env_register: env_reg,
-                closure_type: ClosureType::Regular, // TODO: Detect actual type
-            });
-
-            self._function_captured_environments.insert(
-                child_func,
-                CapturedEnvironment {
-                    parent_function: parent_func,
-                    env_register: env_reg,
-                    capture_point: RegisterDef::new(
-                        dest_reg,
-                        Default::default(),
-                        crate::hbc::InstructionIndex::zero(),
-                    ), // TODO: Get actual location
-                },
-            );
-        }
-    }
 
     /// Build parent function mapping from relationships
     fn build_parent_mapping(&mut self) {
@@ -258,48 +209,6 @@ impl GlobalSSAAnalyzer {
         }
     }
 
-    /// Resolve closure variables across function boundaries
-    fn resolve_closure_variables(&mut self) -> Result<(), SSAError> {
-        // Iterate through all functions
-        for (&func_idx, ssa) in &self.function_analyses {
-            // Process captured variable accesses
-            for access in &ssa.captured_variable_accesses {
-                if let Some(source_func) =
-                    self.resolve_function_at_level(func_idx, access.source_slot)
-                {
-                    // Look up the variable in the source function
-                    if let Some(source_ssa) = self.function_analyses.get(&source_func) {
-                        // Find the environment register in source function
-                        if let Some(source_env) = source_ssa.environment_info.function_env_register
-                        {
-                            let key = (source_env, access.source_slot);
-                            if let Some(var_info) =
-                                source_ssa.environment_info.environment_variables.get(&key)
-                            {
-                                // Found the variable! Store its name globally
-                                let name = var_info.suggested_name.clone().unwrap_or_else(|| {
-                                    format!("closure_var{}", access.source_slot)
-                                });
-
-                                self.variable_names
-                                    .insert((source_func, source_env, access.source_slot), name);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Process environment variables defined in this function
-            for ((env_reg, slot), var_info) in &ssa.environment_info.environment_variables {
-                if let Some(name) = &var_info.suggested_name {
-                    self.variable_names
-                        .insert((func_idx, *env_reg, *slot), name.clone());
-                }
-            }
-        }
-
-        Ok(())
-    }
 
     /// Resolve which function is at a given environment level from current function
     pub fn resolve_function_at_level(&self, current: u32, level: u8) -> Option<u32> {
@@ -322,11 +231,41 @@ impl GlobalSSAAnalyzer {
     pub fn get_function_analysis(&self, func_idx: u32) -> Option<&SSAAnalysis> {
         self.function_analyses.get(&func_idx)
     }
+    
+    /// Get or compute the SSA analysis for a specific function (for lazy analysis)
+    pub fn get_or_compute_function_analysis(&mut self, hbc_file: &HbcFile, func_idx: u32) -> Result<&SSAAnalysis, SSAError> {
+        // If already analyzed, return it
+        if self.function_analyses.contains_key(&func_idx) {
+            log::trace!("GlobalSSA: Function {} already analyzed, returning cached result", func_idx);
+            return Ok(&self.function_analyses[&func_idx]);
+        }
+        
+        // Otherwise, analyze it now
+        log::info!("GlobalSSA: Lazy analyzing function {} on-demand", func_idx);
+        let mut cfg = Cfg::new(hbc_file, func_idx);
+        cfg.build();
+        
+        let mut ssa = construct_ssa(&cfg, func_idx)?;
+        
+        // Extract function environment register
+        if let Some(env_reg) = ssa.environment_info.function_env_register {
+            self.function_environments.insert(func_idx, env_reg);
+        }
+        
+        // Update pending environment resolutions with actual source functions
+        self.update_environment_resolutions(func_idx, &mut ssa);
+        
+        self.function_analyses.insert(func_idx, ssa);
+        Ok(&self.function_analyses[&func_idx])
+    }
 
     /// Resolve a variable name from environment access
     pub fn resolve_variable_name(&self, function: u32, env_reg: u8, slot: u8) -> String {
+        log::debug!("GlobalSSA: Resolving variable name for function {}, env_reg {}, slot {}", function, env_reg, slot);
+        
         // First check if we have a direct mapping
         if let Some(name) = self.variable_names.get(&(function, env_reg, slot)) {
+            log::debug!("GlobalSSA: Found direct mapping: {}", name);
             return name.clone();
         }
 

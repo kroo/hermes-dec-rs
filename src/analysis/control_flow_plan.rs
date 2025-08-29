@@ -1059,7 +1059,9 @@ impl ControlFlowPlan {
                 true_branch,
                 false_branch,
             } => {
-                writeln!(f, "Conditional (condition: {})", condition_block.index())?;
+                writeln!(f, "Conditional")?;
+                writeln!(f, "{}  Condition block: {} (contains condition evaluation + any other instructions)", 
+                    indent_str, condition_block.index())?;
                 if let Some(expr) = condition_expr {
                     writeln!(
                         f,

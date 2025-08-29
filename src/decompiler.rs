@@ -156,6 +156,7 @@ impl Decompiler {
 
         // Ensure global analysis is run
         if self.global_analysis.is_none() {
+            log::debug!("Running global analysis for decompiler...");
             let global_result = match GlobalSSAAnalyzer::analyze(hbc_file) {
                 Ok(result) => result,
                 Err(e) => {
