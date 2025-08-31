@@ -77,6 +77,10 @@ pub struct ControlFlowPlan {
     /// Call site analysis with argument registers for each Call/Construct
     pub call_site_analysis: CallSiteAnalysis,
 
+    /// SSA values that must be inlined (e.g., source operands of setup instructions)
+    /// These values' defining instructions won't be in the generated code path
+    pub mandatory_inline: HashSet<SSAValue>,
+
     /// Next available structure ID
     next_structure_id: usize,
 }
@@ -451,8 +455,9 @@ impl ControlFlowPlan {
             scope_boundaries: HashMap::new(),
             phi_deconstructions: HashMap::new(),
             phi_results: HashSet::new(),
-            next_structure_id: 1,
             call_site_analysis: CallSiteAnalysis::new(),
+            mandatory_inline: HashSet::new(),
+            next_structure_id: 1,
         }
     }
 

@@ -131,11 +131,9 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let src_var = self.register_manager.get_source_variable_name(src_reg);
-
-        let span = Span::default();
-        let src_atom = self.ast_builder.allocator.alloc_str(&src_var);
-        let src_expr = self.ast_builder.expression_identifier(span, src_atom);
+        
+        // Use source_register_to_expression to respect use strategies (e.g., inlining constants)
+        let src_expr = self.source_register_to_expression(src_reg)?;
 
         let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(src_expr))?;
 

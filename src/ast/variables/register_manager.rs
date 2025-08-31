@@ -105,19 +105,65 @@ impl RegisterManager {
     pub fn get_variable_name(&mut self, register: u8) -> String {
         // First check if we're in a duplication context
         if let Some(ref context) = self.current_duplication_context {
-            if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            if let (Some(mapping), Some(pc), Some(block)) = 
+                (&self.variable_mapping, self.current_pc, self.current_block) 
+            {
                 // Look for the SSA value at this register/PC
                 let ssa_before = mapping.register_before_pc.get(&(register, pc));
                 let ssa_at = mapping.register_at_pc.get(&(register, pc));
-                let ssa_value = ssa_before.or(ssa_at);
+                let mut ssa_value = ssa_before.or(ssa_at);
 
                 log::debug!(
                     "Looking up register {} at PC {} in duplication context. SSA before: {:?}, SSA at: {:?}, Using: {:?}",
                     register, pc.value(), ssa_before, ssa_at, ssa_value
                 );
 
+                // If we don't find an SSA value at this exact PC, try to find the most recent one
+                if ssa_value.is_none() {
+                    log::debug!(
+                        "No SSA value found at PC {}, searching for most recent definition",
+                        pc.value()
+                    );
+
+                    // Search backwards for the most recent definition of this register
+                    for check_pc in (0..pc.value()).rev() {
+                        let check_idx = InstructionIndex::new(check_pc);
+                        if let Some(ssa_val) = mapping.register_at_pc.get(&(register, check_idx)) {
+                            log::debug!("Found SSA value at PC {}: {:?}", check_pc, ssa_val);
+                            ssa_value = Some(ssa_val);
+                            break;
+                        }
+                    }
+                }
+
                 if let Some(ssa_value) = ssa_value {
-                    // Create a duplicated SSA value
+                    // Check if there's a PHI replacement for this SSA value in this duplicated block
+                    if let Some(phi_info) = self.control_flow_plan.get_phi_info(block, Some(context)) {
+                        if let Some(replacement) = phi_info.replacements.get(ssa_value) {
+                            log::debug!(
+                                "Found PHI replacement: {:?} -> {:?}",
+                                ssa_value,
+                                replacement
+                            );
+                            // Use the replacement SSA value's normal variable name (not duplicated)
+                            if let Some(var_name) = mapping.ssa_to_var.get(replacement) {
+                                log::debug!("Using replacement variable name: {}", var_name);
+                                return var_name.clone();
+                            }
+                        }
+                    }
+                    
+                    // If no PHI replacement, check if this is a PHI result
+                    // PHI results should not use duplicated names
+                    if self.control_flow_plan.phi_results.contains(ssa_value) {
+                        // Use the normal variable name for PHI results
+                        if let Some(var_name) = mapping.ssa_to_var.get(ssa_value) {
+                            log::debug!("Using PHI result variable name: {}", var_name);
+                            return var_name.clone();
+                        }
+                    }
+                    
+                    // Otherwise, create a duplicated SSA value
                     let dup_ssa = DuplicatedSSAValue {
                         original: ssa_value.clone(),
                         duplication_context: Some(context.clone()),
@@ -130,32 +176,6 @@ impl RegisterManager {
                         ssa_value
                     );
                     return dup_name;
-                } else {
-                    // If we don't find an SSA value at this exact PC, try to find the most recent one
-                    log::debug!(
-                        "No SSA value found at PC {}, searching for most recent definition",
-                        pc.value()
-                    );
-
-                    // Search backwards for the most recent definition of this register
-                    for check_pc in (0..pc.value()).rev() {
-                        let check_idx = InstructionIndex::new(check_pc);
-                        if let Some(ssa_value) = mapping.register_at_pc.get(&(register, check_idx))
-                        {
-                            log::debug!("Found SSA value at PC {}: {:?}", check_pc, ssa_value);
-                            let dup_ssa = DuplicatedSSAValue {
-                                original: ssa_value.clone(),
-                                duplication_context: Some(context.clone()),
-                            };
-                            let dup_name = mapping.get_variable_name_for_duplicated(&dup_ssa);
-                            log::debug!(
-                                "Returning duplicated name: {} for SSA {:?}",
-                                dup_name,
-                                ssa_value
-                            );
-                            return dup_name;
-                        }
-                    }
                 }
             }
         }
@@ -180,7 +200,9 @@ impl RegisterManager {
     pub fn get_source_variable_name(&mut self, register: u8) -> String {
         // First check if we're in a duplication context
         if let Some(ref context) = self.current_duplication_context {
-            if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
+            if let (Some(mapping), Some(pc), Some(block)) = 
+                (&self.variable_mapping, self.current_pc, self.current_block) 
+            {
                 // Look for the SSA value at this register/PC (before the instruction)
                 if let Some(ssa_value) =
                     mapping.register_before_pc.get(&(register, pc)).or_else(|| {
@@ -196,6 +218,32 @@ impl RegisterManager {
                         None
                     })
                 {
+                    // Check if there's a PHI replacement for this SSA value in this duplicated block
+                    if let Some(phi_info) = self.control_flow_plan.get_phi_info(block, Some(context)) {
+                        if let Some(replacement) = phi_info.replacements.get(ssa_value) {
+                            log::debug!(
+                                "Found PHI replacement for source: {:?} -> {:?}",
+                                ssa_value,
+                                replacement
+                            );
+                            // Use the replacement SSA value's normal variable name (not duplicated)
+                            if let Some(var_name) = mapping.ssa_to_var.get(replacement) {
+                                log::debug!("Using replacement source variable name: {}", var_name);
+                                return var_name.clone();
+                            }
+                        }
+                    }
+                    
+                    // If no PHI replacement, check if this is a PHI result
+                    // PHI results should not use duplicated names
+                    if self.control_flow_plan.phi_results.contains(ssa_value) {
+                        // Use the normal variable name for PHI results
+                        if let Some(var_name) = mapping.ssa_to_var.get(ssa_value) {
+                            log::debug!("Using PHI result source variable name: {}", var_name);
+                            return var_name.clone();
+                        }
+                    }
+                    
                     // Use the control flow plan to determine if we should use a duplicated name
                     let dup_ssa = self
                         .control_flow_plan

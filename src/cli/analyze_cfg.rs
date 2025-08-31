@@ -628,6 +628,61 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
             println!("  {} -> {}", dup_ssa.original_ssa_value(), status);
         }
     }
+    
+    // Print constant value tracking if we have function analysis
+    if let Some(fa) = func_analysis.as_ref() {
+        println!("\n=== Constant Value Tracking ===");
+        let value_tracker = crate::analysis::value_tracker::ValueTracker::new(&fa.cfg, &fa.ssa, &hbc_file);
+        
+        // Track all SSA values
+        let mut constant_values = Vec::new();
+        let mut phi_values = Vec::new();
+        let mut param_values = Vec::new();
+        
+        for (_def_site, ssa_value) in &fa.ssa.ssa_values {
+            let tracked = value_tracker.get_value(ssa_value);
+            use crate::analysis::value_tracker::TrackedValue;
+            match tracked {
+                TrackedValue::Constant(c) => {
+                    constant_values.push((ssa_value.clone(), c));
+                }
+                TrackedValue::Parameter { index, ssa_value } => {
+                    param_values.push((ssa_value, index));
+                }
+                TrackedValue::Phi { ssa_value } => {
+                    phi_values.push(ssa_value);
+                }
+                TrackedValue::Unknown => {
+                    // Don't print unknown values to reduce noise
+                }
+            }
+        }
+        
+        // Print parameters
+        if !param_values.is_empty() {
+            println!("Parameters:");
+            for (ssa_value, index) in param_values {
+                println!("  {} = Parameter(index={})", ssa_value, index);
+            }
+        }
+        
+        // Print PHI results
+        if !phi_values.is_empty() {
+            println!("PHI Results:");
+            for ssa_value in phi_values {
+                println!("  {} = PHI result", ssa_value);
+            }
+        }
+        
+        // Print constant values sorted by SSA value
+        if !constant_values.is_empty() {
+            println!("Constants:");
+            constant_values.sort_by_key(|(ssa, _)| (ssa.register, ssa.version));
+            for (ssa_value, constant) in constant_values {
+                println!("  {} = {}", ssa_value, format_constant_value(&constant, &hbc_file));
+            }
+        }
+    }
 
     Ok(())
 }
@@ -859,7 +914,7 @@ fn print_switch_region(
                             println!("        Case {} (keys {:?}):", i, case.keys);
 
                             // Create a temporary case group to analyze PHI contributions
-                            let _group = crate::cfg::switch_analysis::CaseGroup {
+                            let group = crate::cfg::switch_analysis::CaseGroup {
                                 keys: case.keys.clone(),
                                 target_block: case.target_block,
                                 setup: case.setup.clone(),
@@ -875,32 +930,13 @@ fn print_switch_region(
                                     .map(|ssa| ssa.name())
                                     .unwrap_or_else(|| format!("r{}", phi_node.register));
 
-                                // TODO: Re-enable once ControlFlowPlanConverter is implemented
-                                /*
-                                if let Some(value) = switch_converter
-                                    .find_phi_contribution_for_case(&group, phi_node)
-                                {
-                                    println!(
-                                        "          {} = {}",
-                                        phi_name,
-                                        format_constant_value(&value, hbc_file)
-                                    );
+                                // For now, just show which value this case contributes
+                                // The actual PHI contribution analysis is handled by the control flow plan
+                                if group.target_block != shared_tail.block_id {
+                                    println!("          {} = <computed in case block>", phi_name);
                                 } else {
-                                    // Check if this case flows through a block that computes a value
-                                    if group.target_block != shared_tail.block_id {
-                                        println!("          {} = <computed value>", phi_name);
-                                    } else {
-                                        println!(
-                                            "          {} = <no contribution found>",
-                                            phi_name
-                                        );
-                                    }
+                                    println!("          {} = <direct jump to tail>", phi_name);
                                 }
-                                */
-                                println!(
-                                    "          {} = <analysis disabled during refactoring>",
-                                    phi_name
-                                );
                             }
                         }
 

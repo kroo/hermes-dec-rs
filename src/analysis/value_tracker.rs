@@ -115,9 +115,11 @@ impl<'a> ValueTracker<'a> {
         for (_pred_block, operand_ssa) in &phi.operands {
             match self.get_value(operand_ssa) {
                 TrackedValue::Constant(c) => {
+                    log::trace!("PHI operand {} evaluates to constant: {:?}", operand_ssa, c);
                     if let Some(ref existing) = constant_value {
                         if existing != &c {
                             // Different constants - this phi doesn't resolve to a single constant
+                            log::trace!("PHI has different constants, returning Phi");
                             return TrackedValue::Phi {
                                 ssa_value: phi.result.clone(),
                             };
@@ -128,6 +130,7 @@ impl<'a> ValueTracker<'a> {
                 }
                 _ => {
                     // Non-constant operand - this phi doesn't resolve to a constant
+                    log::trace!("PHI operand {} is not constant, returning Phi", operand_ssa);
                     return TrackedValue::Phi {
                         ssa_value: phi.result.clone(),
                     };
@@ -137,6 +140,7 @@ impl<'a> ValueTracker<'a> {
 
         // All operands are the same constant
         if let Some(c) = constant_value {
+            log::trace!("All PHI operands are the same constant: {:?}", c);
             TrackedValue::Constant(c)
         } else {
             TrackedValue::Phi {
@@ -332,14 +336,20 @@ impl<'a> ValueTracker<'a> {
     {
         // Get SSA values for both operands
         let val1 = if let Some(ssa1) = self.ssa.get_value_before_instruction(operand1, pc) {
-            self.get_value(ssa1)
+            let v = self.get_value(ssa1);
+            log::trace!("Binary op at PC {} operand1 (r{}) = {} = {:?}", pc, operand1, ssa1, v);
+            v
         } else {
+            log::trace!("Binary op operand1 (r{}) = Unknown (no SSA)", operand1);
             TrackedValue::Unknown
         };
 
         let val2 = if let Some(ssa2) = self.ssa.get_value_before_instruction(operand2, pc) {
-            self.get_value(ssa2)
+            let v = self.get_value(ssa2);
+            log::trace!("Binary op operand2 (r{}) = {:?}", operand2, v);
+            v
         } else {
+            log::trace!("Binary op operand2 (r{}) = Unknown (no SSA)", operand2);
             TrackedValue::Unknown
         };
 
@@ -347,12 +357,16 @@ impl<'a> ValueTracker<'a> {
         match (val1, val2) {
             (TrackedValue::Constant(c1), TrackedValue::Constant(c2)) => {
                 if let Some(result) = folder(&c1, &c2) {
+                    log::trace!("Folding constants: {:?} + {:?} = {:?}", c1, c2, result);
                     TrackedValue::Constant(result)
                 } else {
                     TrackedValue::Unknown
                 }
             }
-            _ => TrackedValue::Unknown,
+            _ => {
+                log::trace!("Cannot fold non-constants");
+                TrackedValue::Unknown
+            }
         }
     }
 

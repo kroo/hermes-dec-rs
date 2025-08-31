@@ -1,0 +1,66 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 9d23bbe90ef9bd6fd611ea5e5173a5011f0f7b81
+  Function count: 3
+  String count: 6
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..4] #1C35E808: hello
+s1[ASCII, 5..10] #629A2BFD: global
+s2[ASCII, 3..5] #5B8EEB7D: log
+s3[ASCII, 11..17] #66C5197F: console
+s4[ASCII, 18..23] method
+s5[ASCII, 24..35] testInlining
+
+Array Buffer:
+
+Function<global>0(1 params, 9 registers, 0 symbols):
+  DeclareGlobalVar  "testInlining"
+  CreateEnvironment r0
+  CreateClosure     r1, r0, Function<testInlining>1
+  GetGlobalObject   r0
+  PutById           r0, r1, 1, "testInlining"
+  GetByIdShort      r1, r0, 1, "testInlining"
+  LoadConstUndefined r0
+  Call1             r0, r1, r0
+  Ret               r0
+
+Function<testInlining>1(1 params, 13 registers, 0 symbols):
+  GetGlobalObject   r0
+  TryGetById        r2, r0, 1, "console"
+  GetByIdShort      r1, r2, 2, "log"
+  LoadConstUInt8    r3, 5
+  Call2             r1, r1, r2, r3
+  TryGetById        r4, r0, 1, "console"
+  GetByIdShort      r1, r4, 2, "log"
+  LoadConstString   r2, "hello"
+  Call2             r1, r1, r4, r2
+  TryGetById        r4, r0, 1, "console"
+  GetByIdShort      r1, r4, 2, "log"
+  LoadConstTrue     r0
+  Call2             r0, r1, r4, r0
+  NewObject         r1
+  CreateEnvironment r0
+  CreateClosure     r0, r0, Function<method>2
+  PutNewOwnByIdShort r1, r0, "method"
+  GetByIdShort      r0, r1, 3, "method"
+  Call2             r0, r0, r1, r3
+  GetByIdShort      r0, r1, 3, "method"
+  Call2             r0, r0, r1, r2
+  LoadConstUInt8    r0, 15
+  Ret               r0
+
+Function<method>2(2 params, 1 registers, 0 symbols):
+  LoadParam         r0, 1
+  Ret               r0
+

@@ -724,7 +724,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             }
 
                             // Convert the setup instruction using the regular instruction converter
-                            // This ensures we use the same logic as for normal basic blocks
+                            // Setup instructions are just regular instructions that were hoisted
                             let block_id = setup_instr.ssa_value.def_site.block_id;
                             let instruction_idx = setup_instr.ssa_value.def_site.instruction_idx;
 
@@ -749,8 +749,19 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                     // Handle the instruction result
                                     match instr_result {
                                         crate::ast::InstructionResult::Statement(stmt) => {
-                                            // Prepare the setup comment before borrowing comment_manager
-                                            let setup_comment = if self.include_ssa_comments {
+                                            // Prepare comments before borrowing comment_manager
+                                            let instruction_comment = if self.include_instruction_comments {
+                                                // Setup instructions are hoisted from comparison blocks
+                                                Some(format!(
+                                                    "PC {} (setup): {:?}",
+                                                    setup_instr.instruction.instruction_index.0,
+                                                    setup_instr.instruction.instruction
+                                                ))
+                                            } else {
+                                                None
+                                            };
+                                            
+                                            let ssa_comment = if self.include_ssa_comments {
                                                 let var_name = self.get_variable_name(&dup_ssa);
                                                 Some(format!(
                                                     "Setup: {} [r{}_{}]",
@@ -761,15 +772,22 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                             } else {
                                                 None
                                             };
-
-                                            // Add setup comment to the statement
-                                            if let Some(ref mut comment_manager) =
-                                                self.comment_manager
-                                            {
-                                                if let Some(ssa_comment) = setup_comment {
+                                            
+                                            // Add comments to the statement
+                                            if let Some(ref mut comment_manager) = self.comment_manager {
+                                                if let Some(comment) = instruction_comment {
                                                     comment_manager.add_comment(
                                                         &stmt,
-                                                        ssa_comment,
+                                                        comment,
+                                                        CommentKind::Line,
+                                                        CommentPosition::Leading,
+                                                    );
+                                                }
+                                                
+                                                if let Some(comment) = ssa_comment {
+                                                    comment_manager.add_comment(
+                                                        &stmt,
+                                                        comment,
                                                         CommentKind::Line,
                                                         CommentPosition::Leading,
                                                     );
@@ -782,8 +800,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                         crate::ast::InstructionResult::JumpCondition(_) => {
                                             // Setup instructions shouldn't be jumps
                                             log::warn!(
-                                                "Unexpected jump instruction in setup at PC {}: {:?}",
-                                                instruction_idx.0,
+                                                "Unexpected jump instruction in setup: {:?}",
                                                 setup_instr.instruction.instruction.name()
                                             );
                                         }
@@ -794,8 +811,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                 }
                                 Err(e) => {
                                     log::warn!(
-                                        "Failed to convert setup instruction at PC {}: {:?}",
-                                        instruction_idx.0,
+                                        "Failed to convert setup instruction: {:?}",
                                         e
                                     );
                                 }

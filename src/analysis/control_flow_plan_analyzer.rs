@@ -7,7 +7,7 @@ use super::control_flow_plan::{
     ControlFlowKind, ControlFlowPlan, ControlFlowStructure, PhiDeconstructionInfo, StructureId,
     UpdatedPhiFunction,
 };
-use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker};
+use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker, UseStrategy};
 use crate::analysis::FunctionAnalysis;
 use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext, RegisterUse};
 use crate::cfg::ssa::{PhiFunction, SSAValue};
@@ -99,27 +99,44 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             ssa_values_to_check.push(dup_ssa_value.original_ssa_value().clone());
         }
         
+        // Also collect all SSA values that are used in the function
+        // This ensures we consider constants that might be used but not declared
+        // (e.g., constants used in setup instructions)
+        for (_use_site, def_site) in &self.function_analysis.ssa.use_def_chains {
+            if let Some(ssa_value) = self.function_analysis.ssa.ssa_values.get(def_site) {
+                ssa_values_to_check.push(ssa_value.clone());
+            }
+        }
+        
         // De-duplicate
         ssa_values_to_check.sort_by_key(|v| (v.def_site.block_id, v.def_site.instruction_idx, v.register));
         ssa_values_to_check.dedup();
 
         // Check each SSA value
+        log::debug!("Checking {} SSA values for constant inlining", ssa_values_to_check.len());
         for ssa_value in ssa_values_to_check {
             let tracked_value = value_tracker.get_value(&ssa_value);
             
             // Check if this is a constant value
-            if let TrackedValue::Constant(_) = tracked_value {
+            if let TrackedValue::Constant(ref const_val) = tracked_value {
+                log::debug!("SSA value {} is constant: {:?}", ssa_value, const_val);
                 // Get uses for this SSA value
                 let uses = self.function_analysis.ssa.get_ssa_value_uses(&ssa_value);
+                log::debug!("SSA value {} has {} uses", ssa_value, uses.len());
                 
                 // Count non-consumed uses
                 let non_consumed_uses = uses.iter().filter(|_use_site| {
                     let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
                     !self.plan.consumed_uses.contains_key(&dup_value)
                 }).count();
+                log::debug!("SSA value {} has {} non-consumed uses", ssa_value, non_consumed_uses);
                 
-                // Decide whether to inline based on options
-                let should_inline = if self.inline_all_constants {
+                // Decide whether to inline based on options or mandatory inlining
+                let is_mandatory = self.plan.mandatory_inline.contains(&ssa_value);
+                let should_inline = if is_mandatory {
+                    log::debug!("SSA value {} requires mandatory inlining", ssa_value);
+                    true
+                } else if self.inline_all_constants {
                     true
                 } else if self.inline_constants {
                     non_consumed_uses == 1
@@ -140,6 +157,11 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                         
                         // Get the constant value to inline
                         if let TrackedValue::Constant(const_val) = &tracked_value {
+                            log::debug!(
+                                "Setting InlineValue strategy for {} at {:?}",
+                                ssa_value,
+                                use_site
+                            );
                             self.plan.use_strategies.insert(
                                 (dup_value.clone(), use_site.clone()),
                                 UseStrategy::InlineValue(const_val.clone()),
@@ -154,6 +176,40 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         }
     }
 
+    /// Validate that all mandatory inline values were successfully inlined
+    fn validate_mandatory_inlining(&self) {
+        for ssa_value in &self.plan.mandatory_inline {
+            // Check all uses of this SSA value
+            let uses = self.function_analysis.ssa.get_ssa_value_uses(ssa_value);
+            
+            for use_site in uses {
+                let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+                let key = (dup_value, use_site.clone());
+                
+                // Check if this use has an inline strategy
+                match self.plan.use_strategies.get(&key) {
+                    Some(UseStrategy::InlineValue(_)) => {
+                        // Good, it's being inlined
+                    }
+                    Some(UseStrategy::UseVariable) => {
+                        log::error!(
+                            "Mandatory inline value {} at {:?} is using variable strategy instead of inline!",
+                            ssa_value,
+                            use_site
+                        );
+                    }
+                    None => {
+                        log::warn!(
+                            "Mandatory inline value {} at {:?} has no use strategy",
+                            ssa_value,
+                            use_site
+                        );
+                    }
+                }
+            }
+        }
+    }
+    
     /// Analyze the control flow plan and compute strategies
     pub fn analyze(mut self) {
         let start_time = std::time::Instant::now();
@@ -170,10 +226,13 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         log::debug!("Marking consumed uses...");
         self.mark_consumed_uses();
 
-        // Perform aggressive constant inlining if enabled
-        if self.inline_constants || self.inline_all_constants {
+        // Perform aggressive constant inlining if enabled or if there are mandatory inline values
+        if self.inline_constants || self.inline_all_constants || !self.plan.mandatory_inline.is_empty() {
             log::debug!("Performing aggressive constant inlining...");
             self.perform_aggressive_constant_inlining();
+            
+            // Validate that all mandatory inline values were successfully inlined
+            self.validate_mandatory_inlining();
         }
 
         // Perform cascading elimination with duplication context awareness
@@ -379,6 +438,56 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                 }
                             }
                             break; // Found the comparison instruction
+                        }
+                    }
+                }
+
+                // Identify and mark source operands of setup instructions for mandatory inlining
+                // These are values that are used by setup instructions but whose defining
+                // instructions won't be in the generated case body
+                debug!("Processing setup instructions for mandatory inlining");
+                for group in case_groups {
+                    for case in &group.cases {
+                        for setup_instr in &case.setup_instructions {
+                            // Get the instruction usage information
+                            let usage = crate::generated::instruction_analysis::analyze_register_usage(
+                                &setup_instr.instruction.instruction,
+                            );
+                            
+                            // Process each source register used by the setup instruction
+                            for src_reg in usage.sources {
+                                // Find the SSA value being used
+                                let use_site = RegisterUse {
+                                    register: src_reg,
+                                    block_id: setup_instr.ssa_value.def_site.block_id,
+                                    instruction_idx: setup_instr.instruction.instruction_index,
+                                };
+                                
+                                // Look up the SSA value from the use-def chain
+                                if let Some(def_site) = self.function_analysis.ssa.use_def_chains.get(&use_site) {
+                                    if let Some(ssa_value) = self.function_analysis
+                                        .ssa
+                                        .ssa_values
+                                        .values()
+                                        .find(|v| &v.def_site == def_site)
+                                    {
+                                        // Check if this SSA value's defining instruction is in a comparison block
+                                        // (i.e., not in the case body that will be generated)
+                                        let is_in_comparison_block = info.cases.iter().any(|c| 
+                                            c.comparison_block == ssa_value.def_site.block_id
+                                        );
+                                        
+                                        if is_in_comparison_block {
+                                            debug!(
+                                                "Marking {} for mandatory inlining (used by setup instruction {:?})",
+                                                ssa_value,
+                                                setup_instr.instruction.instruction.name()
+                                            );
+                                            self.plan.mandatory_inline.insert(ssa_value.clone());
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

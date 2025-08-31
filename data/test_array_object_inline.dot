@@ -1,0 +1,34 @@
+// CFG analysis for test_array_object_inline
+// Generated from data/test_array_object_inline.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-9)\l  0: DeclareGlobalVar  \"testArrayObjectInlining\"\l  1: CreateEnvironment r0\l  2: CreateClosure     r1, r0, Function<testArrayObjectInlining>1\l  3: GetGlobalObject   r0\l  4: PutById           r0, r1, 1, \"testArrayObjectInlining\"\l  5: GetByIdShort      r1, r0, 1, \"testArrayObjectInlining\"\l  6: LoadConstUndefined r0\l  7: Call1             r0, r1, r0\l  8: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-31)\l  0: NewArrayWithBuffer r0, 3, 3, 0\l  1: GetGlobalObject   r1\l  2: TryGetById        r3, r1, 1, \"console\"\l  3: GetByIdShort      r2, r3, 2, \"log\"\l  4: Call2             r2, r2, r3, r0\l  5: TryGetById        r4, r1, 1, \"console\"\l  6: GetByIdShort      r3, r4, 2, \"log\"\l  7: NewObjectWithBuffer r2, 2, 2, 0, 0\l  8: Call2             r2, r3, r4, r2\l  9: NewObject         r4\l  10: NewArrayWithBuffer r2, 2, 2, 13\l  11: PutNewOwnByIdShort r4, r2, \"arr\"\l  12: NewObject         r2\l  13: LoadConstUInt8    r3, 3\l  14: PutNewOwnByIdShort r2, r3, \"c\"\l  15: PutNewOwnByIdShort r4, r2, \"obj\"\l  16: TryGetById        r3, r1, 1, \"console\"\l  17: GetByIdShort      r2, r3, 2, \"log\"\l  18: Call2             r2, r2, r3, r4\l  19: TryGetById        r3, r1, 3, \"Math\"\l  20: GetByIdShort      r2, r3, 4, \"max\"\l  21: NewArray          r1, 0\l  22: NewArrayWithBuffer r7, 3, 3, 23\l  23: LoadConstZero     r6\l  24: Mov               r8, r1\l  25: CallBuiltin       r4, 46, 4\l  26: Mov               r8, r2\l  27: Mov               r7, r1\l  28: Mov               r6, r3\l  29: CallBuiltin       r1, 47, 4\l  30: Ret               r0\l" ]
+    f1_n1 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n1 [label="Uncond"]
+  }
+
+}
