@@ -207,10 +207,6 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         if self.should_skip_declaration(dest_reg) {
             return Ok(InstructionResult::None);
         }
-        
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
 
         // Look up string from the string table
         let string_value = self.expression_context.lookup_string(string_id)?;
@@ -221,8 +217,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_string_literal(span, string_atom, None);
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(string_expr))?;
-
+        let stmt = self.create_register_assignment_statement(dest_reg, string_expr)?;
         Ok(InstructionResult::Statement(stmt))
     }
 
@@ -235,10 +230,6 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         if self.should_skip_declaration(dest_reg) {
             return Ok(InstructionResult::None);
         }
-        
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
 
         // Look up BigInt from the BigInt table
         let bigint_value = self.expression_context.lookup_bigint(bigint_id)?;
@@ -252,8 +243,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_syntax::number::BigintBase::Decimal,
         );
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(bigint_expr))?;
-
+        let stmt = self.create_register_assignment_statement(dest_reg, bigint_expr)?;
         Ok(InstructionResult::Statement(stmt))
     }
 

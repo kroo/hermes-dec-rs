@@ -235,6 +235,24 @@ impl<'a> InstructionToStatementConverter<'a> {
         }
         false
     }
+    
+    /// Get the declaration strategy for the given destination register
+    pub fn get_declaration_strategy_for_register(&self, dest_reg: u8) -> Option<DeclarationStrategy> {
+        if let Some(ssa_value) = self.register_manager.get_current_ssa_value(dest_reg) {
+            let dup_ssa = if let Some(context) = self.register_manager.current_duplication_context() {
+                DuplicatedSSAValue {
+                    original: ssa_value,
+                    duplication_context: Some(context.clone()),
+                }
+            } else {
+                DuplicatedSSAValue::original(ssa_value)
+            };
+            
+            self.control_flow_plan.get_declaration_strategy(&dup_ssa).cloned()
+        } else {
+            None
+        }
+    }
 
     /// Get the global analyzer from HBC analysis
     pub fn global_analyzer(&self) -> &Arc<GlobalAnalysisResult> {
@@ -1859,6 +1877,41 @@ impl<'a> InstructionToStatementConverter<'a> {
         Ok(Statement::VariableDeclaration(
             self.ast_builder.alloc(var_decl),
         ))
+    }
+
+    /// Create a statement for a register assignment based on its declaration strategy
+    pub fn create_register_assignment_statement(
+        &mut self,
+        dest_reg: u8,
+        init_expression: oxc_ast::ast::Expression<'a>,
+    ) -> Result<Statement<'a>, StatementConversionError> {
+        let dest_var = self
+            .register_manager
+            .create_new_variable_for_register(dest_reg);
+        
+        // Check the declaration strategy
+        if let Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::AssignOnly) = 
+            self.get_declaration_strategy_for_register(dest_reg) {
+            // Create assignment only (no declaration)
+            let span = oxc_span::Span::default();
+            let var_atom = self.ast_builder.allocator.alloc_str(&dest_var);
+            let assign_expr = self.ast_builder.expression_assignment(
+                span,
+                oxc_ast::ast::AssignmentOperator::Assign,
+                oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
+                    self.ast_builder.alloc(oxc_ast::ast::IdentifierReference {
+                        span,
+                        name: oxc_span::Atom::from(var_atom),
+                        reference_id: std::cell::Cell::new(None),
+                    }),
+                ),
+                init_expression,
+            );
+            Ok(self.ast_builder.statement_expression(span, assign_expr))
+        } else {
+            // Use the normal declaration or assignment logic
+            self.create_variable_declaration_or_assignment(&dest_var, Some(init_expression))
+        }
     }
 
     /// Create a variable declaration or assignment based on whether the variable was already declared

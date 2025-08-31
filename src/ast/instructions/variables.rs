@@ -133,15 +133,10 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
             return Ok(InstructionResult::None);
         }
         
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
-        
         // Use source_register_to_expression to respect use strategies (e.g., inlining constants)
         let src_expr = self.source_register_to_expression(src_reg)?;
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(src_expr))?;
-
+        let stmt = self.create_register_assignment_statement(dest_reg, src_expr)?;
         Ok(InstructionResult::Statement(stmt))
     }
 
