@@ -171,7 +171,7 @@ fn is_valid_identifier(s: &str) -> bool {
 }
 
 /// Convert an SLPValue to an AST expression
-fn slp_value_to_expression<'a>(
+pub fn slp_value_to_expression<'a>(
     value: &SLPValue,
     ast_builder: &'a oxc_ast::AstBuilder<'a>,
     expression_context: &ExpressionContext,

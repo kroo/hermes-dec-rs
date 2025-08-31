@@ -389,15 +389,6 @@ impl<'a> SSAUsageTracker<'a> {
         dup_ssa_value: &DuplicatedSSAValue,
         call_site_analysis: Option<&crate::analysis::call_site_analysis::CallSiteAnalysis>,
     ) -> bool {
-        // First check if this value is used as an implicit argument in a Call/Construct
-        if self.is_implicit_argument(dup_ssa_value.original_ssa_value(), call_site_analysis) {
-            trace!(
-                "{} is used as an implicit argument, not eliminated",
-                dup_ssa_value.original_ssa_value()
-            );
-            return false;
-        }
-
         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
 
         if all_uses.is_empty() {
@@ -409,7 +400,7 @@ impl<'a> SSAUsageTracker<'a> {
             return true;
         }
 
-        // Check if all uses have been consumed
+        // Check if all uses have been consumed first
         if let Some(consumed) = self.consumed_uses.get(dup_ssa_value) {
             let is_eliminated = all_uses.iter().all(|use_site| consumed.contains(use_site));
             trace!(
@@ -419,16 +410,28 @@ impl<'a> SSAUsageTracker<'a> {
                 consumed.len(),
                 is_eliminated
             );
-            is_eliminated
+            if is_eliminated {
+                return true;
+            }
         } else {
             trace!(
                 "{} has {} uses, 0 consumed, not eliminated",
                 dup_ssa_value.original_ssa_value(),
                 all_uses.len()
             );
-            // No consumed uses tracked, so not eliminated
-            false
         }
+
+        // Only check for implicit arguments if not already eliminated
+        if self.is_implicit_argument(dup_ssa_value.original_ssa_value(), call_site_analysis) {
+            trace!(
+                "{} is used as an implicit argument, not eliminated",
+                dup_ssa_value.original_ssa_value()
+            );
+            return false;
+        }
+
+        // Not eliminated
+        false
     }
 
     /// Determine the declaration strategy for a (potentially duplicated) SSA value at its definition site
@@ -540,13 +543,29 @@ impl<'a> SSAUsageTracker<'a> {
         // 2. Check if fully eliminated (considering duplication context)
         // Only check this AFTER checking for PHI operands
         // Side effects were already checked above
-        if self.is_duplicated_fully_eliminated_with_context(dup_ssa_value, call_site_analysis) {
+        let is_eliminated =
+            self.is_duplicated_fully_eliminated_with_context(dup_ssa_value, call_site_analysis);
+        if is_eliminated {
             debug!(
                 "SSA value {} (context: {}) is fully eliminated with no side effects, using Skip",
                 ssa_value,
                 dup_ssa_value.context_description()
             );
             return DeclarationStrategy::Skip;
+        } else {
+            // Log why it's not eliminated for debugging
+            let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
+            let consumed_uses = self
+                .consumed_uses
+                .get(dup_ssa_value)
+                .map(|s| s.len())
+                .unwrap_or(0);
+            trace!(
+                "SSA value {} has {} uses, {} consumed, not eliminated",
+                ssa_value,
+                all_uses.len(),
+                consumed_uses
+            );
         }
 
         // 3. Single SSA value - declare at definition

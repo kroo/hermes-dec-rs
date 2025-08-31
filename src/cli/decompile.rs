@@ -11,6 +11,8 @@ pub fn decompile(
     comments: &str,
     skip_validation: bool,
     decompile_nested: bool,
+    inline_constants: bool,
+    inline_all_constants: bool,
 ) -> DecompilerResult<()> {
     // Read the input file
     let data = match fs::read(input_path) {
@@ -36,21 +38,26 @@ pub fn decompile(
     // Create decompiler
     let mut decompiler = Decompiler::new()?;
 
-    // Decompile the specific function
-    let output = match decompiler.decompile_function_with_full_options_and_nested(
-        &hbc_file,
-        function_index as u32,
+    // Create decompile options
+    let options = crate::decompiler::DecompileOptions::from_cli(
         comments,
         skip_validation,
         decompile_nested,
-    ) {
-        Ok(output) => output,
-        Err(e) => {
-            return Err(DecompilerError::Internal {
-                message: format!("Failed to decompile function {}: {}", function_index, e),
-            });
-        }
-    };
+        inline_constants,
+        inline_all_constants,
+    );
+
+    // Decompile the specific function
+    let output =
+        match decompiler.decompile_function_with_options(&hbc_file, function_index as u32, options)
+        {
+            Ok(output) => output,
+            Err(e) => {
+                return Err(DecompilerError::Internal {
+                    message: format!("Failed to decompile function {}: {}", function_index, e),
+                });
+            }
+        };
 
     // Write output
     match output_path {

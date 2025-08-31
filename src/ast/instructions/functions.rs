@@ -184,8 +184,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         // Read all variable names BEFORE creating destination variable to avoid conflicts
         let func_var = self.register_manager.get_source_variable_name(func_reg);
 
-        // Collect argument variable names - use call site analysis if available
-        let mut arg_vars = Vec::new();
+        // Collect argument registers - use call site analysis if available
+        let mut arg_regs = Vec::new();
 
         // Try to get argument registers from call site analysis
         if let Some(current_block) = self.register_manager.current_block() {
@@ -199,24 +199,19 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
                 .get(&call_site_key)
             {
                 // Use the actual argument registers from the analysis
-                for &arg_reg in &call_site_info.argument_registers {
-                    let arg_var = self.register_manager.get_source_variable_name(arg_reg);
-                    arg_vars.push(arg_var);
-                }
+                arg_regs = call_site_info.argument_registers.clone();
             } else {
                 // Fallback to heuristic: sequential registers after func_reg
                 for i in 0..arg_count {
                     let arg_reg = func_reg + 1 + i;
-                    let arg_var = self.register_manager.get_source_variable_name(arg_reg);
-                    arg_vars.push(arg_var);
+                    arg_regs.push(arg_reg);
                 }
             }
         } else {
             // Fallback to heuristic: sequential registers after func_reg
             for i in 0..arg_count {
                 let arg_reg = func_reg + 1 + i;
-                let arg_var = self.register_manager.get_source_variable_name(arg_reg);
-                arg_vars.push(arg_var);
+                arg_regs.push(arg_reg);
             }
         }
 
@@ -232,7 +227,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let func_expr = self.ast_builder.expression_identifier(span, func_atom);
 
         // Handle Hermes calling convention: always use func.call(thisArg, ...args)
-        let call_expr = if arg_vars.is_empty() {
+        let call_expr = if arg_regs.is_empty() {
             // No arguments, regular function call
             self.ast_builder.expression_call(
                 span,
@@ -251,9 +246,9 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
             let mut arguments = self.ast_builder.vec();
             // Add all arguments (first is 'this', rest are actual arguments)
-            for arg_var in arg_vars {
-                let arg_atom = self.ast_builder.allocator.alloc_str(&arg_var);
-                let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
+            // Use register_to_expression to handle inline values
+            for arg_reg in arg_regs {
+                let arg_expr = self.register_to_expression(arg_reg)?;
                 arguments.push(oxc_ast::ast::Argument::from(arg_expr));
             }
 
@@ -277,9 +272,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         func_reg: u8,
         arg1_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read all variable names BEFORE creating destination variable
+        // Read function variable name BEFORE creating destination variable
         let func_var = self.register_manager.get_source_variable_name(func_reg);
-        let arg1_var = self.register_manager.get_source_variable_name(arg1_reg);
 
         // Now create the destination variable
         let dest_var = self
@@ -301,8 +295,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let mut arguments = self.ast_builder.vec();
         // arg1 is the 'this' argument in Hermes calling convention
-        let arg1_atom = self.ast_builder.allocator.alloc_str(&arg1_var);
-        let arg1_expr = self.ast_builder.expression_identifier(span, arg1_atom);
+        // Use register_to_expression to handle inline values
+        let arg1_expr = self.register_to_expression(arg1_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
 
         let call_expr = self.ast_builder.expression_call(
@@ -325,10 +319,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg1_reg: u8,
         arg2_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read all variable names BEFORE creating destination variable
+        // Read function variable name BEFORE creating destination variable
         let func_var = self.register_manager.get_source_variable_name(func_reg);
-        let arg1_var = self.register_manager.get_source_variable_name(arg1_reg);
-        let arg2_var = self.register_manager.get_source_variable_name(arg2_reg);
 
         // Now create the destination variable
         let dest_var = self
@@ -350,12 +342,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let mut arguments = self.ast_builder.vec();
         // arg1 is 'this', arg2 is the first actual argument
-        let arg1_atom = self.ast_builder.allocator.alloc_str(&arg1_var);
-        let arg1_expr = self.ast_builder.expression_identifier(span, arg1_atom);
+        // Use register_to_expression to handle inline values
+        let arg1_expr = self.register_to_expression(arg1_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
 
-        let arg2_atom = self.ast_builder.allocator.alloc_str(&arg2_var);
-        let arg2_expr = self.ast_builder.expression_identifier(span, arg2_atom);
+        let arg2_expr = self.register_to_expression(arg2_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
 
         let call_expr = self.ast_builder.expression_call(
@@ -379,11 +370,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg2_reg: u8,
         arg3_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read all variable names BEFORE creating destination variable
+        // Read function variable name BEFORE creating destination variable
         let func_var = self.register_manager.get_source_variable_name(func_reg);
-        let arg1_var = self.register_manager.get_source_variable_name(arg1_reg);
-        let arg2_var = self.register_manager.get_source_variable_name(arg2_reg);
-        let arg3_var = self.register_manager.get_source_variable_name(arg3_reg);
 
         // Check if this should be executed for side effects only
         let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
@@ -414,16 +402,14 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let mut arguments = self.ast_builder.vec();
         // arg1 is 'this', arg2 and arg3 are actual arguments
-        let arg1_atom = self.ast_builder.allocator.alloc_str(&arg1_var);
-        let arg1_expr = self.ast_builder.expression_identifier(span, arg1_atom);
+        // Use register_to_expression to handle inline values
+        let arg1_expr = self.register_to_expression(arg1_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
 
-        let arg2_atom = self.ast_builder.allocator.alloc_str(&arg2_var);
-        let arg2_expr = self.ast_builder.expression_identifier(span, arg2_atom);
+        let arg2_expr = self.register_to_expression(arg2_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
 
-        let arg3_atom = self.ast_builder.allocator.alloc_str(&arg3_var);
-        let arg3_expr = self.ast_builder.expression_identifier(span, arg3_atom);
+        let arg3_expr = self.register_to_expression(arg3_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg3_expr));
 
         let call_expr = self.ast_builder.expression_call(
@@ -454,12 +440,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg3_reg: u8,
         arg4_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read all variable names BEFORE creating destination variable
+        // Read function variable name BEFORE creating destination variable
         let func_var = self.register_manager.get_source_variable_name(func_reg);
-        let arg1_var = self.register_manager.get_source_variable_name(arg1_reg);
-        let arg2_var = self.register_manager.get_source_variable_name(arg2_reg);
-        let arg3_var = self.register_manager.get_source_variable_name(arg3_reg);
-        let arg4_var = self.register_manager.get_source_variable_name(arg4_reg);
 
         // Now create the destination variable
         let dest_var = self
@@ -481,20 +463,17 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let mut arguments = self.ast_builder.vec();
         // arg1 is 'this', arg2, arg3, arg4 are actual arguments
-        let arg1_atom = self.ast_builder.allocator.alloc_str(&arg1_var);
-        let arg1_expr = self.ast_builder.expression_identifier(span, arg1_atom);
+        // Use register_to_expression to handle inline values
+        let arg1_expr = self.register_to_expression(arg1_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
 
-        let arg2_atom = self.ast_builder.allocator.alloc_str(&arg2_var);
-        let arg2_expr = self.ast_builder.expression_identifier(span, arg2_atom);
+        let arg2_expr = self.register_to_expression(arg2_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
 
-        let arg3_atom = self.ast_builder.allocator.alloc_str(&arg3_var);
-        let arg3_expr = self.ast_builder.expression_identifier(span, arg3_atom);
+        let arg3_expr = self.register_to_expression(arg3_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg3_expr));
 
-        let arg4_atom = self.ast_builder.allocator.alloc_str(&arg4_var);
-        let arg4_expr = self.ast_builder.expression_identifier(span, arg4_atom);
+        let arg4_expr = self.register_to_expression(arg4_reg)?;
         arguments.push(oxc_ast::ast::Argument::from(arg4_expr));
 
         let call_expr = self.ast_builder.expression_call(
@@ -514,13 +493,10 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         &mut self,
         value_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Use get_source_variable_name since we're reading the value
-        let value_var = self.register_manager.get_source_variable_name(value_reg);
+        // Use register_to_expression to handle inline values properly
+        let value_expr = self.register_to_expression(value_reg)?;
 
         let span = Span::default();
-        let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
-        let value_expr = self.ast_builder.expression_identifier(span, value_atom);
-
         let return_stmt = self.ast_builder.statement_return(span, Some(value_expr));
 
         Ok(InstructionResult::Statement(return_stmt))

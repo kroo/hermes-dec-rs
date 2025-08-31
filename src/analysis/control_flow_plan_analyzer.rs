@@ -32,6 +32,10 @@ pub struct ControlFlowPlanAnalyzer<'a> {
     usage_tracker: SSAUsageTracker<'a>,
     /// Blocks that will be duplicated in various contexts
     duplicated_blocks: HashMap<NodeIndex, Vec<DuplicationContext>>,
+    /// Whether to inline single-use constants
+    inline_constants: bool,
+    /// Whether to inline all constants regardless of usage
+    inline_all_constants: bool,
 }
 
 impl<'a> ControlFlowPlanAnalyzer<'a> {
@@ -45,6 +49,26 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             function_analysis,
             usage_tracker,
             duplicated_blocks: HashMap::new(),
+            inline_constants: false,
+            inline_all_constants: false,
+        }
+    }
+
+    /// Create a new analyzer with options
+    pub fn with_options(
+        plan: &'a mut ControlFlowPlan,
+        function_analysis: &'a FunctionAnalysis<'a>,
+        inline_constants: bool,
+        inline_all_constants: bool,
+    ) -> Self {
+        let usage_tracker = SSAUsageTracker::new(function_analysis);
+        Self {
+            plan,
+            function_analysis,
+            usage_tracker,
+            duplicated_blocks: HashMap::new(),
+            inline_constants,
+            inline_all_constants,
         }
     }
 
@@ -54,6 +78,78 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         for phi_list in self.function_analysis.ssa.phi_functions.values() {
             for phi in phi_list {
                 self.plan.phi_results.insert(phi.result.clone());
+            }
+        }
+    }
+
+    /// Perform aggressive constant inlining based on options
+    fn perform_aggressive_constant_inlining(&mut self) {
+        use crate::analysis::value_tracker::{TrackedValue, ValueTracker};
+        use crate::analysis::ssa_usage_tracker::UseStrategy;
+        
+        let value_tracker = ValueTracker::new(
+            &self.function_analysis.cfg,
+            &self.function_analysis.ssa,
+            self.function_analysis.hbc_file,
+        );
+
+        // Collect all SSA values from declaration strategies
+        let mut ssa_values_to_check = Vec::new();
+        for (dup_ssa_value, _) in &self.plan.declaration_strategies {
+            ssa_values_to_check.push(dup_ssa_value.original_ssa_value().clone());
+        }
+        
+        // De-duplicate
+        ssa_values_to_check.sort_by_key(|v| (v.def_site.block_id, v.def_site.instruction_idx, v.register));
+        ssa_values_to_check.dedup();
+
+        // Check each SSA value
+        for ssa_value in ssa_values_to_check {
+            let tracked_value = value_tracker.get_value(&ssa_value);
+            
+            // Check if this is a constant value
+            if let TrackedValue::Constant(_) = tracked_value {
+                // Get uses for this SSA value
+                let uses = self.function_analysis.ssa.get_ssa_value_uses(&ssa_value);
+                
+                // Count non-consumed uses
+                let non_consumed_uses = uses.iter().filter(|_use_site| {
+                    let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+                    !self.plan.consumed_uses.contains_key(&dup_value)
+                }).count();
+                
+                // Decide whether to inline based on options
+                let should_inline = if self.inline_all_constants {
+                    true
+                } else if self.inline_constants {
+                    non_consumed_uses == 1
+                } else {
+                    false
+                };
+                
+                if should_inline {
+                    log::debug!(
+                        "Marking constant SSA value {} for inlining ({} non-consumed uses)",
+                        ssa_value,
+                        non_consumed_uses
+                    );
+                    
+                    // Mark all uses for inlining by updating the plan's use strategies
+                    for use_site in uses {
+                        let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+                        
+                        // Get the constant value to inline
+                        if let TrackedValue::Constant(const_val) = &tracked_value {
+                            self.plan.use_strategies.insert(
+                                (dup_value.clone(), use_site.clone()),
+                                UseStrategy::InlineValue(const_val.clone()),
+                            );
+                        }
+                        
+                        // Mark as consumed
+                        self.usage_tracker.mark_use_consumed(&ssa_value, use_site);
+                    }
+                }
             }
         }
     }
@@ -73,6 +169,12 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         // Second pass: Mark consumed uses (e.g., switch discriminators, inlined constants)
         log::debug!("Marking consumed uses...");
         self.mark_consumed_uses();
+
+        // Perform aggressive constant inlining if enabled
+        if self.inline_constants || self.inline_all_constants {
+            log::debug!("Performing aggressive constant inlining...");
+            self.perform_aggressive_constant_inlining();
+        }
 
         // Perform cascading elimination with duplication context awareness
         self.usage_tracker

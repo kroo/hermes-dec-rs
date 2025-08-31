@@ -103,6 +103,8 @@ impl Cli {
                     &comments,
                     false,
                     decompile_nested,
+                    false, // inline_constants
+                    false, // inline_all_constants
                 )?;
             }
             Commands::Disasm { input } => {

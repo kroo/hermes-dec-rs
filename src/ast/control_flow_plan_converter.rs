@@ -1665,7 +1665,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         }
 
         // Get the proper variable name from the register manager's mapping
-        let mut name = self
+        let name = self
             .instruction_converter
             .register_manager()
             .get_variable_name_for_duplicated(value);

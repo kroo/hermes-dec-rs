@@ -75,6 +75,14 @@ enum Commands {
         /// Decompile nested function definitions (experimental)
         #[arg(long)]
         decompile_nested: bool,
+
+        /// Inline constant values that are used only once
+        #[arg(long)]
+        inline_constants: bool,
+
+        /// Aggressively inline all constant values regardless of usage count
+        #[arg(long)]
+        inline_all_constants: bool,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -137,6 +145,8 @@ fn main() -> Result<()> {
             comments,
             skip_validation,
             decompile_nested,
+            inline_constants,
+            inline_all_constants,
             format: _,
             minify: _,
             hbc_version: _,
@@ -147,6 +157,8 @@ fn main() -> Result<()> {
             &comments,
             skip_validation,
             decompile_nested,
+            inline_constants,
+            inline_all_constants,
         )
         .map_err(|e| miette!("{}", e)),
         Commands::Generate { force: _ } => {

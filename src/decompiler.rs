@@ -27,6 +27,60 @@ pub struct Decompiler {
     function_cache: HashMap<u32, String>,
 }
 
+/// Options for decompilation
+#[derive(Debug, Clone)]
+pub struct DecompileOptions {
+    /// Include instruction comments
+    pub include_instruction_comments: bool,
+    /// Include SSA comments
+    pub include_ssa_comments: bool,
+    /// Skip validation
+    pub skip_validation: bool,
+    /// Decompile nested functions
+    pub decompile_nested: bool,
+    /// Inline constant values that are used only once
+    pub inline_constants: bool,
+    /// Aggressively inline all constant values
+    pub inline_all_constants: bool,
+}
+
+impl Default for DecompileOptions {
+    fn default() -> Self {
+        Self {
+            include_instruction_comments: false,
+            include_ssa_comments: false,
+            skip_validation: false,
+            decompile_nested: false,
+            inline_constants: false,
+            inline_all_constants: false,
+        }
+    }
+}
+
+impl DecompileOptions {
+    /// Create options from comment string and flags
+    pub fn from_cli(
+        comments: &str,
+        skip_validation: bool,
+        decompile_nested: bool,
+        inline_constants: bool,
+        inline_all_constants: bool,
+    ) -> Self {
+        let include_instruction_comments =
+            comments.contains("instructions") || comments.contains("pc");
+        let include_ssa_comments = comments.contains("ssa");
+
+        Self {
+            include_instruction_comments,
+            include_ssa_comments,
+            skip_validation,
+            decompile_nested,
+            inline_constants,
+            inline_all_constants,
+        }
+    }
+}
+
 /// Result of function decompilation - AST node and metadata
 pub struct FunctionDecompilationResult<'a> {
     /// The function body statements
@@ -53,14 +107,8 @@ pub struct FunctionDecompiler<'a> {
     function_index: u32,
     /// Global analysis result (shared)
     global_analysis: Arc<GlobalAnalysisResult>,
-    /// Whether to include instruction comments
-    include_instruction_comments: bool,
-    /// Whether to include SSA comments
-    include_ssa_comments: bool,
-    /// Whether to skip validation
-    skip_validation: bool,
-    /// Whether to decompile nested functions
-    decompile_nested: bool,
+    /// Decompilation options
+    options: DecompileOptions,
 }
 
 impl Decompiler {
@@ -110,17 +158,7 @@ impl Decompiler {
         hbc_file: &HbcFile,
         function_index: u32,
     ) -> DecompilerResult<String> {
-        self.decompile_function_with_options(hbc_file, function_index, "none")
-    }
-
-    /// Decompile a single function with options
-    pub fn decompile_function_with_options(
-        &mut self,
-        hbc_file: &HbcFile,
-        function_index: u32,
-        comments: &str,
-    ) -> DecompilerResult<String> {
-        self.decompile_function_with_full_options(hbc_file, function_index, comments, false)
+        self.decompile_function_with_full_options(hbc_file, function_index, "none", false)
     }
 
     /// Decompile a single function with full options
@@ -149,8 +187,20 @@ impl Decompiler {
         skip_validation: bool,
         decompile_nested: bool,
     ) -> DecompilerResult<String> {
+        let options =
+            DecompileOptions::from_cli(comments, skip_validation, decompile_nested, false, false);
+        self.decompile_function_with_options(hbc_file, function_index, options)
+    }
+
+    /// Decompile a single function with options
+    pub fn decompile_function_with_options(
+        &mut self,
+        hbc_file: &HbcFile,
+        function_index: u32,
+        options: DecompileOptions,
+    ) -> DecompilerResult<String> {
         // Check cache first
-        if !decompile_nested && self.function_cache.contains_key(&function_index) {
+        if !options.decompile_nested && self.function_cache.contains_key(&function_index) {
             return Ok(self.function_cache[&function_index].clone());
         }
 
@@ -170,24 +220,19 @@ impl Decompiler {
 
         let global_analysis = self.global_analysis.as_ref().unwrap().clone();
 
-        // Parse comment types
-        let comment_types: Vec<&str> = comments.split(',').map(|s| s.trim()).collect();
-        let include_instruction_comments = comment_types.contains(&"instructions");
-        let include_ssa_comments = comment_types.contains(&"ssa");
-
         // Create allocator and AST builder for this decompilation
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
+
+        // Save decompile_nested flag before moving options
+        let decompile_nested = options.decompile_nested;
 
         // Create a function decompiler
         let function_decompiler = FunctionDecompiler {
             hbc_file,
             function_index,
             global_analysis,
-            include_instruction_comments,
-            include_ssa_comments,
-            skip_validation,
-            decompile_nested,
+            options,
         };
 
         // Create HBC analysis for this file
@@ -352,10 +397,13 @@ impl<'a> FunctionDecompiler<'a> {
         let mut plan = plan_builder.build();
 
         // Analyze the plan to determine declaration and use strategies
-        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
-            &mut plan,
-            function_analysis,
-        );
+        let analyzer =
+            crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::with_options(
+                &mut plan,
+                function_analysis,
+                self.options.inline_constants,
+                self.options.inline_all_constants,
+            );
         analyzer.analyze();
 
         // Convert the plan to AST
@@ -366,8 +414,8 @@ impl<'a> FunctionDecompiler<'a> {
             self.function_index,
             function_analysis,
             plan,
-            self.include_ssa_comments,
-            self.include_instruction_comments,
+            self.options.include_ssa_comments,
+            self.options.include_instruction_comments,
         );
         let all_statements = converter.convert_to_ast();
 
