@@ -51,6 +51,10 @@ impl ComparisonValue {
             ConstantValue::Boolean(b) => ComparisonValue::Boolean(*b),
             ConstantValue::Null => ComparisonValue::Null,
             ConstantValue::Undefined => ComparisonValue::Undefined,
+            ConstantValue::ArrayLiteral(_) | ConstantValue::ObjectLiteral(_) => {
+                // Arrays/objects can't be compared with strict equality
+                ComparisonValue::String("__complex__".to_string())
+            }
         }
     }
 }

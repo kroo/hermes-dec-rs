@@ -19,6 +19,10 @@ pub enum ConstantValue {
     Boolean(bool),
     Null,
     Undefined,
+    /// Array literal with its elements
+    ArrayLiteral(Vec<ConstantValue>),
+    /// Object literal with its key-value pairs
+    ObjectLiteral(Vec<(String, ConstantValue)>),
 }
 
 impl ConstantValue {
@@ -36,6 +40,11 @@ impl ConstantValue {
             }
             _ => None,
         }
+    }
+    
+    /// Check if this value is a primitive (not an array or object)
+    pub fn is_primitive(&self) -> bool {
+        !matches!(self, ConstantValue::ArrayLiteral(_) | ConstantValue::ObjectLiteral(_))
     }
 }
 
@@ -268,6 +277,38 @@ impl<'a> ValueTracker<'a> {
                 },
             ),
 
+            // Array creation with buffer
+            UnifiedInstruction::NewArrayWithBuffer {
+                operand_1,
+                operand_2,
+                operand_3,
+                ..
+            } => self.track_array_literal(*operand_1, *operand_2, *operand_3 as u32),
+            
+            UnifiedInstruction::NewArrayWithBufferLong {
+                operand_1,
+                operand_2,
+                operand_3,
+                ..
+            } => self.track_array_literal(*operand_1, *operand_2, *operand_3),
+            
+            // Object creation with buffer
+            UnifiedInstruction::NewObjectWithBuffer {
+                operand_1,
+                operand_2,
+                operand_3,
+                operand_4,
+                ..
+            } => self.track_object_literal(*operand_1, *operand_2, *operand_3 as u32, *operand_4 as u32),
+            
+            UnifiedInstruction::NewObjectWithBufferLong {
+                operand_1,
+                operand_2,
+                operand_3,
+                operand_4,
+                ..
+            } => self.track_object_literal(*operand_1, *operand_2, *operand_3, *operand_4),
+
             // TODO: Handle more operations like:
             // - Negate, Not, BitNot
             // - Mod, BitAnd, BitOr, BitXor, LShift, RShift, URshift
@@ -348,6 +389,113 @@ impl<'a> ValueTracker<'a> {
             self.get_value(ssa_value)
         } else {
             TrackedValue::Unknown
+        }
+    }
+    
+    /// Track an array literal from NewArrayWithBuffer instruction
+    fn track_array_literal(&self, _size_hint: u16, num_literals: u16, buffer_start_index: u32) -> TrackedValue {
+        use crate::hbc::serialized_literal_parser::unpack_slp_array;
+        
+        // Try to look up the array data from the serialized literals
+        let literal_tables = &self.hbc_file.serialized_literals;
+        
+        // Validate bounds
+        if buffer_start_index as usize >= literal_tables.arrays_data.len() {
+            return TrackedValue::Unknown;
+        }
+        
+        // Parse the array from serialized data
+        let slice_from_offset = &literal_tables.arrays_data[buffer_start_index as usize..];
+        let parsed_array = match unpack_slp_array(slice_from_offset, Some(num_literals as usize)) {
+            Ok(array) => array,
+            Err(_) => return TrackedValue::Unknown,
+        };
+        
+        // Convert SLPValues to ConstantValues
+        let mut elements = Vec::new();
+        for slp_value in parsed_array.items {
+            match self.slp_value_to_constant(&slp_value) {
+                Some(const_val) => elements.push(const_val),
+                None => return TrackedValue::Unknown, // If any element can't be tracked as constant, don't track the array
+            }
+        }
+        
+        TrackedValue::Constant(ConstantValue::ArrayLiteral(elements))
+    }
+    
+    /// Track an object literal from NewObjectWithBuffer instruction
+    fn track_object_literal(&self, _size_hint: u16, num_literals: u16, key_buffer_start_index: u32, value_buffer_start_index: u32) -> TrackedValue {
+        
+        let literal_tables = &self.hbc_file.serialized_literals;
+        
+        // Validate bounds for keys
+        let key_end_index = key_buffer_start_index + num_literals as u32;
+        let value_end_index = value_buffer_start_index + num_literals as u32;
+        
+        if key_end_index as usize > literal_tables.object_keys.items.len() ||
+           value_end_index as usize > literal_tables.object_values.items.len() {
+            return TrackedValue::Unknown;
+        }
+        
+        // Get keys and values
+        let keys = &literal_tables.object_keys.items[key_buffer_start_index as usize..key_end_index as usize];
+        let values = &literal_tables.object_values.items[value_buffer_start_index as usize..value_end_index as usize];
+        
+        // Convert to constant key-value pairs
+        let mut properties = Vec::new();
+        for (key, value) in keys.iter().zip(values.iter()) {
+            // Keys must be strings
+            let key_str = match self.slp_value_to_string(key) {
+                Some(s) => s,
+                None => return TrackedValue::Unknown,
+            };
+            
+            // Convert value to constant
+            let const_val = match self.slp_value_to_constant(value) {
+                Some(v) => v,
+                None => return TrackedValue::Unknown,
+            };
+            
+            properties.push((key_str, const_val));
+        }
+        
+        TrackedValue::Constant(ConstantValue::ObjectLiteral(properties))
+    }
+    
+    /// Convert an SLPValue to a ConstantValue
+    fn slp_value_to_constant(&self, slp_value: &crate::hbc::serialized_literal_parser::SLPValue) -> Option<ConstantValue> {
+        use crate::hbc::serialized_literal_parser::SLPValue;
+        
+        match slp_value {
+            SLPValue::Null => Some(ConstantValue::Null),
+            SLPValue::True => Some(ConstantValue::Boolean(true)),
+            SLPValue::False => Some(ConstantValue::Boolean(false)),
+            SLPValue::Number(n) => Some(ConstantValue::Number(*n)),
+            SLPValue::Integer(i) => Some(ConstantValue::Number(*i as f64)),
+            SLPValue::LongString(id) => {
+                self.hbc_file.strings.get((*id).into()).ok()
+                    .map(|s| ConstantValue::String(s))
+            },
+            SLPValue::ShortString(id) => {
+                self.hbc_file.strings.get((*id as u32).into()).ok()
+                    .map(|s| ConstantValue::String(s))
+            },
+            SLPValue::ByteString(id) => {
+                self.hbc_file.strings.get((*id as u32).into()).ok()
+                    .map(|s| ConstantValue::String(s))
+            },
+        }
+    }
+    
+    /// Convert an SLPValue to a string (for object keys)
+    fn slp_value_to_string(&self, slp_value: &crate::hbc::serialized_literal_parser::SLPValue) -> Option<String> {
+        use crate::hbc::serialized_literal_parser::SLPValue;
+        
+        match slp_value {
+            SLPValue::LongString(id) => self.hbc_file.strings.get((*id).into()).ok(),
+            SLPValue::ShortString(id) => self.hbc_file.strings.get((*id as u32).into()).ok(),
+            SLPValue::ByteString(id) => self.hbc_file.strings.get((*id as u32).into()).ok(),
+            _ => None, // Non-string keys not supported for now
         }
     }
 }

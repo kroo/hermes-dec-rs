@@ -958,5 +958,7 @@ fn format_constant_value(value: &crate::analysis::ConstantValue, _hbc_file: &Hbc
         ConstantValue::Boolean(b) => format!("Boolean({})", b),
         ConstantValue::Null => "Null".to_string(),
         ConstantValue::Undefined => "Undefined".to_string(),
+        ConstantValue::ArrayLiteral(elements) => format!("Array[{}]", elements.len()),
+        ConstantValue::ObjectLiteral(props) => format!("Object{{{} props}}", props.len()),
     }
 }

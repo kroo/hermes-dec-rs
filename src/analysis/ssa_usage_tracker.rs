@@ -474,6 +474,20 @@ impl<'a> SSAUsageTracker<'a> {
                                 call_site_analysis,
                             )
                         {
+                            // Special case: Array/object literals with constant contents can be eliminated
+                            if self.is_eliminable_literal(&instr.instruction) {
+                                // Check if this is a constant array/object that can be eliminated
+                                let value_tracker = self.function_analysis.value_tracker();
+                                let tracked_value = value_tracker.get_value(ssa_value);
+                                if let TrackedValue::Constant(_) = tracked_value {
+                                    trace!(
+                                        "SSA value {} is an unused constant literal, using Skip",
+                                        ssa_value
+                                    );
+                                    return DeclarationStrategy::Skip;
+                                }
+                            }
+                            
                             trace!(
                                 "SSA value {} has side effects but no uses, using SideEffectOnly",
                                 ssa_value
@@ -616,6 +630,18 @@ impl<'a> SSAUsageTracker<'a> {
         self.perform_cascading_elimination(&empty_duplicated_blocks);
     }
 
+    /// Check if an instruction is an array/object literal that can be eliminated if unused
+    fn is_eliminable_literal(&self, instruction: &crate::generated::unified_instructions::UnifiedInstruction) -> bool {
+        use crate::generated::unified_instructions::UnifiedInstruction;
+        matches!(
+            instruction,
+            UnifiedInstruction::NewArrayWithBuffer { .. } |
+            UnifiedInstruction::NewArrayWithBufferLong { .. } |
+            UnifiedInstruction::NewObjectWithBuffer { .. } |
+            UnifiedInstruction::NewObjectWithBufferLong { .. }
+        )
+    }
+    
     /// Check if an SSA value is a PHI result
     fn is_phi_result(&self, ssa_value: &SSAValue) -> bool {
         // Check if this SSA value is the result of a PHI function

@@ -1643,6 +1643,38 @@ impl<'a> ControlFlowPlanConverter<'a> {
                 self.ast_builder
                     .expression_identifier(oxc_span::SPAN, undefined_atom)
             }
+            ConstantValue::ArrayLiteral(elements) => {
+                let mut array_elements = self.ast_builder.vec();
+                for element in elements {
+                    let element_expr = self.create_constant_expression(element);
+                    array_elements.push(oxc_ast::ast::ArrayExpressionElement::from(element_expr));
+                }
+                self.ast_builder.expression_array(oxc_span::SPAN, array_elements)
+            }
+            ConstantValue::ObjectLiteral(properties) => {
+                let mut object_properties = self.ast_builder.vec();
+                for (key, value) in properties {
+                    let key_atom = self.ast_builder.allocator.alloc_str(key);
+                    let key_ident = self.ast_builder.identifier_name(oxc_span::SPAN, key_atom);
+                    let property_key = oxc_ast::ast::PropertyKey::StaticIdentifier(
+                        self.ast_builder.alloc(key_ident)
+                    );
+                    let value_expr = self.create_constant_expression(value);
+                    let property = self.ast_builder.object_property(
+                        oxc_span::SPAN,
+                        oxc_ast::ast::PropertyKind::Init,
+                        property_key,
+                        value_expr,
+                        false,
+                        false,
+                        false,
+                    );
+                    object_properties.push(oxc_ast::ast::ObjectPropertyKind::ObjectProperty(
+                        self.ast_builder.alloc(property)
+                    ));
+                }
+                self.ast_builder.expression_object(oxc_span::SPAN, object_properties)
+            }
         }
     }
 
