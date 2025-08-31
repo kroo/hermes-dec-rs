@@ -99,6 +99,11 @@ impl RegisterManager {
     pub fn set_duplication_context(&mut self, context: Option<DuplicationContext>) {
         self.current_duplication_context = context;
     }
+    
+    /// Get the current duplication context
+    pub fn current_duplication_context(&self) -> Option<&DuplicationContext> {
+        self.current_duplication_context.as_ref()
+    }
 
     /// Get the current variable name for a register (for reading)
     /// Pure lookup - no naming logic

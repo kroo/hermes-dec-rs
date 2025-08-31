@@ -128,6 +128,11 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         dest_reg: u8,
         src_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this declaration should be skipped
+        if self.should_skip_declaration(dest_reg) {
+            return Ok(InstructionResult::None);
+        }
+        
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);

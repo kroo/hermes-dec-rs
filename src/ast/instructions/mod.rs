@@ -215,6 +215,27 @@ impl<'a> InstructionToStatementConverter<'a> {
         &mut self.expression_context
     }
 
+    /// Check if a declaration should be skipped for the given destination register
+    pub fn should_skip_declaration(&self, dest_reg: u8) -> bool {
+        if let Some(ssa_value) = self.register_manager.get_current_ssa_value(dest_reg) {
+            let dup_ssa = if let Some(context) = self.register_manager.current_duplication_context() {
+                DuplicatedSSAValue {
+                    original: ssa_value,
+                    duplication_context: Some(context.clone()),
+                }
+            } else {
+                DuplicatedSSAValue::original(ssa_value)
+            };
+            
+            // Check if this declaration should be skipped
+            if let Some(DeclarationStrategy::Skip) = 
+                self.control_flow_plan.get_declaration_strategy(&dup_ssa) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Get the global analyzer from HBC analysis
     pub fn global_analyzer(&self) -> &Arc<GlobalAnalysisResult> {
         &self.hbc_analysis.global_analysis
@@ -245,20 +266,39 @@ impl<'a> InstructionToStatementConverter<'a> {
                     block_id: current_block,
                     instruction_idx: current_pc,
                 };
-                let dup_value = crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone());
+                
+                // Create the duplicated SSA value with the current context if any
+                let dup_value = if let Some(context) = self.register_manager.current_duplication_context() {
+                    crate::cfg::ssa::DuplicatedSSAValue {
+                        original: ssa_value.clone(),
+                        duplication_context: Some(context.clone()),
+                    }
+                } else {
+                    crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone())
+                };
+
+                log::debug!(
+                    "Looking up use strategy for {} at {:?} with context: {}",
+                    ssa_value,
+                    use_site,
+                    dup_value.context_description()
+                );
 
                 if let Some(strategy) = self
                     .control_flow_plan
                     .use_strategies
-                    .get(&(dup_value, use_site))
+                    .get(&(dup_value.clone(), use_site))
                 {
+                    log::debug!("Found use strategy: {:?}", strategy);
                     match strategy {
                         crate::analysis::ssa_usage_tracker::UseStrategy::InlineValue(constant) => {
                             // Create a constant expression
+                            log::debug!("Inlining constant: {:?}", constant);
                             return self.create_constant_expression(constant);
                         }
                         crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
                             // Use the variable reference
+                            log::debug!("Using variable: {}", var_name);
                             let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
                             return Ok(self.ast_builder.expression_identifier(span, var_atom));
                         }

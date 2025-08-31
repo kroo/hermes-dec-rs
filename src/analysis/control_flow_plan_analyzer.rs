@@ -153,23 +153,49 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                     
                     // Mark all uses for inlining by updating the plan's use strategies
                     for use_site in uses {
-                        let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+                        // Check if this use is in a duplicated block
+                        // We need to handle BOTH the original context AND any duplication contexts
+                        let contexts_to_handle = if let Some(contexts) = self.duplicated_blocks.get(&use_site.block_id) {
+                            // This block is duplicated - handle both original and duplicated contexts
+                            let mut all_contexts = vec![None]; // Original context
+                            for ctx in contexts {
+                                all_contexts.push(Some(ctx.clone()));
+                            }
+                            all_contexts
+                        } else {
+                            // Not duplicated - just the original context
+                            vec![None]
+                        };
                         
-                        // Get the constant value to inline
-                        if let TrackedValue::Constant(const_val) = &tracked_value {
-                            log::debug!(
-                                "Setting InlineValue strategy for {} at {:?}",
-                                ssa_value,
-                                use_site
-                            );
-                            self.plan.use_strategies.insert(
-                                (dup_value.clone(), use_site.clone()),
-                                UseStrategy::InlineValue(const_val.clone()),
-                            );
+                        // Create use strategies for all contexts
+                        for context in contexts_to_handle {
+                            let dup_value = if let Some(ctx) = context {
+                                DuplicatedSSAValue {
+                                    original: ssa_value.clone(),
+                                    duplication_context: Some(ctx),
+                                }
+                            } else {
+                                DuplicatedSSAValue::original(ssa_value.clone())
+                            };
+                            
+                            // Get the constant value to inline
+                            if let TrackedValue::Constant(const_val) = &tracked_value {
+                                log::debug!(
+                                    "Setting InlineValue strategy for {} at {:?} (context: {})",
+                                    ssa_value,
+                                    use_site,
+                                    dup_value.context_description()
+                                );
+                                self.plan.use_strategies.insert(
+                                    (dup_value.clone(), use_site.clone()),
+                                    UseStrategy::InlineValue(const_val.clone()),
+                                );
+                            }
+                            
+                            // Mark as consumed with proper duplication context
+                            self.usage_tracker.mark_duplicated_use_consumed(&dup_value, use_site);
+                            self.plan.mark_use_consumed(dup_value.clone(), use_site.clone());
                         }
-                        
-                        // Mark as consumed
-                        self.usage_tracker.mark_use_consumed(&ssa_value, use_site);
                     }
                 }
             }
@@ -1199,10 +1225,39 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
                     // Normal duplicated value
                     let call_site_analysis = &self.plan.call_site_analysis;
-                    let dup_strategy = self.usage_tracker.get_declaration_strategy_with_context(
-                        &dup_value,
-                        Some(call_site_analysis),
-                    );
+                    
+                    // Check if this duplicated value is fully consumed
+                    let is_consumed = if let Some(consumed_uses) = self.plan.consumed_uses.get(&dup_value) {
+                        let all_uses = self.function_analysis.ssa.get_ssa_value_uses(&ssa_value);
+                        let uses_in_context = all_uses.iter().filter(|use_site| {
+                            // Check if this use is in a block with the same duplication context
+                            self.duplicated_blocks.get(&use_site.block_id)
+                                .map(|contexts| contexts.contains(context))
+                                .unwrap_or(false)
+                        }).count();
+                        
+                        log::debug!(
+                            "Duplicated {} (context: {:?}) has {} uses in context, {} consumed",
+                            ssa_value,
+                            context,
+                            uses_in_context,
+                            consumed_uses.len()
+                        );
+                        
+                        uses_in_context > 0 && uses_in_context == consumed_uses.len()
+                    } else {
+                        false
+                    };
+                    
+                    let dup_strategy = if is_consumed {
+                        log::debug!("Duplicated {} is fully consumed, using Skip", ssa_value);
+                        DeclarationStrategy::Skip
+                    } else {
+                        self.usage_tracker.get_declaration_strategy_with_context(
+                            &dup_value,
+                            Some(call_site_analysis),
+                        )
+                    };
                     self.plan.set_declaration_strategy(dup_value, dup_strategy);
                 }
             }

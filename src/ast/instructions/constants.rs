@@ -110,6 +110,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         dest_reg: u8,
         value: f64,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this declaration should be skipped
+        if self.should_skip_declaration(dest_reg) {
+            return Ok(InstructionResult::None);
+        }
+        
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -132,6 +137,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         dest_reg: u8,
         value: bool,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this declaration should be skipped
+        if self.should_skip_declaration(dest_reg) {
+            return Ok(InstructionResult::None);
+        }
+        
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -148,6 +158,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         &mut self,
         dest_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this declaration should be skipped
+        if self.should_skip_declaration(dest_reg) {
+            return Ok(InstructionResult::None);
+        }
+        
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -164,6 +179,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         &mut self,
         dest_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this declaration should be skipped
+        if self.should_skip_declaration(dest_reg) {
+            return Ok(InstructionResult::None);
+        }
+        
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -183,6 +203,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         dest_reg: u8,
         string_id: u32,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this declaration should be skipped
+        if self.should_skip_declaration(dest_reg) {
+            return Ok(InstructionResult::None);
+        }
+        
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -206,6 +231,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         dest_reg: u8,
         bigint_id: u32,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this declaration should be skipped
+        if self.should_skip_declaration(dest_reg) {
+            return Ok(InstructionResult::None);
+        }
+        
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
