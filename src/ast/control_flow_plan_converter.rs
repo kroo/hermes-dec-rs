@@ -1383,8 +1383,33 @@ impl<'a> ControlFlowPlanConverter<'a> {
         // Handle any PHI deconstructions for this block
         let phi_key = (block_id, context.cloned());
         if let Some(phi_info) = plan.phi_deconstructions.get(&phi_key) {
+            log::debug!(
+                "Applying PHI replacements for block {} with context {:?}",
+                block_id.index(), context
+            );
             // Apply PHI replacements
             for (original, replacement) in &phi_info.replacements {
+                // Check the declaration strategy for the PHI result in this context
+                // If it's Skip, we don't need the assignment
+                let dup_original = if let Some(ctx) = context {
+                    crate::cfg::ssa::DuplicatedSSAValue {
+                        original: original.clone(),
+                        duplication_context: Some(ctx.clone()),
+                    }
+                } else {
+                    crate::cfg::ssa::DuplicatedSSAValue::original(original.clone())
+                };
+                
+                // Check if the PHI result has Skip strategy (meaning it's fully inlined)
+                if let Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::Skip) = 
+                    plan.declaration_strategies.get(&dup_original) {
+                    log::debug!(
+                        "Skipping PHI replacement assignment for {} -> {} (PHI result has Skip strategy)",
+                        original, replacement
+                    );
+                    continue;
+                }
+                
                 // Create assignment: phi_var = replacement_value
                 let var_name = self.get_variable_name_for_ssa(original);
                 let var_atom = self.ast_builder.allocator.alloc_str(&var_name);

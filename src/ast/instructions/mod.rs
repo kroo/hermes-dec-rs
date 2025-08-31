@@ -302,12 +302,13 @@ impl<'a> InstructionToStatementConverter<'a> {
                     dup_value.context_description()
                 );
 
+                let key = (dup_value.clone(), use_site.clone());
                 if let Some(strategy) = self
                     .control_flow_plan
                     .use_strategies
-                    .get(&(dup_value.clone(), use_site))
+                    .get(&key)
                 {
-                    log::debug!("Found use strategy: {:?}", strategy);
+                    log::debug!("Found use strategy for key {:?}: {:?}", key, strategy);
                     match strategy {
                         crate::analysis::ssa_usage_tracker::UseStrategy::InlineValue(constant) => {
                             // Create a constant expression

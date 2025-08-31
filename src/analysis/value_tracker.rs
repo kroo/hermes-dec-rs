@@ -74,16 +74,75 @@ pub struct ValueTracker<'a> {
     cfg: &'a Cfg<'a>,
     ssa: &'a SSAAnalysis,
     hbc_file: &'a HbcFile<'a>,
+    /// PHI deconstructions from control flow plan (if available)
+    /// Maps (block_id, context) to PHI replacement info
+    phi_deconstructions: Option<&'a std::collections::HashMap<
+        (petgraph::graph::NodeIndex, Option<crate::cfg::ssa::DuplicationContext>),
+        crate::analysis::control_flow_plan::PhiDeconstructionInfo
+    >>,
+    /// Current duplication context for value resolution
+    current_context: Option<crate::cfg::ssa::DuplicationContext>,
 }
 
 impl<'a> ValueTracker<'a> {
     /// Create a new value tracker
     pub fn new(cfg: &'a Cfg<'a>, ssa: &'a SSAAnalysis, hbc_file: &'a HbcFile<'a>) -> Self {
-        Self { cfg, ssa, hbc_file }
+        Self { 
+            cfg, 
+            ssa, 
+            hbc_file,
+            phi_deconstructions: None,
+            current_context: None,
+        }
+    }
+    
+    /// Create a value tracker with PHI deconstruction information
+    pub fn with_phi_deconstructions(
+        cfg: &'a Cfg<'a>, 
+        ssa: &'a SSAAnalysis, 
+        hbc_file: &'a HbcFile<'a>,
+        phi_deconstructions: &'a std::collections::HashMap<
+            (petgraph::graph::NodeIndex, Option<crate::cfg::ssa::DuplicationContext>),
+            crate::analysis::control_flow_plan::PhiDeconstructionInfo
+        >,
+    ) -> Self {
+        Self { 
+            cfg, 
+            ssa, 
+            hbc_file,
+            phi_deconstructions: Some(phi_deconstructions),
+            current_context: None,
+        }
+    }
+    
+    /// Set the current duplication context for value resolution
+    pub fn with_context(mut self, context: Option<crate::cfg::ssa::DuplicationContext>) -> Self {
+        self.current_context = context;
+        self
     }
 
     /// Get the tracked value of an SSA value
     pub fn get_value(&self, ssa_value: &SSAValue) -> TrackedValue {
+        // First, check if we have PHI deconstructions and if this SSA value is a PHI result
+        // that has been replaced in the current context
+        if let (Some(phi_decons), Some(ref context)) = (&self.phi_deconstructions, &self.current_context) {
+            // Check if there's a PHI replacement for this value in the current context
+            // We need to check all blocks to find where this PHI result might be replaced
+            for ((_block_id, ctx), phi_info) in phi_decons.iter() {
+                if ctx.as_ref() == Some(context) {
+                    // Check if this SSA value is one of the PHI results that got replaced
+                    if let Some(replacement) = phi_info.replacements.get(ssa_value) {
+                        log::debug!(
+                            "Found PHI replacement for {} -> {} in context {:?}",
+                            ssa_value, replacement, context
+                        );
+                        // Recursively get the value of the replacement
+                        return self.get_value(replacement);
+                    }
+                }
+            }
+        }
+        
         // Check if this SSA value is produced by a phi function
         if let Some(phi_functions) = self.ssa.phi_functions.get(&ssa_value.def_site.block_id) {
             for phi in phi_functions {
