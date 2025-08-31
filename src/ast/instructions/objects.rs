@@ -458,7 +458,6 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         prop_id: u32,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         let obj_var = self.register_manager.get_variable_name(obj_reg);
-        let value_var = self.register_manager.get_variable_name(value_reg);
 
         // Look up property name from string table
         // Note: cache_id is used by the VM for optimization but not needed for decompilation
@@ -470,9 +469,8 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         let obj_atom = self.ast_builder.allocator.alloc_str(&obj_var);
         let obj_expr = self.ast_builder.expression_identifier(span, obj_atom);
 
-        // Create value identifier
-        let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
-        let value_expr = self.ast_builder.expression_identifier(span, value_atom);
+        // Create value expression (may be inlined)
+        let value_expr = self.register_to_expression(value_reg)?;
 
         // Create property access for assignment target
         let prop_atom = self.ast_builder.allocator.alloc_str(&prop_name);
@@ -500,8 +498,6 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         key_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         let obj_var = self.register_manager.get_variable_name(obj_reg);
-        let value_var = self.register_manager.get_variable_name(value_reg);
-        let key_var = self.register_manager.get_variable_name(key_reg);
 
         let span = Span::default();
 
@@ -509,11 +505,9 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         let obj_atom = self.ast_builder.allocator.alloc_str(&obj_var);
         let obj_expr = self.ast_builder.expression_identifier(span, obj_atom);
 
-        let key_atom = self.ast_builder.allocator.alloc_str(&key_var);
-        let key_expr = self.ast_builder.expression_identifier(span, key_atom);
-
-        let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
-        let value_expr = self.ast_builder.expression_identifier(span, value_atom);
+        // Key and value expressions may be inlined
+        let key_expr = self.register_to_expression(key_reg)?;
+        let value_expr = self.register_to_expression(value_reg)?;
 
         // Create computed member expression for assignment target
         let member_expr = self
@@ -1157,7 +1151,6 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         index: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         let obj_var = self.register_manager.get_variable_name(obj_reg);
-        let value_var = self.register_manager.get_variable_name(value_reg);
 
         let span = Span::default();
 
@@ -1172,8 +1165,8 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_syntax::number::NumberBase::Decimal,
         );
 
-        let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
-        let value_expr = self.ast_builder.expression_identifier(span, value_atom);
+        // Value expression may be inlined
+        let value_expr = self.register_to_expression(value_reg)?;
 
         // Create computed member expression for assignment target
         let member_expr = self
@@ -1199,7 +1192,6 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         index: u32,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         let obj_var = self.register_manager.get_variable_name(obj_reg);
-        let value_var = self.register_manager.get_variable_name(value_reg);
 
         let span = Span::default();
 
@@ -1214,8 +1206,8 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_syntax::number::NumberBase::Decimal,
         );
 
-        let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
-        let value_expr = self.ast_builder.expression_identifier(span, value_atom);
+        // Value expression may be inlined
+        let value_expr = self.register_to_expression(value_reg)?;
 
         // Create computed member expression for assignment target
         let member_expr = self
