@@ -15,6 +15,15 @@ function testArrayObjectInlining() {
     const nums = [10, 20, 30];
     Math.max(...nums);
     
+    // Test custom global property (should remain as globalThis.customGlobal)
+    const g = globalThis;
+    const custom = g.customGlobal;
+    const standardConsole = g.console;
+    
+    // Use them to prevent elimination
+    if (custom) custom();
+    if (standardConsole) standardConsole.log("test");
+    
     return arr;
 }
 

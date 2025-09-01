@@ -65,6 +65,15 @@ pub enum TrackedValue {
         /// The SSA value produced by the phi
         ssa_value: SSAValue,
     },
+    /// The global object (globalThis)
+    GlobalObject,
+    /// A property access chain
+    PropertyAccess {
+        /// The object being accessed
+        object: Box<TrackedValue>,
+        /// The property name
+        property: String,
+    },
     /// Unknown or dynamic value
     Unknown,
 }
@@ -372,6 +381,151 @@ impl<'a> ValueTracker<'a> {
                 ..
             } => self.track_object_literal(*operand_1, *operand_2, *operand_3, *operand_4),
 
+            // Array creation with specified size
+            UnifiedInstruction::NewArray { operand_1, .. } => {
+                // NewArray creates an array with operand_1 undefined elements
+                // Create a vector with that many undefined values
+                let size = *operand_1 as usize;
+                let undefined_array = vec![ConstantValue::Undefined; size];
+                TrackedValue::Constant(ConstantValue::ArrayLiteral(undefined_array))
+            }
+            
+            // Empty object creation
+            UnifiedInstruction::NewObject { .. } => {
+                // NewObject creates an empty object
+                TrackedValue::Constant(ConstantValue::ObjectLiteral(Vec::new()))
+            }
+            
+            // Object with parent - we'll track as Unknown for now
+            UnifiedInstruction::NewObjectWithParent { .. } => {
+                // This creates an object with a specific prototype chain
+                // For now, we'll treat it as unknown since we don't track prototype chains
+                TrackedValue::Unknown
+            }
+            
+            // Global object access
+            UnifiedInstruction::GetGlobalObject { .. } => {
+                TrackedValue::GlobalObject
+            }
+            
+            // Property access instructions
+            UnifiedInstruction::GetById { operand_1, operand_2, .. } => {
+                // Get the object being accessed
+                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                    let object_value = self.get_value(object_ssa);
+                    
+                    // Get the property name
+                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_2).into()) {
+                        log::trace!("GetById for {}: object reg {}, property '{}', object_value: {:?}", 
+                                   ssa_value, *operand_1, property_name, object_value);
+                        // Avoid infinite recursion with a depth check
+                        if let Some(depth) = self.get_property_chain_depth(&object_value) {
+                            if depth < 10 {  // Reasonable depth limit
+                                let result = TrackedValue::PropertyAccess {
+                                    object: Box::new(object_value),
+                                    property: property_name.clone(),
+                                };
+                                log::trace!("Returning PropertyAccess: {:?}", result);
+                                return result;
+                            }
+                        }
+                    }
+                }
+                TrackedValue::Unknown
+            }
+            
+            UnifiedInstruction::GetByIdShort { operand_1, operand_3, .. } => {
+                // Get the object being accessed (operand_1 is object register)
+                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                    let object_value = self.get_value(object_ssa);
+                    
+                    // Get the property name (operand_3 is string ID for GetByIdShort)
+                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_3 as u32).into()) {
+                        log::trace!("GetByIdShort for {}: object reg {}, property '{}', object_value: {:?}", 
+                                   ssa_value, *operand_1, property_name, object_value);
+                        // Avoid infinite recursion with a depth check
+                        if let Some(depth) = self.get_property_chain_depth(&object_value) {
+                            if depth < 10 {  // Reasonable depth limit
+                                let result = TrackedValue::PropertyAccess {
+                                    object: Box::new(object_value),
+                                    property: property_name.clone(),
+                                };
+                                log::trace!("Returning PropertyAccess: {:?}", result);
+                                return result;
+                            }
+                        }
+                    }
+                }
+                TrackedValue::Unknown
+            }
+            
+            UnifiedInstruction::TryGetById { operand_1, operand_3, .. } => {
+                // Get the object being accessed (operand_1 is object register)
+                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                    let object_value = self.get_value(object_ssa);
+                    
+                    // Get the property name (operand_3 is string ID for TryGetById)
+                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_3 as u32).into()) {
+                        log::trace!("TryGetById for {}: object reg {}, property '{}', object_value: {:?}", 
+                                   ssa_value, *operand_1, property_name, object_value);
+                        // Avoid infinite recursion with a depth check
+                        if let Some(depth) = self.get_property_chain_depth(&object_value) {
+                            if depth < 10 {  // Reasonable depth limit
+                                let result = TrackedValue::PropertyAccess {
+                                    object: Box::new(object_value),
+                                    property: property_name.clone(),
+                                };
+                                log::trace!("Returning PropertyAccess: {:?}", result);
+                                return result;
+                            }
+                        }
+                    }
+                }
+                TrackedValue::Unknown
+            }
+            
+            UnifiedInstruction::GetByIdLong { operand_1, operand_2, .. } => {
+                // Get the object being accessed
+                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                    let object_value = self.get_value(object_ssa);
+                    
+                    // Get the property name
+                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_2).into()) {
+                        // Avoid infinite recursion with a depth check
+                        if let Some(depth) = self.get_property_chain_depth(&object_value) {
+                            if depth < 10 {  // Reasonable depth limit
+                                return TrackedValue::PropertyAccess {
+                                    object: Box::new(object_value),
+                                    property: property_name,
+                                };
+                            }
+                        }
+                    }
+                }
+                TrackedValue::Unknown
+            }
+            
+            UnifiedInstruction::TryGetByIdLong { operand_1, operand_3, .. } => {
+                // Get the object being accessed (operand_1 is object register)
+                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                    let object_value = self.get_value(object_ssa);
+                    
+                    // Get the property name (operand_3 is string ID for TryGetByIdLong)
+                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_3).into()) {
+                        // Avoid infinite recursion with a depth check
+                        if let Some(depth) = self.get_property_chain_depth(&object_value) {
+                            if depth < 10 {  // Reasonable depth limit
+                                return TrackedValue::PropertyAccess {
+                                    object: Box::new(object_value),
+                                    property: property_name,
+                                };
+                            }
+                        }
+                    }
+                }
+                TrackedValue::Unknown
+            }
+            
             // TODO: Handle more operations like:
             // - Negate, Not, BitNot
             // - Mod, BitAnd, BitOr, BitXor, LShift, RShift, URshift
@@ -569,6 +723,20 @@ impl<'a> ValueTracker<'a> {
             SLPValue::ShortString(id) => self.hbc_file.strings.get((*id as u32).into()).ok(),
             SLPValue::ByteString(id) => self.hbc_file.strings.get((*id as u32).into()).ok(),
             _ => None, // Non-string keys not supported for now
+        }
+    }
+    
+    /// Get the depth of a property chain to avoid infinite recursion
+    fn get_property_chain_depth(&self, value: &TrackedValue) -> Option<usize> {
+        match value {
+            TrackedValue::PropertyAccess { object, .. } => {
+                self.get_property_chain_depth(object).map(|d| d + 1)
+            }
+            TrackedValue::GlobalObject | 
+            TrackedValue::Constant(_) | 
+            TrackedValue::Parameter { .. } |
+            TrackedValue::Phi { .. } => Some(0),
+            TrackedValue::Unknown => None,
         }
     }
 }

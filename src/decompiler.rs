@@ -27,6 +27,66 @@ pub struct Decompiler {
     function_cache: HashMap<u32, String>,
 }
 
+/// Configuration for inlining optimizations
+#[derive(Debug, Clone)]
+pub struct InlineConfig {
+    /// Inline constant values that are used only once
+    pub inline_constants: bool,
+    /// Aggressively inline all constant values
+    pub inline_all_constants: bool,
+    /// Inline property access chains that are used only once
+    pub inline_property_access: bool,
+    /// Aggressively inline all property access chains
+    pub inline_all_property_access: bool,
+    /// Inline all globalThis accesses (enabled by default when any inlining is enabled)
+    pub inline_global_this: bool,
+}
+
+impl Default for InlineConfig {
+    fn default() -> Self {
+        Self {
+            inline_constants: false,
+            inline_all_constants: false,
+            inline_property_access: false,
+            inline_all_property_access: false,
+            inline_global_this: false,
+        }
+    }
+}
+
+impl InlineConfig {
+    /// Check if any inlining is enabled
+    pub fn any_enabled(&self) -> bool {
+        self.inline_constants || 
+        self.inline_all_constants || 
+        self.inline_property_access || 
+        self.inline_all_property_access ||
+        self.inline_global_this
+    }
+    
+    /// Create from individual CLI flags
+    pub fn from_cli_flags(
+        inline_constants: bool,
+        inline_all_constants: bool,
+        inline_property_access: bool,
+        inline_all_property_access: bool,
+        inline_global_this: Option<bool>,
+    ) -> Self {
+        // Enable global_this inlining by default if any other inlining is enabled
+        let any_inline = inline_constants || inline_all_constants || 
+                        inline_property_access || inline_all_property_access;
+        let inline_global_this = inline_global_this.unwrap_or(any_inline);
+        
+        Self {
+            inline_constants,
+            inline_all_constants,
+            inline_property_access,
+            inline_all_property_access,
+            inline_global_this,
+        }
+    }
+}
+
 /// Options for decompilation
 #[derive(Debug, Clone)]
 pub struct DecompileOptions {
@@ -38,10 +98,8 @@ pub struct DecompileOptions {
     pub skip_validation: bool,
     /// Decompile nested functions
     pub decompile_nested: bool,
-    /// Inline constant values that are used only once
-    pub inline_constants: bool,
-    /// Aggressively inline all constant values
-    pub inline_all_constants: bool,
+    /// Inlining configuration
+    pub inline_config: InlineConfig,
 }
 
 impl Default for DecompileOptions {
@@ -51,8 +109,7 @@ impl Default for DecompileOptions {
             include_ssa_comments: false,
             skip_validation: false,
             decompile_nested: false,
-            inline_constants: false,
-            inline_all_constants: false,
+            inline_config: InlineConfig::default(),
         }
     }
 }
@@ -65,6 +122,9 @@ impl DecompileOptions {
         decompile_nested: bool,
         inline_constants: bool,
         inline_all_constants: bool,
+        inline_property_access: bool,
+        inline_all_property_access: bool,
+        inline_global_this: Option<bool>,
     ) -> Self {
         let include_instruction_comments =
             comments.contains("instructions") || comments.contains("pc");
@@ -75,8 +135,13 @@ impl DecompileOptions {
             include_ssa_comments,
             skip_validation,
             decompile_nested,
-            inline_constants,
-            inline_all_constants,
+            inline_config: InlineConfig::from_cli_flags(
+                inline_constants,
+                inline_all_constants,
+                inline_property_access,
+                inline_all_property_access,
+                inline_global_this,
+            ),
         }
     }
 }
@@ -188,7 +253,7 @@ impl Decompiler {
         decompile_nested: bool,
     ) -> DecompilerResult<String> {
         let options =
-            DecompileOptions::from_cli(comments, skip_validation, decompile_nested, false, false);
+            DecompileOptions::from_cli(comments, skip_validation, decompile_nested, false, false, false, false, None);
         self.decompile_function_with_options(hbc_file, function_index, options)
     }
 
@@ -398,11 +463,10 @@ impl<'a> FunctionDecompiler<'a> {
 
         // Analyze the plan to determine declaration and use strategies
         let analyzer =
-            crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::with_options(
+            crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::with_inline_config(
                 &mut plan,
                 function_analysis,
-                self.options.inline_constants,
-                self.options.inline_all_constants,
+                &self.options.inline_config,
             );
         analyzer.analyze();
 

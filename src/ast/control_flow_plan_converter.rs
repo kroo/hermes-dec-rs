@@ -20,6 +20,27 @@ use oxc_ast::AstBuilder;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
+/// Check if a property name is a standard global that doesn't need globalThis prefix
+fn is_standard_global(property: &str) -> bool {
+    matches!(
+        property,
+        "console" | "Math" | "Object" | "Array" | "String" | "Number" | "Boolean" |
+        "Date" | "RegExp" | "Error" | "JSON" | "Promise" | "Map" | "Set" |
+        "WeakMap" | "WeakSet" | "Symbol" | "Proxy" | "Reflect" | "BigInt" |
+        "Int8Array" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" |
+        "Uint16Array" | "Int32Array" | "Uint32Array" | "Float32Array" |
+        "Float64Array" | "BigInt64Array" | "BigUint64Array" | "ArrayBuffer" |
+        "SharedArrayBuffer" | "DataView" | "Atomics" | "encodeURI" |
+        "encodeURIComponent" | "decodeURI" | "decodeURIComponent" | "eval" |
+        "isFinite" | "isNaN" | "parseFloat" | "parseInt" | "URL" |
+        "URLSearchParams" | "TextEncoder" | "TextDecoder" | "WebAssembly" |
+        "Intl" | "Buffer" | "process" | "global" | "window" | "document" |
+        "setTimeout" | "clearTimeout" | "setInterval" | "clearInterval" |
+        "setImmediate" | "clearImmediate" | "requestAnimationFrame" |
+        "cancelAnimationFrame" | "fetch" | "crypto" | "performance"
+    )
+}
+
 /// Converts a ControlFlowPlan into JavaScript AST
 pub struct ControlFlowPlanConverter<'a> {
     /// AST builder for creating nodes
@@ -1623,6 +1644,16 @@ impl<'a> ControlFlowPlanConverter<'a> {
                         // Inline the constant value directly
                         return self.create_constant_expression(constant);
                     }
+                    UseStrategy::InlinePropertyAccess(tracked_value) => {
+                        // Inline the property access chain
+                        return self.create_property_access_expression(tracked_value);
+                    }
+                    UseStrategy::InlineGlobalThis => {
+                        // Inline globalThis directly
+                        let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                        let span = oxc_span::SPAN;
+                        return self.ast_builder.expression_identifier(span, global_atom);
+                    }
                     UseStrategy::UseVariable => {
                         // Fall through to use variable name
                     }
@@ -1715,6 +1746,53 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     ));
                 }
                 self.ast_builder.expression_object(oxc_span::SPAN, object_properties)
+            }
+        }
+    }
+
+    /// Create a property access expression from a TrackedValue
+    fn create_property_access_expression(&self, tracked_value: &crate::analysis::value_tracker::TrackedValue) -> Expression<'a> {
+        use crate::analysis::value_tracker::TrackedValue;
+        
+        match tracked_value {
+            TrackedValue::PropertyAccess { object, property } => {
+                // Recursively build the object expression
+                let object_expr = self.create_property_access_expression(object);
+                
+                // Check if this is a global property access that can be simplified
+                if let TrackedValue::GlobalObject = &**object {
+                    // Check if this is a standard global property
+                    if is_standard_global(property) {
+                        // Just use the property name directly
+                        let prop_atom = self.ast_builder.allocator.alloc_str(property);
+                        return self.ast_builder.expression_identifier(oxc_span::SPAN, prop_atom);
+                    }
+                }
+                
+                // Create the member expression
+                let prop_atom = self.ast_builder.allocator.alloc_str(property);
+                let property_ident = self.ast_builder.identifier_name(oxc_span::SPAN, prop_atom);
+                let member = self.ast_builder.member_expression_static(
+                    oxc_span::SPAN,
+                    object_expr,
+                    property_ident,
+                    false, // optional
+                );
+                Expression::from(member)
+            }
+            TrackedValue::GlobalObject => {
+                // Use globalThis as the base
+                let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                self.ast_builder.expression_identifier(oxc_span::SPAN, global_atom)
+            }
+            TrackedValue::Constant(value) => {
+                // If for some reason we have a constant in the chain, inline it
+                self.create_constant_expression(value)
+            }
+            TrackedValue::Parameter { .. } | TrackedValue::Phi { .. } | TrackedValue::Unknown => {
+                // These shouldn't appear in property access chains, but handle gracefully
+                let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                self.ast_builder.expression_identifier(oxc_span::SPAN, undefined_atom)
             }
         }
     }
@@ -1820,6 +1898,8 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             match strategy {
                                 UseStrategy::UseVariable => "var",
                                 UseStrategy::InlineValue(_) => "inline",
+                                UseStrategy::InlinePropertyAccess(_) => "inline-prop",
+                                UseStrategy::InlineGlobalThis => "inline-global",
                             }
                         } else {
                             ""
@@ -1920,6 +2000,8 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             match strategy {
                                 UseStrategy::UseVariable => "var/dup",
                                 UseStrategy::InlineValue(_) => "inline/dup",
+                                UseStrategy::InlinePropertyAccess(_) => "inline-prop/dup",
+                                UseStrategy::InlineGlobalThis => "inline-global/dup",
                             }
                         } else {
                             "dup"

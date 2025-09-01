@@ -82,6 +82,12 @@ pub enum UseStrategy {
 
     /// Inline the constant value directly
     InlineValue(ConstantValue),
+    
+    /// Inline a property access chain
+    InlinePropertyAccess(TrackedValue),
+    
+    /// Inline globalThis directly
+    InlineGlobalThis,
 }
 
 impl<'a> SSAUsageTracker<'a> {
@@ -1051,19 +1057,13 @@ fn has_side_effects(
         // Iterator operations follow iterator protocol, can throw
         | UnifiedInstruction::IteratorBegin { .. }
         | UnifiedInstruction::IteratorNext { .. }
-        // Property access can call getters, can throw
-        | UnifiedInstruction::GetById { .. }
-        | UnifiedInstruction::GetByIdShort { .. }
-        | UnifiedInstruction::GetByIdLong { .. }
-        | UnifiedInstruction::TryGetById { .. }
-        | UnifiedInstruction::TryGetByIdLong { .. }
+        // GetByVal can call getters or computed properties, can throw
         | UnifiedInstruction::GetByVal { .. }
         | UnifiedInstruction::GetPNameList { .. }
         // Exception handling must not be eliminated
         | UnifiedInstruction::Catch { .. }
         // Meta properties and special values might be needed
         | UnifiedInstruction::GetNewTarget { .. }
-        | UnifiedInstruction::GetGlobalObject { .. }
         | UnifiedInstruction::GetArgumentsLength { .. }
         | UnifiedInstruction::GetArgumentsPropByVal { .. }
         | UnifiedInstruction::ReifyArguments { .. }

@@ -11,6 +11,7 @@ use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker, U
 use crate::analysis::FunctionAnalysis;
 use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext, RegisterUse};
 use crate::cfg::ssa::{PhiFunction, SSAValue};
+use crate::decompiler::InlineConfig;
 use crate::generated::unified_instructions::UnifiedInstruction;
 use log::debug;
 use petgraph::graph::NodeIndex;
@@ -32,10 +33,8 @@ pub struct ControlFlowPlanAnalyzer<'a> {
     usage_tracker: SSAUsageTracker<'a>,
     /// Blocks that will be duplicated in various contexts
     duplicated_blocks: HashMap<NodeIndex, Vec<DuplicationContext>>,
-    /// Whether to inline single-use constants
-    inline_constants: bool,
-    /// Whether to inline all constants regardless of usage
-    inline_all_constants: bool,
+    /// Inlining configuration
+    inline_config: InlineConfig,
 }
 
 impl<'a> ControlFlowPlanAnalyzer<'a> {
@@ -49,8 +48,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             function_analysis,
             usage_tracker,
             duplicated_blocks: HashMap::new(),
-            inline_constants: false,
-            inline_all_constants: false,
+            inline_config: InlineConfig::default(),
         }
     }
 
@@ -67,8 +65,23 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             function_analysis,
             usage_tracker,
             duplicated_blocks: HashMap::new(),
-            inline_constants,
-            inline_all_constants,
+            inline_config: InlineConfig::from_cli_flags(inline_constants, inline_all_constants, false, false, None),
+        }
+    }
+    
+    /// Create a new analyzer with full options
+    pub fn with_inline_config(
+        plan: &'a mut ControlFlowPlan,
+        function_analysis: &'a FunctionAnalysis<'a>,
+        inline_config: &InlineConfig,
+    ) -> Self {
+        let usage_tracker = SSAUsageTracker::new(function_analysis);
+        Self {
+            plan,
+            function_analysis,
+            usage_tracker,
+            duplicated_blocks: HashMap::new(),
+            inline_config: inline_config.clone(),
         }
     }
 
@@ -249,9 +262,9 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                         let should_inline = if is_mandatory {
                             log::debug!("SSA value {} requires mandatory inlining", ssa_value);
                             true
-                        } else if self.inline_all_constants {
+                        } else if self.inline_config.inline_all_constants {
                             true
-                        } else if self.inline_constants {
+                        } else if self.inline_config.inline_constants {
                             non_consumed_uses == 1
                         } else {
                             false
@@ -324,12 +337,250 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             self.usage_tracker
                 .mark_duplicated_use_consumed(&dup_value, &use_site);
             self.plan
-                .mark_use_consumed(dup_value, use_site);
+                .mark_use_consumed(dup_value, use_site.clone());
         }
         
         // After inlining constants, check if any PHI results should have their declaration
         // strategies updated to Skip because all their operands are being inlined
         self.update_phi_result_declaration_strategies(ssa);
+    }
+    
+    /// Perform globalThis inlining - inline all direct uses of GetGlobalObject
+    fn perform_global_this_inlining(&mut self) {
+        use crate::analysis::ssa_usage_tracker::UseStrategy;
+        use crate::analysis::value_tracker::{TrackedValue, ValueTracker};
+        
+        // Collect updates to apply later (to avoid borrowing conflicts)
+        let mut updates_to_apply = Vec::new();
+        
+        {
+            // Create value tracker
+            let value_tracker = ValueTracker::with_phi_deconstructions(
+                &self.function_analysis.cfg,
+                &self.function_analysis.ssa,
+                self.function_analysis.hbc_file,
+                &self.plan.phi_deconstructions,
+            );
+            
+            // Check each SSA value
+            for (_def_site, ssa_value) in &self.function_analysis.ssa.ssa_values {
+                // Get the tracked value
+                let tracked_value = value_tracker.get_value(&ssa_value);
+                
+                // Check if this is just the global object
+                if matches!(tracked_value, TrackedValue::GlobalObject) {
+                    log::debug!("SSA value {} is GlobalObject", ssa_value);
+                    
+                    // Get all uses for this SSA value
+                    let uses = self.function_analysis.ssa.get_ssa_value_uses(&ssa_value);
+                    
+                    // Mark all uses for inlining
+                    for use_site in &uses {
+                        let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
+                        
+                        if !self.plan.consumed_uses.contains_key(&dup_value) {
+                            updates_to_apply.push((
+                                dup_value,
+                                use_site.clone(),
+                                TrackedValue::GlobalObject,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check if we have updates before consuming the vector
+        let has_updates = !updates_to_apply.is_empty();
+        
+        // Apply all the updates
+        for (dup_value, use_site, _tracked_value) in updates_to_apply {
+            log::debug!("Marking globalThis for inlining at {:?}", use_site);
+            self.plan.use_strategies.insert(
+                (dup_value.clone(), use_site.clone()),
+                UseStrategy::InlineGlobalThis,
+            );
+            
+            // Mark as consumed
+            self.usage_tracker
+                .mark_duplicated_use_consumed(&dup_value, &use_site);
+            self.plan
+                .mark_use_consumed(dup_value, use_site.clone());
+        }
+        
+        // Run cascading elimination after globalThis inlining
+        if has_updates {
+            log::debug!("Running cascading elimination after globalThis inlining...");
+            self.usage_tracker
+                .perform_cascading_elimination(&self.duplicated_blocks);
+        }
+    }
+    
+    /// Perform property access inlining based on options
+    fn perform_property_access_inlining(&mut self) {
+        use crate::analysis::ssa_usage_tracker::UseStrategy;
+        use crate::analysis::value_tracker::{TrackedValue, ValueTracker};
+        
+        // Skip if property access inlining is disabled
+        if !self.inline_config.inline_property_access && !self.inline_config.inline_all_property_access {
+            return;
+        }
+        
+        // Collect updates to apply later (to avoid borrowing conflicts)
+        let mut updates_to_apply = Vec::new();
+        
+        {
+            // Create value tracker
+            let value_tracker = ValueTracker::with_phi_deconstructions(
+                &self.function_analysis.cfg,
+                &self.function_analysis.ssa,
+                self.function_analysis.hbc_file,
+                &self.plan.phi_deconstructions,
+            );
+            
+            // Check each SSA value
+            for (_def_site, ssa_value) in &self.function_analysis.ssa.ssa_values {
+                    // Get the tracked value for different contexts
+                    let mut context_values = HashMap::new();
+                    
+                    // First get the value in the original context
+                    let tracked_value = value_tracker.get_value(&ssa_value);
+                    
+                    // Check if this is a property access
+                    if matches!(tracked_value, TrackedValue::PropertyAccess { .. }) {
+                        context_values.insert(None, tracked_value.clone());
+                        
+                        // Check all contexts where this value might appear
+                        for (_block_id, contexts) in &self.duplicated_blocks {
+                            for context in contexts {
+                                let context_tracker = ValueTracker::with_phi_deconstructions(
+                                    &self.function_analysis.cfg,
+                                    &self.function_analysis.ssa,
+                                    self.function_analysis.hbc_file,
+                                    &self.plan.phi_deconstructions,
+                                ).with_context(Some(context.clone()));
+                                let context_value = context_tracker.get_value(&ssa_value);
+                                if matches!(context_value, TrackedValue::PropertyAccess { .. }) {
+                                    context_values.insert(Some(context.clone()), context_value);
+                                }
+                            }
+                        }
+                        
+                        // Process each context where the value is a property access
+                        for (context, tracked_value) in context_values {
+                            if let TrackedValue::PropertyAccess { .. } = tracked_value {
+                                log::debug!(
+                                    "SSA value {} is property access in context {:?}", 
+                                    ssa_value, context
+                                );
+                                
+                                // Get uses for this SSA value
+                                let uses = self.function_analysis.ssa.get_ssa_value_uses(&ssa_value);
+                                log::debug!("SSA value {} has {} uses", ssa_value, uses.len());
+                                
+                                // Count non-consumed uses in this specific context
+                                let non_consumed_uses = uses
+                                    .iter()
+                                    .filter(|use_site| {
+                                        let use_in_context = if let Some(ref ctx) = context {
+                                            self.duplicated_blocks
+                                                .get(&use_site.block_id)
+                                                .map(|contexts| contexts.contains(ctx))
+                                                .unwrap_or(false)
+                                        } else {
+                                            true
+                                        };
+                                        
+                                        if !use_in_context {
+                                            return false;
+                                        }
+                                        
+                                        let dup_value = if let Some(ref ctx) = context {
+                                            DuplicatedSSAValue {
+                                                original: ssa_value.clone(),
+                                                duplication_context: Some(ctx.clone()),
+                                            }
+                                        } else {
+                                            DuplicatedSSAValue::original(ssa_value.clone())
+                                        };
+                                        !self.plan.consumed_uses.contains_key(&dup_value)
+                                    })
+                                    .count();
+                                
+                                log::debug!(
+                                    "SSA value {} has {} non-consumed uses in context {:?}",
+                                    ssa_value,
+                                    non_consumed_uses,
+                                    context
+                                );
+                                
+                                // Decide whether to inline
+                                let should_inline = if self.inline_config.inline_all_property_access {
+                                    true
+                                } else if self.inline_config.inline_property_access {
+                                    non_consumed_uses == 1
+                                } else {
+                                    false
+                                };
+                                
+                                if should_inline {
+                                    log::debug!(
+                                        "Marking property access SSA value {} for inlining in context {:?} ({} non-consumed uses)",
+                                        ssa_value,
+                                        context,
+                                        non_consumed_uses
+                                    );
+                                    
+                                    // Collect uses to mark for inlining
+                                    for use_site in &uses {
+                                        let use_in_context = if let Some(ref ctx) = context {
+                                            self.duplicated_blocks
+                                                .get(&use_site.block_id)
+                                                .map(|contexts| contexts.contains(ctx))
+                                                .unwrap_or(false)
+                                        } else {
+                                            true
+                                        };
+                                        
+                                        if use_in_context {
+                                            let dup_value = if let Some(ref ctx) = context {
+                                                DuplicatedSSAValue {
+                                                    original: ssa_value.clone(),
+                                                    duplication_context: Some(ctx.clone()),
+                                                }
+                                            } else {
+                                                DuplicatedSSAValue::original(ssa_value.clone())
+                                            };
+                                            
+                                            if !self.plan.consumed_uses.contains_key(&dup_value) {
+                                                updates_to_apply.push((
+                                                    dup_value,
+                                                    use_site.clone(),
+                                                    tracked_value.clone(),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        
+        // Apply all the updates
+        for (dup_value, use_site, tracked_value) in updates_to_apply {
+            self.plan.use_strategies.insert(
+                (dup_value.clone(), use_site.clone()),
+                UseStrategy::InlinePropertyAccess(tracked_value),
+            );
+            
+            // Mark as consumed
+            self.usage_tracker
+                .mark_duplicated_use_consumed(&dup_value, &use_site);
+            self.plan
+                .mark_use_consumed(dup_value, use_site.clone());
+        }
     }
     
     /// Update PHI result declaration strategies when the PHI result itself is fully inlined
@@ -436,7 +687,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
                 // Check if this use has an inline strategy
                 match self.plan.use_strategies.get(&key) {
-                    Some(UseStrategy::InlineValue(_)) => {
+                    Some(UseStrategy::InlineValue(_)) | Some(UseStrategy::InlinePropertyAccess(_)) | Some(UseStrategy::InlineGlobalThis) => {
                         // Good, it's being inlined
                     }
                     Some(UseStrategy::UseVariable) => {
@@ -480,8 +731,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
         // Perform aggressive constant inlining if enabled or if there are mandatory inline values
         // This happens AFTER PHI deconstruction so we can inline PHI results that become constants
-        if self.inline_constants
-            || self.inline_all_constants
+        if self.inline_config.inline_constants
+            || self.inline_config.inline_all_constants
             || !self.plan.mandatory_inline.is_empty()
         {
             log::debug!("Performing aggressive constant inlining...");
@@ -489,6 +740,23 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
 
             // Validate that all mandatory inline values were successfully inlined
             self.validate_mandatory_inlining();
+        }
+        
+        // Perform globalThis inlining if enabled
+        if self.inline_config.inline_global_this {
+            log::debug!("Performing globalThis inlining...");
+            self.perform_global_this_inlining();
+        }
+        
+        // Perform property access inlining if enabled
+        if self.inline_config.inline_property_access || self.inline_config.inline_all_property_access {
+            log::debug!("Performing property access inlining...");
+            self.perform_property_access_inlining();
+            
+            // Run cascading elimination again after property access inlining
+            log::debug!("Running cascading elimination after property access inlining...");
+            self.usage_tracker
+                .perform_cascading_elimination(&self.duplicated_blocks);
         }
 
         // Perform cascading elimination with duplication context awareness

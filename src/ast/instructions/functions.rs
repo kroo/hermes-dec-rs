@@ -319,9 +319,6 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg1_reg: u8,
         arg2_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read function variable name BEFORE creating destination variable
-        let func_var = self.register_manager.get_source_variable_name(func_reg);
-
         // Now create the destination variable
         let dest_var = self
             .register_manager
@@ -329,9 +326,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let span = Span::default();
 
-        // Create function expression
-        let func_atom = self.ast_builder.allocator.alloc_str(&func_var);
-        let func_expr = self.ast_builder.expression_identifier(span, func_atom);
+        // Create function expression using register_to_expression to handle inlining
+        let func_expr = self.register_to_expression(func_reg)?;
 
         // Use .call() syntax: func.call(thisArg, arg1)
         let call_atom = self.ast_builder.allocator.alloc_str("call");
@@ -370,9 +366,6 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg2_reg: u8,
         arg3_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read function variable name BEFORE creating destination variable
-        let func_var = self.register_manager.get_source_variable_name(func_reg);
-
         // Check if this should be executed for side effects only
         let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
 
@@ -389,9 +382,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let span = Span::default();
 
-        // Create function expression
-        let func_atom = self.ast_builder.allocator.alloc_str(&func_var);
-        let func_expr = self.ast_builder.expression_identifier(span, func_atom);
+        // Create function expression using register_to_expression to handle inlining
+        let func_expr = self.register_to_expression(func_reg)?;
 
         // Use .call() syntax: func.call(thisArg, arg1, arg2)
         let call_atom = self.ast_builder.allocator.alloc_str("call");
@@ -440,9 +432,6 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg3_reg: u8,
         arg4_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read function variable name BEFORE creating destination variable
-        let func_var = self.register_manager.get_source_variable_name(func_reg);
-
         // Now create the destination variable
         let dest_var = self
             .register_manager
@@ -450,9 +439,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let span = Span::default();
 
-        // Create function expression
-        let func_atom = self.ast_builder.allocator.alloc_str(&func_var);
-        let func_expr = self.ast_builder.expression_identifier(span, func_atom);
+        // Create function expression using register_to_expression to handle inlining
+        let func_expr = self.register_to_expression(func_reg)?;
 
         // Use .call() syntax: func.call(thisArg, arg1, arg2, arg3)
         let call_atom = self.ast_builder.allocator.alloc_str("call");

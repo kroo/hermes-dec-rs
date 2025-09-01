@@ -105,6 +105,9 @@ impl Cli {
                     decompile_nested,
                     false, // inline_constants
                     false, // inline_all_constants
+                    false, // inline_property_access
+                    false, // inline_all_property_access
+                    None,  // inline_global_this
                 )?;
             }
             Commands::Disasm { input } => {

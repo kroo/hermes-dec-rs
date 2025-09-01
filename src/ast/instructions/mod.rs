@@ -15,7 +15,7 @@ use crate::cfg::ssa::DuplicationContext;
 use crate::cfg::switch_analysis::switch_info::CaseGroup;
 use crate::hbc::InstructionIndex;
 use crate::{analysis::GlobalAnalysisResult, generated::unified_instructions::UnifiedInstruction};
-use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
+use oxc_ast::{ast::{Expression, Statement}, AstBuilder as OxcAstBuilder};
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -28,6 +28,27 @@ mod jump;
 mod misc;
 mod objects;
 mod variables;
+
+/// Check if a property name is a standard global that doesn't need globalThis prefix
+fn is_standard_global(property: &str) -> bool {
+    matches!(
+        property,
+        "console" | "Math" | "Object" | "Array" | "String" | "Number" | "Boolean" |
+        "Date" | "RegExp" | "Error" | "JSON" | "Promise" | "Map" | "Set" |
+        "WeakMap" | "WeakSet" | "Symbol" | "Proxy" | "Reflect" | "BigInt" |
+        "Int8Array" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" |
+        "Uint16Array" | "Int32Array" | "Uint32Array" | "Float32Array" |
+        "Float64Array" | "BigInt64Array" | "BigUint64Array" | "ArrayBuffer" |
+        "SharedArrayBuffer" | "DataView" | "Atomics" | "encodeURI" |
+        "encodeURIComponent" | "decodeURI" | "decodeURIComponent" | "eval" |
+        "isFinite" | "isNaN" | "parseFloat" | "parseInt" | "URL" |
+        "URLSearchParams" | "TextEncoder" | "TextDecoder" | "WebAssembly" |
+        "Intl" | "Buffer" | "process" | "global" | "window" | "document" |
+        "setTimeout" | "clearTimeout" | "setInterval" | "clearInterval" |
+        "setImmediate" | "clearImmediate" | "requestAnimationFrame" |
+        "cancelAnimationFrame" | "fetch" | "crypto" | "performance"
+    )
+}
 
 use arithmetic::ArithmeticHelpers;
 use constants::ConstantHelpers;
@@ -314,6 +335,17 @@ impl<'a> InstructionToStatementConverter<'a> {
                             // Create a constant expression
                             log::debug!("Inlining constant: {:?}", constant);
                             return self.create_constant_expression(constant);
+                        }
+                        crate::analysis::ssa_usage_tracker::UseStrategy::InlinePropertyAccess(tracked_value) => {
+                            // Create a property access chain expression
+                            log::debug!("Inlining property access: {:?}", tracked_value);
+                            return self.create_property_access_expression(tracked_value);
+                        }
+                        crate::analysis::ssa_usage_tracker::UseStrategy::InlineGlobalThis => {
+                            // Inline globalThis directly
+                            log::debug!("Inlining globalThis");
+                            let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                            return Ok(self.ast_builder.expression_identifier(span, global_atom));
                         }
                         crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
                             // Use the variable reference
@@ -2027,6 +2059,62 @@ impl<'a> InstructionToStatementConverter<'a> {
             }
         };
         Ok(expr)
+    }
+    
+    /// Create a property access expression from a TrackedValue
+    pub fn create_property_access_expression(
+        &self,
+        tracked_value: &crate::analysis::value_tracker::TrackedValue,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        use crate::analysis::value_tracker::TrackedValue;
+        
+        let span = oxc_span::Span::default();
+        
+        match tracked_value {
+            TrackedValue::PropertyAccess { object, property } => {
+                // Recursively build the object expression
+                let object_expr = self.create_property_access_expression(object)?;
+                
+                // Check if this is a global property access that can be simplified
+                // For example, globalThis.console can be simplified to just console
+                if let TrackedValue::GlobalObject = &**object {
+                    // Check if this is a standard global property
+                    if is_standard_global(property) {
+                        // Just use the property name directly
+                        let prop_atom = self.ast_builder.allocator.alloc_str(property);
+                        return Ok(self.ast_builder.expression_identifier(span, prop_atom));
+                    }
+                }
+                
+                // Create the member expression
+                let prop_atom = self.ast_builder.allocator.alloc_str(property);
+                let property_ident = self.ast_builder.identifier_name(span, prop_atom);
+                let member = self.ast_builder.member_expression_static(
+                    span,
+                    object_expr,
+                    property_ident,
+                    false, // optional
+                );
+                Ok(Expression::from(member))
+            }
+            TrackedValue::GlobalObject => {
+                // Use globalThis as the base
+                let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                Ok(self.ast_builder.expression_identifier(span, global_atom))
+            }
+            TrackedValue::Constant(value) => {
+                // If for some reason we have a constant in the chain, inline it
+                self.create_constant_expression(value)
+            }
+            TrackedValue::Parameter { .. } | TrackedValue::Phi { .. } | TrackedValue::Unknown => {
+                // These shouldn't appear in property access chains normally
+                // But if they do, we have a problem - we can't inline them properly
+                // This is likely a bug in the tracking logic
+                log::warn!("Unexpected TrackedValue in property access chain: {:?}", tracked_value);
+                let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                Ok(self.ast_builder.expression_identifier(span, undefined_atom))
+            }
+        }
     }
 
     /// Create a return statement: `return expression;`

@@ -13,6 +13,9 @@ pub fn decompile(
     decompile_nested: bool,
     inline_constants: bool,
     inline_all_constants: bool,
+    inline_property_access: bool,
+    inline_all_property_access: bool,
+    inline_global_this: Option<bool>,
 ) -> DecompilerResult<()> {
     // Read the input file
     let data = match fs::read(input_path) {
@@ -45,6 +48,9 @@ pub fn decompile(
         decompile_nested,
         inline_constants,
         inline_all_constants,
+        inline_property_access,
+        inline_all_property_access,
+        inline_global_this,
     );
 
     // Decompile the specific function

@@ -83,6 +83,18 @@ enum Commands {
         /// Aggressively inline all constant values regardless of usage count
         #[arg(long)]
         inline_all_constants: bool,
+        
+        /// Inline property access chains that are used only once
+        #[arg(long)]
+        inline_property_access: bool,
+        
+        /// Aggressively inline all property access chains regardless of usage count
+        #[arg(long)]
+        inline_all_property_access: bool,
+        
+        /// Inline all uses of globalThis (defaults to true if any other inlining is enabled)
+        #[arg(long)]
+        inline_global_this: Option<bool>,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -147,6 +159,9 @@ fn main() -> Result<()> {
             decompile_nested,
             inline_constants,
             inline_all_constants,
+            inline_property_access,
+            inline_all_property_access,
+            inline_global_this,
             format: _,
             minify: _,
             hbc_version: _,
@@ -159,6 +174,9 @@ fn main() -> Result<()> {
             decompile_nested,
             inline_constants,
             inline_all_constants,
+            inline_property_access,
+            inline_all_property_access,
+            inline_global_this,
         )
         .map_err(|e| miette!("{}", e)),
         Commands::Generate { force: _ } => {

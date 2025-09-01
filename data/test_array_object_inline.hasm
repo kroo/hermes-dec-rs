@@ -1,8 +1,8 @@
 Bytecode File Information:
   Bytecode version number: 96
-  Source hash: 0a11848f1e26a21eebf589c53f0366254fb253bb
+  Source hash: 8a0ac4bfa697a617f3e2abb8eab486eecc430546
   Function count: 2
-  String count: 11
+  String count: 13
   BigInt count: 0
   String Kind Entry count: 2
   RegExp count: 0
@@ -15,17 +15,19 @@ Bytecode File Information:
     cjsModulesStaticallyResolved: 0
 
 Global String Table:
-s0[ASCII, 2..7] #1C35E808: global
-s1[ASCII, 0..2] #00018270: log
-s2[ASCII, 6..6] #1C182460: a
-s3[ASCII, 8..11] #5A7E6397: Math
-s4[ASCII, 12..14] #DC53DBCF: arr
-s5[ASCII, 15..17] #00018E43: obj
-s6[ASCII, 16..16] #00018A52: b
-s7[ASCII, 18..18] #629A2BFD: c
-s8[ASCII, 18..24] #5A3857F6: console
-s9[ASCII, 25..27] #235B2AD4: max
-s10[ASCII, 28..50] testArrayObjectInlining
+s0[ASCII, 13..18] #8236AAAB: global
+s1[ASCII, 0..11] #1C35E808: customGlobal
+s2[ASCII, 11..13] #F3091991: log
+s3[ASCII, 13..22] #00018270: globalThis
+s4[ASCII, 17..17] #1C182460: a
+s5[ASCII, 23..26] #5A7E6397: Math
+s6[ASCII, 27..29] #DC53DBCF: arr
+s7[ASCII, 30..32] #00018E43: obj
+s8[ASCII, 31..31] #00018A52: b
+s9[ASCII, 33..33] #629A2BFD: c
+s10[ASCII, 33..39] #5A3857F6: console
+s11[ASCII, 40..42] #235B2AD4: max
+s12[ASCII, 43..65] testArrayObjectInlining
 
 Array Buffer:
 Integer(1)
@@ -37,8 +39,8 @@ Integer(10)
 Integer(20)
 Integer(30)
 Object Key Buffer:
-[String 2]
-[String 6]
+[String 4]
+[String 8]
 Object Value Buffer:
 [int 1]
 [int 2]
@@ -54,7 +56,7 @@ Function<global>0(1 params, 9 registers, 0 symbols):
   Call1             r0, r1, r0
   Ret               r0
 
-Function<testArrayObjectInlining>1(1 params, 16 registers, 0 symbols):
+Function<testArrayObjectInlining>1(1 params, 17 registers, 0 symbols):
   NewArrayWithBuffer r0, 3, 3, 0
   GetGlobalObject   r1
   TryGetById        r3, r1, 1, "console"
@@ -74,16 +76,19 @@ Function<testArrayObjectInlining>1(1 params, 16 registers, 0 symbols):
   TryGetById        r3, r1, 1, "console"
   GetByIdShort      r2, r3, 2, "log"
   Call2             r2, r2, r3, r4
-  TryGetById        r3, r1, 3, "Math"
-  GetByIdShort      r2, r3, 4, "max"
-  NewArray          r1, 0
-  NewArrayWithBuffer r7, 3, 3, 23
-  LoadConstZero     r6
-  Mov               r8, r1
-  CallBuiltin       r4, 46, 4
+  TryGetById        r4, r1, 3, "Math"
+  GetByIdShort      r3, r4, 4, "max"
+  NewArray          r2, 0
+  NewArrayWithBuffer r8, 3, 3, 23
+  LoadConstZero     r7
+  Mov               r9, r2
+  CallBuiltin       r5, 46, 4
+  Mov               r9, r3
   Mov               r8, r2
-  Mov               r7, r1
-  Mov               r6, r3
-  CallBuiltin       r1, 47, 4
+  Mov               r7, r4
+  CallBuiltin       r2, 47, 4
+  TryGetById        r1, r1, 5, "globalThis"
+  GetByIdShort      r2, r1, 6, "customGlobal"
+  GetByIdShort      r1, r1, 1, "console"
   Ret               r0
 

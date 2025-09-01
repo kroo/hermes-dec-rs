@@ -536,7 +536,6 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let obj_var = self.register_manager.get_variable_name(obj_reg);
 
         // Look up property name from string table
         // Note: cache_id is used by the VM for optimization but not needed for decompilation
@@ -544,22 +543,37 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let span = Span::default();
 
-        // Create object identifier
-        let obj_atom = self.ast_builder.allocator.alloc_str(&obj_var);
-        let obj_expr = self.ast_builder.expression_identifier(span, obj_atom);
+        // Use register_to_expression to handle inlining
+        let obj_expr = self.register_to_expression(obj_reg)?;
 
-        // Create property access
-        let prop_atom = self.ast_builder.allocator.alloc_str(&prop_name);
-        let property_name = self.ast_builder.identifier_name(span, prop_atom);
-        let member_expr =
-            self.ast_builder
-                .alloc_static_member_expression(span, obj_expr, property_name, false);
+        // Check if we're accessing a standard global property on globalThis
+        let final_expr = if let oxc_ast::ast::Expression::Identifier(ident) = &obj_expr {
+            if ident.name.as_str() == "globalThis" && crate::ast::instructions::is_standard_global(&prop_name) {
+                // Simplify globalThis.console to just console
+                let prop_atom = self.ast_builder.allocator.alloc_str(&prop_name);
+                self.ast_builder.expression_identifier(span, prop_atom)
+            } else {
+                // Create normal property access
+                let prop_atom = self.ast_builder.allocator.alloc_str(&prop_name);
+                let property_name = self.ast_builder.identifier_name(span, prop_atom);
+                let member_expr =
+                    self.ast_builder
+                        .alloc_static_member_expression(span, obj_expr, property_name, false);
+                oxc_ast::ast::Expression::StaticMemberExpression(member_expr)
+            }
+        } else {
+            // Create normal property access
+            let prop_atom = self.ast_builder.allocator.alloc_str(&prop_name);
+            let property_name = self.ast_builder.identifier_name(span, prop_atom);
+            let member_expr =
+                self.ast_builder
+                    .alloc_static_member_expression(span, obj_expr, property_name, false);
+            oxc_ast::ast::Expression::StaticMemberExpression(member_expr)
+        };
 
         let stmt = self.create_variable_declaration_or_assignment(
             &dest_var,
-            Some(oxc_ast::ast::Expression::StaticMemberExpression(
-                member_expr,
-            )),
+            Some(final_expr),
         )?;
 
         Ok(InstructionResult::Statement(stmt))
@@ -630,30 +644,38 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
 
         let span = Span::default();
 
-        // Create Array constructor call
-        let array_atom = self.ast_builder.allocator.alloc_str("Array");
-        let array_expr = self.ast_builder.expression_identifier(span, array_atom);
+        let expr = if size == 0 {
+            // For size 0, create an empty array literal []
+            let elements = self.ast_builder.vec();
+            oxc_ast::ast::Expression::ArrayExpression(
+                self.ast_builder.alloc_array_expression(span, elements)
+            )
+        } else {
+            // For non-zero size, create new Array(size)
+            let array_atom = self.ast_builder.allocator.alloc_str("Array");
+            let array_expr = self.ast_builder.expression_identifier(span, array_atom);
 
-        // Create size argument
-        let size_expr = self.ast_builder.expression_numeric_literal(
-            span,
-            size as f64,
-            None,
-            oxc_syntax::number::NumberBase::Decimal,
-        );
+            // Create size argument
+            let size_expr = self.ast_builder.expression_numeric_literal(
+                span,
+                size as f64,
+                None,
+                oxc_syntax::number::NumberBase::Decimal,
+            );
 
-        let mut arguments = self.ast_builder.vec();
-        arguments.push(oxc_ast::ast::Argument::from(size_expr));
+            let mut arguments = self.ast_builder.vec();
+            arguments.push(oxc_ast::ast::Argument::from(size_expr));
 
-        // Create new expression
-        let new_expr = self.ast_builder.expression_new(
-            span,
-            array_expr,
-            None::<oxc_ast::ast::TSTypeParameterInstantiation>,
-            arguments,
-        );
+            // Create new expression
+            self.ast_builder.expression_new(
+                span,
+                array_expr,
+                None::<oxc_ast::ast::TSTypeParameterInstantiation>,
+                arguments,
+            )
+        };
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(new_expr))?;
+        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(expr))?;
 
         Ok(InstructionResult::Statement(stmt))
     }

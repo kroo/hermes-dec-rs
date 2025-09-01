@@ -534,6 +534,10 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                                     UseStrategy::InlineValue(ref val) => {
                                         format!("InlineValue({:?})", val)
                                     }
+                                    UseStrategy::InlinePropertyAccess(ref val) => {
+                                        format!("InlinePropertyAccess({:?})", val)
+                                    }
+                                    UseStrategy::InlineGlobalThis => "InlineGlobalThis".to_string(),
                                 };
                                 println!("      Use strategy: {}", strategy_str);
                             }
@@ -651,6 +655,12 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 }
                 TrackedValue::Phi { ssa_value } => {
                     phi_values.push(ssa_value);
+                }
+                TrackedValue::GlobalObject => {
+                    // Could track global object references if needed
+                }
+                TrackedValue::PropertyAccess { .. } => {
+                    // Could track property accesses if needed
                 }
                 TrackedValue::Unknown => {
                     // Don't print unknown values to reduce noise
