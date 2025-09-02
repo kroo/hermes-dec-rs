@@ -174,6 +174,105 @@ pub trait FunctionHelpers<'a> {
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
 }
 
+impl<'a> InstructionToStatementConverter<'a> {
+    /// Helper to create a call expression, potentially simplified based on the use strategy
+    /// 
+    /// This method checks if the 'this' argument should trigger call simplification:
+    /// - If 'this' is undefined and simplify_calls is enabled: outputs `func(args)`
+    /// - If 'this' matches the object in a member expression: outputs `obj.method(args)`
+    /// - Otherwise: outputs `func.call(this, args)`
+    fn create_call_expression(
+        &mut self,
+        func_expr: oxc_ast::ast::Expression<'a>,
+        this_reg: Option<u8>,
+        arg_regs: &[u8],
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        let span = Span::default();
+        
+        // Check if we should simplify this call
+        let should_simplify = if let Some(this_reg) = this_reg {
+            // Check if the 'this' argument has SimplifyCall strategy
+            if let Some(current_block) = self.register_manager.current_block() {
+                let current_pc = self.expression_context.current_pc;
+                
+                // Create the RegisterUse for lookup
+                let use_site = crate::cfg::ssa::types::RegisterUse {
+                    register: this_reg,
+                    block_id: current_block,
+                    instruction_idx: current_pc,
+                };
+                
+                // Check all use strategies to find one matching this use site
+                // We need to iterate because we don't know the exact SSA value
+                self.control_flow_plan.use_strategies.iter().any(|((_, reg_use), strategy)| {
+                    reg_use == &use_site && matches!(strategy, crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall { .. })
+                })
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        
+        if should_simplify && (self.inline_config.simplify_calls || self.inline_config.unsafe_simplify_calls) {
+            // Create simplified call: func(args) without .call(this, ...)
+            let mut arguments = self.ast_builder.vec();
+            
+            // Skip the 'this' argument and use the rest
+            for &arg_reg in arg_regs {
+                let arg_expr = self.register_to_expression(arg_reg)?;
+                arguments.push(oxc_ast::ast::Argument::from(arg_expr));
+            }
+            
+            Ok(self.ast_builder.expression_call(
+                span,
+                func_expr,
+                None::<oxc_ast::ast::TSTypeParameterInstantiation>,
+                arguments,
+                false,
+            ))
+        } else if this_reg.is_some() || !arg_regs.is_empty() {
+            // Use .call() syntax: func.call(this, args...)
+            let call_atom = self.ast_builder.allocator.alloc_str("call");
+            let call_name = self.ast_builder.identifier_name(span, call_atom);
+            let member_expr = self
+                .ast_builder
+                .alloc_static_member_expression(span, func_expr, call_name, false);
+            
+            let mut arguments = self.ast_builder.vec();
+            
+            // Add 'this' argument if present
+            if let Some(this_reg) = this_reg {
+                let this_expr = self.register_to_expression(this_reg)?;
+                arguments.push(oxc_ast::ast::Argument::from(this_expr));
+            }
+            
+            // Add rest of arguments
+            for &arg_reg in arg_regs {
+                let arg_expr = self.register_to_expression(arg_reg)?;
+                arguments.push(oxc_ast::ast::Argument::from(arg_expr));
+            }
+            
+            Ok(self.ast_builder.expression_call(
+                span,
+                oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
+                None::<oxc_ast::ast::TSTypeParameterInstantiation>,
+                arguments,
+                false,
+            ))
+        } else {
+            // No arguments, regular function call
+            Ok(self.ast_builder.expression_call(
+                span,
+                func_expr,
+                None::<oxc_ast::ast::TSTypeParameterInstantiation>,
+                self.ast_builder.vec(),
+                false,
+            ))
+        }
+    }
+}
+
 impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
     fn create_function_call(
         &mut self,
@@ -181,8 +280,19 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         func_reg: u8,
         arg_count: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read all variable names BEFORE creating destination variable to avoid conflicts
-        let func_var = self.register_manager.get_source_variable_name(func_reg);
+        // Check if this should be executed for side effects only
+        let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
+
+        // Create the destination variable only if we need it
+        let dest_var = if !is_side_effect_only {
+            self.register_manager
+                .create_new_variable_for_register(dest_reg)
+        } else {
+            // Still need to register the variable even if we don't use it
+            self.register_manager
+                .create_new_variable_for_register(dest_reg);
+            String::new() // Won't be used
+        };
 
         // Collect argument registers - use call site analysis if available
         let mut arg_regs = Vec::new();
@@ -215,53 +325,23 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             }
         }
 
-        // Now create the destination variable (this updates register mappings)
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
+        // Create function expression using register_to_expression
+        let func_expr = self.register_to_expression(func_reg)?;
 
-        let span = Span::default();
-
-        // Create function expression
-        let func_atom = self.ast_builder.allocator.alloc_str(&func_var);
-        let func_expr = self.ast_builder.expression_identifier(span, func_atom);
-
-        // Handle Hermes calling convention: always use func.call(thisArg, ...args)
-        let call_expr = if arg_regs.is_empty() {
-            // No arguments, regular function call
-            self.ast_builder.expression_call(
-                span,
-                func_expr,
-                None::<oxc_ast::ast::TSTypeParameterInstantiation>,
-                self.ast_builder.vec(),
-                false,
-            )
+        // For Call/CallLong, first arg is 'this', rest are actual arguments
+        let (this_reg, actual_args) = if !arg_regs.is_empty() {
+            (Some(arg_regs[0]), &arg_regs[1..])
         } else {
-            // Use .call() syntax: func.call(thisArg, arg1, arg2, ...)
-            let call_atom = self.ast_builder.allocator.alloc_str("call");
-            let call_name = self.ast_builder.identifier_name(span, call_atom);
-            let member_expr = self
-                .ast_builder
-                .alloc_static_member_expression(span, func_expr, call_name, false);
-
-            let mut arguments = self.ast_builder.vec();
-            // Add all arguments (first is 'this', rest are actual arguments)
-            // Use register_to_expression to handle inline values
-            for arg_reg in arg_regs {
-                let arg_expr = self.register_to_expression(arg_reg)?;
-                arguments.push(oxc_ast::ast::Argument::from(arg_expr));
-            }
-
-            self.ast_builder.expression_call(
-                span,
-                oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
-                None::<oxc_ast::ast::TSTypeParameterInstantiation>,
-                arguments,
-                false,
-            )
+            (None, &arg_regs[..])
         };
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
+        let call_expr = self.create_call_expression(func_expr, this_reg, actual_args)?;
+
+        let stmt = if is_side_effect_only {
+            self.ast_builder.statement_expression(Span::default(), call_expr)
+        } else {
+            self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
+        };
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -272,42 +352,31 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         func_reg: u8,
         arg1_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Read function variable name BEFORE creating destination variable
-        let func_var = self.register_manager.get_source_variable_name(func_reg);
+        // Check if this should be executed for side effects only
+        let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
+        
+        // Create the destination variable only if we need it
+        let dest_var = if !is_side_effect_only {
+            self.register_manager
+                .create_new_variable_for_register(dest_reg)
+        } else {
+            // Still need to register the variable even if we don't use it
+            self.register_manager
+                .create_new_variable_for_register(dest_reg);
+            String::new() // Won't be used
+        };
 
-        // Now create the destination variable
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
+        // Create function expression using register_to_expression
+        let func_expr = self.register_to_expression(func_reg)?;
 
-        let span = Span::default();
+        // Call1 has arg1 as 'this' and no other arguments
+        let call_expr = self.create_call_expression(func_expr, Some(arg1_reg), &[])?;
 
-        // Create function expression
-        let func_atom = self.ast_builder.allocator.alloc_str(&func_var);
-        let func_expr = self.ast_builder.expression_identifier(span, func_atom);
-
-        // Use .call() syntax: func.call(thisArg)
-        let call_atom = self.ast_builder.allocator.alloc_str("call");
-        let call_name = self.ast_builder.identifier_name(span, call_atom);
-        let member_expr = self
-            .ast_builder
-            .alloc_static_member_expression(span, func_expr, call_name, false);
-
-        let mut arguments = self.ast_builder.vec();
-        // arg1 is the 'this' argument in Hermes calling convention
-        // Use register_to_expression to handle inline values
-        let arg1_expr = self.register_to_expression(arg1_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
-
-        let call_expr = self.ast_builder.expression_call(
-            span,
-            oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
-            None::<oxc_ast::ast::TSTypeParameterInstantiation>,
-            arguments,
-            false,
-        );
-
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
+        let stmt = if is_side_effect_only {
+            self.ast_builder.statement_expression(Span::default(), call_expr)
+        } else {
+            self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
+        };
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -319,41 +388,31 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg1_reg: u8,
         arg2_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Now create the destination variable
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
+        // Check if this should be executed for side effects only
+        let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
+        
+        // Create the destination variable only if we need it
+        let dest_var = if !is_side_effect_only {
+            self.register_manager
+                .create_new_variable_for_register(dest_reg)
+        } else {
+            // Still need to register the variable even if we don't use it
+            self.register_manager
+                .create_new_variable_for_register(dest_reg);
+            String::new() // Won't be used
+        };
 
-        let span = Span::default();
-
-        // Create function expression using register_to_expression to handle inlining
+        // Create function expression using register_to_expression
         let func_expr = self.register_to_expression(func_reg)?;
 
-        // Use .call() syntax: func.call(thisArg, arg1)
-        let call_atom = self.ast_builder.allocator.alloc_str("call");
-        let call_name = self.ast_builder.identifier_name(span, call_atom);
-        let member_expr = self
-            .ast_builder
-            .alloc_static_member_expression(span, func_expr, call_name, false);
+        // Call2 has arg1 as 'this' and arg2 as the first actual argument
+        let call_expr = self.create_call_expression(func_expr, Some(arg1_reg), &[arg2_reg])?;
 
-        let mut arguments = self.ast_builder.vec();
-        // arg1 is 'this', arg2 is the first actual argument
-        // Use register_to_expression to handle inline values
-        let arg1_expr = self.register_to_expression(arg1_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
-
-        let arg2_expr = self.register_to_expression(arg2_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
-
-        let call_expr = self.ast_builder.expression_call(
-            span,
-            oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
-            None::<oxc_ast::ast::TSTypeParameterInstantiation>,
-            arguments,
-            false,
-        );
-
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
+        let stmt = if is_side_effect_only {
+            self.ast_builder.statement_expression(Span::default(), call_expr)
+        } else {
+            self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
+        };
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -380,42 +439,14 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             String::new() // Won't be used
         };
 
-        let span = Span::default();
-
-        // Create function expression using register_to_expression to handle inlining
+        // Create function expression using register_to_expression
         let func_expr = self.register_to_expression(func_reg)?;
 
-        // Use .call() syntax: func.call(thisArg, arg1, arg2)
-        let call_atom = self.ast_builder.allocator.alloc_str("call");
-        let call_name = self.ast_builder.identifier_name(span, call_atom);
-        let member_expr = self
-            .ast_builder
-            .alloc_static_member_expression(span, func_expr, call_name, false);
+        // Call3 has arg1 as 'this' and arg2, arg3 as actual arguments
+        let call_expr = self.create_call_expression(func_expr, Some(arg1_reg), &[arg2_reg, arg3_reg])?;
 
-        let mut arguments = self.ast_builder.vec();
-        // arg1 is 'this', arg2 and arg3 are actual arguments
-        // Use register_to_expression to handle inline values
-        let arg1_expr = self.register_to_expression(arg1_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
-
-        let arg2_expr = self.register_to_expression(arg2_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
-
-        let arg3_expr = self.register_to_expression(arg3_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg3_expr));
-
-        let call_expr = self.ast_builder.expression_call(
-            span,
-            oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
-            None::<oxc_ast::ast::TSTypeParameterInstantiation>,
-            arguments,
-            false,
-        );
-
-        // Check if this should be executed for side effects only (no assignment)
         let stmt = if is_side_effect_only {
-            // Create an expression statement instead of a variable declaration
-            self.ast_builder.statement_expression(span, call_expr)
+            self.ast_builder.statement_expression(Span::default(), call_expr)
         } else {
             self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
         };
@@ -432,47 +463,31 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         arg3_reg: u8,
         arg4_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        // Now create the destination variable
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
+        // Check if this should be executed for side effects only
+        let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
 
-        let span = Span::default();
+        // Create the destination variable only if we need it
+        let dest_var = if !is_side_effect_only {
+            self.register_manager
+                .create_new_variable_for_register(dest_reg)
+        } else {
+            // Still need to register the variable even if we don't use it
+            self.register_manager
+                .create_new_variable_for_register(dest_reg);
+            String::new() // Won't be used
+        };
 
-        // Create function expression using register_to_expression to handle inlining
+        // Create function expression using register_to_expression
         let func_expr = self.register_to_expression(func_reg)?;
 
-        // Use .call() syntax: func.call(thisArg, arg1, arg2, arg3)
-        let call_atom = self.ast_builder.allocator.alloc_str("call");
-        let call_name = self.ast_builder.identifier_name(span, call_atom);
-        let member_expr = self
-            .ast_builder
-            .alloc_static_member_expression(span, func_expr, call_name, false);
+        // Call4 has arg1 as 'this' and arg2, arg3, arg4 as actual arguments
+        let call_expr = self.create_call_expression(func_expr, Some(arg1_reg), &[arg2_reg, arg3_reg, arg4_reg])?;
 
-        let mut arguments = self.ast_builder.vec();
-        // arg1 is 'this', arg2, arg3, arg4 are actual arguments
-        // Use register_to_expression to handle inline values
-        let arg1_expr = self.register_to_expression(arg1_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg1_expr));
-
-        let arg2_expr = self.register_to_expression(arg2_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg2_expr));
-
-        let arg3_expr = self.register_to_expression(arg3_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg3_expr));
-
-        let arg4_expr = self.register_to_expression(arg4_reg)?;
-        arguments.push(oxc_ast::ast::Argument::from(arg4_expr));
-
-        let call_expr = self.ast_builder.expression_call(
-            span,
-            oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
-            None::<oxc_ast::ast::TSTypeParameterInstantiation>,
-            arguments,
-            false,
-        );
-
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?;
+        let stmt = if is_side_effect_only {
+            self.ast_builder.statement_expression(Span::default(), call_expr)
+        } else {
+            self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
+        };
 
         Ok(InstructionResult::Statement(stmt))
     }

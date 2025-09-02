@@ -538,6 +538,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                                         format!("InlinePropertyAccess({:?})", val)
                                     }
                                     UseStrategy::InlineGlobalThis => "InlineGlobalThis".to_string(),
+                                    UseStrategy::SimplifyCall { is_method_call } => format!("SimplifyCall(method: {})", is_method_call),
                                 };
                                 println!("      Use strategy: {}", strategy_str);
                             }

@@ -96,19 +96,22 @@ impl Cli {
                 comments,
                 decompile_nested,
             } => {
-                decompile::decompile(
-                    &input,
-                    function,
-                    output.as_deref(),
-                    &comments,
-                    false,
+                let args = decompile::DecompileArgs {
+                    input_path: input,
+                    function_index: function,
+                    output_path: output,
+                    comments,
+                    skip_validation: false,
                     decompile_nested,
-                    false, // inline_constants
-                    false, // inline_all_constants
-                    false, // inline_property_access
-                    false, // inline_all_property_access
-                    None,  // inline_global_this
-                )?;
+                    inline_constants: None,
+                    inline_all_constants: None,
+                    inline_property_access: None,
+                    inline_all_property_access: None,
+                    inline_global_this: None,
+                    simplify_calls: None,
+                    unsafe_simplify_calls: None,
+                };
+                decompile::decompile(&args)?;
             }
             Commands::Disasm { input } => {
                 disasm::disasm(&input)?;

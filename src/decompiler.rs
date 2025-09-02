@@ -40,6 +40,10 @@ pub struct InlineConfig {
     pub inline_all_property_access: bool,
     /// Inline all globalThis accesses (enabled by default when any inlining is enabled)
     pub inline_global_this: bool,
+    /// Simplify call patterns like fn.call(undefined, ...) to fn(...)
+    pub simplify_calls: bool,
+    /// Unsafely simplify method calls (e.g., obj.fn.call(obj, args) -> obj.fn(args))
+    pub unsafe_simplify_calls: bool,
 }
 
 impl Default for InlineConfig {
@@ -50,6 +54,8 @@ impl Default for InlineConfig {
             inline_property_access: false,
             inline_all_property_access: false,
             inline_global_this: false,
+            simplify_calls: false,
+            unsafe_simplify_calls: false,
         }
     }
 }
@@ -57,13 +63,15 @@ impl Default for InlineConfig {
 impl InlineConfig {
     /// Check if any inlining is enabled
     pub fn any_enabled(&self) -> bool {
-        self.inline_constants || 
-        self.inline_all_constants || 
-        self.inline_property_access || 
-        self.inline_all_property_access ||
-        self.inline_global_this
+        self.inline_constants
+            || self.inline_all_constants
+            || self.inline_property_access
+            || self.inline_all_property_access
+            || self.inline_global_this
+            || self.simplify_calls
+            || self.unsafe_simplify_calls
     }
-    
+
     /// Create from individual CLI flags
     pub fn from_cli_flags(
         inline_constants: bool,
@@ -71,18 +79,24 @@ impl InlineConfig {
         inline_property_access: bool,
         inline_all_property_access: bool,
         inline_global_this: Option<bool>,
+        simplify_calls: Option<bool>,
+        unsafe_simplify_calls: Option<bool>,
     ) -> Self {
         // Enable global_this inlining by default if any other inlining is enabled
-        let any_inline = inline_constants || inline_all_constants || 
-                        inline_property_access || inline_all_property_access;
+        let any_inline = inline_constants
+            || inline_all_constants
+            || inline_property_access
+            || inline_all_property_access;
         let inline_global_this = inline_global_this.unwrap_or(any_inline);
-        
+
         Self {
             inline_constants,
             inline_all_constants,
             inline_property_access,
             inline_all_property_access,
             inline_global_this,
+            simplify_calls: simplify_calls.unwrap_or(any_inline),
+            unsafe_simplify_calls: unsafe_simplify_calls.unwrap_or(false),
         }
     }
 }
@@ -125,6 +139,8 @@ impl DecompileOptions {
         inline_property_access: bool,
         inline_all_property_access: bool,
         inline_global_this: Option<bool>,
+        simplify_calls: Option<bool>,
+        unsafe_simplify_calls: Option<bool>,
     ) -> Self {
         let include_instruction_comments =
             comments.contains("instructions") || comments.contains("pc");
@@ -141,6 +157,8 @@ impl DecompileOptions {
                 inline_property_access,
                 inline_all_property_access,
                 inline_global_this,
+                simplify_calls,
+                unsafe_simplify_calls,
             ),
         }
     }
@@ -252,8 +270,18 @@ impl Decompiler {
         skip_validation: bool,
         decompile_nested: bool,
     ) -> DecompilerResult<String> {
-        let options =
-            DecompileOptions::from_cli(comments, skip_validation, decompile_nested, false, false, false, false, None);
+        let options = DecompileOptions::from_cli(
+            comments,
+            skip_validation,
+            decompile_nested,
+            false,
+            false,
+            false,
+            false,
+            None,
+            None,
+            None,
+        );
         self.decompile_function_with_options(hbc_file, function_index, options)
     }
 
@@ -480,6 +508,7 @@ impl<'a> FunctionDecompiler<'a> {
             plan,
             self.options.include_ssa_comments,
             self.options.include_instruction_comments,
+            &self.options.inline_config,
         );
         let all_statements = converter.convert_to_ast();
 

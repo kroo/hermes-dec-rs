@@ -72,6 +72,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         plan: ControlFlowPlan,
         include_ssa_comments: bool,
         include_instruction_comments: bool,
+        inline_config: &crate::decompiler::InlineConfig,
     ) -> Self {
         let expression_context = ExpressionContext::with_context(
             hbc,
@@ -86,6 +87,9 @@ impl<'a> ControlFlowPlanConverter<'a> {
             hbc_analysis,
             plan,
         );
+        
+        // Set the inline configuration
+        instruction_converter.set_inline_config(inline_config.clone());
 
         // Generate variable mapping from SSA analysis
         let mut variable_mapper = crate::ast::variables::VariableMapper::new();
@@ -1648,6 +1652,13 @@ impl<'a> ControlFlowPlanConverter<'a> {
                         // Inline the property access chain
                         return self.create_property_access_expression(tracked_value);
                     }
+                    UseStrategy::SimplifyCall { .. } => {
+                        // This is handled in Call instructions, fallback to variable
+                        let name = self.get_variable_name(&dup_value);
+                        let name_atom = self.ast_builder.allocator.alloc_str(&name);
+                        let span = oxc_span::SPAN;
+                        return self.ast_builder.expression_identifier(span, name_atom);
+                    }
                     UseStrategy::InlineGlobalThis => {
                         // Inline globalThis directly
                         let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
@@ -1900,6 +1911,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                 UseStrategy::InlineValue(_) => "inline",
                                 UseStrategy::InlinePropertyAccess(_) => "inline-prop",
                                 UseStrategy::InlineGlobalThis => "inline-global",
+                                UseStrategy::SimplifyCall { .. } => "simplify-call",
                             }
                         } else {
                             ""
@@ -2002,6 +2014,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                 UseStrategy::InlineValue(_) => "inline/dup",
                                 UseStrategy::InlinePropertyAccess(_) => "inline-prop/dup",
                                 UseStrategy::InlineGlobalThis => "inline-global/dup",
+                                UseStrategy::SimplifyCall { .. } => "simplify-call/dup",
                             }
                         } else {
                             "dup"

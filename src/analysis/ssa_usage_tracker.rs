@@ -82,12 +82,16 @@ pub enum UseStrategy {
 
     /// Inline the constant value directly
     InlineValue(ConstantValue),
-    
+
     /// Inline a property access chain
     InlinePropertyAccess(TrackedValue),
-    
+
     /// Inline globalThis directly
     InlineGlobalThis,
+
+    /// Simplify call pattern (for 'this' argument in Call instructions)
+    /// Contains the function expression and whether it matches the object.method pattern
+    SimplifyCall { is_method_call: bool },
 }
 
 impl<'a> SSAUsageTracker<'a> {
@@ -493,7 +497,7 @@ impl<'a> SSAUsageTracker<'a> {
                                     return DeclarationStrategy::Skip;
                                 }
                             }
-                            
+
                             trace!(
                                 "SSA value {} has side effects but no uses, using SideEffectOnly",
                                 ssa_value
@@ -637,17 +641,22 @@ impl<'a> SSAUsageTracker<'a> {
     }
 
     /// Check if an instruction is an array/object literal that can be eliminated if unused
-    fn is_eliminable_literal(&self, instruction: &crate::generated::unified_instructions::UnifiedInstruction) -> bool {
+    fn is_eliminable_literal(
+        &self,
+        instruction: &crate::generated::unified_instructions::UnifiedInstruction,
+    ) -> bool {
         use crate::generated::unified_instructions::UnifiedInstruction;
         matches!(
             instruction,
-            UnifiedInstruction::NewArrayWithBuffer { .. } |
-            UnifiedInstruction::NewArrayWithBufferLong { .. } |
-            UnifiedInstruction::NewObjectWithBuffer { .. } |
-            UnifiedInstruction::NewObjectWithBufferLong { .. }
+            UnifiedInstruction::NewArrayWithBuffer { .. }
+                | UnifiedInstruction::NewArrayWithBufferLong { .. }
+                | UnifiedInstruction::NewObjectWithBuffer { .. }
+                | UnifiedInstruction::NewObjectWithBufferLong { .. }
+                | UnifiedInstruction::NewArray { .. }
+                | UnifiedInstruction::NewObject { .. }
         )
     }
-    
+
     /// Check if an SSA value is a PHI result
     fn is_phi_result(&self, ssa_value: &SSAValue) -> bool {
         // Check if this SSA value is the result of a PHI function

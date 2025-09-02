@@ -78,23 +78,32 @@ enum Commands {
 
         /// Inline constant values that are used only once
         #[arg(long)]
-        inline_constants: bool,
+        inline_constants: Option<bool>,
 
         /// Aggressively inline all constant values regardless of usage count
         #[arg(long)]
-        inline_all_constants: bool,
+        inline_all_constants: Option<bool>,
         
         /// Inline property access chains that are used only once
         #[arg(long)]
-        inline_property_access: bool,
+        inline_property_access: Option<bool>,
         
         /// Aggressively inline all property access chains regardless of usage count
         #[arg(long)]
-        inline_all_property_access: bool,
+        inline_all_property_access: Option<bool>,
         
         /// Inline all uses of globalThis (defaults to true if any other inlining is enabled)
         #[arg(long)]
         inline_global_this: Option<bool>,
+        
+        /// Simplify call patterns like fn.call(undefined, ...) to fn(...)
+        #[arg(long)]
+        simplify_calls: Option<bool>,
+        
+        /// Unsafely simplify method calls (e.g., obj.fn.call(obj, args) -> obj.fn(args))
+        /// Warning: This transformation is not semantics-preserving in all cases
+        #[arg(long)]
+        unsafe_simplify_calls: Option<bool>,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -162,23 +171,29 @@ fn main() -> Result<()> {
             inline_property_access,
             inline_all_property_access,
             inline_global_this,
+            simplify_calls,
+            unsafe_simplify_calls,
             format: _,
             minify: _,
             hbc_version: _,
-        } => cli::decompile::decompile(
-            &input,
-            function,
-            output.as_ref().map(|v| &**v),
-            &comments,
-            skip_validation,
-            decompile_nested,
-            inline_constants,
-            inline_all_constants,
-            inline_property_access,
-            inline_all_property_access,
-            inline_global_this,
-        )
-        .map_err(|e| miette!("{}", e)),
+        } => {
+            let args = cli::decompile::DecompileArgs {
+                input_path: input,
+                function_index: function,
+                output_path: output,
+                comments,
+                skip_validation,
+                decompile_nested,
+                inline_constants,
+                inline_all_constants,
+                inline_property_access,
+                inline_all_property_access,
+                inline_global_this,
+                simplify_calls,
+                unsafe_simplify_calls,
+            };
+            cli::decompile::decompile(&args).map_err(|e| miette!("{}", e))
+        }
         Commands::Generate { force: _ } => {
             cli::generate::generate_instructions().map_err(|e| miette!("{}", e))
         }

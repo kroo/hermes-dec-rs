@@ -133,6 +133,8 @@ pub struct InstructionToStatementConverter<'a> {
     current_duplication_context: Option<DuplicationContext>,
     /// The control flow plan (shared ownership)
     pub control_flow_plan: Rc<crate::analysis::control_flow_plan::ControlFlowPlan>,
+    /// Inline configuration settings
+    pub inline_config: crate::decompiler::InlineConfig,
 }
 
 impl<'a> InstructionToStatementConverter<'a> {
@@ -153,7 +155,13 @@ impl<'a> InstructionToStatementConverter<'a> {
             undeclared_variables: HashSet::new(),
             current_duplication_context: None,
             control_flow_plan: control_flow_plan_rc,
+            inline_config: crate::decompiler::InlineConfig::default(),
         }
+    }
+    
+    /// Set the inline configuration
+    pub fn set_inline_config(&mut self, config: crate::decompiler::InlineConfig) {
+        self.inline_config = config;
     }
 
     /// Set the current program counter for context-aware operations
@@ -346,6 +354,13 @@ impl<'a> InstructionToStatementConverter<'a> {
                             log::debug!("Inlining globalThis");
                             let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
                             return Ok(self.ast_builder.expression_identifier(span, global_atom));
+                        }
+                        crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall { .. } => {
+                            // This strategy is handled in Call instructions, not here
+                            // Just use the variable reference
+                            log::debug!("SimplifyCall strategy in register_to_expression - using variable: {}", var_name);
+                            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+                            return Ok(self.ast_builder.expression_identifier(span, var_atom));
                         }
                         crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
                             // Use the variable reference

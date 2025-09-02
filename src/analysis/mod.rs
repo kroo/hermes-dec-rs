@@ -17,6 +17,7 @@ pub mod function_analysis;
 pub mod function_classifier;
 pub mod global_ssa;
 pub mod hbc_analysis;
+pub mod optimization_passes;
 pub mod ssa_usage_tracker;
 pub mod value_tracker;
 
