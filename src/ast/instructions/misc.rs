@@ -62,8 +62,8 @@ pub trait MiscHelpers<'a> {
     fn create_select_object(
         &mut self,
         dest_reg: u8,
-        test_reg: u8,
-        alt_reg: u8,
+        this_reg: u8,   // Arg2: the 'this' object (created with Object.create)
+        return_reg: u8, // Arg3: constructor's return value
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
 
     /// Create regular expression: `let var0_1 = /pattern/flags;`
@@ -196,7 +196,6 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let src_var = self.register_manager.get_variable_name(src_reg);
 
         let span = Span::default();
 
@@ -206,9 +205,8 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             .ast_builder
             .expression_string_literal(span, empty_str_atom, None);
 
-        // Create source expression
-        let src_atom = self.ast_builder.allocator.alloc_str(&src_var);
-        let src_expr = self.ast_builder.expression_identifier(span, src_atom);
+        // Use register_to_expression to handle inlining properly
+        let src_expr = self.register_to_expression(src_reg)?;
 
         // Create binary expression
         let binary_expr = self.ast_builder.expression_binary(
@@ -255,7 +253,6 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let prototype_var = self.register_manager.get_variable_name(prototype_reg);
 
         let span = Span::default();
 
@@ -269,9 +266,8 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             self.ast_builder
                 .alloc_static_member_expression(span, object_expr, create_name, false);
 
-        // Use the prototype directly (it's already Error.prototype, not Error constructor)
-        let prototype_atom = self.ast_builder.allocator.alloc_str(&prototype_var);
-        let prototype_expr = self.ast_builder.expression_identifier(span, prototype_atom);
+        // Use register_to_expression to handle inlining properly
+        let prototype_expr = self.register_to_expression(prototype_reg)?;
 
         // Create call
         let mut args = self.ast_builder.vec();
@@ -336,23 +332,23 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
     fn create_select_object(
         &mut self,
         dest_reg: u8,
-        test_reg: u8,
-        alt_reg: u8,
+        this_reg: u8,   // Arg2: the 'this' object (created with Object.create)
+        return_reg: u8, // Arg3: constructor's return value
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let test_var = self.register_manager.get_variable_name(test_reg);
-        let alt_var = self.register_manager.get_variable_name(alt_reg);
 
         let span = Span::default();
 
-        // Create typeof test === 'object'
-        let test_atom = self.ast_builder.allocator.alloc_str(&test_var);
-        let test_expr = self.ast_builder.expression_identifier(span, test_atom);
-        let typeof_expr =
-            self.ast_builder
-                .expression_unary(span, oxc_ast::ast::UnaryOperator::Typeof, test_expr);
+        // Test if the constructor's return value (Arg3) is an object
+        // Create typeof return_value === 'object'
+        let return_expr = self.register_to_expression(return_reg)?;
+        let typeof_expr = self.ast_builder.expression_unary(
+            span,
+            oxc_ast::ast::UnaryOperator::Typeof,
+            return_expr,
+        );
 
         let object_str = self.ast_builder.allocator.alloc_str("object");
         let object_literal = self
@@ -366,19 +362,18 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             object_literal,
         );
 
-        // Create test !== null
-        let test_atom2 = self.ast_builder.allocator.alloc_str(&test_var);
-        let test_expr2 = self.ast_builder.expression_identifier(span, test_atom2);
+        // Create return_value !== null
+        let return_expr2 = self.register_to_expression(return_reg)?;
         let null_expr = self.ast_builder.expression_null_literal(span);
 
         let not_null_check = self.ast_builder.expression_binary(
             span,
-            test_expr2,
+            return_expr2,
             oxc_ast::ast::BinaryOperator::StrictInequality,
             null_expr,
         );
 
-        // Combine with &&: (typeof test === 'object' && test !== null)
+        // Combine with &&: (typeof return === 'object' && return !== null)
         let condition = self.ast_builder.expression_logical(
             span,
             typeof_check,
@@ -386,18 +381,14 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             not_null_check,
         );
 
-        // Create test expression for the true branch
-        let test_atom3 = self.ast_builder.allocator.alloc_str(&test_var);
-        let test_expr3 = self.ast_builder.expression_identifier(span, test_atom3);
+        // If return value is an object, use it; otherwise use 'this'
+        let return_expr3 = self.register_to_expression(return_reg)?;
+        let this_expr = self.register_to_expression(this_reg)?;
 
-        // Create alternative expression
-        let alt_atom = self.ast_builder.allocator.alloc_str(&alt_var);
-        let alt_expr = self.ast_builder.expression_identifier(span, alt_atom);
-
-        // Create conditional expression: (typeof test === 'object' && test !== null) ? test : alt
-        let conditional_expr = self
-            .ast_builder
-            .expression_conditional(span, condition, test_expr3, alt_expr);
+        // Create conditional expression: (typeof return === 'object' && return !== null) ? return : this
+        let conditional_expr =
+            self.ast_builder
+                .expression_conditional(span, condition, return_expr3, this_expr);
 
         let stmt =
             self.create_variable_declaration_or_assignment(&dest_var, Some(conditional_expr))?;
@@ -493,18 +484,12 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let left_var = self.register_manager.get_variable_name(left_reg);
-        let right_var = self.register_manager.get_variable_name(right_reg);
 
         let span = Span::default();
 
-        // Create left expression
-        let left_atom = self.ast_builder.allocator.alloc_str(&left_var);
-        let left_expr = self.ast_builder.expression_identifier(span, left_atom);
-
-        // Create right expression
-        let right_atom = self.ast_builder.allocator.alloc_str(&right_var);
-        let right_expr = self.ast_builder.expression_identifier(span, right_atom);
+        // Use register_to_expression to handle inlining properly
+        let left_expr = self.register_to_expression(left_reg)?;
+        let right_expr = self.register_to_expression(right_reg)?;
 
         // Create instanceof binary expression
         let instanceof_expr = self.ast_builder.expression_binary(
@@ -530,18 +515,12 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let prop_var = self.register_manager.get_variable_name(prop_reg);
-        let obj_var = self.register_manager.get_variable_name(obj_reg);
 
         let span = Span::default();
 
-        // Create property expression
-        let prop_atom = self.ast_builder.allocator.alloc_str(&prop_var);
-        let prop_expr = self.ast_builder.expression_identifier(span, prop_atom);
-
-        // Create object expression
-        let obj_atom = self.ast_builder.allocator.alloc_str(&obj_var);
-        let obj_expr = self.ast_builder.expression_identifier(span, obj_atom);
+        // Use register_to_expression to handle inlining properly
+        let prop_expr = self.register_to_expression(prop_reg)?;
+        let obj_expr = self.register_to_expression(obj_reg)?;
 
         // Create 'in' binary expression
         let in_expr = self.ast_builder.expression_binary(
@@ -601,13 +580,10 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         &mut self,
         value_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let value_var = self.register_manager.get_variable_name(value_reg);
-
         let span = Span::default();
 
         // Create if (value === undefined) throw new ReferenceError()
-        let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
-        let value_expr = self.ast_builder.expression_identifier(span, value_atom);
+        let value_expr = self.register_to_expression(value_reg)?;
 
         let undefined_expr = self
             .ast_builder
@@ -774,15 +750,10 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         _default_offset: u32,
         _table_offset: u32,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let discriminant_var = self.register_manager.get_variable_name(discriminant_reg);
-
         let span = Span::default();
 
-        // Create switch statement discriminant
-        let discriminant_atom = self.ast_builder.allocator.alloc_str(&discriminant_var);
-        let discriminant_expr = self
-            .ast_builder
-            .expression_identifier(span, discriminant_atom);
+        // Create switch statement discriminant using register_to_expression
+        let discriminant_expr = self.register_to_expression(discriminant_reg)?;
 
         // For now, create a simple switch with placeholder cases
         // TODO: In a full implementation, we'd read the switch table and create proper cases

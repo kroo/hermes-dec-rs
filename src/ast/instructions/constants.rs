@@ -114,7 +114,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         if self.should_skip_declaration(dest_reg) {
             return Ok(InstructionResult::None);
         }
-        
+
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -141,7 +141,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         if self.should_skip_declaration(dest_reg) {
             return Ok(InstructionResult::None);
         }
-        
+
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -162,7 +162,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         if self.should_skip_declaration(dest_reg) {
             return Ok(InstructionResult::None);
         }
-        
+
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -183,7 +183,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         if self.should_skip_declaration(dest_reg) {
             return Ok(InstructionResult::None);
         }
-        
+
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);

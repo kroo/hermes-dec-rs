@@ -15,7 +15,10 @@ use crate::cfg::ssa::DuplicationContext;
 use crate::cfg::switch_analysis::switch_info::CaseGroup;
 use crate::hbc::InstructionIndex;
 use crate::{analysis::GlobalAnalysisResult, generated::unified_instructions::UnifiedInstruction};
-use oxc_ast::{ast::{Expression, Statement}, AstBuilder as OxcAstBuilder};
+use oxc_ast::{
+    ast::{Expression, Statement},
+    AstBuilder as OxcAstBuilder,
+};
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -33,20 +36,72 @@ mod variables;
 fn is_standard_global(property: &str) -> bool {
     matches!(
         property,
-        "console" | "Math" | "Object" | "Array" | "String" | "Number" | "Boolean" |
-        "Date" | "RegExp" | "Error" | "JSON" | "Promise" | "Map" | "Set" |
-        "WeakMap" | "WeakSet" | "Symbol" | "Proxy" | "Reflect" | "BigInt" |
-        "Int8Array" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" |
-        "Uint16Array" | "Int32Array" | "Uint32Array" | "Float32Array" |
-        "Float64Array" | "BigInt64Array" | "BigUint64Array" | "ArrayBuffer" |
-        "SharedArrayBuffer" | "DataView" | "Atomics" | "encodeURI" |
-        "encodeURIComponent" | "decodeURI" | "decodeURIComponent" | "eval" |
-        "isFinite" | "isNaN" | "parseFloat" | "parseInt" | "URL" |
-        "URLSearchParams" | "TextEncoder" | "TextDecoder" | "WebAssembly" |
-        "Intl" | "Buffer" | "process" | "global" | "window" | "document" |
-        "setTimeout" | "clearTimeout" | "setInterval" | "clearInterval" |
-        "setImmediate" | "clearImmediate" | "requestAnimationFrame" |
-        "cancelAnimationFrame" | "fetch" | "crypto" | "performance"
+        "console"
+            | "Math"
+            | "Object"
+            | "Array"
+            | "String"
+            | "Number"
+            | "Boolean"
+            | "Date"
+            | "RegExp"
+            | "Error"
+            | "JSON"
+            | "Promise"
+            | "Map"
+            | "Set"
+            | "WeakMap"
+            | "WeakSet"
+            | "Symbol"
+            | "Proxy"
+            | "Reflect"
+            | "BigInt"
+            | "Int8Array"
+            | "Uint8Array"
+            | "Uint8ClampedArray"
+            | "Int16Array"
+            | "Uint16Array"
+            | "Int32Array"
+            | "Uint32Array"
+            | "Float32Array"
+            | "Float64Array"
+            | "BigInt64Array"
+            | "BigUint64Array"
+            | "ArrayBuffer"
+            | "SharedArrayBuffer"
+            | "DataView"
+            | "Atomics"
+            | "encodeURI"
+            | "encodeURIComponent"
+            | "decodeURI"
+            | "decodeURIComponent"
+            | "eval"
+            | "isFinite"
+            | "isNaN"
+            | "parseFloat"
+            | "parseInt"
+            | "URL"
+            | "URLSearchParams"
+            | "TextEncoder"
+            | "TextDecoder"
+            | "WebAssembly"
+            | "Intl"
+            | "Buffer"
+            | "process"
+            | "global"
+            | "window"
+            | "document"
+            | "setTimeout"
+            | "clearTimeout"
+            | "setInterval"
+            | "clearInterval"
+            | "setImmediate"
+            | "clearImmediate"
+            | "requestAnimationFrame"
+            | "cancelAnimationFrame"
+            | "fetch"
+            | "crypto"
+            | "performance"
     )
 }
 
@@ -158,7 +213,7 @@ impl<'a> InstructionToStatementConverter<'a> {
             inline_config: crate::decompiler::InlineConfig::default(),
         }
     }
-    
+
     /// Set the inline configuration
     pub fn set_inline_config(&mut self, config: crate::decompiler::InlineConfig) {
         self.inline_config = config;
@@ -247,7 +302,8 @@ impl<'a> InstructionToStatementConverter<'a> {
     /// Check if a declaration should be skipped for the given destination register
     pub fn should_skip_declaration(&self, dest_reg: u8) -> bool {
         if let Some(ssa_value) = self.register_manager.get_current_ssa_value(dest_reg) {
-            let dup_ssa = if let Some(context) = self.register_manager.current_duplication_context() {
+            let dup_ssa = if let Some(context) = self.register_manager.current_duplication_context()
+            {
                 DuplicatedSSAValue {
                     original: ssa_value,
                     duplication_context: Some(context.clone()),
@@ -255,20 +311,25 @@ impl<'a> InstructionToStatementConverter<'a> {
             } else {
                 DuplicatedSSAValue::original(ssa_value)
             };
-            
+
             // Check if this declaration should be skipped
-            if let Some(DeclarationStrategy::Skip) = 
-                self.control_flow_plan.get_declaration_strategy(&dup_ssa) {
+            if let Some(DeclarationStrategy::Skip) =
+                self.control_flow_plan.get_declaration_strategy(&dup_ssa)
+            {
                 return true;
             }
         }
         false
     }
-    
+
     /// Get the declaration strategy for the given destination register
-    pub fn get_declaration_strategy_for_register(&self, dest_reg: u8) -> Option<DeclarationStrategy> {
+    pub fn get_declaration_strategy_for_register(
+        &self,
+        dest_reg: u8,
+    ) -> Option<DeclarationStrategy> {
         if let Some(ssa_value) = self.register_manager.get_current_ssa_value(dest_reg) {
-            let dup_ssa = if let Some(context) = self.register_manager.current_duplication_context() {
+            let dup_ssa = if let Some(context) = self.register_manager.current_duplication_context()
+            {
                 DuplicatedSSAValue {
                     original: ssa_value,
                     duplication_context: Some(context.clone()),
@@ -276,8 +337,10 @@ impl<'a> InstructionToStatementConverter<'a> {
             } else {
                 DuplicatedSSAValue::original(ssa_value)
             };
-            
-            self.control_flow_plan.get_declaration_strategy(&dup_ssa).cloned()
+
+            self.control_flow_plan
+                .get_declaration_strategy(&dup_ssa)
+                .cloned()
         } else {
             None
         }
@@ -313,16 +376,17 @@ impl<'a> InstructionToStatementConverter<'a> {
                     block_id: current_block,
                     instruction_idx: current_pc,
                 };
-                
+
                 // Create the duplicated SSA value with the current context if any
-                let dup_value = if let Some(context) = self.register_manager.current_duplication_context() {
-                    crate::cfg::ssa::DuplicatedSSAValue {
-                        original: ssa_value.clone(),
-                        duplication_context: Some(context.clone()),
-                    }
-                } else {
-                    crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone())
-                };
+                let dup_value =
+                    if let Some(context) = self.register_manager.current_duplication_context() {
+                        crate::cfg::ssa::DuplicatedSSAValue {
+                            original: ssa_value.clone(),
+                            duplication_context: Some(context.clone()),
+                        }
+                    } else {
+                        crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone())
+                    };
 
                 log::debug!(
                     "Looking up use strategy for {} at {:?} with context: {}",
@@ -332,11 +396,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                 );
 
                 let key = (dup_value.clone(), use_site.clone());
-                if let Some(strategy) = self
-                    .control_flow_plan
-                    .use_strategies
-                    .get(&key)
-                {
+                if let Some(strategy) = self.control_flow_plan.use_strategies.get(&key) {
                     log::debug!("Found use strategy for key {:?}: {:?}", key, strategy);
                     match strategy {
                         crate::analysis::ssa_usage_tracker::UseStrategy::InlineValue(constant) => {
@@ -344,7 +404,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                             log::debug!("Inlining constant: {:?}", constant);
                             return self.create_constant_expression(constant);
                         }
-                        crate::analysis::ssa_usage_tracker::UseStrategy::InlinePropertyAccess(tracked_value) => {
+                        crate::analysis::ssa_usage_tracker::UseStrategy::InlinePropertyAccess(
+                            tracked_value,
+                        ) => {
                             // Create a property access chain expression
                             log::debug!("Inlining property access: {:?}", tracked_value);
                             return self.create_property_access_expression(tracked_value);
@@ -355,7 +417,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                             let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
                             return Ok(self.ast_builder.expression_identifier(span, global_atom));
                         }
-                        crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall { .. } => {
+                        crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall {
+                            ..
+                        } => {
                             // This strategy is handled in Call instructions, not here
                             // Just use the variable reference
                             log::debug!("SimplifyCall strategy in register_to_expression - using variable: {}", var_name);
@@ -1936,23 +2000,24 @@ impl<'a> InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        
+
         // Check the declaration strategy
-        if let Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::AssignOnly) = 
-            self.get_declaration_strategy_for_register(dest_reg) {
+        if let Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::AssignOnly) =
+            self.get_declaration_strategy_for_register(dest_reg)
+        {
             // Create assignment only (no declaration)
             let span = oxc_span::Span::default();
             let var_atom = self.ast_builder.allocator.alloc_str(&dest_var);
             let assign_expr = self.ast_builder.expression_assignment(
                 span,
                 oxc_ast::ast::AssignmentOperator::Assign,
-                oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
-                    self.ast_builder.alloc(oxc_ast::ast::IdentifierReference {
+                oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(self.ast_builder.alloc(
+                    oxc_ast::ast::IdentifierReference {
                         span,
                         name: oxc_span::Atom::from(var_atom),
                         reference_id: std::cell::Cell::new(None),
-                    }),
-                ),
+                    },
+                )),
                 init_expression,
             );
             Ok(self.ast_builder.statement_expression(span, assign_expr))
@@ -2054,7 +2119,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                     let key_atom = self.ast_builder.allocator.alloc_str(key);
                     let key_ident = self.ast_builder.identifier_name(span, key_atom);
                     let property_key = oxc_ast::ast::PropertyKey::StaticIdentifier(
-                        self.ast_builder.alloc(key_ident)
+                        self.ast_builder.alloc(key_ident),
                     );
                     let value_expr = self.create_constant_expression(value)?;
                     let property = self.ast_builder.object_property(
@@ -2067,7 +2132,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                         false,
                     );
                     object_properties.push(oxc_ast::ast::ObjectPropertyKind::ObjectProperty(
-                        self.ast_builder.alloc(property)
+                        self.ast_builder.alloc(property),
                     ));
                 }
                 self.ast_builder.expression_object(span, object_properties)
@@ -2075,21 +2140,21 @@ impl<'a> InstructionToStatementConverter<'a> {
         };
         Ok(expr)
     }
-    
+
     /// Create a property access expression from a TrackedValue
     pub fn create_property_access_expression(
         &self,
         tracked_value: &crate::analysis::value_tracker::TrackedValue,
     ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
         use crate::analysis::value_tracker::TrackedValue;
-        
+
         let span = oxc_span::Span::default();
-        
+
         match tracked_value {
             TrackedValue::PropertyAccess { object, property } => {
                 // Recursively build the object expression
                 let object_expr = self.create_property_access_expression(object)?;
-                
+
                 // Check if this is a global property access that can be simplified
                 // For example, globalThis.console can be simplified to just console
                 if let TrackedValue::GlobalObject = &**object {
@@ -2100,7 +2165,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                         return Ok(self.ast_builder.expression_identifier(span, prop_atom));
                     }
                 }
-                
+
                 // Create the member expression
                 let prop_atom = self.ast_builder.allocator.alloc_str(property);
                 let property_ident = self.ast_builder.identifier_name(span, prop_atom);
@@ -2125,7 +2190,10 @@ impl<'a> InstructionToStatementConverter<'a> {
                 // These shouldn't appear in property access chains normally
                 // But if they do, we have a problem - we can't inline them properly
                 // This is likely a bug in the tracking logic
-                log::warn!("Unexpected TrackedValue in property access chain: {:?}", tracked_value);
+                log::warn!(
+                    "Unexpected TrackedValue in property access chain: {:?}",
+                    tracked_value
+                );
                 let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
                 Ok(self.ast_builder.expression_identifier(span, undefined_atom))
             }

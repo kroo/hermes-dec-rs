@@ -83,23 +83,23 @@ enum Commands {
         /// Aggressively inline all constant values regardless of usage count
         #[arg(long)]
         inline_all_constants: Option<bool>,
-        
+
         /// Inline property access chains that are used only once
         #[arg(long)]
         inline_property_access: Option<bool>,
-        
+
         /// Aggressively inline all property access chains regardless of usage count
         #[arg(long)]
         inline_all_property_access: Option<bool>,
-        
+
         /// Inline all uses of globalThis (defaults to true if any other inlining is enabled)
         #[arg(long)]
         inline_global_this: Option<bool>,
-        
+
         /// Simplify call patterns like fn.call(undefined, ...) to fn(...)
         #[arg(long)]
         simplify_calls: Option<bool>,
-        
+
         /// Unsafely simplify method calls (e.g., obj.fn.call(obj, args) -> obj.fn(args))
         /// Warning: This transformation is not semantics-preserving in all cases
         #[arg(long)]
@@ -141,6 +141,18 @@ enum Commands {
         /// Show verbose analysis (dominance frontiers, liveness)
         #[arg(short, long)]
         verbose: bool,
+        /// Inline all constants
+        #[arg(long)]
+        inline_all_constants: bool,
+        /// Inline all property access (requires --inline-all-constants)
+        #[arg(long)]
+        inline_all_property_access: bool,
+        /// Simplify calls with undefined 'this' to direct calls
+        #[arg(long)]
+        unsafe_simplify_calls: bool,
+        /// Inline globalThis references
+        #[arg(long)]
+        inline_global_this: bool,
     },
 }
 
@@ -215,6 +227,19 @@ fn main() -> Result<()> {
             input,
             function,
             verbose,
-        } => cli::analyze_cfg::analyze_cfg(&input, function, verbose).map_err(|e| miette!("{}", e)),
+            inline_all_constants,
+            inline_all_property_access,
+            unsafe_simplify_calls,
+            inline_global_this,
+        } => cli::analyze_cfg::analyze_cfg(
+            &input,
+            function,
+            verbose,
+            inline_all_constants,
+            inline_all_property_access,
+            unsafe_simplify_calls,
+            inline_global_this,
+        )
+        .map_err(|e| miette!("{}", e)),
     }
 }

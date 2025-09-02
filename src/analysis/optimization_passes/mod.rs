@@ -3,22 +3,22 @@
 //! This module contains various optimization passes that can be applied
 //! during decompilation to improve the quality of the output code.
 
+mod call_simplification;
 mod constant_inlining;
 mod global_this_inlining;
 mod property_access_inlining;
-mod call_simplification;
 
+pub use call_simplification::analyze_call_simplification;
 pub use constant_inlining::perform_constant_inlining;
 pub use global_this_inlining::perform_global_this_inlining;
 pub use property_access_inlining::perform_property_access_inlining;
-pub use call_simplification::analyze_call_simplification;
 
 use crate::analysis::control_flow_plan::ControlFlowPlan;
 use crate::analysis::FunctionAnalysis;
+use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext, RegisterUse};
 use crate::decompiler::InlineConfig;
-use std::collections::{HashMap, HashSet};
 use petgraph::graph::NodeIndex;
-use crate::cfg::ssa::types::{DuplicationContext, DuplicatedSSAValue, RegisterUse};
+use std::collections::{HashMap, HashSet};
 
 /// Context for optimization passes
 pub struct OptimizationContext<'a> {
@@ -46,12 +46,13 @@ impl<'a> OptimizationContext<'a> {
             consumed_uses: HashMap::new(),
         }
     }
-    
+
     /// Mark a use as consumed
     pub fn mark_use_consumed(&mut self, dup_value: DuplicatedSSAValue, use_site: RegisterUse) {
         // Mark in the plan
-        self.plan.mark_use_consumed(dup_value.clone(), use_site.clone());
-        
+        self.plan
+            .mark_use_consumed(dup_value.clone(), use_site.clone());
+
         // Also track locally for cascading elimination
         self.consumed_uses
             .entry(dup_value)

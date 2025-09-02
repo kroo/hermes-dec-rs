@@ -14,6 +14,7 @@ use crate::cfg::ssa::{RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::sparse_switch_analyzer::SparseSwitchAnalyzer;
 use crate::cfg::switch_analysis::SwitchInfo;
 use crate::cfg::Cfg;
+use crate::decompiler::InlineConfig;
 use crate::generated::generated_traits::BinaryOperator;
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::instruction_types::InstructionIndex;
@@ -34,6 +35,8 @@ pub struct ControlFlowPlanBuilder<'a> {
     post_dominators: Option<PostDominatorAnalysis>,
     /// Set of catch blocks to exclude from normal control flow
     catch_blocks: HashSet<NodeIndex>,
+    /// Inline configuration for optimization passes
+    inline_config: InlineConfig,
 }
 
 impl<'a> ControlFlowPlanBuilder<'a> {
@@ -57,7 +60,13 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             stop_blocks: HashSet::new(),
             post_dominators,
             catch_blocks,
+            inline_config: InlineConfig::default(),
         }
+    }
+
+    /// Set the inline configuration for optimization passes
+    pub fn set_inline_config(&mut self, config: InlineConfig) {
+        self.inline_config = config;
     }
 
     /// Build the control flow plan
@@ -78,6 +87,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
         // First build the structure
         let function_analysis = self.function_analysis;
+        let inline_config = self.inline_config.clone();
         log::debug!("Building control flow structure...");
         let mut plan = self.build_structure();
         log::debug!("Control flow structure built");
@@ -87,7 +97,11 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
         // Then analyze it to compute SSA strategies
         log::debug!("Starting SSA strategy analysis...");
-        let analyzer = ControlFlowPlanAnalyzer::new(&mut plan, function_analysis);
+        let analyzer = ControlFlowPlanAnalyzer::with_inline_config(
+            &mut plan,
+            function_analysis,
+            &inline_config,
+        );
         analyzer.analyze();
         log::debug!("SSA strategy analysis complete");
 

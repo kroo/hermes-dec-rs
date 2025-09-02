@@ -99,7 +99,7 @@ impl RegisterManager {
     pub fn set_duplication_context(&mut self, context: Option<DuplicationContext>) {
         self.current_duplication_context = context;
     }
-    
+
     /// Get the current duplication context
     pub fn current_duplication_context(&self) -> Option<&DuplicationContext> {
         self.current_duplication_context.as_ref()
@@ -110,8 +110,8 @@ impl RegisterManager {
     pub fn get_variable_name(&mut self, register: u8) -> String {
         // First check if we're in a duplication context
         if let Some(ref context) = self.current_duplication_context {
-            if let (Some(mapping), Some(pc), Some(block)) = 
-                (&self.variable_mapping, self.current_pc, self.current_block) 
+            if let (Some(mapping), Some(pc), Some(block)) =
+                (&self.variable_mapping, self.current_pc, self.current_block)
             {
                 // Look for the SSA value at this register/PC
                 let ssa_before = mapping.register_before_pc.get(&(register, pc));
@@ -143,7 +143,9 @@ impl RegisterManager {
 
                 if let Some(ssa_value) = ssa_value {
                     // Check if there's a PHI replacement for this SSA value in this duplicated block
-                    if let Some(phi_info) = self.control_flow_plan.get_phi_info(block, Some(context)) {
+                    if let Some(phi_info) =
+                        self.control_flow_plan.get_phi_info(block, Some(context))
+                    {
                         if let Some(replacement) = phi_info.replacements.get(ssa_value) {
                             log::debug!(
                                 "Found PHI replacement: {:?} -> {:?}",
@@ -157,7 +159,7 @@ impl RegisterManager {
                             }
                         }
                     }
-                    
+
                     // If no PHI replacement, check if this is a PHI result
                     // PHI results should not use duplicated names
                     if self.control_flow_plan.phi_results.contains(ssa_value) {
@@ -167,7 +169,7 @@ impl RegisterManager {
                             return var_name.clone();
                         }
                     }
-                    
+
                     // Otherwise, create a duplicated SSA value
                     let dup_ssa = DuplicatedSSAValue {
                         original: ssa_value.clone(),
@@ -205,8 +207,8 @@ impl RegisterManager {
     pub fn get_source_variable_name(&mut self, register: u8) -> String {
         // First check if we're in a duplication context
         if let Some(ref context) = self.current_duplication_context {
-            if let (Some(mapping), Some(pc), Some(block)) = 
-                (&self.variable_mapping, self.current_pc, self.current_block) 
+            if let (Some(mapping), Some(pc), Some(block)) =
+                (&self.variable_mapping, self.current_pc, self.current_block)
             {
                 // Look for the SSA value at this register/PC (before the instruction)
                 if let Some(ssa_value) =
@@ -224,7 +226,9 @@ impl RegisterManager {
                     })
                 {
                     // Check if there's a PHI replacement for this SSA value in this duplicated block
-                    if let Some(phi_info) = self.control_flow_plan.get_phi_info(block, Some(context)) {
+                    if let Some(phi_info) =
+                        self.control_flow_plan.get_phi_info(block, Some(context))
+                    {
                         if let Some(replacement) = phi_info.replacements.get(ssa_value) {
                             log::debug!(
                                 "Found PHI replacement for source: {:?} -> {:?}",
@@ -238,7 +242,7 @@ impl RegisterManager {
                             }
                         }
                     }
-                    
+
                     // If no PHI replacement, check if this is a PHI result
                     // PHI results should not use duplicated names
                     if self.control_flow_plan.phi_results.contains(ssa_value) {
@@ -248,7 +252,7 @@ impl RegisterManager {
                             return var_name.clone();
                         }
                     }
-                    
+
                     // Use the control flow plan to determine if we should use a duplicated name
                     let dup_ssa = self
                         .control_flow_plan

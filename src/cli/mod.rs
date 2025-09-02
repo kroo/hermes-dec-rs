@@ -146,7 +146,8 @@ impl Cli {
                 function,
                 verbose,
             } => {
-                analyze_cfg::analyze_cfg(&input, function, verbose)?;
+                // Use default optimization settings for the simplified CLI
+                analyze_cfg::analyze_cfg(&input, function, verbose, false, false, false, false)?;
             }
         }
 

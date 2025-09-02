@@ -8,12 +8,21 @@ use crate::analysis::{FunctionAnalysis, GlobalSSAAnalyzer};
 use crate::ast::variables::VariableMapper;
 use crate::cfg::ssa::DuplicatedSSAValue;
 use crate::cfg::Cfg;
+use crate::decompiler::InlineConfig;
 use crate::hbc::HbcFile;
 use anyhow::Result;
 use std::path::Path;
 
 /// Analyze the control flow graph for a specific function
-pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result<()> {
+pub fn analyze_cfg(
+    input: &Path,
+    function_index: usize,
+    verbose: bool,
+    inline_all_constants: bool,
+    inline_all_property_access: bool,
+    unsafe_simplify_calls: bool,
+    inline_global_this: bool,
+) -> Result<()> {
     // Read the HBC file
     let file_data = std::fs::read(input)?;
     let hbc_file = HbcFile::parse(&file_data).map_err(|e| anyhow::anyhow!(e))?;
@@ -83,8 +92,17 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
 
     // Build ControlFlowPlan if we have FunctionAnalysis
     let control_flow_plan = func_analysis.as_ref().map(|fa| {
-        let builder =
+        let mut builder =
             crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(&cfg, fa);
+
+        // Apply optimization settings
+        let mut inline_config = InlineConfig::default();
+        inline_config.inline_all_constants = inline_all_constants;
+        inline_config.inline_all_property_access = inline_all_property_access;
+        inline_config.unsafe_simplify_calls = unsafe_simplify_calls;
+        inline_config.inline_global_this = inline_global_this;
+        builder.set_inline_config(inline_config);
+
         // The builder.build() method already analyzes the plan internally
         builder.build()
     });
@@ -538,7 +556,9 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                                         format!("InlinePropertyAccess({:?})", val)
                                     }
                                     UseStrategy::InlineGlobalThis => "InlineGlobalThis".to_string(),
-                                    UseStrategy::SimplifyCall { is_method_call } => format!("SimplifyCall(method: {})", is_method_call),
+                                    UseStrategy::SimplifyCall { is_method_call } => {
+                                        format!("SimplifyCall(method: {})", is_method_call)
+                                    }
                                 };
                                 println!("      Use strategy: {}", strategy_str);
                             }
@@ -633,17 +653,18 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
             println!("  {} -> {}", dup_ssa.original_ssa_value(), status);
         }
     }
-    
+
     // Print constant value tracking if we have function analysis
     if let Some(fa) = func_analysis.as_ref() {
         println!("\n=== Constant Value Tracking ===");
-        let value_tracker = crate::analysis::value_tracker::ValueTracker::new(&fa.cfg, &fa.ssa, &hbc_file);
-        
+        let value_tracker =
+            crate::analysis::value_tracker::ValueTracker::new(&fa.cfg, &fa.ssa, &hbc_file);
+
         // Track all SSA values
         let mut constant_values = Vec::new();
         let mut phi_values = Vec::new();
         let mut param_values = Vec::new();
-        
+
         for (_def_site, ssa_value) in &fa.ssa.ssa_values {
             let tracked = value_tracker.get_value(ssa_value);
             use crate::analysis::value_tracker::TrackedValue;
@@ -668,7 +689,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 }
             }
         }
-        
+
         // Print parameters
         if !param_values.is_empty() {
             println!("Parameters:");
@@ -676,7 +697,7 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 println!("  {} = Parameter(index={})", ssa_value, index);
             }
         }
-        
+
         // Print PHI results
         if !phi_values.is_empty() {
             println!("PHI Results:");
@@ -684,13 +705,17 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                 println!("  {} = PHI result", ssa_value);
             }
         }
-        
+
         // Print constant values sorted by SSA value
         if !constant_values.is_empty() {
             println!("Constants:");
             constant_values.sort_by_key(|(ssa, _)| (ssa.register, ssa.version));
             for (ssa_value, constant) in constant_values {
-                println!("  {} = {}", ssa_value, format_constant_value(&constant, &hbc_file));
+                println!(
+                    "  {} = {}",
+                    ssa_value,
+                    format_constant_value(&constant, &hbc_file)
+                );
             }
         }
     }

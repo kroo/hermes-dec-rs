@@ -41,10 +41,13 @@ impl ConstantValue {
             _ => None,
         }
     }
-    
+
     /// Check if this value is a primitive (not an array or object)
     pub fn is_primitive(&self) -> bool {
-        !matches!(self, ConstantValue::ArrayLiteral(_) | ConstantValue::ObjectLiteral(_))
+        !matches!(
+            self,
+            ConstantValue::ArrayLiteral(_) | ConstantValue::ObjectLiteral(_)
+        )
     }
 }
 
@@ -85,10 +88,15 @@ pub struct ValueTracker<'a> {
     hbc_file: &'a HbcFile<'a>,
     /// PHI deconstructions from control flow plan (if available)
     /// Maps (block_id, context) to PHI replacement info
-    phi_deconstructions: Option<&'a std::collections::HashMap<
-        (petgraph::graph::NodeIndex, Option<crate::cfg::ssa::DuplicationContext>),
-        crate::analysis::control_flow_plan::PhiDeconstructionInfo
-    >>,
+    phi_deconstructions: Option<
+        &'a std::collections::HashMap<
+            (
+                petgraph::graph::NodeIndex,
+                Option<crate::cfg::ssa::DuplicationContext>,
+            ),
+            crate::analysis::control_flow_plan::PhiDeconstructionInfo,
+        >,
+    >,
     /// Current duplication context for value resolution
     current_context: Option<crate::cfg::ssa::DuplicationContext>,
 }
@@ -96,34 +104,37 @@ pub struct ValueTracker<'a> {
 impl<'a> ValueTracker<'a> {
     /// Create a new value tracker
     pub fn new(cfg: &'a Cfg<'a>, ssa: &'a SSAAnalysis, hbc_file: &'a HbcFile<'a>) -> Self {
-        Self { 
-            cfg, 
-            ssa, 
+        Self {
+            cfg,
+            ssa,
             hbc_file,
             phi_deconstructions: None,
             current_context: None,
         }
     }
-    
+
     /// Create a value tracker with PHI deconstruction information
     pub fn with_phi_deconstructions(
-        cfg: &'a Cfg<'a>, 
-        ssa: &'a SSAAnalysis, 
+        cfg: &'a Cfg<'a>,
+        ssa: &'a SSAAnalysis,
         hbc_file: &'a HbcFile<'a>,
         phi_deconstructions: &'a std::collections::HashMap<
-            (petgraph::graph::NodeIndex, Option<crate::cfg::ssa::DuplicationContext>),
-            crate::analysis::control_flow_plan::PhiDeconstructionInfo
+            (
+                petgraph::graph::NodeIndex,
+                Option<crate::cfg::ssa::DuplicationContext>,
+            ),
+            crate::analysis::control_flow_plan::PhiDeconstructionInfo,
         >,
     ) -> Self {
-        Self { 
-            cfg, 
-            ssa, 
+        Self {
+            cfg,
+            ssa,
             hbc_file,
             phi_deconstructions: Some(phi_deconstructions),
             current_context: None,
         }
     }
-    
+
     /// Set the current duplication context for value resolution
     pub fn with_context(mut self, context: Option<crate::cfg::ssa::DuplicationContext>) -> Self {
         self.current_context = context;
@@ -134,7 +145,9 @@ impl<'a> ValueTracker<'a> {
     pub fn get_value(&self, ssa_value: &SSAValue) -> TrackedValue {
         // First, check if we have PHI deconstructions and if this SSA value is a PHI result
         // that has been replaced in the current context
-        if let (Some(phi_decons), Some(ref context)) = (&self.phi_deconstructions, &self.current_context) {
+        if let (Some(phi_decons), Some(ref context)) =
+            (&self.phi_deconstructions, &self.current_context)
+        {
             // Check if there's a PHI replacement for this value in the current context
             // We need to check all blocks to find where this PHI result might be replaced
             for ((_block_id, ctx), phi_info) in phi_decons.iter() {
@@ -143,7 +156,9 @@ impl<'a> ValueTracker<'a> {
                     if let Some(replacement) = phi_info.replacements.get(ssa_value) {
                         log::debug!(
                             "Found PHI replacement for {} -> {} in context {:?}",
-                            ssa_value, replacement, context
+                            ssa_value,
+                            replacement,
+                            context
                         );
                         // Recursively get the value of the replacement
                         return self.get_value(replacement);
@@ -151,7 +166,7 @@ impl<'a> ValueTracker<'a> {
                 }
             }
         }
-        
+
         // Check if this SSA value is produced by a phi function
         if let Some(phi_functions) = self.ssa.phi_functions.get(&ssa_value.def_site.block_id) {
             for phi in phi_functions {
@@ -356,14 +371,14 @@ impl<'a> ValueTracker<'a> {
                 operand_3,
                 ..
             } => self.track_array_literal(*operand_1, *operand_2, *operand_3 as u32),
-            
+
             UnifiedInstruction::NewArrayWithBufferLong {
                 operand_1,
                 operand_2,
                 operand_3,
                 ..
             } => self.track_array_literal(*operand_1, *operand_2, *operand_3),
-            
+
             // Object creation with buffer
             UnifiedInstruction::NewObjectWithBuffer {
                 operand_1,
@@ -371,8 +386,13 @@ impl<'a> ValueTracker<'a> {
                 operand_3,
                 operand_4,
                 ..
-            } => self.track_object_literal(*operand_1, *operand_2, *operand_3 as u32, *operand_4 as u32),
-            
+            } => self.track_object_literal(
+                *operand_1,
+                *operand_2,
+                *operand_3 as u32,
+                *operand_4 as u32,
+            ),
+
             UnifiedInstruction::NewObjectWithBufferLong {
                 operand_1,
                 operand_2,
@@ -389,38 +409,49 @@ impl<'a> ValueTracker<'a> {
                 let undefined_array = vec![ConstantValue::Undefined; size];
                 TrackedValue::Constant(ConstantValue::ArrayLiteral(undefined_array))
             }
-            
+
             // Empty object creation
             UnifiedInstruction::NewObject { .. } => {
                 // NewObject creates an empty object
                 TrackedValue::Constant(ConstantValue::ObjectLiteral(Vec::new()))
             }
-            
+
             // Object with parent - we'll track as Unknown for now
             UnifiedInstruction::NewObjectWithParent { .. } => {
                 // This creates an object with a specific prototype chain
                 // For now, we'll treat it as unknown since we don't track prototype chains
                 TrackedValue::Unknown
             }
-            
+
             // Global object access
-            UnifiedInstruction::GetGlobalObject { .. } => {
-                TrackedValue::GlobalObject
-            }
-            
+            UnifiedInstruction::GetGlobalObject { .. } => TrackedValue::GlobalObject,
+
             // Property access instructions
-            UnifiedInstruction::GetById { operand_1, operand_2, .. } => {
+            UnifiedInstruction::GetById {
+                operand_1,
+                operand_2,
+                ..
+            } => {
                 // Get the object being accessed
-                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                if let Some(object_ssa) = self
+                    .ssa
+                    .get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx)
+                {
                     let object_value = self.get_value(object_ssa);
-                    
+
                     // Get the property name
                     if let Ok(property_name) = self.hbc_file.strings.get((*operand_2).into()) {
-                        log::trace!("GetById for {}: object reg {}, property '{}', object_value: {:?}", 
-                                   ssa_value, *operand_1, property_name, object_value);
+                        log::trace!(
+                            "GetById for {}: object reg {}, property '{}', object_value: {:?}",
+                            ssa_value,
+                            *operand_1,
+                            property_name,
+                            object_value
+                        );
                         // Avoid infinite recursion with a depth check
                         if let Some(depth) = self.get_property_chain_depth(&object_value) {
-                            if depth < 10 {  // Reasonable depth limit
+                            if depth < 10 {
+                                // Reasonable depth limit
                                 let result = TrackedValue::PropertyAccess {
                                     object: Box::new(object_value),
                                     property: property_name.clone(),
@@ -433,19 +464,33 @@ impl<'a> ValueTracker<'a> {
                 }
                 TrackedValue::Unknown
             }
-            
-            UnifiedInstruction::GetByIdShort { operand_1, operand_3, .. } => {
+
+            UnifiedInstruction::GetByIdShort {
+                operand_1,
+                operand_3,
+                ..
+            } => {
                 // Get the object being accessed (operand_1 is object register)
-                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                if let Some(object_ssa) = self
+                    .ssa
+                    .get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx)
+                {
                     let object_value = self.get_value(object_ssa);
-                    
+
                     // Get the property name (operand_3 is string ID for GetByIdShort)
-                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_3 as u32).into()) {
-                        log::trace!("GetByIdShort for {}: object reg {}, property '{}', object_value: {:?}", 
-                                   ssa_value, *operand_1, property_name, object_value);
+                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_3 as u32).into())
+                    {
+                        log::trace!(
+                            "GetByIdShort for {}: object reg {}, property '{}', object_value: {:?}",
+                            ssa_value,
+                            *operand_1,
+                            property_name,
+                            object_value
+                        );
                         // Avoid infinite recursion with a depth check
                         if let Some(depth) = self.get_property_chain_depth(&object_value) {
-                            if depth < 10 {  // Reasonable depth limit
+                            if depth < 10 {
+                                // Reasonable depth limit
                                 let result = TrackedValue::PropertyAccess {
                                     object: Box::new(object_value),
                                     property: property_name.clone(),
@@ -458,19 +503,33 @@ impl<'a> ValueTracker<'a> {
                 }
                 TrackedValue::Unknown
             }
-            
-            UnifiedInstruction::TryGetById { operand_1, operand_3, .. } => {
+
+            UnifiedInstruction::TryGetById {
+                operand_1,
+                operand_3,
+                ..
+            } => {
                 // Get the object being accessed (operand_1 is object register)
-                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                if let Some(object_ssa) = self
+                    .ssa
+                    .get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx)
+                {
                     let object_value = self.get_value(object_ssa);
-                    
+
                     // Get the property name (operand_3 is string ID for TryGetById)
-                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_3 as u32).into()) {
-                        log::trace!("TryGetById for {}: object reg {}, property '{}', object_value: {:?}", 
-                                   ssa_value, *operand_1, property_name, object_value);
+                    if let Ok(property_name) = self.hbc_file.strings.get((*operand_3 as u32).into())
+                    {
+                        log::trace!(
+                            "TryGetById for {}: object reg {}, property '{}', object_value: {:?}",
+                            ssa_value,
+                            *operand_1,
+                            property_name,
+                            object_value
+                        );
                         // Avoid infinite recursion with a depth check
                         if let Some(depth) = self.get_property_chain_depth(&object_value) {
-                            if depth < 10 {  // Reasonable depth limit
+                            if depth < 10 {
+                                // Reasonable depth limit
                                 let result = TrackedValue::PropertyAccess {
                                     object: Box::new(object_value),
                                     property: property_name.clone(),
@@ -483,17 +542,25 @@ impl<'a> ValueTracker<'a> {
                 }
                 TrackedValue::Unknown
             }
-            
-            UnifiedInstruction::GetByIdLong { operand_1, operand_2, .. } => {
+
+            UnifiedInstruction::GetByIdLong {
+                operand_1,
+                operand_2,
+                ..
+            } => {
                 // Get the object being accessed
-                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                if let Some(object_ssa) = self
+                    .ssa
+                    .get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx)
+                {
                     let object_value = self.get_value(object_ssa);
-                    
+
                     // Get the property name
                     if let Ok(property_name) = self.hbc_file.strings.get((*operand_2).into()) {
                         // Avoid infinite recursion with a depth check
                         if let Some(depth) = self.get_property_chain_depth(&object_value) {
-                            if depth < 10 {  // Reasonable depth limit
+                            if depth < 10 {
+                                // Reasonable depth limit
                                 return TrackedValue::PropertyAccess {
                                     object: Box::new(object_value),
                                     property: property_name,
@@ -504,17 +571,25 @@ impl<'a> ValueTracker<'a> {
                 }
                 TrackedValue::Unknown
             }
-            
-            UnifiedInstruction::TryGetByIdLong { operand_1, operand_3, .. } => {
+
+            UnifiedInstruction::TryGetByIdLong {
+                operand_1,
+                operand_3,
+                ..
+            } => {
                 // Get the object being accessed (operand_1 is object register)
-                if let Some(object_ssa) = self.ssa.get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx) {
+                if let Some(object_ssa) = self
+                    .ssa
+                    .get_value_before_instruction(*operand_1, ssa_value.def_site.instruction_idx)
+                {
                     let object_value = self.get_value(object_ssa);
-                    
+
                     // Get the property name (operand_3 is string ID for TryGetByIdLong)
                     if let Ok(property_name) = self.hbc_file.strings.get((*operand_3).into()) {
                         // Avoid infinite recursion with a depth check
                         if let Some(depth) = self.get_property_chain_depth(&object_value) {
-                            if depth < 10 {  // Reasonable depth limit
+                            if depth < 10 {
+                                // Reasonable depth limit
                                 return TrackedValue::PropertyAccess {
                                     object: Box::new(object_value),
                                     property: property_name,
@@ -525,7 +600,7 @@ impl<'a> ValueTracker<'a> {
                 }
                 TrackedValue::Unknown
             }
-            
+
             // TODO: Handle more operations like:
             // - Negate, Not, BitNot
             // - Mod, BitAnd, BitOr, BitXor, LShift, RShift, URshift
@@ -550,7 +625,13 @@ impl<'a> ValueTracker<'a> {
         // Get SSA values for both operands
         let val1 = if let Some(ssa1) = self.ssa.get_value_before_instruction(operand1, pc) {
             let v = self.get_value(ssa1);
-            log::trace!("Binary op at PC {} operand1 (r{}) = {} = {:?}", pc, operand1, ssa1, v);
+            log::trace!(
+                "Binary op at PC {} operand1 (r{}) = {} = {:?}",
+                pc,
+                operand1,
+                ssa1,
+                v
+            );
             v
         } else {
             log::trace!("Binary op operand1 (r{}) = Unknown (no SSA)", operand1);
@@ -618,26 +699,31 @@ impl<'a> ValueTracker<'a> {
             TrackedValue::Unknown
         }
     }
-    
+
     /// Track an array literal from NewArrayWithBuffer instruction
-    fn track_array_literal(&self, _size_hint: u16, num_literals: u16, buffer_start_index: u32) -> TrackedValue {
+    fn track_array_literal(
+        &self,
+        _size_hint: u16,
+        num_literals: u16,
+        buffer_start_index: u32,
+    ) -> TrackedValue {
         use crate::hbc::serialized_literal_parser::unpack_slp_array;
-        
+
         // Try to look up the array data from the serialized literals
         let literal_tables = &self.hbc_file.serialized_literals;
-        
+
         // Validate bounds
         if buffer_start_index as usize >= literal_tables.arrays_data.len() {
             return TrackedValue::Unknown;
         }
-        
+
         // Parse the array from serialized data
         let slice_from_offset = &literal_tables.arrays_data[buffer_start_index as usize..];
         let parsed_array = match unpack_slp_array(slice_from_offset, Some(num_literals as usize)) {
             Ok(array) => array,
             Err(_) => return TrackedValue::Unknown,
         };
-        
+
         // Convert SLPValues to ConstantValues
         let mut elements = Vec::new();
         for slp_value in parsed_array.items {
@@ -646,28 +732,36 @@ impl<'a> ValueTracker<'a> {
                 None => return TrackedValue::Unknown, // If any element can't be tracked as constant, don't track the array
             }
         }
-        
+
         TrackedValue::Constant(ConstantValue::ArrayLiteral(elements))
     }
-    
+
     /// Track an object literal from NewObjectWithBuffer instruction
-    fn track_object_literal(&self, _size_hint: u16, num_literals: u16, key_buffer_start_index: u32, value_buffer_start_index: u32) -> TrackedValue {
-        
+    fn track_object_literal(
+        &self,
+        _size_hint: u16,
+        num_literals: u16,
+        key_buffer_start_index: u32,
+        value_buffer_start_index: u32,
+    ) -> TrackedValue {
         let literal_tables = &self.hbc_file.serialized_literals;
-        
+
         // Validate bounds for keys
         let key_end_index = key_buffer_start_index + num_literals as u32;
         let value_end_index = value_buffer_start_index + num_literals as u32;
-        
-        if key_end_index as usize > literal_tables.object_keys.items.len() ||
-           value_end_index as usize > literal_tables.object_values.items.len() {
+
+        if key_end_index as usize > literal_tables.object_keys.items.len()
+            || value_end_index as usize > literal_tables.object_values.items.len()
+        {
             return TrackedValue::Unknown;
         }
-        
+
         // Get keys and values
-        let keys = &literal_tables.object_keys.items[key_buffer_start_index as usize..key_end_index as usize];
-        let values = &literal_tables.object_values.items[value_buffer_start_index as usize..value_end_index as usize];
-        
+        let keys = &literal_tables.object_keys.items
+            [key_buffer_start_index as usize..key_end_index as usize];
+        let values = &literal_tables.object_values.items
+            [value_buffer_start_index as usize..value_end_index as usize];
+
         // Convert to constant key-value pairs
         let mut properties = Vec::new();
         for (key, value) in keys.iter().zip(values.iter()) {
@@ -676,48 +770,60 @@ impl<'a> ValueTracker<'a> {
                 Some(s) => s,
                 None => return TrackedValue::Unknown,
             };
-            
+
             // Convert value to constant
             let const_val = match self.slp_value_to_constant(value) {
                 Some(v) => v,
                 None => return TrackedValue::Unknown,
             };
-            
+
             properties.push((key_str, const_val));
         }
-        
+
         TrackedValue::Constant(ConstantValue::ObjectLiteral(properties))
     }
-    
+
     /// Convert an SLPValue to a ConstantValue
-    fn slp_value_to_constant(&self, slp_value: &crate::hbc::serialized_literal_parser::SLPValue) -> Option<ConstantValue> {
+    fn slp_value_to_constant(
+        &self,
+        slp_value: &crate::hbc::serialized_literal_parser::SLPValue,
+    ) -> Option<ConstantValue> {
         use crate::hbc::serialized_literal_parser::SLPValue;
-        
+
         match slp_value {
             SLPValue::Null => Some(ConstantValue::Null),
             SLPValue::True => Some(ConstantValue::Boolean(true)),
             SLPValue::False => Some(ConstantValue::Boolean(false)),
             SLPValue::Number(n) => Some(ConstantValue::Number(*n)),
             SLPValue::Integer(i) => Some(ConstantValue::Number(*i as f64)),
-            SLPValue::LongString(id) => {
-                self.hbc_file.strings.get((*id).into()).ok()
-                    .map(|s| ConstantValue::String(s))
-            },
-            SLPValue::ShortString(id) => {
-                self.hbc_file.strings.get((*id as u32).into()).ok()
-                    .map(|s| ConstantValue::String(s))
-            },
-            SLPValue::ByteString(id) => {
-                self.hbc_file.strings.get((*id as u32).into()).ok()
-                    .map(|s| ConstantValue::String(s))
-            },
+            SLPValue::LongString(id) => self
+                .hbc_file
+                .strings
+                .get((*id).into())
+                .ok()
+                .map(|s| ConstantValue::String(s)),
+            SLPValue::ShortString(id) => self
+                .hbc_file
+                .strings
+                .get((*id as u32).into())
+                .ok()
+                .map(|s| ConstantValue::String(s)),
+            SLPValue::ByteString(id) => self
+                .hbc_file
+                .strings
+                .get((*id as u32).into())
+                .ok()
+                .map(|s| ConstantValue::String(s)),
         }
     }
-    
+
     /// Convert an SLPValue to a string (for object keys)
-    fn slp_value_to_string(&self, slp_value: &crate::hbc::serialized_literal_parser::SLPValue) -> Option<String> {
+    fn slp_value_to_string(
+        &self,
+        slp_value: &crate::hbc::serialized_literal_parser::SLPValue,
+    ) -> Option<String> {
         use crate::hbc::serialized_literal_parser::SLPValue;
-        
+
         match slp_value {
             SLPValue::LongString(id) => self.hbc_file.strings.get((*id).into()).ok(),
             SLPValue::ShortString(id) => self.hbc_file.strings.get((*id as u32).into()).ok(),
@@ -725,17 +831,17 @@ impl<'a> ValueTracker<'a> {
             _ => None, // Non-string keys not supported for now
         }
     }
-    
+
     /// Get the depth of a property chain to avoid infinite recursion
     fn get_property_chain_depth(&self, value: &TrackedValue) -> Option<usize> {
         match value {
             TrackedValue::PropertyAccess { object, .. } => {
                 self.get_property_chain_depth(object).map(|d| d + 1)
             }
-            TrackedValue::GlobalObject | 
-            TrackedValue::Constant(_) | 
-            TrackedValue::Parameter { .. } |
-            TrackedValue::Phi { .. } => Some(0),
+            TrackedValue::GlobalObject
+            | TrackedValue::Constant(_)
+            | TrackedValue::Parameter { .. }
+            | TrackedValue::Phi { .. } => Some(0),
             TrackedValue::Unknown => None,
         }
     }

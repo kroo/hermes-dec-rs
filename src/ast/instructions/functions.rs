@@ -4,8 +4,6 @@
 //! These handle function calls, returns, and parameter loading operations.
 
 use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
-use crate::ast::context::ExpressionContext;
-use crate::hbc::InstructionIndex;
 use oxc_ast::ast::Statement;
 use oxc_span::Span;
 
@@ -176,7 +174,7 @@ pub trait FunctionHelpers<'a> {
 
 impl<'a> InstructionToStatementConverter<'a> {
     /// Helper to create a call expression, potentially simplified based on the use strategy
-    /// 
+    ///
     /// This method checks if the 'this' argument should trigger call simplification:
     /// - If 'this' is undefined and simplify_calls is enabled: outputs `func(args)`
     /// - If 'this' matches the object in a member expression: outputs `obj.method(args)`
@@ -188,42 +186,51 @@ impl<'a> InstructionToStatementConverter<'a> {
         arg_regs: &[u8],
     ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
         let span = Span::default();
-        
+
         // Check if we should simplify this call
         let should_simplify = if let Some(this_reg) = this_reg {
             // Check if the 'this' argument has SimplifyCall strategy
             if let Some(current_block) = self.register_manager.current_block() {
                 let current_pc = self.expression_context.current_pc;
-                
+
                 // Create the RegisterUse for lookup
                 let use_site = crate::cfg::ssa::types::RegisterUse {
                     register: this_reg,
                     block_id: current_block,
                     instruction_idx: current_pc,
                 };
-                
+
                 // Check all use strategies to find one matching this use site
                 // We need to iterate because we don't know the exact SSA value
-                self.control_flow_plan.use_strategies.iter().any(|((_, reg_use), strategy)| {
-                    reg_use == &use_site && matches!(strategy, crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall { .. })
-                })
+                self.control_flow_plan
+                    .use_strategies
+                    .iter()
+                    .any(|((_, reg_use), strategy)| {
+                        reg_use == &use_site
+                            && matches!(
+                                strategy,
+                                crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall { .. }
+                            )
+                    })
             } else {
                 false
             }
         } else {
             false
         };
-        
-        if should_simplify && (self.inline_config.simplify_calls || self.inline_config.unsafe_simplify_calls) {
+
+        if should_simplify
+            && (self.inline_config.simplify_calls || self.inline_config.unsafe_simplify_calls)
+        {
             // Create simplified call: func(args) without .call(this, ...)
             let mut arguments = self.ast_builder.vec();
-            
+
             // Skip the 'this' argument and use the rest
             for &arg_reg in arg_regs {
                 let arg_expr = self.register_to_expression(arg_reg)?;
                 arguments.push(oxc_ast::ast::Argument::from(arg_expr));
             }
-            
+
             Ok(self.ast_builder.expression_call(
                 span,
                 func_expr,
@@ -238,21 +245,21 @@ impl<'a> InstructionToStatementConverter<'a> {
             let member_expr = self
                 .ast_builder
                 .alloc_static_member_expression(span, func_expr, call_name, false);
-            
+
             let mut arguments = self.ast_builder.vec();
-            
+
             // Add 'this' argument if present
             if let Some(this_reg) = this_reg {
                 let this_expr = self.register_to_expression(this_reg)?;
                 arguments.push(oxc_ast::ast::Argument::from(this_expr));
             }
-            
+
             // Add rest of arguments
             for &arg_reg in arg_regs {
                 let arg_expr = self.register_to_expression(arg_reg)?;
                 arguments.push(oxc_ast::ast::Argument::from(arg_expr));
             }
-            
+
             Ok(self.ast_builder.expression_call(
                 span,
                 oxc_ast::ast::Expression::StaticMemberExpression(member_expr),
@@ -338,7 +345,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let call_expr = self.create_call_expression(func_expr, this_reg, actual_args)?;
 
         let stmt = if is_side_effect_only {
-            self.ast_builder.statement_expression(Span::default(), call_expr)
+            self.ast_builder
+                .statement_expression(Span::default(), call_expr)
         } else {
             self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
         };
@@ -354,7 +362,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Check if this should be executed for side effects only
         let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
-        
+
         // Create the destination variable only if we need it
         let dest_var = if !is_side_effect_only {
             self.register_manager
@@ -373,7 +381,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let call_expr = self.create_call_expression(func_expr, Some(arg1_reg), &[])?;
 
         let stmt = if is_side_effect_only {
-            self.ast_builder.statement_expression(Span::default(), call_expr)
+            self.ast_builder
+                .statement_expression(Span::default(), call_expr)
         } else {
             self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
         };
@@ -390,7 +399,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
         // Check if this should be executed for side effects only
         let is_side_effect_only = self.should_be_side_effect_only(dest_reg);
-        
+
         // Create the destination variable only if we need it
         let dest_var = if !is_side_effect_only {
             self.register_manager
@@ -409,7 +418,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let call_expr = self.create_call_expression(func_expr, Some(arg1_reg), &[arg2_reg])?;
 
         let stmt = if is_side_effect_only {
-            self.ast_builder.statement_expression(Span::default(), call_expr)
+            self.ast_builder
+                .statement_expression(Span::default(), call_expr)
         } else {
             self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
         };
@@ -443,10 +453,12 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let func_expr = self.register_to_expression(func_reg)?;
 
         // Call3 has arg1 as 'this' and arg2, arg3 as actual arguments
-        let call_expr = self.create_call_expression(func_expr, Some(arg1_reg), &[arg2_reg, arg3_reg])?;
+        let call_expr =
+            self.create_call_expression(func_expr, Some(arg1_reg), &[arg2_reg, arg3_reg])?;
 
         let stmt = if is_side_effect_only {
-            self.ast_builder.statement_expression(Span::default(), call_expr)
+            self.ast_builder
+                .statement_expression(Span::default(), call_expr)
         } else {
             self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
         };
@@ -481,10 +493,15 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let func_expr = self.register_to_expression(func_reg)?;
 
         // Call4 has arg1 as 'this' and arg2, arg3, arg4 as actual arguments
-        let call_expr = self.create_call_expression(func_expr, Some(arg1_reg), &[arg2_reg, arg3_reg, arg4_reg])?;
+        let call_expr = self.create_call_expression(
+            func_expr,
+            Some(arg1_reg),
+            &[arg2_reg, arg3_reg, arg4_reg],
+        )?;
 
         let stmt = if is_side_effect_only {
-            self.ast_builder.statement_expression(Span::default(), call_expr)
+            self.ast_builder
+                .statement_expression(Span::default(), call_expr)
         } else {
             self.create_variable_declaration_or_assignment(&dest_var, Some(call_expr))?
         };
@@ -509,12 +526,10 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         &mut self,
         value_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let value_var = self.register_manager.get_variable_name(value_reg);
+        // Use register_to_expression to handle inlining properly
+        let value_expr = self.register_to_expression(value_reg)?;
 
         let span = Span::default();
-        let value_atom = self.ast_builder.allocator.alloc_str(&value_var);
-        let value_expr = self.ast_builder.expression_identifier(span, value_atom);
-
         let throw_stmt = self.ast_builder.statement_throw(span, value_expr);
 
         Ok(InstructionResult::Statement(throw_stmt))
@@ -816,15 +831,11 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let constructor_var = self.register_manager.get_variable_name(constructor_reg);
 
         let span = Span::default();
 
-        // Create constructor.call expression
-        let constructor_atom = self.ast_builder.allocator.alloc_str(&constructor_var);
-        let constructor_expr = self
-            .ast_builder
-            .expression_identifier(span, constructor_atom);
+        // Create constructor expression using register_to_expression to handle inlining
+        let constructor_expr = self.register_to_expression(constructor_reg)?;
 
         // Create the .call member expression
         let call_atom = self.ast_builder.allocator.alloc_str("call");
@@ -853,10 +864,10 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             {
                 // Use the actual argument registers from the analysis
                 // The first argument is 'this', followed by the constructor's actual arguments
-                for &arg_reg in &call_site_info.argument_registers {
-                    let arg_var = self.register_manager.get_variable_name(arg_reg);
-                    let arg_atom = self.ast_builder.allocator.alloc_str(&arg_var);
-                    let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
+                let arg_registers = call_site_info.argument_registers.clone();
+                for arg_reg in arg_registers {
+                    // Use register_to_expression to handle inlining properly
+                    let arg_expr = self.register_to_expression(arg_reg)?;
                     arguments.push(oxc_ast::ast::Argument::from(arg_expr));
                 }
             } else {
@@ -914,17 +925,14 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let code_var = self.register_manager.get_variable_name(code_reg);
-
         let span = Span::default();
 
         // Create eval function expression
         let eval_atom = self.ast_builder.allocator.alloc_str("eval");
         let eval_expr = self.ast_builder.expression_identifier(span, eval_atom);
 
-        // Create code argument
-        let code_atom = self.ast_builder.allocator.alloc_str(&code_var);
-        let code_expr = self.ast_builder.expression_identifier(span, code_atom);
+        // Use register_to_expression for code argument to handle inlining
+        let code_expr = self.register_to_expression(code_reg)?;
 
         let mut arguments = self.ast_builder.vec();
         arguments.push(oxc_ast::ast::Argument::from(code_expr));
@@ -961,25 +969,49 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
             .lookup_function_name(func_idx)
             .unwrap_or_else(|_| format!("function_{}", func_idx));
 
-        // Create function parameters (empty for now)
-        let params = self.ast_builder.formal_parameters(
-            span,
-            oxc_ast::ast::FormalParameterKind::FormalParameter,
-            self.ast_builder.vec(),
-            None::<oxc_ast::ast::BindingRestElement>,
-        );
+        // Get parameter count and create parameters
+        let param_count = self
+            .expression_context
+            .lookup_function_param_count(func_idx)
+            .unwrap_or(0);
 
-        let body_comment = "/* Nested function - body not yet decompiled */";
-        let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
-        let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
-        let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+        let params = self.create_function_parameters(param_count, func_idx);
 
-        let mut body_stmts = self.ast_builder.vec();
-        body_stmts.push(comment_stmt);
+        // Create function body
+        let body = if self.decompile_nested {
+            // Decompile the nested function
+            match self.decompile_nested_function_body(func_idx) {
+                Ok(body_stmts) => {
+                    self.ast_builder
+                        .function_body(span, self.ast_builder.vec(), body_stmts)
+                }
+                Err(e) => {
+                    // If decompilation fails, show error in placeholder
+                    let error_msg = format!("/* Nested function - decompilation error: {} */", e);
+                    let error_atom = self.ast_builder.allocator.alloc_str(&error_msg);
+                    let error_expr = self.ast_builder.expression_identifier(span, error_atom);
+                    let error_stmt = self.ast_builder.statement_expression(span, error_expr);
 
-        let body = self
-            .ast_builder
-            .function_body(span, self.ast_builder.vec(), body_stmts);
+                    let mut error_stmts = self.ast_builder.vec();
+                    error_stmts.push(error_stmt);
+
+                    self.ast_builder
+                        .function_body(span, self.ast_builder.vec(), error_stmts)
+                }
+            }
+        } else {
+            // Use placeholder
+            let body_comment = "/* Nested function - body not yet decompiled */";
+            let comment_atom = self.ast_builder.allocator.alloc_str(&body_comment);
+            let comment_expr = self.ast_builder.expression_identifier(span, comment_atom);
+            let comment_stmt = self.ast_builder.statement_expression(span, comment_expr);
+
+            let mut body_stmts = self.ast_builder.vec();
+            body_stmts.push(comment_stmt);
+
+            self.ast_builder
+                .function_body(span, self.ast_builder.vec(), body_stmts)
+        };
 
         // Create function expression
         let func_name_atom = self.ast_builder.allocator.alloc_str(&func_name);
@@ -1283,7 +1315,6 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
-        let prop_var = self.register_manager.get_variable_name(prop_reg);
 
         let span = Span::default();
 
@@ -1291,8 +1322,8 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         let args_atom = self.ast_builder.allocator.alloc_str("arguments");
         let args_expr = self.ast_builder.expression_identifier(span, args_atom);
 
-        let prop_atom = self.ast_builder.allocator.alloc_str(&prop_var);
-        let prop_expr = self.ast_builder.expression_identifier(span, prop_atom);
+        // Use register_to_expression for prop to handle inlining
+        let prop_expr = self.register_to_expression(prop_reg)?;
 
         let member_expr = self
             .ast_builder
@@ -1385,74 +1416,73 @@ impl<'a> InstructionToStatementConverter<'a> {
             )
         })?;
 
-        // No need to build CFG - it's already in the function analysis
-
-        // Create a new expression context for the nested function
-        let nested_context =
-            ExpressionContext::with_context(hbc_file, function_index, InstructionIndex::zero());
-
-        // Get function analysis for the nested function
-        let nested_function_analysis = self
-            .hbc_analysis
-            .get_function_analysis_ref(function_index)
-            .ok_or_else(|| {
+        // Build function analysis for the nested function
+        // Get the function from HBC file
+        let function = hbc_file
+            .functions
+            .get(function_index, hbc_file)
+            .map_err(|e| {
                 StatementConversionError::UnsupportedInstruction(format!(
-                    "Function analysis not available for nested function {}",
-                    function_index
+                    "Function {} not found: {:?}",
+                    function_index, e
                 ))
             })?;
+
+        // Build CFG for the nested function
+        let mut cfg = crate::cfg::Cfg::new(hbc_file, function_index);
+        cfg.build();
+
+        // Build SSA for the nested function
+        let ssa = crate::cfg::ssa::construct_ssa(&cfg, function_index).map_err(|e| {
+            StatementConversionError::UnsupportedInstruction(format!(
+                "Failed to build SSA for nested function {}: {:?}",
+                function_index, e
+            ))
+        })?;
+
+        // Create function analysis for the nested function
+        let nested_function_analysis =
+            crate::analysis::FunctionAnalysis::new(function, cfg, ssa, hbc_file, function_index);
 
         // Build and analyze the control flow plan for the nested function
         let plan_builder = crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(
             &nested_function_analysis.cfg,
-            nested_function_analysis,
+            &nested_function_analysis,
         );
         let mut plan = plan_builder.build();
 
+        log::debug!(
+            "Nested function {} plan has {} structures",
+            function_index,
+            plan.structures.len()
+        );
+
         // Analyze the plan to determine declaration and use strategies
-        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
+        // Use the same inline configuration as the parent function
+        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::with_inline_config(
             &mut plan,
-            nested_function_analysis,
+            &nested_function_analysis,
+            &self.inline_config,
         );
         analyzer.analyze();
 
-        // Create a new instruction converter for the nested function with the plan
-        let mut nested_converter = InstructionToStatementConverter::new(
+        // Now convert the control flow plan to AST statements
+        let mut converter = crate::ast::control_flow_plan_converter::ControlFlowPlanConverter::new(
             self.ast_builder,
-            nested_context.clone(),
+            hbc_file,
             self.hbc_analysis,
+            function_index,
+            &nested_function_analysis,
             plan,
+            false, // no SSA comments in nested functions
+            false, // no instruction comments in nested functions
+            &self.inline_config,
         );
 
-        // Keep the same decompile_nested setting for nested functions
-        // This allows deeply nested functions to be decompiled
-        nested_converter.set_decompile_nested(self.decompile_nested);
+        // Keep the same decompile_nested setting for deeply nested functions
+        converter.set_decompile_nested(self.decompile_nested);
 
-        // TODO: Complete nested function decompilation using ControlFlowPlanConverter
-        Err(StatementConversionError::UnsupportedInstruction(
-            "Nested function decompilation temporarily disabled - need to port to ControlFlowPlanConverter"
-                .to_string(),
-        ))
-
-        // Original code commented out:
-        // // Create block converter for the nested function
-        // let mut block_converter = crate::ast::control_flow::BlockToStatementConverter::new(
-        //     self.ast_builder,
-        //     nested_function_analysis,
-        //     self.hbc_analysis,
-        //     false, // no instruction comments in nested functions
-        //     false, // no SSA comments in nested functions
-        // );
-        // block_converter.set_decompile_nested(self.decompile_nested);
-        //
-        // // Convert the nested function's blocks to statements
-        // block_converter
-        //     .convert_blocks_from_cfg(&nested_function_analysis.cfg)
-        //     .map_err(|e| {
-        //         StatementConversionError::UnsupportedInstruction(format!(
-        //             "Failed to convert nested function blocks: {}",
-        //             e
-        //         ))
-        //     })
+        // Convert the control flow plan to statements
+        Ok(converter.convert_to_ast())
     }
 }

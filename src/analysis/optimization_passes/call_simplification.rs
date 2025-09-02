@@ -13,15 +13,15 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
     if !ctx.inline_config.simplify_calls && !ctx.inline_config.unsafe_simplify_calls {
         return;
     }
-    
+
     log::debug!(
         "Analyzing {} call sites for simplification",
         ctx.plan.call_site_analysis.call_sites.len()
     );
-    
+
     // Collect updates to apply later (to avoid borrowing conflicts)
     let mut updates_to_apply = Vec::new();
-    
+
     {
         // Create value tracker
         let value_tracker = ValueTracker::with_phi_deconstructions(
@@ -30,14 +30,14 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
             ctx.function_analysis.hbc_file,
             &ctx.plan.phi_deconstructions,
         );
-        
+
         // Iterate through all call sites
         for ((block_id, pc), call_site_info) in &ctx.plan.call_site_analysis.call_sites {
             // Skip constructor calls - they have different semantics
             if call_site_info.is_constructor {
                 continue;
             }
-            
+
             // Get the 'this' argument register (first argument for calls)
             if let Some(&this_reg) = call_site_info.argument_registers.first() {
                 // Find the SSA value for the 'this' register at this use site
@@ -46,11 +46,12 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
                     block_id: *block_id,
                     instruction_idx: *pc,
                 };
-                
+
                 // Look up the SSA value from the use-def chain
                 if let Some(def_site) = ctx.function_analysis.ssa.use_def_chains.get(&use_site) {
                     // Find the SSA value with this def site
-                    if let Some(ssa_value) = ctx.function_analysis
+                    if let Some(ssa_value) = ctx
+                        .function_analysis
                         .ssa
                         .ssa_values
                         .values()
@@ -62,7 +63,7 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
                             tracked_value,
                             TrackedValue::Constant(ConstantValue::Undefined)
                         );
-                        
+
                         let should_simplify = if is_undefined && ctx.inline_config.simplify_calls {
                             // Safe simplification: fn.call(undefined, ...) -> fn(...)
                             log::debug!(
@@ -80,7 +81,7 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
                             // 4. Verify no accessor/reactivity concerns on the object or function property
                             // 5. Check this behavior matches (strict mode, bound functions, etc.)
                             // 6. Ensure it's a normal method call site (no optional chaining)
-                            // 
+                            //
                             // For now, we unsafely simplify all non-undefined 'this' values
                             // This is NOT semantics-preserving in all cases!
                             if !is_undefined {
@@ -96,7 +97,7 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
                         } else {
                             false
                         };
-                        
+
                         if should_simplify {
                             // Check if this use is in a duplicated block
                             if let Some(contexts) = ctx.duplicated_blocks.get(block_id) {
@@ -106,7 +107,7 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
                                         original: ssa_value.clone(),
                                         duplication_context: Some(context.clone()),
                                     };
-                                    
+
                                     // Collect update to apply later
                                     // is_method_call is true if 'this' is not undefined
                                     updates_to_apply.push((
@@ -120,7 +121,7 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
                             } else {
                                 // Normal use, not in a duplicated block
                                 let dup_value = DuplicatedSSAValue::original(ssa_value.clone());
-                                
+
                                 // Collect update to apply later
                                 updates_to_apply.push((
                                     dup_value,
@@ -136,7 +137,7 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
             }
         }
     }
-    
+
     // Apply all updates
     for (dup_value, use_site, strategy) in updates_to_apply {
         ctx.plan.set_use_strategy(dup_value, use_site, strategy);

@@ -510,6 +510,10 @@ impl<'a> FunctionDecompiler<'a> {
             self.options.include_instruction_comments,
             &self.options.inline_config,
         );
+
+        // Set whether to decompile nested functions
+        converter.set_decompile_nested(self.options.decompile_nested);
+
         let all_statements = converter.convert_to_ast();
 
         // Take the comment manager back from the converter

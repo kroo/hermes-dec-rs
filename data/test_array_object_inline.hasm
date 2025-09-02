@@ -1,8 +1,8 @@
 Bytecode File Information:
   Bytecode version number: 96
-  Source hash: 8a0ac4bfa697a617f3e2abb8eab486eecc430546
+  Source hash: cfa9542d935dccaf77b3ab37a9d87c0d4b49d6d2
   Function count: 2
-  String count: 13
+  String count: 14
   BigInt count: 0
   String Kind Entry count: 2
   RegExp count: 0
@@ -16,18 +16,19 @@ Bytecode File Information:
 
 Global String Table:
 s0[ASCII, 13..18] #8236AAAB: global
-s1[ASCII, 0..11] #1C35E808: customGlobal
-s2[ASCII, 11..13] #F3091991: log
-s3[ASCII, 13..22] #00018270: globalThis
-s4[ASCII, 17..17] #1C182460: a
-s5[ASCII, 23..26] #5A7E6397: Math
-s6[ASCII, 27..29] #DC53DBCF: arr
-s7[ASCII, 30..32] #00018E43: obj
-s8[ASCII, 31..31] #00018A52: b
-s9[ASCII, 33..33] #629A2BFD: c
-s10[ASCII, 33..39] #5A3857F6: console
-s11[ASCII, 40..42] #235B2AD4: max
-s12[ASCII, 43..65] testArrayObjectInlining
+s1[ASCII, 23..26] #1C35E808: test
+s2[ASCII, 0..11] #F3091991: customGlobal
+s3[ASCII, 11..13] #00018270: log
+s4[ASCII, 13..22] #235B2AD4: globalThis
+s5[ASCII, 17..17] #1C182460: a
+s6[ASCII, 23..45] #5A7E6397: testArrayObjectInlining
+s7[ASCII, 46..49] #DC53DBCF: Math
+s8[ASCII, 50..52] #00018E43: arr
+s9[ASCII, 53..55] #00018A52: obj
+s10[ASCII, 54..54] #629A2BFD: b
+s11[ASCII, 56..56] #5A3857F6: c
+s12[ASCII, 56..62] console
+s13[ASCII, 63..65] max
 
 Array Buffer:
 Integer(1)
@@ -39,8 +40,8 @@ Integer(10)
 Integer(20)
 Integer(30)
 Object Key Buffer:
-[String 4]
-[String 8]
+[String 5]
+[String 10]
 Object Value Buffer:
 [int 1]
 [int 2]
@@ -89,6 +90,15 @@ Function<testArrayObjectInlining>1(1 params, 17 registers, 0 symbols):
   CallBuiltin       r2, 47, 4
   TryGetById        r1, r1, 5, "globalThis"
   GetByIdShort      r2, r1, 6, "customGlobal"
-  GetByIdShort      r1, r1, 1, "console"
+  GetByIdShort      r3, r1, 1, "console"
+  JmpFalse          L1, r2
+  LoadConstUndefined r1
+  Call1             r1, r2, r1
+L1:
+  JmpFalse          L2, r3
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "test"
+  Call2             r1, r2, r3, r1
+L2:
   Ret               r0
 

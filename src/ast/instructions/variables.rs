@@ -132,7 +132,7 @@ impl<'a> VariableHelpers<'a> for InstructionToStatementConverter<'a> {
         if self.should_skip_declaration(dest_reg) {
             return Ok(InstructionResult::None);
         }
-        
+
         // Use source_register_to_expression to respect use strategies (e.g., inlining constants)
         let src_expr = self.source_register_to_expression(src_reg)?;
 

@@ -434,10 +434,12 @@ impl SSAAnalysis {
         instruction_idx: InstructionIndex,
     ) -> Option<&SSAValue> {
         // First, find which block this instruction is in
-        let block_for_instruction = self.definitions.iter()
+        let block_for_instruction = self
+            .definitions
+            .iter()
             .find(|def| def.instruction_idx == instruction_idx)
             .map(|def| def.block_id);
-        
+
         // If we know the block, check if there's a PHI function for this register in this block
         // PHI functions conceptually execute at the start of a block, so if we're looking for
         // a value before any instruction in that block (except the first), we should use the PHI result
@@ -446,12 +448,13 @@ impl SSAAnalysis {
                 if let Some(phi) = phis.iter().find(|phi| phi.register == register) {
                     // Check if this instruction is AFTER the block start
                     // We need to find the first instruction index in this block
-                    let block_start_idx = self.definitions
+                    let block_start_idx = self
+                        .definitions
                         .iter()
                         .filter(|def| def.block_id == block_id)
                         .map(|def| def.instruction_idx)
                         .min();
-                    
+
                     // If this instruction is after the block start, use the PHI result
                     if let Some(start_idx) = block_start_idx {
                         if instruction_idx > start_idx {

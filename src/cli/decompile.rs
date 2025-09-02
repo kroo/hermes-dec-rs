@@ -1,4 +1,4 @@
-use crate::decompiler::{Decompiler, DecompileOptions};
+use crate::decompiler::{DecompileOptions, Decompiler};
 use crate::error::{Error as DecompilerError, Result as DecompilerResult};
 use crate::hbc::HbcFile;
 use std::fs;
@@ -69,16 +69,21 @@ pub fn decompile(args: &DecompileArgs) -> DecompilerResult<()> {
     let options = args.to_options();
 
     // Decompile the specific function
-    let output =
-        match decompiler.decompile_function_with_options(&hbc_file, args.function_index as u32, options)
-        {
-            Ok(output) => output,
-            Err(e) => {
-                return Err(DecompilerError::Internal {
-                    message: format!("Failed to decompile function {}: {}", args.function_index, e),
-                });
-            }
-        };
+    let output = match decompiler.decompile_function_with_options(
+        &hbc_file,
+        args.function_index as u32,
+        options,
+    ) {
+        Ok(output) => output,
+        Err(e) => {
+            return Err(DecompilerError::Internal {
+                message: format!(
+                    "Failed to decompile function {}: {}",
+                    args.function_index, e
+                ),
+            });
+        }
+    };
 
     // Write output
     match &args.output_path {

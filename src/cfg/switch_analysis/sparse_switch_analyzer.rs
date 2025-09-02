@@ -531,7 +531,8 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                                     ConstantValue::Boolean(b) => CaseKey::Boolean(b),
                                     ConstantValue::Null => CaseKey::Null,
                                     ConstantValue::Undefined => CaseKey::Undefined,
-                                    ConstantValue::ArrayLiteral(_) | ConstantValue::ObjectLiteral(_) => {
+                                    ConstantValue::ArrayLiteral(_)
+                                    | ConstantValue::ObjectLiteral(_) => {
                                         // Arrays and objects can't be switch case keys
                                         continue;
                                     }
