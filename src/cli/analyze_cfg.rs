@@ -22,6 +22,7 @@ pub fn analyze_cfg(
     inline_all_property_access: bool,
     unsafe_simplify_calls: bool,
     inline_global_this: bool,
+    inline_parameters: bool,
 ) -> Result<()> {
     // Read the HBC file
     let file_data = std::fs::read(input)?;
@@ -101,6 +102,7 @@ pub fn analyze_cfg(
         inline_config.inline_all_property_access = inline_all_property_access;
         inline_config.unsafe_simplify_calls = unsafe_simplify_calls;
         inline_config.inline_global_this = inline_global_this;
+        inline_config.inline_parameters = inline_parameters;
         builder.set_inline_config(inline_config);
 
         // The builder.build() method already analyzes the plan internally
@@ -554,6 +556,9 @@ pub fn analyze_cfg(
                                     }
                                     UseStrategy::InlinePropertyAccess(ref val) => {
                                         format!("InlinePropertyAccess({:?})", val)
+                                    }
+                                    UseStrategy::InlineParameter { param_index } => {
+                                        format!("InlineParameter({})", param_index)
                                     }
                                     UseStrategy::InlineGlobalThis => "InlineGlobalThis".to_string(),
                                     UseStrategy::SimplifyCall { is_method_call } => {

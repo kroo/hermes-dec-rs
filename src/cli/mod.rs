@@ -108,6 +108,7 @@ impl Cli {
                     inline_property_access: None,
                     inline_all_property_access: None,
                     inline_global_this: None,
+                    inline_parameters: None,
                     simplify_calls: None,
                     unsafe_simplify_calls: None,
                 };
@@ -147,7 +148,7 @@ impl Cli {
                 verbose,
             } => {
                 // Use default optimization settings for the simplified CLI
-                analyze_cfg::analyze_cfg(&input, function, verbose, false, false, false, false)?;
+                analyze_cfg::analyze_cfg(&input, function, verbose, false, false, false, false, false)?;
             }
         }
 

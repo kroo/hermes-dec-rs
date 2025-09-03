@@ -548,12 +548,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
 
         // Create parameter name based on index
         // Account for implicit 'this' parameter at index 0
-        let param_name = if param_index > 0 {
-            format!("arg{}", param_index - 1)
-        } else {
-            // This is the implicit 'this' parameter
-            "this".to_string()
-        };
+        let param_name = self.variable_mapper.get_parameter_name(param_index as u8);
         let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
         let param_expr = self.ast_builder.expression_identifier(span, param_atom);
 
@@ -879,11 +874,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
                 );
                 // First argument is 'this', rest are constructor arguments
                 for i in 0..arg_count {
-                    let arg_name = if i == 0 {
-                        "this".to_string()
-                    } else {
-                        format!("arg{}", i - 1)
-                    };
+                    let arg_name = self.variable_mapper.get_parameter_name(i as u8);
                     let arg_atom = self.ast_builder.allocator.alloc_str(&arg_name);
                     let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
                     arguments.push(oxc_ast::ast::Argument::from(arg_expr));
@@ -892,11 +883,7 @@ impl<'a> FunctionHelpers<'a> for InstructionToStatementConverter<'a> {
         } else {
             // No current block context - use placeholder arguments
             for i in 0..arg_count {
-                let arg_name = if i == 0 {
-                    "this".to_string()
-                } else {
-                    format!("arg{}", i - 1)
-                };
+                let arg_name = self.variable_mapper.get_parameter_name(i as u8);
                 let arg_atom = self.ast_builder.allocator.alloc_str(&arg_name);
                 let arg_expr = self.ast_builder.expression_identifier(span, arg_atom);
                 arguments.push(oxc_ast::ast::Argument::from(arg_expr));

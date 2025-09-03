@@ -9,7 +9,7 @@ use super::control_flow_plan::{
 };
 use crate::analysis::optimization_passes::{
     analyze_call_simplification, perform_constant_inlining, perform_global_this_inlining,
-    perform_property_access_inlining, OptimizationContext,
+    perform_parameter_inlining, perform_property_access_inlining, OptimizationContext,
 };
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker, UseStrategy};
 use crate::analysis::FunctionAnalysis;
@@ -77,6 +77,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 None,
                 None,
                 None,
+                None,
             ),
         }
     }
@@ -121,7 +122,8 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 match self.plan.use_strategies.get(&key) {
                     Some(UseStrategy::InlineValue(_))
                     | Some(UseStrategy::InlinePropertyAccess(_))
-                    | Some(UseStrategy::InlineGlobalThis) => {
+                    | Some(UseStrategy::InlineGlobalThis)
+                    | Some(UseStrategy::InlineParameter { .. }) => {
                         // Good, it's being inlined
                     }
                     Some(UseStrategy::SimplifyCall { .. }) => {
@@ -199,6 +201,9 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             if need_property_inlining {
                 perform_property_access_inlining(&mut opt_context);
             }
+
+            // Perform parameter inlining if enabled
+            perform_parameter_inlining(&mut opt_context);
 
             // Analyze call sites for simplification if enabled
             if self.inline_config.simplify_calls || self.inline_config.unsafe_simplify_calls {

@@ -44,6 +44,8 @@ pub struct InlineConfig {
     pub simplify_calls: bool,
     /// Unsafely simplify method calls (e.g., obj.fn.call(obj, args) -> obj.fn(args))
     pub unsafe_simplify_calls: bool,
+    /// Inline parameter references to use original parameter names (this, arg0, arg1, etc.)
+    pub inline_parameters: bool,
 }
 
 impl Default for InlineConfig {
@@ -56,6 +58,7 @@ impl Default for InlineConfig {
             inline_global_this: false,
             simplify_calls: false,
             unsafe_simplify_calls: false,
+            inline_parameters: false,
         }
     }
 }
@@ -81,6 +84,7 @@ impl InlineConfig {
         inline_global_this: Option<bool>,
         simplify_calls: Option<bool>,
         unsafe_simplify_calls: Option<bool>,
+        inline_parameters: Option<bool>,
     ) -> Self {
         // Enable global_this inlining by default if any other inlining is enabled
         let any_inline = inline_constants
@@ -97,6 +101,7 @@ impl InlineConfig {
             inline_global_this,
             simplify_calls: simplify_calls.unwrap_or(any_inline),
             unsafe_simplify_calls: unsafe_simplify_calls.unwrap_or(false),
+            inline_parameters: inline_parameters.unwrap_or(false),
         }
     }
 }
@@ -141,6 +146,7 @@ impl DecompileOptions {
         inline_global_this: Option<bool>,
         simplify_calls: Option<bool>,
         unsafe_simplify_calls: Option<bool>,
+        inline_parameters: Option<bool>,
     ) -> Self {
         let include_instruction_comments =
             comments.contains("instructions") || comments.contains("pc");
@@ -159,6 +165,7 @@ impl DecompileOptions {
                 inline_global_this,
                 simplify_calls,
                 unsafe_simplify_calls,
+                inline_parameters,
             ),
         }
     }
@@ -278,6 +285,7 @@ impl Decompiler {
             false,
             false,
             false,
+            None,
             None,
             None,
             None,
@@ -593,7 +601,8 @@ impl<'a> FunctionDecompiler<'a> {
         let param_names: Vec<String> = if actual_param_count > 0 {
             (0..actual_param_count)
                 .map(|i| {
-                    let param_name = format!("arg{}", i);
+                    // param_index starts at 1 since 0 is 'this'
+                    let param_name = crate::ast::variables::VariableMapper::get_parameter_name_static((i + 1) as u8);
                     // Check if this parameter has a default value
                     if let Some(default_info) = default_params.get(&(i as u32)) {
                         // Extract the default value from the instruction

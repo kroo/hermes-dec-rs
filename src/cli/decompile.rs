@@ -19,6 +19,7 @@ pub struct DecompileArgs {
     pub inline_global_this: Option<bool>,
     pub simplify_calls: Option<bool>,
     pub unsafe_simplify_calls: Option<bool>,
+    pub inline_parameters: Option<bool>,
 }
 
 impl DecompileArgs {
@@ -35,6 +36,7 @@ impl DecompileArgs {
             self.inline_global_this,
             self.simplify_calls,
             self.unsafe_simplify_calls,
+            self.inline_parameters,
         )
     }
 }

@@ -89,6 +89,9 @@ pub enum UseStrategy {
     /// Inline globalThis directly
     InlineGlobalThis,
 
+    /// Inline parameter reference directly (this, arg0, arg1, etc.)
+    InlineParameter { param_index: u8 },
+
     /// Simplify call pattern (for 'this' argument in Call instructions)
     /// Contains the function expression and whether it matches the object.method pattern
     SimplifyCall { is_method_call: bool },
@@ -465,47 +468,67 @@ impl<'a> SSAUsageTracker<'a> {
     ) -> DeclarationStrategy {
         let ssa_value = dup_ssa_value.original_ssa_value();
 
-        // Check for side effects first - even if a value has no uses,
-        // we need to execute the instruction if it has side effects
-        if let Some(block) = self
-            .function_analysis
-            .cfg
-            .graph()
-            .node_weight(ssa_value.def_site.block_id)
-        {
-            for instr in &block.instructions {
-                if instr.instruction_index == ssa_value.def_site.instruction_idx {
-                    if has_side_effects(&instr.instruction) {
-                        // Check if this value has any uses
-                        let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
-                        if all_uses.is_empty()
-                            || self.is_duplicated_fully_eliminated_with_context(
-                                dup_ssa_value,
-                                call_site_analysis,
-                            )
-                        {
-                            // Special case: Array/object literals with constant contents can be eliminated
-                            if self.is_eliminable_literal(&instr.instruction) {
-                                // Check if this is a constant array/object that can be eliminated
-                                let value_tracker = self.function_analysis.value_tracker();
-                                let tracked_value = value_tracker.get_value(ssa_value);
-                                if let TrackedValue::Constant(_) = tracked_value {
-                                    trace!(
-                                        "SSA value {} is an unused constant literal, using Skip",
-                                        ssa_value
-                                    );
-                                    return DeclarationStrategy::Skip;
-                                }
-                            }
+        // Check if this value is part of a PHI group OR is a PHI operand with a used result
+        // PHI operands need to be assigned even if they appear to have no direct uses
+        let is_phi_related = if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
+            if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
+                trace!(
+                    "{} is part of PHI group with representative {}",
+                    ssa_value,
+                    coalesced_rep
+                );
+                true // This is part of a coalesced PHI group
+            } else {
+                // Not coalesced, but check if it's a PHI operand with a used result
+                self.is_phi_operand_with_used_result(ssa_value)
+            }
+        } else {
+            // No variable analysis, still check if it's a PHI operand
+            self.is_phi_operand_with_used_result(ssa_value)
+        };
 
-                            trace!(
-                                "SSA value {} has side effects but no uses, using SideEffectOnly",
-                                ssa_value
-                            );
-                            return DeclarationStrategy::SideEffectOnly;
+        if !is_phi_related {
+            // Not PHI-related, check for side effects
+            if let Some(block) = self
+                .function_analysis
+                .cfg
+                .graph()
+                .node_weight(ssa_value.def_site.block_id)
+            {
+                for instr in &block.instructions {
+                    if instr.instruction_index == ssa_value.def_site.instruction_idx {
+                        if has_side_effects(&instr.instruction) {
+                            // Check if this value has any uses
+                            let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
+                            if all_uses.is_empty()
+                                || self.is_duplicated_fully_eliminated_with_context(
+                                    dup_ssa_value,
+                                    call_site_analysis,
+                                )
+                            {
+                                // Special case: Array/object literals with constant contents can be eliminated
+                                if self.is_eliminable_literal(&instr.instruction) {
+                                    // Check if this is a constant array/object that can be eliminated
+                                    let value_tracker = self.function_analysis.value_tracker();
+                                    let tracked_value = value_tracker.get_value(ssa_value);
+                                    if let TrackedValue::Constant(_) = tracked_value {
+                                        trace!(
+                                            "SSA value {} is an unused constant literal, using Skip",
+                                            ssa_value
+                                        );
+                                        return DeclarationStrategy::Skip;
+                                    }
+                                }
+
+                                trace!(
+                                    "SSA value {} has side effects but no uses, using SideEffectOnly",
+                                    ssa_value
+                                );
+                                return DeclarationStrategy::SideEffectOnly;
+                            }
                         }
+                        break;
                     }
-                    break;
                 }
             }
         }
@@ -664,6 +687,41 @@ impl<'a> SSAUsageTracker<'a> {
             for phi in phi_list {
                 if &phi.result == ssa_value {
                     return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if a value is used as a PHI operand where the PHI result is used
+    fn is_phi_operand_with_used_result(&self, ssa_value: &SSAValue) -> bool {
+        // Check all PHI functions to see if this value is an operand
+        for phi_list in self.ssa().phi_functions.values() {
+            for phi in phi_list {
+                // Check if this value is an operand of this PHI
+                if phi.operands.values().any(|operand| operand == ssa_value) {
+                    // This value is a PHI operand - now check if the PHI result is used
+                    // First check direct uses
+                    let phi_result_uses = self.ssa().get_ssa_value_uses(&phi.result);
+                    if !phi_result_uses.is_empty() {
+                        trace!(
+                            "SSA value {} is PHI operand for {} which has {} uses",
+                            ssa_value,
+                            phi.result,
+                            phi_result_uses.len()
+                        );
+                        return true;
+                    }
+                    
+                    // Also recursively check if the PHI result itself feeds into another used PHI
+                    if self.is_phi_operand_with_used_result(&phi.result) {
+                        trace!(
+                            "SSA value {} is PHI operand for {} which feeds into another used PHI",
+                            ssa_value,
+                            phi.result
+                        );
+                        return true;
+                    }
                 }
             }
         }

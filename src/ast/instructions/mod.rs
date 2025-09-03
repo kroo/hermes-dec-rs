@@ -190,6 +190,8 @@ pub struct InstructionToStatementConverter<'a> {
     pub control_flow_plan: Rc<crate::analysis::control_flow_plan::ControlFlowPlan>,
     /// Inline configuration settings
     pub inline_config: crate::decompiler::InlineConfig,
+    /// Variable mapper for consistent naming
+    variable_mapper: crate::ast::variables::VariableMapper,
 }
 
 impl<'a> InstructionToStatementConverter<'a> {
@@ -211,12 +213,18 @@ impl<'a> InstructionToStatementConverter<'a> {
             current_duplication_context: None,
             control_flow_plan: control_flow_plan_rc,
             inline_config: crate::decompiler::InlineConfig::default(),
+            variable_mapper: crate::ast::variables::VariableMapper::new(),
         }
     }
 
     /// Set the inline configuration
     pub fn set_inline_config(&mut self, config: crate::decompiler::InlineConfig) {
         self.inline_config = config;
+    }
+
+    /// Set the variable mapper
+    pub fn set_variable_mapper(&mut self, mapper: crate::ast::variables::VariableMapper) {
+        self.variable_mapper = mapper;
     }
 
     /// Set the current program counter for context-aware operations
@@ -416,6 +424,13 @@ impl<'a> InstructionToStatementConverter<'a> {
                             log::debug!("Inlining globalThis");
                             let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
                             return Ok(self.ast_builder.expression_identifier(span, global_atom));
+                        }
+                        crate::analysis::ssa_usage_tracker::UseStrategy::InlineParameter { param_index } => {
+                            // Inline parameter reference directly
+                            let param_name = self.variable_mapper.get_parameter_name(*param_index);
+                            log::debug!("Inlining parameter: {}", param_name);
+                            let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
+                            return Ok(self.ast_builder.expression_identifier(span, param_atom));
                         }
                         crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall {
                             ..
@@ -2224,9 +2239,9 @@ impl<'a> InstructionToStatementConverter<'a> {
         let actual_param_count = if param_count > 0 { param_count - 1 } else { 0 };
 
         for i in 0..actual_param_count {
-            // Parameters are named starting from arg0, arg1, etc.
-            // TODO: Analyze function body to determine better parameter names based on usage patterns
-            let param_name = format!("arg{}", i);
+            // Parameters are named using the variable mapper
+            // param_index starts at 1 since 0 is 'this'
+            let param_name = self.variable_mapper.get_parameter_name((i + 1) as u8);
             let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
 
             // Create binding identifier for the parameter

@@ -6,11 +6,13 @@
 mod call_simplification;
 mod constant_inlining;
 mod global_this_inlining;
+mod parameter_inlining;
 mod property_access_inlining;
 
 pub use call_simplification::analyze_call_simplification;
 pub use constant_inlining::perform_constant_inlining;
 pub use global_this_inlining::perform_global_this_inlining;
+pub use parameter_inlining::perform_parameter_inlining;
 pub use property_access_inlining::perform_property_access_inlining;
 
 use crate::analysis::control_flow_plan::ControlFlowPlan;
@@ -19,6 +21,20 @@ use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext, RegisterUse
 use crate::decompiler::InlineConfig;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
+
+/// Trait for optimization passes
+pub trait OptimizationPass {
+    /// Get the name of this optimization pass
+    fn name(&self) -> &'static str;
+    
+    /// Run the optimization pass on the control flow plan
+    fn run(&mut self, plan: &mut ControlFlowPlan);
+    
+    /// Check if this pass should run
+    fn should_run(&self) -> bool {
+        true
+    }
+}
 
 /// Context for optimization passes
 pub struct OptimizationContext<'a> {

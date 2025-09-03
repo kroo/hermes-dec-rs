@@ -113,6 +113,8 @@ pub struct ControlFlowPlanConverter<'a> {
     include_instruction_comments: bool,
     /// Comment manager for attaching comments to statements
     comment_manager: Option<AddressCommentManager>,
+    /// Variable mapper for consistent naming
+    variable_mapper: crate::ast::variables::VariableMapper,
 }
 
 impl<'a> ControlFlowPlanConverter<'a> {
@@ -156,6 +158,9 @@ impl<'a> ControlFlowPlanConverter<'a> {
                 .set_variable_mapping(variable_mapping);
         }
 
+        // Set the variable mapper in the instruction converter
+        instruction_converter.set_variable_mapper(variable_mapper.clone());
+
         Self {
             ast_builder,
             hbc_analysis,
@@ -170,6 +175,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
             } else {
                 None
             },
+            variable_mapper,
         }
     }
 
@@ -1789,6 +1795,13 @@ impl<'a> ControlFlowPlanConverter<'a> {
                         let span = oxc_span::SPAN;
                         return self.ast_builder.expression_identifier(span, global_atom);
                     }
+                    UseStrategy::InlineParameter { param_index } => {
+                        // Inline parameter directly
+                        let param_name = self.variable_mapper.get_parameter_name(*param_index);
+                        let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
+                        let span = oxc_span::SPAN;
+                        return self.ast_builder.expression_identifier(span, param_atom);
+                    }
                     UseStrategy::UseVariable => {
                         // Fall through to use variable name
                     }
@@ -2045,6 +2058,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                 UseStrategy::InlinePropertyAccess(_) => "inline-prop",
                                 UseStrategy::InlineGlobalThis => "inline-global",
                                 UseStrategy::SimplifyCall { .. } => "simplify-call",
+                                UseStrategy::InlineParameter { .. } => "inline-param",
                             }
                         } else {
                             ""

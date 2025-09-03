@@ -104,6 +104,10 @@ enum Commands {
         /// Warning: This transformation is not semantics-preserving in all cases
         #[arg(long)]
         unsafe_simplify_calls: Option<bool>,
+
+        /// Inline parameter references to use original parameter names (this, arg0, arg1, etc.)
+        #[arg(long)]
+        inline_parameters: Option<bool>,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -153,6 +157,9 @@ enum Commands {
         /// Inline globalThis references
         #[arg(long)]
         inline_global_this: bool,
+        /// Inline parameter references to use original parameter names
+        #[arg(long)]
+        inline_parameters: bool,
     },
 }
 
@@ -185,6 +192,7 @@ fn main() -> Result<()> {
             inline_global_this,
             simplify_calls,
             unsafe_simplify_calls,
+            inline_parameters,
             format: _,
             minify: _,
             hbc_version: _,
@@ -203,6 +211,7 @@ fn main() -> Result<()> {
                 inline_global_this,
                 simplify_calls,
                 unsafe_simplify_calls,
+                inline_parameters,
             };
             cli::decompile::decompile(&args).map_err(|e| miette!("{}", e))
         }
@@ -231,6 +240,7 @@ fn main() -> Result<()> {
             inline_all_property_access,
             unsafe_simplify_calls,
             inline_global_this,
+            inline_parameters,
         } => cli::analyze_cfg::analyze_cfg(
             &input,
             function,
@@ -239,6 +249,7 @@ fn main() -> Result<()> {
             inline_all_property_access,
             unsafe_simplify_calls,
             inline_global_this,
+            inline_parameters,
         )
         .map_err(|e| miette!("{}", e)),
     }
