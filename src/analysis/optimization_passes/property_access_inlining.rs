@@ -2,19 +2,69 @@
 //!
 //! This pass inlines property access chains based on the configured strategy.
 
-use super::OptimizationContext;
+use super::{OptimizationContext, OptimizationPass};
+use crate::analysis::control_flow_plan::ControlFlowPlan;
 use crate::analysis::ssa_usage_tracker::UseStrategy;
 use crate::analysis::value_tracker::{TrackedValue, ValueTracker};
-use crate::cfg::ssa::types::DuplicatedSSAValue;
+use crate::analysis::FunctionAnalysis;
+use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext};
+use crate::decompiler::InlineConfig;
+use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
+
+/// Property access inlining optimization pass
+pub struct PropertyAccessInliningPass<'a> {
+    function_analysis: &'a FunctionAnalysis<'a>,
+    inline_config: &'a InlineConfig,
+    duplicated_blocks: &'a HashMap<NodeIndex, Vec<DuplicationContext>>,
+}
+
+impl<'a> PropertyAccessInliningPass<'a> {
+    /// Create a new property access inlining pass
+    pub fn new(
+        function_analysis: &'a FunctionAnalysis<'a>,
+        inline_config: &'a InlineConfig,
+        duplicated_blocks: &'a HashMap<NodeIndex, Vec<DuplicationContext>>,
+    ) -> Self {
+        Self {
+            function_analysis,
+            inline_config,
+            duplicated_blocks,
+        }
+    }
+}
+
+impl<'a> OptimizationPass for PropertyAccessInliningPass<'a> {
+    fn name(&self) -> &'static str {
+        "PropertyAccessInlining"
+    }
+
+    fn should_run(&self) -> bool {
+        self.inline_config.inline_property_access || self.inline_config.inline_all_property_access
+    }
+
+    fn run(&mut self, plan: &mut ControlFlowPlan) {
+        // Skip if property access inlining is disabled
+        if !self.inline_config.inline_property_access
+            && !self.inline_config.inline_all_property_access
+        {
+            return;
+        }
+
+        // Create optimization context
+        let mut ctx = OptimizationContext::new(
+            plan,
+            self.function_analysis,
+            self.inline_config,
+            self.duplicated_blocks,
+        );
+
+        perform_property_access_inlining(&mut ctx);
+    }
+}
 
 /// Perform property access inlining based on options
 pub fn perform_property_access_inlining(ctx: &mut OptimizationContext) {
-    // Skip if property access inlining is disabled
-    if !ctx.inline_config.inline_property_access && !ctx.inline_config.inline_all_property_access {
-        return;
-    }
-
     log::debug!("Performing property access inlining...");
 
     // Collect updates to apply later (to avoid borrowing conflicts)

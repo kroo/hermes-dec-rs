@@ -9,11 +9,12 @@ mod global_this_inlining;
 mod parameter_inlining;
 mod property_access_inlining;
 
-pub use call_simplification::analyze_call_simplification;
-pub use constant_inlining::perform_constant_inlining;
-pub use global_this_inlining::perform_global_this_inlining;
-pub use parameter_inlining::perform_parameter_inlining;
-pub use property_access_inlining::perform_property_access_inlining;
+// Export the pass implementations
+pub use call_simplification::{analyze_call_simplification, CallSimplificationPass};
+pub use constant_inlining::{perform_constant_inlining, ConstantInliningPass};
+pub use global_this_inlining::{perform_global_this_inlining, GlobalThisInliningPass};
+pub use parameter_inlining::{perform_parameter_inlining, ParameterInliningPass};
+pub use property_access_inlining::{perform_property_access_inlining, PropertyAccessInliningPass};
 
 use crate::analysis::control_flow_plan::ControlFlowPlan;
 use crate::analysis::FunctionAnalysis;
@@ -26,10 +27,10 @@ use std::collections::{HashMap, HashSet};
 pub trait OptimizationPass {
     /// Get the name of this optimization pass
     fn name(&self) -> &'static str;
-    
+
     /// Run the optimization pass on the control flow plan
     fn run(&mut self, plan: &mut ControlFlowPlan);
-    
+
     /// Check if this pass should run
     fn should_run(&self) -> bool {
         true

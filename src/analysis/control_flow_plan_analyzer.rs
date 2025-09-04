@@ -8,8 +8,8 @@ use super::control_flow_plan::{
     UpdatedPhiFunction,
 };
 use crate::analysis::optimization_passes::{
-    analyze_call_simplification, perform_constant_inlining, perform_global_this_inlining,
-    perform_parameter_inlining, perform_property_access_inlining, OptimizationContext,
+    CallSimplificationPass, ConstantInliningPass, GlobalThisInliningPass, OptimizationPass,
+    ParameterInliningPass, PropertyAccessInliningPass,
 };
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker, UseStrategy};
 use crate::analysis::FunctionAnalysis;
@@ -168,51 +168,53 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         log::debug!("Analyzing PHI deconstruction...");
         self.analyze_phi_deconstruction();
 
-        // Check conditions before creating the optimization context
-        let has_mandatory_inline = !self.plan.mandatory_inline.is_empty();
-        let need_constant_inlining = self.inline_config.inline_constants
-            || self.inline_config.inline_all_constants
-            || has_mandatory_inline;
-        let need_property_inlining = self.inline_config.inline_property_access
-            || self.inline_config.inline_all_property_access;
-
-        // Run all optimization passes in a scope to control the lifetime of the mutable borrow
-        let optimization_consumed_uses = {
-            // Create optimization context for the passes
-            let mut opt_context = OptimizationContext::new(
-                self.plan,
+        // Create and run optimization passes using the trait-based approach
+        let mut optimization_passes: Vec<Box<dyn OptimizationPass>> = vec![
+            // Constant inlining pass
+            Box::new(ConstantInliningPass::new(
                 self.function_analysis,
                 &self.inline_config,
                 &self.duplicated_blocks,
-            );
+            )),
+            // GlobalThis inlining pass
+            Box::new(GlobalThisInliningPass::new(
+                self.function_analysis,
+                &self.inline_config,
+                &self.duplicated_blocks,
+            )),
+            // Property access inlining pass
+            Box::new(PropertyAccessInliningPass::new(
+                self.function_analysis,
+                &self.inline_config,
+                &self.duplicated_blocks,
+            )),
+            // Parameter inlining pass
+            Box::new(ParameterInliningPass::new(
+                self.function_analysis,
+                &self.inline_config,
+                &self.duplicated_blocks,
+            )),
+            // Call simplification pass
+            Box::new(CallSimplificationPass::new(
+                self.function_analysis,
+                &self.inline_config,
+                &self.duplicated_blocks,
+            )),
+        ];
 
-            // Perform aggressive constant inlining if enabled or if there are mandatory inline values
-            // This happens AFTER PHI deconstruction so we can inline PHI results that become constants
-            if need_constant_inlining {
-                perform_constant_inlining(&mut opt_context);
+        // Run each optimization pass that should run
+        for pass in &mut optimization_passes {
+            if pass.should_run() {
+                log::debug!("Running optimization pass: {}", pass.name());
+                pass.run(self.plan);
             }
+        }
 
-            // Perform globalThis inlining if enabled
-            if self.inline_config.inline_global_this {
-                perform_global_this_inlining(&mut opt_context);
-            }
+        // Drop the optimization passes to release the borrows
+        drop(optimization_passes);
 
-            // Perform property access inlining if enabled
-            if need_property_inlining {
-                perform_property_access_inlining(&mut opt_context);
-            }
-
-            // Perform parameter inlining if enabled
-            perform_parameter_inlining(&mut opt_context);
-
-            // Analyze call sites for simplification if enabled
-            if self.inline_config.simplify_calls || self.inline_config.unsafe_simplify_calls {
-                analyze_call_simplification(&mut opt_context);
-            }
-
-            // Return the consumed uses from optimization passes
-            opt_context.consumed_uses
-        }; // opt_context goes out of scope here, ending the mutable borrow of self.plan
+        // Get consumed uses from the plan (populated by optimization passes)
+        let optimization_consumed_uses = self.plan.consumed_uses.clone();
 
         // Mark all consumed uses in the usage tracker for cascading elimination
         for (dup_value, use_sites) in optimization_consumed_uses {
@@ -223,7 +225,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
         }
 
         // Validate after optimization passes complete
-        if has_mandatory_inline {
+        if !self.plan.mandatory_inline.is_empty() {
             self.validate_mandatory_inlining();
         }
 

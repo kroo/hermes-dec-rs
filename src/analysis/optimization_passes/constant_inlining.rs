@@ -2,19 +2,72 @@
 //!
 //! This pass inlines constant values based on the configured inlining strategy.
 
-use super::OptimizationContext;
+use super::{OptimizationContext, OptimizationPass};
+use crate::analysis::control_flow_plan::ControlFlowPlan;
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, UseStrategy};
 use crate::analysis::value_tracker::{TrackedValue, ValueTracker};
-use crate::cfg::ssa::types::DuplicatedSSAValue;
+use crate::analysis::FunctionAnalysis;
+use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext};
+use crate::decompiler::InlineConfig;
+use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
+
+/// Constant inlining optimization pass
+pub struct ConstantInliningPass<'a> {
+    function_analysis: &'a FunctionAnalysis<'a>,
+    inline_config: &'a InlineConfig,
+    duplicated_blocks: &'a HashMap<NodeIndex, Vec<DuplicationContext>>,
+}
+
+impl<'a> ConstantInliningPass<'a> {
+    /// Create a new constant inlining pass
+    pub fn new(
+        function_analysis: &'a FunctionAnalysis<'a>,
+        inline_config: &'a InlineConfig,
+        duplicated_blocks: &'a HashMap<NodeIndex, Vec<DuplicationContext>>,
+    ) -> Self {
+        Self {
+            function_analysis,
+            inline_config,
+            duplicated_blocks,
+        }
+    }
+}
+
+impl<'a> OptimizationPass for ConstantInliningPass<'a> {
+    fn name(&self) -> &'static str {
+        "ConstantInlining"
+    }
+
+    fn should_run(&self) -> bool {
+        self.inline_config.inline_constants
+            || self.inline_config.inline_all_constants
+            || !self.function_analysis.ssa.ssa_values.is_empty()
+    }
+
+    fn run(&mut self, plan: &mut ControlFlowPlan) {
+        // Skip if constant inlining is disabled and no mandatory inlines
+        if !self.inline_config.inline_constants
+            && !self.inline_config.inline_all_constants
+            && plan.mandatory_inline.is_empty()
+        {
+            return;
+        }
+
+        // Create optimization context
+        let mut ctx = OptimizationContext::new(
+            plan,
+            self.function_analysis,
+            self.inline_config,
+            self.duplicated_blocks,
+        );
+
+        perform_constant_inlining(&mut ctx);
+    }
+}
 
 /// Perform aggressive constant inlining with PHI updates
 pub fn perform_constant_inlining(ctx: &mut OptimizationContext) {
-    // Skip if constant inlining is disabled
-    if !ctx.inline_config.inline_constants && !ctx.inline_config.inline_all_constants {
-        return;
-    }
-
     log::debug!("Performing aggressive constant inlining...");
 
     // Collect updates to apply later (to avoid borrowing conflicts)

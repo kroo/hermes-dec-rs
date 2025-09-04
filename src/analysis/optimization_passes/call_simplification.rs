@@ -2,18 +2,67 @@
 //!
 //! This pass simplifies call patterns like fn.call(undefined, ...) to fn(...).
 
-use super::OptimizationContext;
+use super::{OptimizationContext, OptimizationPass};
+use crate::analysis::control_flow_plan::ControlFlowPlan;
 use crate::analysis::ssa_usage_tracker::UseStrategy;
 use crate::analysis::value_tracker::{ConstantValue, TrackedValue, ValueTracker};
-use crate::cfg::ssa::types::{DuplicatedSSAValue, RegisterUse};
+use crate::analysis::FunctionAnalysis;
+use crate::cfg::ssa::types::{DuplicatedSSAValue, DuplicationContext, RegisterUse};
+use crate::decompiler::InlineConfig;
+use petgraph::graph::NodeIndex;
+use std::collections::HashMap;
+
+/// Call simplification optimization pass
+pub struct CallSimplificationPass<'a> {
+    function_analysis: &'a FunctionAnalysis<'a>,
+    inline_config: &'a InlineConfig,
+    duplicated_blocks: &'a HashMap<NodeIndex, Vec<DuplicationContext>>,
+}
+
+impl<'a> CallSimplificationPass<'a> {
+    /// Create a new call simplification pass
+    pub fn new(
+        function_analysis: &'a FunctionAnalysis<'a>,
+        inline_config: &'a InlineConfig,
+        duplicated_blocks: &'a HashMap<NodeIndex, Vec<DuplicationContext>>,
+    ) -> Self {
+        Self {
+            function_analysis,
+            inline_config,
+            duplicated_blocks,
+        }
+    }
+}
+
+impl<'a> OptimizationPass for CallSimplificationPass<'a> {
+    fn name(&self) -> &'static str {
+        "CallSimplification"
+    }
+
+    fn should_run(&self) -> bool {
+        self.inline_config.simplify_calls || self.inline_config.unsafe_simplify_calls
+    }
+
+    fn run(&mut self, plan: &mut ControlFlowPlan) {
+        // Skip if call simplification is disabled
+        if !self.inline_config.simplify_calls && !self.inline_config.unsafe_simplify_calls {
+            return;
+        }
+
+        // Create optimization context
+        let mut ctx = OptimizationContext::new(
+            plan,
+            self.function_analysis,
+            self.inline_config,
+            self.duplicated_blocks,
+        );
+
+        analyze_call_simplification(&mut ctx);
+    }
+}
 
 /// Analyze call sites and mark 'this' arguments for simplification when appropriate
 pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
-    // Skip if call simplification is disabled
-    if !ctx.inline_config.simplify_calls && !ctx.inline_config.unsafe_simplify_calls {
-        return;
-    }
-
     log::debug!(
         "Analyzing {} call sites for simplification",
         ctx.plan.call_site_analysis.call_sites.len()
