@@ -470,22 +470,23 @@ impl<'a> SSAUsageTracker<'a> {
 
         // Check if this value is part of a PHI group OR is a PHI operand with a used result
         // PHI operands need to be assigned even if they appear to have no direct uses
-        let is_phi_related = if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
-            if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
-                trace!(
-                    "{} is part of PHI group with representative {}",
-                    ssa_value,
-                    coalesced_rep
-                );
-                true // This is part of a coalesced PHI group
+        let is_phi_related =
+            if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
+                if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
+                    trace!(
+                        "{} is part of PHI group with representative {}",
+                        ssa_value,
+                        coalesced_rep
+                    );
+                    true // This is part of a coalesced PHI group
+                } else {
+                    // Not coalesced, but check if it's a PHI operand with a used result
+                    self.is_phi_operand_with_used_result(ssa_value)
+                }
             } else {
-                // Not coalesced, but check if it's a PHI operand with a used result
+                // No variable analysis, still check if it's a PHI operand
                 self.is_phi_operand_with_used_result(ssa_value)
-            }
-        } else {
-            // No variable analysis, still check if it's a PHI operand
-            self.is_phi_operand_with_used_result(ssa_value)
-        };
+            };
 
         if !is_phi_related {
             // Not PHI-related, check for side effects
@@ -712,7 +713,7 @@ impl<'a> SSAUsageTracker<'a> {
                         );
                         return true;
                     }
-                    
+
                     // Also recursively check if the PHI result itself feeds into another used PHI
                     if self.is_phi_operand_with_used_result(&phi.result) {
                         trace!(

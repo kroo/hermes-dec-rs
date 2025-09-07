@@ -335,11 +335,60 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
         this_reg: u8,   // Arg2: the 'this' object (created with Object.create)
         return_reg: u8, // Arg3: constructor's return value
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
-
         let span = Span::default();
+
+        // Check if this SelectObject is part of a constructor pattern
+        // We need to match by PC since we store that in the pattern
+        let current_pc = self.expression_context.current_pc.value() as u32;
+
+        // Look for a constructor pattern with this PC
+        let matching_pattern = self
+            .control_flow_plan
+            .constructor_patterns
+            .values()
+            .find(|pattern| pattern.select_object_pc == current_pc)
+            .cloned();
+
+        if let Some(pattern) = matching_pattern {
+            // This is a constructor pattern! Generate `new Constructor(...)`
+            log::debug!("Found constructor pattern at PC {}", current_pc);
+
+            // Create use site at the Construct instruction where these values are actually used
+            let construct_use_site = crate::cfg::ssa::RegisterUse {
+                register: pattern.constructor_reg,
+                block_id: self.register_manager.current_block().unwrap_or_default(),
+                instruction_idx: crate::hbc::InstructionIndex::new(pattern.construct_pc as usize),
+            };
+
+            // Get the constructor expression using the Construct PC as the use site
+            let constructor_expr = self.ssa_value_to_expression_at_use_site(&pattern.constructor, construct_use_site.clone())?;
+
+            // Get the argument expressions from the SSA values with use strategies
+            // Arguments also use the Construct PC as their use site
+            let mut arguments = self.ast_builder.vec();
+            for (_i, arg_ssa) in pattern.arguments.iter().enumerate() {
+                // Create use site for this argument at the Construct instruction
+                let arg_use_site = crate::cfg::ssa::RegisterUse {
+                    register: arg_ssa.register,
+                    block_id: self.register_manager.current_block().unwrap_or_default(),
+                    instruction_idx: crate::hbc::InstructionIndex::new(pattern.construct_pc as usize),
+                };
+                let arg_expr = self.ssa_value_to_expression_at_use_site(arg_ssa, arg_use_site)?;
+                arguments.push(oxc_ast::ast::Argument::from(arg_expr));
+            }
+
+            // Create the new expression
+            let new_expr = self.ast_builder.expression_new(
+                span,
+                constructor_expr,
+                None::<oxc_allocator::Box<oxc_ast::ast::TSTypeParameterInstantiation>>,
+                arguments,
+            );
+
+            // Create the statement using register assignment which respects declaration strategies
+            let stmt = self.create_register_assignment_statement(dest_reg, new_expr)?;
+            return Ok(InstructionResult::Statement(stmt));
+        }
 
         // Test if the constructor's return value (Arg3) is an object
         // Create typeof return_value === 'object'
@@ -390,8 +439,8 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             self.ast_builder
                 .expression_conditional(span, condition, return_expr3, this_expr);
 
-        let stmt =
-            self.create_variable_declaration_or_assignment(&dest_var, Some(conditional_expr))?;
+        // Create the statement using register assignment which respects declaration strategies
+        let stmt = self.create_register_assignment_statement(dest_reg, conditional_expr)?;
 
         Ok(InstructionResult::Statement(stmt))
     }

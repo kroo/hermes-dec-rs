@@ -23,6 +23,7 @@ pub fn analyze_cfg(
     unsafe_simplify_calls: bool,
     inline_global_this: bool,
     inline_parameters: bool,
+    inline_constructor_calls: bool,
 ) -> Result<()> {
     // Read the HBC file
     let file_data = std::fs::read(input)?;
@@ -103,6 +104,7 @@ pub fn analyze_cfg(
         inline_config.unsafe_simplify_calls = unsafe_simplify_calls;
         inline_config.inline_global_this = inline_global_this;
         inline_config.inline_parameters = inline_parameters;
+        inline_config.inline_constructor_calls = inline_constructor_calls;
         builder.set_inline_config(inline_config);
 
         // The builder.build() method already analyzes the plan internally

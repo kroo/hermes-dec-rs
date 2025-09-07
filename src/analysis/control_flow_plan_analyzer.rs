@@ -8,8 +8,8 @@ use super::control_flow_plan::{
     UpdatedPhiFunction,
 };
 use crate::analysis::optimization_passes::{
-    CallSimplificationPass, ConstantInliningPass, GlobalThisInliningPass, OptimizationPass,
-    ParameterInliningPass, PropertyAccessInliningPass,
+    CallSimplificationPass, ConstantInliningPass, ConstructorCallInliningPass,
+    GlobalThisInliningPass, OptimizationPass, ParameterInliningPass, PropertyAccessInliningPass,
 };
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker, UseStrategy};
 use crate::analysis::FunctionAnalysis;
@@ -74,6 +74,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 inline_all_constants,
                 false,
                 false,
+                None,
                 None,
                 None,
                 None,
@@ -196,6 +197,12 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             )),
             // Call simplification pass
             Box::new(CallSimplificationPass::new(
+                self.function_analysis,
+                &self.inline_config,
+                &self.duplicated_blocks,
+            )),
+            // Constructor call inlining pass
+            Box::new(ConstructorCallInliningPass::new(
                 self.function_analysis,
                 &self.inline_config,
                 &self.duplicated_blocks,

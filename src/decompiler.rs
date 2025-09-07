@@ -46,6 +46,8 @@ pub struct InlineConfig {
     pub unsafe_simplify_calls: bool,
     /// Inline parameter references to use original parameter names (this, arg0, arg1, etc.)
     pub inline_parameters: bool,
+    /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
+    pub inline_constructor_calls: bool,
 }
 
 impl Default for InlineConfig {
@@ -59,6 +61,7 @@ impl Default for InlineConfig {
             simplify_calls: false,
             unsafe_simplify_calls: false,
             inline_parameters: false,
+            inline_constructor_calls: false,
         }
     }
 }
@@ -85,6 +88,7 @@ impl InlineConfig {
         simplify_calls: Option<bool>,
         unsafe_simplify_calls: Option<bool>,
         inline_parameters: Option<bool>,
+        inline_constructor_calls: Option<bool>,
     ) -> Self {
         // Enable global_this inlining by default if any other inlining is enabled
         let any_inline = inline_constants
@@ -102,6 +106,7 @@ impl InlineConfig {
             simplify_calls: simplify_calls.unwrap_or(any_inline),
             unsafe_simplify_calls: unsafe_simplify_calls.unwrap_or(false),
             inline_parameters: inline_parameters.unwrap_or(false),
+            inline_constructor_calls: inline_constructor_calls.unwrap_or(false),
         }
     }
 }
@@ -147,6 +152,7 @@ impl DecompileOptions {
         simplify_calls: Option<bool>,
         unsafe_simplify_calls: Option<bool>,
         inline_parameters: Option<bool>,
+        inline_constructor_calls: Option<bool>,
     ) -> Self {
         let include_instruction_comments =
             comments.contains("instructions") || comments.contains("pc");
@@ -166,6 +172,7 @@ impl DecompileOptions {
                 simplify_calls,
                 unsafe_simplify_calls,
                 inline_parameters,
+                inline_constructor_calls,
             ),
         }
     }
@@ -285,6 +292,7 @@ impl Decompiler {
             false,
             false,
             false,
+            None,
             None,
             None,
             None,
@@ -602,7 +610,10 @@ impl<'a> FunctionDecompiler<'a> {
             (0..actual_param_count)
                 .map(|i| {
                     // param_index starts at 1 since 0 is 'this'
-                    let param_name = crate::ast::variables::VariableMapper::get_parameter_name_static((i + 1) as u8);
+                    let param_name =
+                        crate::ast::variables::VariableMapper::get_parameter_name_static(
+                            (i + 1) as u8,
+                        );
                     // Check if this parameter has a default value
                     if let Some(default_info) = default_params.get(&(i as u32)) {
                         // Extract the default value from the instruction

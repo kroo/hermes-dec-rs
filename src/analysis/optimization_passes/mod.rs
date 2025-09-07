@@ -5,6 +5,7 @@
 
 mod call_simplification;
 mod constant_inlining;
+mod constructor_call_inlining;
 mod global_this_inlining;
 mod parameter_inlining;
 mod property_access_inlining;
@@ -12,6 +13,9 @@ mod property_access_inlining;
 // Export the pass implementations
 pub use call_simplification::{analyze_call_simplification, CallSimplificationPass};
 pub use constant_inlining::{perform_constant_inlining, ConstantInliningPass};
+pub use constructor_call_inlining::{
+    perform_constructor_call_inlining, ConstructorCallInliningPass,
+};
 pub use global_this_inlining::{perform_global_this_inlining, GlobalThisInliningPass};
 pub use parameter_inlining::{perform_parameter_inlining, ParameterInliningPass};
 pub use property_access_inlining::{perform_property_access_inlining, PropertyAccessInliningPass};

@@ -14,6 +14,29 @@ use crate::generated::generated_traits::BinaryOperator;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
+/// Information about a constructor pattern (CreateThis/Construct/SelectObject)
+#[derive(Debug, Clone)]
+pub struct ConstructorPattern {
+    /// The constructor function SSA value
+    pub constructor: SSAValue,
+    /// The arguments to the constructor
+    pub arguments: Vec<SSAValue>,
+    /// The 'this' value passed to Construct (often a copy of create_this_result)
+    pub construct_this: Option<SSAValue>,
+    /// The CreateThis result (intermediate, will be consumed)
+    pub create_this_result: SSAValue,
+    /// The Construct result (intermediate, will be consumed)
+    pub construct_result: SSAValue,
+    /// PC of the SelectObject instruction (for AST generation context)
+    pub select_object_pc: u32,
+    /// PC of the Construct instruction (to get register info during AST generation)
+    pub construct_pc: u32,
+    /// Register containing the constructor function at Construct
+    pub constructor_reg: u8,
+    /// Number of arguments
+    pub arg_count: u8,
+}
+
 /// Unique identifier for a control flow structure
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StructureId(pub usize);
@@ -80,6 +103,10 @@ pub struct ControlFlowPlan {
     /// SSA values that must be inlined (e.g., source operands of setup instructions)
     /// These values' defining instructions won't be in the generated code path
     pub mandatory_inline: HashSet<SSAValue>,
+
+    /// Constructor patterns detected in the function
+    /// Maps SelectObject result SSA value to the constructor pattern info
+    pub constructor_patterns: HashMap<SSAValue, ConstructorPattern>,
 
     /// Next available structure ID
     next_structure_id: usize,
@@ -457,6 +484,7 @@ impl ControlFlowPlan {
             phi_results: HashSet::new(),
             call_site_analysis: CallSiteAnalysis::new(),
             mandatory_inline: HashSet::new(),
+            constructor_patterns: HashMap::new(),
             next_structure_id: 1,
         }
     }
@@ -1065,7 +1093,7 @@ impl ControlFlowPlan {
                 false_branch,
             } => {
                 writeln!(f, "Conditional")?;
-                writeln!(f, "{}  Condition block: {} (contains condition evaluation + any other instructions)", 
+                writeln!(f, "{}  Condition block: {} (contains condition evaluation + any other instructions)",
                     indent_str, condition_block.index())?;
                 if let Some(expr) = condition_expr {
                     writeln!(
