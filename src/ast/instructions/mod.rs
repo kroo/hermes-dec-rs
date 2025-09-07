@@ -2284,7 +2284,11 @@ impl<'a> InstructionToStatementConverter<'a> {
                 // If for some reason we have a constant in the chain, inline it
                 self.create_constant_expression(value)
             }
-            TrackedValue::Parameter { .. } | TrackedValue::Phi { .. } | TrackedValue::Unknown => {
+            TrackedValue::Parameter { .. } 
+            | TrackedValue::Phi { .. } 
+            | TrackedValue::Unknown 
+            | TrackedValue::MutableObject { .. }
+            | TrackedValue::MergedObject { .. } => {
                 // These shouldn't appear in property access chains normally
                 // But if they do, we have a problem - we can't inline them properly
                 // This is likely a bug in the tracking logic

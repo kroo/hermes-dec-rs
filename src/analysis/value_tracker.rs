@@ -79,6 +79,74 @@ pub enum TrackedValue {
     },
     /// Unknown or dynamic value
     Unknown,
+    /// A mutable object being tracked
+    MutableObject {
+        /// The PC where the object was created
+        creation_pc: usize,
+        /// Current version of the object
+        version: usize,
+        /// Base type of the object
+        base_type: ObjectBaseType,
+        /// Mutations applied to this object
+        mutations: Vec<ObjectMutation>,
+    },
+    /// A merged object from PHI nodes
+    MergedObject {
+        /// Source objects from different control flow paths
+        sources: Vec<(petgraph::graph::NodeIndex, TrackedValue)>,
+        /// Mutations applied after the merge
+        mutations_after_merge: Vec<ObjectMutation>,
+    },
+}
+
+/// Base type of a mutable object
+#[derive(Debug, Clone, PartialEq)]
+pub enum ObjectBaseType {
+    /// Plain object created with NewObject
+    Object,
+    /// Array created with NewArray
+    Array { initial_length: Option<usize> },
+    /// Object created with NewObjectWithBuffer
+    ObjectWithBuffer,
+    /// Function object
+    Function,
+}
+
+/// A mutation applied to an object
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectMutation {
+    /// PC where the mutation occurred
+    pub pc: usize,
+    /// Type of mutation
+    pub kind: MutationKind,
+}
+
+/// Type of mutation applied to an object
+#[derive(Debug, Clone, PartialEq)]
+pub enum MutationKind {
+    /// Property set (e.g., obj.x = value or obj["x"] = value)
+    PropertySet { 
+        key: Box<TrackedValue>, 
+        value: Box<TrackedValue> 
+    },
+    /// Property definition (e.g., Object.defineProperty)
+    PropertyDefine { 
+        key: Box<TrackedValue>, 
+        value: Box<TrackedValue> 
+    },
+    /// Array element set
+    ArraySet { 
+        index: Box<TrackedValue>, 
+        value: Box<TrackedValue> 
+    },
+    /// Array push operation
+    ArrayPush { 
+        value: Box<TrackedValue> 
+    },
+    /// Prototype set
+    ProtoSet { 
+        proto: Box<TrackedValue> 
+    },
 }
 
 /// Value tracker for analyzing SSA values
@@ -99,6 +167,9 @@ pub struct ValueTracker<'a> {
     >,
     /// Current duplication context for value resolution
     current_context: Option<crate::cfg::ssa::DuplicationContext>,
+    /// Registry of mutable objects by their creation PC
+    /// Maps PC -> current TrackedValue for the object
+    object_registry: std::collections::HashMap<usize, TrackedValue>,
 }
 
 impl<'a> ValueTracker<'a> {
@@ -110,6 +181,7 @@ impl<'a> ValueTracker<'a> {
             hbc_file,
             phi_deconstructions: None,
             current_context: None,
+            object_registry: std::collections::HashMap::new(),
         }
     }
 
@@ -132,6 +204,7 @@ impl<'a> ValueTracker<'a> {
             hbc_file,
             phi_deconstructions: Some(phi_deconstructions),
             current_context: None,
+            object_registry: std::collections::HashMap::new(),
         }
     }
 
@@ -366,62 +439,110 @@ impl<'a> ValueTracker<'a> {
 
             // Array creation with buffer
             UnifiedInstruction::NewArrayWithBuffer {
-                operand_1,
-                operand_2,
-                operand_3,
+                operand_1: _size_hint,
+                operand_2: num_elements,
                 ..
-            } => self.track_array_literal(*operand_1, *operand_2, *operand_3 as u32),
+            } => {
+                // For now, track as mutable array
+                // TODO: Parse the buffer and add initial mutations
+                let creation_pc = ssa_value.def_site.instruction_idx.value();
+                TrackedValue::MutableObject {
+                    creation_pc,
+                    version: 0,
+                    base_type: ObjectBaseType::Array { 
+                        initial_length: Some(*num_elements as usize) 
+                    },
+                    mutations: Vec::new(),
+                }
+            }
 
             UnifiedInstruction::NewArrayWithBufferLong {
-                operand_1,
-                operand_2,
-                operand_3,
+                operand_1: _size_hint,
+                operand_2: num_elements,
                 ..
-            } => self.track_array_literal(*operand_1, *operand_2, *operand_3),
+            } => {
+                // For now, track as mutable array
+                // TODO: Parse the buffer and add initial mutations
+                let creation_pc = ssa_value.def_site.instruction_idx.value();
+                TrackedValue::MutableObject {
+                    creation_pc,
+                    version: 0,
+                    base_type: ObjectBaseType::Array { 
+                        initial_length: Some(*num_elements as usize) 
+                    },
+                    mutations: Vec::new(),
+                }
+            }
 
             // Object creation with buffer
             UnifiedInstruction::NewObjectWithBuffer {
-                operand_1,
-                operand_2,
-                operand_3,
-                operand_4,
+                operand_1: _size_hint,
+                operand_2: _num_elements,
                 ..
-            } => self.track_object_literal(
-                *operand_1,
-                *operand_2,
-                *operand_3 as u32,
-                *operand_4 as u32,
-            ),
+            } => {
+                // For now, track as mutable object
+                // TODO: Parse the buffer and add initial mutations
+                let creation_pc = ssa_value.def_site.instruction_idx.value();
+                TrackedValue::MutableObject {
+                    creation_pc,
+                    version: 0,
+                    base_type: ObjectBaseType::ObjectWithBuffer,
+                    mutations: Vec::new(),
+                }
+            }
 
             UnifiedInstruction::NewObjectWithBufferLong {
-                operand_1,
-                operand_2,
-                operand_3,
-                operand_4,
+                operand_1: _size_hint,
+                operand_2: _num_elements,
                 ..
-            } => self.track_object_literal(*operand_1, *operand_2, *operand_3, *operand_4),
+            } => {
+                // For now, track as mutable object
+                // TODO: Parse the buffer and add initial mutations
+                let creation_pc = ssa_value.def_site.instruction_idx.value();
+                TrackedValue::MutableObject {
+                    creation_pc,
+                    version: 0,
+                    base_type: ObjectBaseType::ObjectWithBuffer,
+                    mutations: Vec::new(),
+                }
+            }
 
             // Array creation with specified size
             UnifiedInstruction::NewArray { operand_1, .. } => {
-                // NewArray creates an array with operand_1 undefined elements
-                // Create a vector with that many undefined values
-                let size = *operand_1 as usize;
-                let undefined_array = vec![ConstantValue::Undefined; size];
-                TrackedValue::Constant(ConstantValue::ArrayLiteral(undefined_array))
+                // Track as a mutable array with versioning
+                let creation_pc = ssa_value.def_site.instruction_idx.value();
+                TrackedValue::MutableObject {
+                    creation_pc,
+                    version: 0,
+                    base_type: ObjectBaseType::Array { 
+                        initial_length: Some(*operand_1 as usize) 
+                    },
+                    mutations: Vec::new(),
+                }
             }
 
             // Empty object creation
             UnifiedInstruction::NewObject { .. } => {
-                // Don't track as constant - objects are mutable and may have properties added later
-                // Tracking as constant causes incorrect inlining of empty objects
-                TrackedValue::Unknown
+                // Track as a mutable object with versioning
+                let creation_pc = ssa_value.def_site.instruction_idx.value();
+                TrackedValue::MutableObject {
+                    creation_pc,
+                    version: 0,
+                    base_type: ObjectBaseType::Object,
+                    mutations: Vec::new(),
+                }
             }
 
-            // Object with parent - we'll track as Unknown for now
+            // Object with parent
             UnifiedInstruction::NewObjectWithParent { .. } => {
-                // This creates an object with a specific prototype chain
-                // For now, we'll treat it as unknown since we don't track prototype chains
-                TrackedValue::Unknown
+                // Track as a mutable object with versioning
+                let creation_pc = ssa_value.def_site.instruction_idx.value();
+                TrackedValue::MutableObject {
+                    creation_pc,
+                    version: 0,
+                    base_type: ObjectBaseType::Object,
+                    mutations: Vec::new(),
+                }
             }
 
             // Global object access
@@ -842,7 +963,9 @@ impl<'a> ValueTracker<'a> {
             TrackedValue::GlobalObject
             | TrackedValue::Constant(_)
             | TrackedValue::Parameter { .. }
-            | TrackedValue::Phi { .. } => Some(0),
+            | TrackedValue::Phi { .. }
+            | TrackedValue::MutableObject { .. }
+            | TrackedValue::MergedObject { .. } => Some(0),
             TrackedValue::Unknown => None,
         }
     }

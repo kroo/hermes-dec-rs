@@ -1945,7 +1945,11 @@ impl<'a> ControlFlowPlanConverter<'a> {
                 // If for some reason we have a constant in the chain, inline it
                 self.create_constant_expression(value)
             }
-            TrackedValue::Parameter { .. } | TrackedValue::Phi { .. } | TrackedValue::Unknown => {
+            TrackedValue::Parameter { .. } 
+            | TrackedValue::Phi { .. } 
+            | TrackedValue::Unknown 
+            | TrackedValue::MutableObject { .. }
+            | TrackedValue::MergedObject { .. } => {
                 // These shouldn't appear in property access chains, but handle gracefully
                 let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
                 self.ast_builder

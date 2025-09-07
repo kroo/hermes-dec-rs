@@ -694,6 +694,12 @@ pub fn analyze_cfg(
                 TrackedValue::Unknown => {
                     // Don't print unknown values to reduce noise
                 }
+                TrackedValue::MutableObject { .. } => {
+                    // Could track mutable objects if needed
+                }
+                TrackedValue::MergedObject { .. } => {
+                    // Could track merged objects if needed
+                }
             }
         }
 
