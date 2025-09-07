@@ -23,6 +23,8 @@ pub struct ConstructorPattern {
     pub arguments: Vec<SSAValue>,
     /// The 'this' value passed to Construct (often a copy of create_this_result)
     pub construct_this: Option<SSAValue>,
+    /// The prototype value used by CreateThis (should be consumed)
+    pub create_this_prototype: Option<SSAValue>,
     /// The CreateThis result (intermediate, will be consumed)
     pub create_this_result: SSAValue,
     /// The Construct result (intermediate, will be consumed)

@@ -179,6 +179,17 @@ fn find_pattern_for_select(
     let mut create_this_info = None;
     let mut construct_info = None;
 
+    // Find the SSA values that SelectObject is actually using
+    let select_this_def = find_definition_for_use_at(ctx, select_info.pc, select_this)?;
+    let select_return_def = find_definition_for_use_at(ctx, select_info.pc, select_return)?;
+    
+    trace!(
+        "SelectObject at PC {} uses this from PC {} and return from PC {}",
+        select_info.pc,
+        select_this_def.instruction_idx.value(),
+        select_return_def.instruction_idx.value()
+    );
+
     // Look for CreateThis that defines select_this and Construct that defines select_return
     // Only consider instructions in the same block as the SelectObject
     for instr_info in all_instructions.iter().filter(|i| i.block_id == select_info.block_id) {
@@ -189,13 +200,14 @@ fn find_pattern_for_select(
                 operand_2: _new_target,
             } => {
                 trace!(
-                    "CreateThis at PC {}: dst={}, fn_reg={}, looking for dst={}",
+                    "CreateThis at PC {}: dst={}, fn_reg={}, looking for PC={}",
                     instr_info.pc,
                     create_dst,
                     fn_reg,
-                    select_this
+                    select_this_def.instruction_idx.value()
                 );
-                if *create_dst == select_this {
+                // Check if this is the specific CreateThis that defines the SSA value used by SelectObject
+                if *create_dst == select_this && instr_info.pc as usize == select_this_def.instruction_idx.value() {
                     // This CreateThis defines the 'this' operand of SelectObject
                     create_this_info = Some((instr_info, *fn_reg));
                     debug!("Found CreateThis at PC {} for SelectObject", instr_info.pc);
@@ -207,13 +219,14 @@ fn find_pattern_for_select(
                 operand_2: arg_count,
             } => {
                 trace!(
-                    "Construct at PC {}: dst={}, fn_reg={}, looking for dst={}",
+                    "Construct at PC {}: dst={}, fn_reg={}, looking for PC={}",
                     instr_info.pc,
                     construct_dst,
                     fn_reg,
-                    select_return
+                    select_return_def.instruction_idx.value()
                 );
-                if *construct_dst == select_return {
+                // Check if this is the specific Construct that defines the SSA value used by SelectObject
+                if *construct_dst == select_return && instr_info.pc as usize == select_return_def.instruction_idx.value() {
                     // This Construct defines the 'return' operand of SelectObject
                     construct_info = Some((instr_info, *fn_reg, *arg_count));
                     debug!("Found Construct at PC {} for SelectObject", instr_info.pc);
@@ -226,7 +239,7 @@ fn find_pattern_for_select(
     // If we found both instructions, we have a pattern
     // Note: We don't require the constructor registers to match between CreateThis and Construct
     if let (
-        Some((create_info, _create_fn_reg)),
+        Some((create_info, create_prototype_reg)),
         Some((construct_info, construct_fn_reg, arg_count)),
     ) = (create_this_info, construct_info)
     {
@@ -319,10 +332,18 @@ fn find_pattern_for_select(
             panic!("Missing call site analysis")
         }
 
+        // Get the SSA value for the prototype used by CreateThis
+        let create_this_prototype = find_ssa_value_at_use(ctx, create_info.pc, create_prototype_reg);
+        
+        if let Some(ref proto) = create_this_prototype {
+            debug!("Found prototype SSA value for CreateThis: {}", proto);
+        }
+
         let pattern = ConstructorPattern {
             constructor: constructor_ssa,
             arguments,
             construct_this,
+            create_this_prototype,
             create_this_result,
             construct_result,
             select_object_pc: select_info.pc,
@@ -335,6 +356,27 @@ fn find_pattern_for_select(
     }
 
     None
+}
+
+/// Find the definition that reaches a use at a specific PC for a register
+fn find_definition_for_use_at(ctx: &OptimizationContext, pc: u32, register: u8) -> Option<RegisterDef> {
+    let ssa = &ctx.function_analysis.ssa;
+    let instruction_idx = crate::hbc::InstructionIndex::new(pc as usize);
+
+    // Look through all uses to find one at this PC for this register
+    for use_site in &ssa.uses {
+        if use_site.register == register && use_site.instruction_idx == instruction_idx {
+            // Find the definition that reaches this use
+            return ssa.use_def_chains.get(use_site).cloned();
+        }
+    }
+
+    // Fallback: look for the most recent definition of this register before this PC
+    ssa.definitions
+        .iter()
+        .filter(|def| def.register == register && def.instruction_idx.value() < pc as usize)
+        .max_by_key(|def| def.instruction_idx.value())
+        .cloned()
 }
 
 /// Find the SSA value that's being used at a specific PC for a register
@@ -395,6 +437,12 @@ fn process_constructor_pattern(
     // This is often a copy of create_this_result (like var6_b = var1_a)
     if let Some(ref construct_this) = pattern.construct_this {
         mark_all_uses_consumed(ctx, construct_this);
+    }
+    
+    // Mark the prototype value used by CreateThis as consumed
+    // This is often something like var1_m = var9.prototype
+    if let Some(ref create_this_prototype) = pattern.create_this_prototype {
+        mark_all_uses_consumed(ctx, create_this_prototype);
     }
 
     // The SelectObject result itself keeps its normal declaration strategy
