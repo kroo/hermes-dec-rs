@@ -412,8 +412,9 @@ impl<'a> ValueTracker<'a> {
 
             // Empty object creation
             UnifiedInstruction::NewObject { .. } => {
-                // NewObject creates an empty object
-                TrackedValue::Constant(ConstantValue::ObjectLiteral(Vec::new()))
+                // Don't track as constant - objects are mutable and may have properties added later
+                // Tracking as constant causes incorrect inlining of empty objects
+                TrackedValue::Unknown
             }
 
             // Object with parent - we'll track as Unknown for now
