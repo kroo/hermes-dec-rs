@@ -394,10 +394,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                     // The discriminator will be a parameter or variable, not a constant
                                     let value_tracker = self.function_analysis.value_tracker();
                                     let tracked_value = value_tracker.get_value(&ssa_value);
-                                    let is_case_value =
-                                        crate::analysis::value_tracker::ValueTracker::is_constant(
-                                            &tracked_value,
-                                        );
+                                    let is_case_value = tracked_value.is_constant();
 
                                     debug!(
                                         "Block {}, Register r{} -> SSA {} (constant: {})",
@@ -624,10 +621,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                                 // Check if this register contains a constant value
                                 let value_tracker = self.function_analysis.value_tracker();
                                 let tracked_value = value_tracker.get_value(&ssa_value);
-                                let is_constant =
-                                    crate::analysis::value_tracker::ValueTracker::is_constant(
-                                        &tracked_value,
-                                    );
+                                let is_constant = tracked_value.is_constant();
 
                                 if is_constant {
                                     debug!("BasicBlock {} comparison uses constant {}, marking as consumed (context: {:?})",

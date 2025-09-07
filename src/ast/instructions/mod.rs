@@ -528,7 +528,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.create_property_assignment_by_value(*operand_0, *operand_1, *operand_2),
+            } => self.create_property_assignment_by_value(*operand_0, *operand_2, *operand_1),
 
             // Control flow that generates statements
             Ret { operand_0, .. } => self.create_return_statement(*operand_0),

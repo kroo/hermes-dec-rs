@@ -15,13 +15,31 @@ UnifiedInstruction::NewObject { .. } => {
 
 This leads to incorrect inlining where empty objects `{}` are inlined while property assignments remain, referencing undefined variables.
 
-## Status Update
+## Status Update (2024-01-07)
 
-### Immediate Fix Applied ✅
-Changed `NewObject` tracking to return `TrackedValue::Unknown` instead of an empty constant object literal. This prevents incorrect inlining and fixes the immediate issue seen in `constructor_test.hbc` functions 1 and 4.
+### Completed Work ✅
 
-### Modularization Attempt
-An attempt was made to split ValueTracker into modules, but this revealed significant API drift between the value_tracker implementation and the actual SSA/CFG APIs. The modularization has been deferred until the APIs can be properly aligned.
+#### Object Versioning and Mutation Tracking
+- Implemented `MutableObject` variant with comprehensive mutation tracking
+- Objects are tracked with creation PC, version number, base type, and mutation list
+- Mutations are collected via SSA def-use chains
+- Support for all mutation types: property sets, array element sets, dynamic property access
+- Fixed `PutByVal` instruction argument order bug
+
+#### Escape Analysis
+- Basic escape analysis infrastructure implemented in `src/analysis/value_tracking/escape_analysis.rs`
+- Identifies escape reasons: returns, function arguments, storage in containers, closures
+- Integrated with ValueTracker via `check_object_escape` method
+
+#### Successful Modularization
+- Refactored ValueTracker from 1034 lines to 884 lines
+- Created well-organized module structure:
+  - `value_tracking/types.rs` - Core types with helper methods
+  - `value_tracking/escape_analysis.rs` - Escape analysis
+  - `value_tracking/constant_folding.rs` - Constant folding operations
+  - `value_tracking/literal_tracker.rs` - Literal tracking from buffers
+- Moved utility methods to types (e.g., `is_constant()` is now instance method)
+- Removed dead code and unused methods
 
 ## Solution: Integrated ValueTracker with Object Versioning
 
@@ -320,53 +338,44 @@ UnifiedInstruction::NewObject { dst } => {
 4. **Comprehensive**: Handles all object/array creation patterns
 5. **Control-flow aware**: Uses PHI analysis for merged objects
 
-## Module Structure (Future Work)
+## Module Structure (Implemented)
 
-When the ValueTracker is eventually split into modules, the following structure is recommended:
+The ValueTracker has been successfully modularized into:
 
-### 1. **value_tracker/mod.rs** (Main coordinator, ~200 lines)
-- `ValueTracker` struct and core public API
-- Delegates to specialized modules
+### Current Structure
+```
+src/analysis/
+├── value_tracker.rs (884 lines - core logic)
+└── value_tracking/
+    ├── mod.rs              - Module exports
+    ├── types.rs            - Core types (TrackedValue, ConstantValue, etc.)
+    ├── escape_analysis.rs  - Escape analysis for objects
+    ├── constant_folding.rs - Constant folding operations
+    └── literal_tracker.rs  - Tracking literals from serialized buffers
+```
 
-### 2. **value_tracker/types.rs** (~100 lines)
-- `ConstantValue` enum and its methods
-- `TrackedValue` enum (expanded with MutableObject, MergedObject)
-- Object tracking types
+### What Remains in value_tracker.rs
+- Core `ValueTracker` struct
+- Mutation tracking methods (need full context)
+- PHI analysis (tightly integrated)
+- The large `analyze_instruction` method (core mapping logic)
+- Binary operation folding (needs register lookup)
 
-### 3. **value_tracker/instruction_analyzer.rs** (~400 lines)
-- Main instruction analysis logic
-- Binary operation folding
-- Delegates object mutations to object_tracker
-
-### 4. **value_tracker/object_tracker.rs** (NEW, ~300 lines)
-- Object creation and mutation tracking
-- Object versioning logic
-- Object literal reconstruction
-
-### 5. **value_tracker/escape_analysis.rs** (NEW, ~150 lines)
-- Escape point detection
-- Safe inlining determination
-
-### 6. **value_tracker/phi_analyzer.rs** (~100 lines)
-- PHI function analysis
-- PHI-aware object merging
-
-### 7. **value_tracker/literal_tracker.rs** (~150 lines)
-- Array and object literal tracking
-- SLP conversions
-
-Note: Before attempting modularization again, the following APIs need to be verified/implemented:
-- SSAAnalysis methods: `get_phi_function`, `get_value_at_instruction`, `get_instruction_at`
-- Instruction variants: `StoreOwnBySlotIdx`, `StoreNewOwnByIdShort`, `Phi`
-- Proper field mappings for instructions like `MovLong`, `NewArray`
+### API Considerations
+Some methods couldn't be extracted due to circular dependencies:
+- Mutation tracking needs access to value resolution
+- Binary folding needs register value lookup
+- These remain in the main ValueTracker for now
 
 ## Testing Strategy
 
 1. Test with `constructor_test.hbc` functions 1 and 4 ✅
 2. Verify empty objects are not incorrectly inlined ✅
 3. Ensure property assignments are preserved or inlined together ✅
-4. Test escape analysis with various patterns (pending)
-5. Verify PHI merging for objects across control flow (pending)
+4. Test mutation tracking with `simple_object_test.hbc` ✅
+5. Test array mutations with `PutByVal` ✅
+6. Test escape analysis with various patterns (basic infrastructure ✅, full testing pending)
+7. Verify PHI merging for objects across control flow (pending)
 
 ## Future Enhancements
 
