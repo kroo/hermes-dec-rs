@@ -235,7 +235,7 @@ impl<'a> ValueTracker<'a> {
     pub fn check_object_escape(&self, ssa_value: &SSAValue) -> bool {
         use crate::analysis::value_tracking::EscapeAnalyzer;
         
-        let analyzer = EscapeAnalyzer::new(self.ssa);
+        let analyzer = EscapeAnalyzer::new(self.ssa, self.cfg);
         let def = RegisterDef {
             register: ssa_value.register,
             block_id: ssa_value.def_site.block_id,

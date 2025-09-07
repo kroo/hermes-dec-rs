@@ -5,6 +5,7 @@
 
 use crate::cfg::ssa::types::{RegisterDef, RegisterUse};
 use crate::cfg::ssa::SSAAnalysis;
+use crate::cfg::Cfg;
 use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::InstructionIndex;
 use std::collections::HashSet;
@@ -69,12 +70,13 @@ impl EscapeAnalysisResult {
 /// Analyzer for determining if objects escape their creation scope
 pub struct EscapeAnalyzer<'a> {
     ssa: &'a SSAAnalysis,
+    cfg: &'a Cfg<'a>,
 }
 
 impl<'a> EscapeAnalyzer<'a> {
     /// Create a new escape analyzer
-    pub fn new(ssa: &'a SSAAnalysis) -> Self {
-        Self { ssa }
+    pub fn new(ssa: &'a SSAAnalysis, cfg: &'a Cfg<'a>) -> Self {
+        Self { ssa, cfg }
     }
 
     /// Analyze if an object created at the given definition escapes
@@ -95,18 +97,105 @@ impl<'a> EscapeAnalyzer<'a> {
     }
 
     /// Check if a specific use of the object causes it to escape
-    fn check_use_for_escape(&self, _use_site: &RegisterUse, _result: &mut EscapeAnalysisResult) {
-        // Note: We need access to the actual instruction at the use site
-        // This would require access to the CFG, which we'll need to pass in
-        // For now, we'll mark this as a TODO
+    fn check_use_for_escape(&self, use_site: &RegisterUse, result: &mut EscapeAnalysisResult) {
+        // Get the instruction at the use site
+        let block = &self.cfg.graph()[use_site.block_id];
         
-        // TODO: Get the instruction at use_site and analyze it
-        // Common escape scenarios:
-        // 1. Ret instruction - object is returned
-        // 2. Call/Construct with object as argument - passed to function
-        // 3. StoreToEnvironment - escapes to closure
-        // 4. PutById/PutByVal where object is the value (not the target)
-        // 5. Throw instruction - thrown as exception
+        // Find the instruction at the specified index
+        if let Some(instr_info) = block.instructions().iter()
+            .find(|i| i.instruction_index == use_site.instruction_idx) {
+            
+            // Determine which operand position the register is used in
+            let operand_position = Self::find_operand_position(&instr_info.instruction, use_site.register);
+            
+            if let Some(pos) = operand_position {
+                if let Some(reason) = Self::instruction_causes_escape(&instr_info.instruction, pos) {
+                    result.add_escape(reason, use_site.instruction_idx);
+                }
+            }
+        }
+    }
+    
+    /// Find which operand position a register is used in an instruction
+    fn find_operand_position(instruction: &UnifiedInstruction, register: u8) -> Option<usize> {
+        use UnifiedInstruction::*;
+        
+        match instruction {
+            Ret { operand_0 } if *operand_0 == register => Some(0),
+            Throw { operand_0 } if *operand_0 == register => Some(0),
+            
+            // For PutById variants, check if register is the value (operand_1)
+            PutById { operand_0, operand_1, .. } => {
+                if *operand_0 == register { Some(0) }
+                else if *operand_1 == register { Some(1) }
+                else { None }
+            }
+            PutByIdLong { operand_0, operand_1, .. } => {
+                if *operand_0 == register { Some(0) }
+                else if *operand_1 == register { Some(1) }
+                else { None }
+            }
+            PutNewOwnById { operand_0, operand_1, .. } => {
+                if *operand_0 == register { Some(0) }
+                else if *operand_1 == register { Some(1) }
+                else { None }
+            }
+            PutNewOwnByIdLong { operand_0, operand_1, .. } => {
+                if *operand_0 == register { Some(0) }
+                else if *operand_1 == register { Some(1) }
+                else { None }
+            }
+            PutNewOwnByIdShort { operand_0, operand_1, .. } => {
+                if *operand_0 == register { Some(0) }
+                else if *operand_1 == register { Some(1) }
+                else { None }
+            }
+            
+            // For PutByVal, check all operands
+            PutByVal { operand_0, operand_1, operand_2 } => {
+                if *operand_0 == register { Some(0) }
+                else if *operand_1 == register { Some(1) }
+                else if *operand_2 == register { Some(2) }
+                else { None }
+            }
+            
+            // For calls, need to check which argument position
+            Call { operand_1, operand_2, .. } => {
+                if *operand_1 == register { Some(1) }  // Callee
+                else if *operand_2 == register { Some(2) }  // First argument
+                else { None }
+            }
+            
+            // Handle Call1, Call2, Call3, Call4 variants
+            Call1 { operand_1, operand_2, .. } => {
+                if *operand_1 == register { Some(1) }  // Callee
+                else if *operand_2 == register { Some(2) }  // First argument
+                else { None }
+            }
+            Call2 { operand_1, operand_2, operand_3, .. } => {
+                if *operand_1 == register { Some(1) }  // Callee
+                else if *operand_2 == register { Some(2) }  // This (first argument)
+                else if *operand_3 == register { Some(3) }  // Second argument
+                else { None }
+            }
+            Call3 { operand_1, operand_2, operand_3, operand_4, .. } => {
+                if *operand_1 == register { Some(1) }  // Callee
+                else if *operand_2 == register { Some(2) }  // This
+                else if *operand_3 == register { Some(3) }  // First argument
+                else if *operand_4 == register { Some(4) }  // Second argument
+                else { None }
+            }
+            Call4 { operand_1, operand_2, operand_3, operand_4, operand_5, .. } => {
+                if *operand_1 == register { Some(1) }  // Callee
+                else if *operand_2 == register { Some(2) }  // This
+                else if *operand_3 == register { Some(3) }  // First argument
+                else if *operand_4 == register { Some(4) }  // Second argument
+                else if *operand_5 == register { Some(5) }  // Third argument
+                else { None }
+            }
+            
+            _ => None
+        }
     }
 
     /// Check if an instruction causes escape when the object is used in a specific operand position
@@ -128,7 +217,9 @@ impl<'a> EscapeAnalyzer<'a> {
             }
             
             // Object is passed as an argument to a call
-            Call { .. } | CallLong { .. } | Construct { .. } | ConstructLong { .. } 
+            Call { .. } | CallLong { .. } | 
+            Call1 { .. } | Call2 { .. } | Call3 { .. } | Call4 { .. } |
+            Construct { .. } | ConstructLong { .. } 
                 if operand_position > 0 => {
                 Some(EscapeReason::PassedToFunction {
                     callee: "unknown".to_string(),
