@@ -95,31 +95,6 @@ impl RegisterManager {
         None
     }
 
-    /// Set the current block
-    pub fn set_current_block(&mut self, block: petgraph::graph::NodeIndex) {
-        self.current_block = Some(block);
-    }
-
-    /// Get the current block
-    pub fn current_block(&self) -> Option<petgraph::graph::NodeIndex> {
-        self.current_block
-    }
-
-    /// Get the current SSA value for a register (for source operands)
-    pub fn get_current_ssa_for_register(&self, register: u8) -> Option<SSAValue> {
-        if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
-            // First try to get the value before the current PC (for source operands)
-            if let Some(ssa) = mapping.register_before_pc.get(&(register, pc)) {
-                return Some(ssa.clone());
-            }
-            // Fall back to the value at the current PC
-            if let Some(ssa) = mapping.register_at_pc.get(&(register, pc)) {
-                return Some(ssa.clone());
-            }
-        }
-        None
-    }
-
     /// Set the current duplication context
     pub fn set_duplication_context(&mut self, context: Option<DuplicationContext>) {
         self.current_duplication_context = context;

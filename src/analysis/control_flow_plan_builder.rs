@@ -791,7 +791,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         let mut processed_in_body = HashSet::new();
 
         // Filter out catch blocks from the case body
-<<<<<<< HEAD
         let filtered_blocks: Vec<_> = analysis
             .blocks
             .iter()
@@ -799,13 +798,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             .filter(|b| !self.catch_blocks.contains(b))
             .collect();
 
-=======
-        let filtered_blocks: Vec<_> = analysis.blocks.iter()
-            .copied()
-            .filter(|b| !self.catch_blocks.contains(b))
-            .collect();
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Sort blocks by index to process them in order
         let mut sorted_blocks = filtered_blocks;
         sorted_blocks.sort_by_key(|b| b.index());
@@ -1515,20 +1507,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             .map(|edge| edge.target())
             .collect();
 
-<<<<<<< HEAD
         // If there's exactly one successor and it's not already processed or a catch block,
         // that's our next block
         if successors.len() == 1
             && !self.processed_blocks.contains(&successors[0])
             && !self.catch_blocks.contains(&successors[0])
         {
-=======
-        // If there's exactly one successor and it's not already processed or a catch block, 
-        // that's our next block
-        if successors.len() == 1 
-            && !self.processed_blocks.contains(&successors[0])
-            && !self.catch_blocks.contains(&successors[0]) {
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
             Some(successors[0])
         } else {
             None
@@ -1942,7 +1926,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         analysis: &crate::cfg::exception_analysis::ExceptionAnalysis,
     ) -> StructureId {
         // Find the earliest instruction covered by any exception region
-<<<<<<< HEAD
         let earliest_try_start = analysis
             .regions
             .iter()
@@ -1950,13 +1933,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             .min()
             .unwrap_or(0);
 
-=======
-        let earliest_try_start = analysis.regions.iter()
-            .map(|r| r.try_start_idx)
-            .min()
-            .unwrap_or(0);
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Check if there are any blocks before the exception regions
         let mut preamble_blocks = Vec::new();
         for node in self.cfg.graph().node_indices() {
@@ -1966,17 +1942,10 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 preamble_blocks.push(node);
             }
         }
-<<<<<<< HEAD
 
         // Sort preamble blocks by their start PC
         preamble_blocks.sort_by_key(|&node| self.cfg.graph()[node].start_pc());
 
-=======
-        
-        // Sort preamble blocks by their start PC
-        preamble_blocks.sort_by_key(|&node| self.cfg.graph()[node].start_pc());
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Build the exception structure
         let exception_structure = if analysis.regions.len() == 1 {
             let region = &analysis.regions[0];
@@ -1989,20 +1958,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             let entry_block = NodeIndex::new(0);
             self.build_sequential_structure(entry_block)
         };
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // If we have preamble blocks, create a sequential structure
         if !preamble_blocks.is_empty() {
             use crate::analysis::control_flow_plan::SequentialElement;
             let mut elements = Vec::new();
-<<<<<<< HEAD
 
-=======
-            
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
             // Add each preamble block as a structure
             for block in preamble_blocks {
                 self.processed_blocks.insert(block);
@@ -2013,7 +1974,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 });
                 elements.push(SequentialElement::Structure(block_structure));
             }
-<<<<<<< HEAD
 
             // Add the exception structure
             elements.push(SequentialElement::Structure(exception_structure));
@@ -2021,23 +1981,11 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             // Create and return the sequential structure
             self.plan
                 .create_structure(ControlFlowKind::Sequential { elements })
-=======
-            
-            // Add the exception structure
-            elements.push(SequentialElement::Structure(exception_structure));
-            
-            // Create and return the sequential structure
-            self.plan.create_structure(ControlFlowKind::Sequential { elements })
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         } else {
             exception_structure
         }
     }
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
     /// Build nested exception structures
     fn build_nested_exception_structures(
         &mut self,
@@ -2046,33 +1994,19 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Sort regions by their start index (and reverse end index for proper nesting order)
         let mut sorted_regions = regions.to_vec();
         sorted_regions.sort_by_key(|r| (r.try_start_idx, std::cmp::Reverse(r.try_end_idx)));
-<<<<<<< HEAD
 
         // Find the outermost region (widest range)
         let outermost = sorted_regions
             .iter()
-=======
-        
-        // Find the outermost region (widest range)
-        let outermost = sorted_regions.iter()
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
             .enumerate()
             .max_by_key(|(_, r)| r.try_end_idx - r.try_start_idx)
             .map(|(idx, _)| idx)
             .unwrap_or(0);
-<<<<<<< HEAD
 
         // Build the outermost structure
         self.build_try_catch_structure_with_nested(&sorted_regions[outermost], &sorted_regions)
     }
 
-=======
-        
-        // Build the outermost structure
-        self.build_try_catch_structure_with_nested(&sorted_regions[outermost], &sorted_regions)
-    }
-    
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
     /// Build try-catch structure with potential nested regions
     fn build_try_catch_structure_with_nested(
         &mut self,
@@ -2080,12 +2014,8 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         all_regions: &[crate::cfg::exception_analysis::ExceptionRegion],
     ) -> StructureId {
         // Find any regions nested inside this one
-<<<<<<< HEAD
         let nested_regions: Vec<_> = all_regions
             .iter()
-=======
-        let nested_regions: Vec<_> = all_regions.iter()
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
             .filter(|r| {
                 // A region is nested if it's completely inside this region's try blocks
                 std::ptr::eq(*r, region) == false &&  // Not the same region
@@ -2094,11 +2024,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             })
             .cloned()
             .collect();
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         if !nested_regions.is_empty() {
             // Build the nested structure recursively
             let nested_structure = if nested_regions.len() == 1 {
@@ -2106,7 +2032,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             } else {
                 self.build_nested_exception_structures(&nested_regions)
             };
-<<<<<<< HEAD
 
             // Now build this region with the nested structure as part of the try body
             return self.build_try_catch_with_nested_structure(region, nested_structure);
@@ -2116,17 +2041,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         self.build_try_catch_structure(region)
     }
 
-=======
-            
-            // Now build this region with the nested structure as part of the try body  
-            return self.build_try_catch_with_nested_structure(region, nested_structure);
-        }
-        
-        // No nested regions, build normally
-        self.build_try_catch_structure(region)
-    }
-    
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
     /// Build try-catch with a nested structure in the try body
     fn build_try_catch_with_nested_structure(
         &mut self,
@@ -2134,11 +2048,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         nested_structure: StructureId,
     ) -> StructureId {
         use crate::analysis::control_flow_plan::CatchClause;
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Find blocks that belong to the outer try but not the nested region
         // These are blocks that come before the nested try-catch
         let mut outer_only_blocks = Vec::new();
@@ -2150,27 +2060,16 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 self.processed_blocks.insert(block);
             }
         }
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Build the try body including both outer-only blocks and nested structure
         let try_body = if outer_only_blocks.is_empty() {
             nested_structure
         } else {
             use crate::analysis::control_flow_plan::SequentialElement;
-<<<<<<< HEAD
 
             // Create a sequential structure with outer blocks followed by nested structure
             let mut elements = Vec::new();
 
-=======
-            
-            // Create a sequential structure with outer blocks followed by nested structure
-            let mut elements = Vec::new();
-            
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
             // Add outer-only blocks
             for block in outer_only_blocks {
                 let block_structure = self.plan.create_structure(ControlFlowKind::BasicBlock {
@@ -2180,7 +2079,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 });
                 elements.push(SequentialElement::Structure(block_structure));
             }
-<<<<<<< HEAD
 
             // Add the nested structure
             elements.push(SequentialElement::Structure(nested_structure));
@@ -2207,32 +2105,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             let error_ssa_value =
                 self.find_catch_ssa_value(catch_handler.catch_block, catch_handler.error_register);
 
-=======
-            
-            // Add the nested structure
-            elements.push(SequentialElement::Structure(nested_structure));
-            
-            // Create sequential structure
-            self.plan.create_structure(ControlFlowKind::Sequential { elements })
-        };
-        
-        // Build catch clause if present
-        let catch_clause = if let Some(ref catch_handler) = region.catch_handler {
-            self.processed_blocks.insert(catch_handler.catch_block);
-            
-            let catch_body = self.plan.create_structure(ControlFlowKind::BasicBlock {
-                block: catch_handler.catch_block,
-                instruction_count: self.cfg.graph()[catch_handler.catch_block].instructions().len() - 1, // Skip Catch instruction
-                is_synthetic: false,
-            });
-            
-            // Look up the actual SSA value for the Catch instruction
-            let error_ssa_value = self.find_catch_ssa_value(
-                catch_handler.catch_block,
-                catch_handler.error_register
-            );
-            
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
             Some(CatchClause {
                 catch_block: catch_handler.catch_block,
                 error_register: catch_handler.error_register,
@@ -2242,19 +2114,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         } else {
             None
         };
-<<<<<<< HEAD
 
         // Build finally clause if present
         let finally_clause = region
             .finally_block
             .map(|block| self.build_finally_clause(block));
 
-=======
-        
-        // Build finally clause if present
-        let finally_clause = region.finally_block.map(|block| self.build_finally_clause(block));
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Create the try-catch structure
         self.plan.create_structure(ControlFlowKind::TryCatch {
             try_body,
@@ -2274,11 +2139,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         for &block in &region.try_blocks {
             self.processed_blocks.insert(block);
         }
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         if let Some(ref catch_handler) = region.catch_handler {
             self.processed_blocks.insert(catch_handler.catch_block);
         }
@@ -2300,17 +2161,9 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             });
 
             // Look up the actual SSA value for the Catch instruction
-<<<<<<< HEAD
             let error_ssa_value =
                 self.find_catch_ssa_value(handler.catch_block, handler.error_register);
 
-=======
-            let error_ssa_value = self.find_catch_ssa_value(
-                handler.catch_block,
-                handler.error_register
-            );
-            
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
             CatchClause {
                 catch_block: handler.catch_block,
                 error_register: handler.error_register,
@@ -2338,20 +2191,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     /// Build a branch structure from a set of blocks  
     fn build_branch_from_blocks(&mut self, blocks: &[NodeIndex]) -> StructureId {
         use crate::analysis::control_flow_plan::SequentialElement;
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Mark all blocks as processed
         for &block in blocks {
             self.processed_blocks.insert(block);
         }
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Build sequential structure from the blocks
         if blocks.is_empty() {
             self.plan.create_structure(ControlFlowKind::Empty)
@@ -2368,7 +2213,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 .iter()
                 .map(|&block| SequentialElement::Block(block))
                 .collect();
-<<<<<<< HEAD
             self.plan
                 .create_structure(ControlFlowKind::Sequential { elements })
         }
@@ -2379,16 +2223,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Check if these blocks contain a switch pattern
         if let Some(switch_analysis) = self.cfg.analyze_switch_regions(&self.function_analysis.ssa)
         {
-=======
-            self.plan.create_structure(ControlFlowKind::Sequential { elements })
-        }
-    }
-    
-    /// Build structure from a set of blocks, detecting patterns like switches
-    fn build_structure_from_blocks(&mut self, blocks: &[NodeIndex]) -> StructureId {
-        // Check if these blocks contain a switch pattern
-        if let Some(switch_analysis) = self.cfg.analyze_switch_regions(&self.function_analysis.ssa) {
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
             // Check if any switch region matches our blocks
             for region in &switch_analysis.regions {
                 // Check if the switch dispatch block is in our blocks
@@ -2402,27 +2236,16 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 }
             }
         }
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Check for conditional patterns
         if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
             for chain in &conditional_analysis.chains {
                 // Check if this chain's blocks overlap with our blocks
                 let has_overlap = chain.branches.iter().any(|branch| {
-<<<<<<< HEAD
                     blocks.contains(&branch.condition_block)
                         || branch.branch_blocks.iter().any(|b| blocks.contains(b))
                 });
 
-=======
-                    blocks.contains(&branch.condition_block) || 
-                    branch.branch_blocks.iter().any(|b| blocks.contains(b))
-                });
-                
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
                 if has_overlap {
                     // Mark blocks as processed
                     for &block in blocks {
@@ -2433,11 +2256,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 }
             }
         }
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Fallback: build sequential structure from blocks
         if blocks.len() == 1 {
             let block = blocks[0];
@@ -2452,7 +2271,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 .iter()
                 .map(|&block| SequentialElement::Block(block))
                 .collect();
-<<<<<<< HEAD
             self.plan
                 .create_structure(ControlFlowKind::Sequential { elements })
         }
@@ -2468,18 +2286,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
         let block = &self.cfg.graph()[catch_block];
 
-=======
-            self.plan.create_structure(ControlFlowKind::Sequential { elements })
-        }
-    }
-    
-    /// Find the SSA value defined by the Catch instruction
-    fn find_catch_ssa_value(&self, catch_block: NodeIndex, error_register: u8) -> crate::cfg::ssa::SSAValue {
-        use crate::generated::unified_instructions::UnifiedInstruction;
-        
-        let block = &self.cfg.graph()[catch_block];
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // The Catch instruction is always the first instruction
         if let Some(first_instr) = block.instructions().first() {
             if matches!(&first_instr.instruction, UnifiedInstruction::Catch { .. }) {
@@ -2494,17 +2300,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 }
             }
         }
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Fallback: create a synthetic SSA value if not found
         // This shouldn't normally happen if SSA analysis is complete
         let def_site = crate::cfg::ssa::RegisterDef::new(
             error_register,
             catch_block,
-<<<<<<< HEAD
             block
                 .instructions()
                 .first()
@@ -2522,60 +2323,30 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         use crate::analysis::control_flow_plan::FinallyClause;
         use crate::generated::unified_instructions::UnifiedInstruction;
 
-=======
-            block.instructions().first().map(|i| i.instruction_index.into()).unwrap_or(0u32.into()),
-        );
-        crate::cfg::ssa::SSAValue::new(error_register, 1, def_site)
-    }
-    
-    /// Build the finally clause structure
-    fn build_finally_clause(&mut self, finally_block: NodeIndex) -> crate::analysis::control_flow_plan::FinallyClause {
-        use crate::analysis::control_flow_plan::FinallyClause;
-        use crate::generated::unified_instructions::UnifiedInstruction;
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // The finally block in exception handler contains:
         // 1. Catch instruction (first)
         // 2. Finally code (middle)
         // 3. Throw instruction (last)
-<<<<<<< HEAD
 
         self.processed_blocks.insert(finally_block);
 
         let block = &self.cfg.graph()[finally_block];
         let instructions = block.instructions();
 
-=======
-        
-        self.processed_blocks.insert(finally_block);
-        
-        let block = &self.cfg.graph()[finally_block];
-        let instructions = block.instructions();
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         // Determine how many instructions to skip
         let skip_start = if matches!(
             instructions.first().map(|i| &i.instruction),
             Some(UnifiedInstruction::Catch { .. })
         ) {
-<<<<<<< HEAD
             1 // Skip the Catch instruction
         } else {
             0
         };
 
-=======
-            1  // Skip the Catch instruction
-        } else {
-            0
-        };
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         let skip_end = if matches!(
             instructions.last().map(|i| &i.instruction),
             Some(UnifiedInstruction::Throw { .. })
         ) {
-<<<<<<< HEAD
             1 // Skip the Throw instruction
         } else {
             0
@@ -2585,27 +2356,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         let total_instructions = instructions.len();
         let actual_instruction_count = total_instructions.saturating_sub(skip_start + skip_end);
 
-=======
-            1  // Skip the Throw instruction
-        } else {
-            0
-        };
-        
-        // Calculate the actual instruction count for the finally body
-        let total_instructions = instructions.len();
-        let actual_instruction_count = total_instructions.saturating_sub(skip_start + skip_end);
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         let body = self.plan.create_structure(ControlFlowKind::BasicBlock {
             block: finally_block,
             instruction_count: actual_instruction_count,
             is_synthetic: false,
         });
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
         FinallyClause {
             finally_block,
             body,
@@ -2613,7 +2369,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             skip_end,
         }
     }
-<<<<<<< HEAD
 
     /// Try to build a basic block structure if it hasn't been processed yet
     fn try_build_basic_block(&mut self, block: NodeIndex) -> Option<StructureId> {
@@ -2632,6 +2387,4 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             None
         }
     }
-=======
->>>>>>> 14dcaa1 (Fix SSA use strategies and cascading elimination issues)
 }
