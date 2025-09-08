@@ -1,0 +1,76 @@
+// CFG analysis for constructor_test
+// Generated from data/constructor_test.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-15)\l  0: DeclareGlobalVar  \"testConstructors\"\l  1: DeclareGlobalVar  \"testErrorInCatch\"\l  2: DeclareGlobalVar  \"testMultiArgConstructor\"\l  3: CreateEnvironment r1\l  4: CreateClosure     r2, r1, Function<testConstructors>1\l  5: GetGlobalObject   r0\l  6: PutById           r0, r2, 1, \"testConstructors\"\l  7: CreateClosure     r2, r1, Function<testErrorInCatch>3\l  8: PutById           r0, r2, 2, \"testErrorInCatch\"\l  9: CreateClosure     r1, r1, Function<testMultiArgConstructor>4\l  10: PutById           r0, r1, 3, \"testMultiArgConstructor\"\l  11: GetByIdShort      r1, r0, 1, \"testConstructors\"\l  12: LoadConstUndefined r0\l  13: Call1             r0, r1, r0\l  14: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-69)\l  0: CreateEnvironment r0\l  1: CreateClosure     r9, r0, Function<MyClass>2\l  2: GetGlobalObject   r0\l  3: TryGetById        r3, r0, 1, \"Error\"\l  4: GetByIdShort      r1, r3, 2, \"prototype\"\l  5: CreateThis        r2, r1, r3\l  6: LoadConstString   r13, \"Basic error\"\l  7: Mov               r14, r2\l  8: Construct         r1, r3, 2\l  9: SelectObject      r8, r2, r1\l  10: TryGetById        r3, r0, 3, \"Array\"\l  11: GetByIdShort      r1, r3, 2, \"prototype\"\l  12: CreateThis        r2, r1, r3\l  13: LoadConstUInt8    r13, 5\l  14: Mov               r14, r2\l  15: Construct         r1, r3, 2\l  16: SelectObject      r7, r2, r1\l  17: TryGetById        r5, r0, 3, \"Array\"\l  18: GetByIdShort      r1, r5, 2, \"prototype\"\l  19: CreateThis        r2, r1, r5\l  20: LoadConstUInt8    r13, 1\l  21: LoadConstUInt8    r12, 2\l  22: LoadConstUInt8    r11, 3\l  23: Mov               r14, r2\l  24: Construct         r1, r5, 4\l  25: SelectObject      r6, r2, r1\l  26: TryGetById        r1, r0, 4, \"Object\"\l  27: GetByIdShort      r2, r1, 2, \"prototype\"\l  28: CreateThis        r2, r2, r1\l  29: Mov               r14, r2\l  30: Construct         r1, r1, 1\l  31: SelectObject      r5, r2, r1\l  32: TryGetById        r1, r0, 5, \"Date\"\l  33: GetByIdShort      r2, r1, 2, \"prototype\"\l  34: CreateThis        r2, r2, r1\l  35: Mov               r14, r2\l  36: Construct         r1, r1, 1\l  37: SelectObject      r4, r2, r1\l  38: TryGetById        r3, r0, 5, \"Date\"\l  39: GetByIdShort      r1, r3, 2, \"prototype\"\l  40: CreateThis        r2, r1, r3\l  41: LoadConstString   r13, \"2024-01-01\"\l  42: Mov               r14, r2\l  43: Construct         r1, r3, 2\l  44: SelectObject      r3, r2, r1\l  45: TryGetById        r10, r0, 6, \"RegExp\"\l  46: GetByIdShort      r0, r10, 2, \"prototype\"\l  47: CreateThis        r2, r0, r10\l  48: LoadConstString   r0, \"test\"\l  49: LoadConstString   r12, \"gi\"\l  50: Mov               r14, r2\l  51: Mov               r13, r0\l  52: Construct         r1, r10, 3\l  53: SelectObject      r2, r2, r1\l  54: GetByIdShort      r1, r9, 2, \"prototype\"\l  55: CreateThis        r1, r1, r9\l  56: Mov               r14, r1\l  57: Construct         r0, r9, 2\l  58: SelectObject      r1, r1, r0\l  59: NewObject         r0\l  60: PutNewOwnByIdShort r0, r8, \"err1\"\l  61: PutNewOwnByIdShort r0, r7, \"arr1\"\l  62: PutNewOwnByIdShort r0, r6, \"arr2\"\l  63: PutNewOwnByIdShort r0, r5, \"obj1\"\l  64: PutNewOwnByIdShort r0, r4, \"date1\"\l  65: PutNewOwnByIdShort r0, r3, \"date2\"\l  66: PutNewOwnByIdShort r0, r2, \"regex1\"\l  67: PutNewOwnByIdShort r0, r1, \"inst1\"\l  68: Ret               r0\l" ]
+    f1_n1 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [ label = "Block 0 (PC 0-5)\l  0: LoadParam         r1, 1\l  1: LoadThisNS        r0\l  2: PutById           r0, r1, 1, \"name\"\l  3: LoadConstUndefined r0\l  4: Ret               r0\l" ]
+    f2_n1 [ label = "EXIT" ]
+
+    f2_n0 -> f2_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-9) [L1]\l  0: GetGlobalObject   r0\l  1: TryGetById        r2, r0, 1, \"TypeError\"\l  2: GetByIdShort      r0, r2, 2, \"prototype\"\l  3: CreateThis        r1, r0, r2\l  4: LoadConstString   r3, \"Type error test\"\l  5: Mov               r4, r1\l  6: Construct         r0, r2, 2\l  7: SelectObject      r0, r1, r0\l  8: Throw             r0\l" ]
+    f3_n1 [ label = "Block 1 (PC 9-21) [L2]\l  0: Catch             r0\l  1: GetGlobalObject   r1\l  2: TryGetById        r2, r1, 3, \"RangeError\"\l  3: GetByIdShort      r1, r0, 4, \"message\"\l  4: LoadConstString   r0, \"Range error: \"\l  5: Add               r3, r0, r1\l  6: GetByIdShort      r1, r2, 2, \"prototype\"\l  7: CreateThis        r1, r1, r2\l  8: Mov               r4, r1\l  9: Construct         r0, r2, 2\l  10: SelectObject      r0, r1, r0\l  11: Throw             r0\l" ]
+    f3_n2 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n2 [label="Uncond"]
+    f3_n1 -> f3_n2 [label="Uncond"]
+    f3_n0 -> f3_n1 [label="Exception"]
+  }
+
+  subgraph cluster_function_4 {
+    label = "Function 4";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f4_n0 [ label = "Block 0 (PC 0-36)\l  0: GetGlobalObject   r0\l  1: TryGetById        r4, r0, 1, \"Error\"\l  2: NewObject         r3\l  3: LoadConstString   r1, \"test\"\l  4: PutNewOwnByIdShort r3, r1, \"cause\"\l  5: GetByIdShort      r1, r4, 2, \"prototype\"\l  6: CreateThis        r2, r1, r4\l  7: LoadConstString   r13, \"Error\"\l  8: Mov               r14, r2\l  9: Mov               r12, r3\l  10: Construct         r1, r4, 3\l  11: SelectObject      r3, r2, r1\l  12: TryGetById        r5, r0, 3, \"RegExp\"\l  13: GetByIdShort      r1, r5, 2, \"prototype\"\l  14: CreateThis        r2, r1, r5\l  15: LoadConstString   r13, \"pattern\"\l  16: LoadConstString   r12, \"flags\"\l  17: Mov               r14, r2\l  18: Construct         r1, r5, 3\l  19: SelectObject      r2, r2, r1\l  20: TryGetById        r8, r0, 4, \"Array\"\l  21: GetByIdShort      r0, r8, 2, \"prototype\"\l  22: CreateThis        r1, r0, r8\l  23: LoadConstUInt8    r13, 1\l  24: LoadConstUInt8    r12, 2\l  25: LoadConstUInt8    r11, 3\l  26: LoadConstUInt8    r10, 4\l  27: LoadConstUInt8    r9, 5\l  28: Mov               r14, r1\l  29: Construct         r0, r8, 6\l  30: SelectObject      r1, r1, r0\l  31: NewObject         r0\l  32: PutNewOwnByIdShort r0, r3, \"err\"\l  33: PutNewOwnByIdShort r0, r2, \"regex\"\l  34: PutNewOwnByIdShort r0, r1, \"arr\"\l  35: Ret               r0\l" ]
+    f4_n1 [ label = "EXIT" ]
+
+    f4_n0 -> f4_n1 [label="Uncond"]
+  }
+
+}

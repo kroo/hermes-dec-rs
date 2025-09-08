@@ -120,7 +120,7 @@ enum Commands {
         /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
         #[arg(long)]
         inline_constructor_calls: bool,
-        
+
         /// Inline object literals when safe (experimental)
         #[arg(long)]
         inline_object_literals: bool,
@@ -206,7 +206,7 @@ enum Commands {
         /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
         #[arg(long)]
         inline_constructor_calls: bool,
-        
+
         /// Inline object literals when safe (experimental)
         #[arg(long)]
         inline_object_literals: bool,
@@ -341,12 +341,12 @@ fn main() -> Result<()> {
         } => {
             // Apply optimization presets
             let (
-                _inline_constants,  // Not used in analyze_cfg yet
+                _inline_constants, // Not used in analyze_cfg yet
                 inline_all_constants,
-                _inline_property_access,  // Not used in analyze_cfg yet
+                _inline_property_access, // Not used in analyze_cfg yet
                 inline_all_property_access,
                 inline_global_this,
-                _simplify_calls,  // Not used in analyze_cfg yet
+                _simplify_calls, // Not used in analyze_cfg yet
                 unsafe_simplify_calls,
                 inline_parameters,
                 inline_constructor_calls,

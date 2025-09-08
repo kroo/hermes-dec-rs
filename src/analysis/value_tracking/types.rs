@@ -118,28 +118,24 @@ pub struct ObjectMutation {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MutationKind {
     /// Property set (e.g., obj.x = value or obj["x"] = value)
-    PropertySet { 
-        key: Box<TrackedValue>, 
-        value: Box<TrackedValue> 
+    PropertySet {
+        key: Box<TrackedValue>,
+        value: Box<TrackedValue>,
     },
     /// Property definition (e.g., Object.defineProperty)
-    PropertyDefine { 
-        key: Box<TrackedValue>, 
-        value: Box<TrackedValue> 
+    PropertyDefine {
+        key: Box<TrackedValue>,
+        value: Box<TrackedValue>,
     },
     /// Array element set
-    ArraySet { 
-        index: Box<TrackedValue>, 
-        value: Box<TrackedValue> 
+    ArraySet {
+        index: Box<TrackedValue>,
+        value: Box<TrackedValue>,
     },
     /// Array push operation
-    ArrayPush { 
-        value: Box<TrackedValue> 
-    },
+    ArrayPush { value: Box<TrackedValue> },
     /// Prototype set
-    ProtoSet { 
-        proto: Box<TrackedValue> 
-    },
+    ProtoSet { proto: Box<TrackedValue> },
 }
 
 impl TrackedValue {

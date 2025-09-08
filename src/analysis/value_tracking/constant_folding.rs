@@ -42,11 +42,7 @@ impl ConstantFolder {
     }
 
     /// Fold a comparison operation
-    pub fn fold_comparison<F>(
-        left: &TrackedValue,
-        right: &TrackedValue,
-        op: F,
-    ) -> TrackedValue
+    pub fn fold_comparison<F>(left: &TrackedValue, right: &TrackedValue, op: F) -> TrackedValue
     where
         F: Fn(&ConstantValue, &ConstantValue) -> bool,
     {

@@ -40,7 +40,7 @@ impl<'a> OptimizationPass for PropertyAccessInliningPass<'a> {
     }
 
     fn should_run(&self) -> bool {
-        self.inline_config.inline_property_access 
+        self.inline_config.inline_property_access
             || self.inline_config.inline_all_property_access
             || self.inline_config.inline_object_literals
     }

@@ -523,7 +523,11 @@ impl<'a> SSAUsageTracker<'a> {
             for instr in &block.instructions {
                 if instr.instruction_index == ssa_value.def_site.instruction_idx {
                     if has_side_effects(&instr.instruction) {
-                        log::debug!("Instruction at {} has side effects: {:?}", ssa_value, instr.instruction);
+                        log::debug!(
+                            "Instruction at {} has side effects: {:?}",
+                            ssa_value,
+                            instr.instruction
+                        );
                         // Check if this value has any uses
                         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
                         if all_uses.is_empty()
@@ -532,7 +536,10 @@ impl<'a> SSAUsageTracker<'a> {
                                 call_site_analysis,
                             )
                         {
-                            log::debug!("SSA value {} has no uses or is fully eliminated", ssa_value);
+                            log::debug!(
+                                "SSA value {} has no uses or is fully eliminated",
+                                ssa_value
+                            );
                             // Special case: Array/object literals with constant contents can be eliminated
                             let is_literal = self.is_eliminable_literal(&instr.instruction);
                             log::debug!("Is eliminable literal: {}", is_literal);

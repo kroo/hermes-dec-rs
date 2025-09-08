@@ -361,7 +361,10 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
             };
 
             // Get the constructor expression using the Construct PC as the use site
-            let constructor_expr = self.ssa_value_to_expression_at_use_site(&pattern.constructor, construct_use_site.clone())?;
+            let constructor_expr = self.ssa_value_to_expression_at_use_site(
+                &pattern.constructor,
+                construct_use_site.clone(),
+            )?;
 
             // Get the argument expressions from the SSA values with use strategies
             // Arguments also use the Construct PC as their use site
@@ -371,7 +374,9 @@ impl<'a> MiscHelpers<'a> for InstructionToStatementConverter<'a> {
                 let arg_use_site = crate::cfg::ssa::RegisterUse {
                     register: arg_ssa.register,
                     block_id: self.register_manager.current_block().unwrap_or_default(),
-                    instruction_idx: crate::hbc::InstructionIndex::new(pattern.construct_pc as usize),
+                    instruction_idx: crate::hbc::InstructionIndex::new(
+                        pattern.construct_pc as usize,
+                    ),
                 };
                 let arg_expr = self.ssa_value_to_expression_at_use_site(arg_ssa, arg_use_site)?;
                 arguments.push(oxc_ast::ast::Argument::from(arg_expr));

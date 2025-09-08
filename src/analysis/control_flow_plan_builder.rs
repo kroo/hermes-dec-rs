@@ -46,7 +46,9 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         let post_dominators = cfg.analyze_post_dominators();
 
         // Identify catch blocks from exception analysis
-        let catch_blocks = if let Some(exception_analysis) = cfg.analyze_exception_handlers(&function_analysis.ssa) {
+        let catch_blocks = if let Some(exception_analysis) =
+            cfg.analyze_exception_handlers(&function_analysis.ssa)
+        {
             crate::cfg::exception_analysis::get_catch_blocks(&exception_analysis)
         } else {
             HashSet::new()
@@ -113,7 +115,10 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Use existing CFG analyses instead of reimplementing
 
         // Check for exception handlers first
-        if let Some(exception_analysis) = self.cfg.analyze_exception_handlers(&self.function_analysis.ssa) {
+        if let Some(exception_analysis) = self
+            .cfg
+            .analyze_exception_handlers(&self.function_analysis.ssa)
+        {
             if !exception_analysis.regions.is_empty() {
                 log::debug!(
                     "Found {} exception regions",

@@ -1629,7 +1629,10 @@ impl<'a> ControlFlowPlanConverter<'a> {
 
             for hbc_instruction in instructions_iter {
                 // First check if this instruction has been consumed (e.g., object mutations that are inlined)
-                if plan.consumed_instructions.contains(&(block_id, hbc_instruction.instruction_index)) {
+                if plan
+                    .consumed_instructions
+                    .contains(&(block_id, hbc_instruction.instruction_index))
+                {
                     log::debug!(
                         "Skipping consumed instruction at block {:?} instruction {:?}",
                         block_id,
@@ -1637,7 +1640,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     );
                     continue;
                 }
-                
+
                 // Check if this instruction defines a value that should be skipped
                 let should_skip = if let Some(target_reg) =
                     crate::generated::instruction_analysis::analyze_register_usage(
@@ -1963,9 +1966,9 @@ impl<'a> ControlFlowPlanConverter<'a> {
                 // If for some reason we have a constant in the chain, inline it
                 self.create_constant_expression(value)
             }
-            TrackedValue::Parameter { .. } 
-            | TrackedValue::Phi { .. } 
-            | TrackedValue::Unknown 
+            TrackedValue::Parameter { .. }
+            | TrackedValue::Phi { .. }
+            | TrackedValue::Unknown
             | TrackedValue::MutableObject { .. }
             | TrackedValue::MergedObject { .. } => {
                 // These shouldn't appear in property access chains, but handle gracefully

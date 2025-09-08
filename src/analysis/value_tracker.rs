@@ -4,7 +4,10 @@
 //! including constant folding, parameter detection, and static value analysis.
 
 use crate::cfg::{
-    ssa::{types::{RegisterDef, SSAValue}, SSAAnalysis},
+    ssa::{
+        types::{RegisterDef, SSAValue},
+        SSAAnalysis,
+    },
     Cfg,
 };
 use crate::generated::unified_instructions::UnifiedInstruction;
@@ -46,7 +49,7 @@ impl<'a> ValueTracker<'a> {
             phi_deconstructions: None,
             current_context: None,
         };
-        
+
         // Note: Mutations are collected lazily when analyzing values
         tracker
     }
@@ -78,25 +81,28 @@ impl<'a> ValueTracker<'a> {
         self.current_context = context;
         self
     }
-    
+
     /// Find mutations for a given SSA value by analyzing its uses
     fn find_mutations_for_ssa_value(&self, ssa_value: &SSAValue) -> Vec<ObjectMutation> {
         let mut mutations = Vec::new();
-        
+
         // Find the definition for this SSA value
         let def = RegisterDef {
             register: ssa_value.register,
             block_id: ssa_value.def_site.block_id,
             instruction_idx: ssa_value.def_site.instruction_idx,
         };
-        
+
         // Get all uses of this definition
         if let Some(uses) = self.ssa.def_use_chains.get(&def) {
             for use_site in uses {
-                // Get the instruction at this use site  
+                // Get the instruction at this use site
                 let block_data = &self.cfg.graph()[use_site.block_id];
-                if let Some(instr_info) = block_data.instructions.iter()
-                    .find(|i| i.instruction_index == use_site.instruction_idx) {
+                if let Some(instr_info) = block_data
+                    .instructions
+                    .iter()
+                    .find(|i| i.instruction_index == use_site.instruction_idx)
+                {
                     // Check if this is a mutation instruction
                     if let Some(mutation) = self.extract_mutation_from_instruction(
                         &instr_info.instruction,
@@ -108,10 +114,10 @@ impl<'a> ValueTracker<'a> {
                 }
             }
         }
-        
+
         mutations
     }
-    
+
     /// Extract a mutation from an instruction if it mutates the given object register
     fn extract_mutation_from_instruction(
         &self,
@@ -120,19 +126,33 @@ impl<'a> ValueTracker<'a> {
         object_reg: u8,
     ) -> Option<ObjectMutation> {
         use crate::generated::unified_instructions::UnifiedInstruction;
-        
+
         match instruction {
             // Property mutations by ID
-            UnifiedInstruction::PutById { operand_0, operand_1: value_reg, operand_3: prop_id, .. } |
-            UnifiedInstruction::PutNewOwnById { operand_0, operand_1: value_reg, operand_2: prop_id } |
-            UnifiedInstruction::PutNewOwnNEById { operand_0, operand_1: value_reg, operand_2: prop_id } 
-                if *operand_0 == object_reg => {
+            UnifiedInstruction::PutById {
+                operand_0,
+                operand_1: value_reg,
+                operand_3: prop_id,
+                ..
+            }
+            | UnifiedInstruction::PutNewOwnById {
+                operand_0,
+                operand_1: value_reg,
+                operand_2: prop_id,
+            }
+            | UnifiedInstruction::PutNewOwnNEById {
+                operand_0,
+                operand_1: value_reg,
+                operand_2: prop_id,
+            } if *operand_0 == object_reg => {
                 if let Ok(prop_name) = self.hbc_file.strings.get((*prop_id).into()) {
                     let value = self.get_register_value_at_pc(*value_reg, pc);
                     Some(ObjectMutation {
                         pc,
                         kind: MutationKind::PropertySet {
-                            key: Box::new(TrackedValue::Constant(ConstantValue::String(prop_name.to_string()))),
+                            key: Box::new(TrackedValue::Constant(ConstantValue::String(
+                                prop_name.to_string(),
+                            ))),
                             value: Box::new(value),
                         },
                     })
@@ -140,17 +160,31 @@ impl<'a> ValueTracker<'a> {
                     None
                 }
             }
-            
-            UnifiedInstruction::PutByIdLong { operand_0, operand_1: value_reg, operand_3: prop_id, .. } |
-            UnifiedInstruction::PutNewOwnByIdLong { operand_0, operand_1: value_reg, operand_2: prop_id } |
-            UnifiedInstruction::PutNewOwnNEByIdLong { operand_0, operand_1: value_reg, operand_2: prop_id }
-                if *operand_0 == object_reg => {
+
+            UnifiedInstruction::PutByIdLong {
+                operand_0,
+                operand_1: value_reg,
+                operand_3: prop_id,
+                ..
+            }
+            | UnifiedInstruction::PutNewOwnByIdLong {
+                operand_0,
+                operand_1: value_reg,
+                operand_2: prop_id,
+            }
+            | UnifiedInstruction::PutNewOwnNEByIdLong {
+                operand_0,
+                operand_1: value_reg,
+                operand_2: prop_id,
+            } if *operand_0 == object_reg => {
                 if let Ok(prop_name) = self.hbc_file.strings.get((*prop_id).into()) {
                     let value = self.get_register_value_at_pc(*value_reg, pc);
                     Some(ObjectMutation {
                         pc,
                         kind: MutationKind::PropertySet {
-                            key: Box::new(TrackedValue::Constant(ConstantValue::String(prop_name.to_string()))),
+                            key: Box::new(TrackedValue::Constant(ConstantValue::String(
+                                prop_name.to_string(),
+                            ))),
                             value: Box::new(value),
                         },
                     })
@@ -158,15 +192,20 @@ impl<'a> ValueTracker<'a> {
                     None
                 }
             }
-            
-            UnifiedInstruction::PutNewOwnByIdShort { operand_0, operand_1: value_reg, operand_2: prop_id }
-                if *operand_0 == object_reg => {
+
+            UnifiedInstruction::PutNewOwnByIdShort {
+                operand_0,
+                operand_1: value_reg,
+                operand_2: prop_id,
+            } if *operand_0 == object_reg => {
                 if let Ok(prop_name) = self.hbc_file.strings.get((*prop_id as u32).into()) {
                     let value = self.get_register_value_at_pc(*value_reg, pc);
                     Some(ObjectMutation {
                         pc,
                         kind: MutationKind::PropertySet {
-                            key: Box::new(TrackedValue::Constant(ConstantValue::String(prop_name.to_string()))),
+                            key: Box::new(TrackedValue::Constant(ConstantValue::String(
+                                prop_name.to_string(),
+                            ))),
                             value: Box::new(value),
                         },
                     })
@@ -174,82 +213,102 @@ impl<'a> ValueTracker<'a> {
                     None
                 }
             }
-            
+
             // Array mutations by index
-            UnifiedInstruction::PutOwnByIndex { operand_0, operand_1: value_reg, operand_2: index }
-                if *operand_0 == object_reg => {
+            UnifiedInstruction::PutOwnByIndex {
+                operand_0,
+                operand_1: value_reg,
+                operand_2: index,
+            } if *operand_0 == object_reg => {
                 let value = self.get_register_value_at_pc(*value_reg, pc);
                 Some(ObjectMutation {
                     pc,
                     kind: MutationKind::ArraySet {
-                        index: Box::new(TrackedValue::Constant(ConstantValue::Number(*index as f64))),
+                        index: Box::new(TrackedValue::Constant(ConstantValue::Number(
+                            *index as f64,
+                        ))),
                         value: Box::new(value),
                     },
                 })
             }
-            
-            UnifiedInstruction::PutOwnByIndexL { operand_0, operand_1: value_reg, operand_2: index }
-                if *operand_0 == object_reg => {
+
+            UnifiedInstruction::PutOwnByIndexL {
+                operand_0,
+                operand_1: value_reg,
+                operand_2: index,
+            } if *operand_0 == object_reg => {
                 let value = self.get_register_value_at_pc(*value_reg, pc);
                 Some(ObjectMutation {
                     pc,
                     kind: MutationKind::ArraySet {
-                        index: Box::new(TrackedValue::Constant(ConstantValue::Number(*index as f64))),
+                        index: Box::new(TrackedValue::Constant(ConstantValue::Number(
+                            *index as f64,
+                        ))),
                         value: Box::new(value),
                     },
                 })
             }
-            
+
             // Dynamic property mutations
-            UnifiedInstruction::PutByVal { operand_0, operand_1: key_reg, operand_2: value_reg }
-                if *operand_0 == object_reg => {
+            UnifiedInstruction::PutByVal {
+                operand_0,
+                operand_1: key_reg,
+                operand_2: value_reg,
+            } if *operand_0 == object_reg => {
                 let key = self.get_register_value_at_pc(*key_reg, pc);
                 let value = self.get_register_value_at_pc(*value_reg, pc);
                 Some(ObjectMutation {
                     pc,
-                    kind: MutationKind::PropertySet { 
+                    kind: MutationKind::PropertySet {
                         key: Box::new(key),
                         value: Box::new(value),
                     },
                 })
             }
-            
-            UnifiedInstruction::PutOwnByVal { operand_0, operand_1: key_reg, operand_2: value_reg, .. }
-                if *operand_0 == object_reg => {
+
+            UnifiedInstruction::PutOwnByVal {
+                operand_0,
+                operand_1: key_reg,
+                operand_2: value_reg,
+                ..
+            } if *operand_0 == object_reg => {
                 let key = self.get_register_value_at_pc(*key_reg, pc);
                 let value = self.get_register_value_at_pc(*value_reg, pc);
                 Some(ObjectMutation {
                     pc,
-                    kind: MutationKind::PropertySet { 
+                    kind: MutationKind::PropertySet {
                         key: Box::new(key),
                         value: Box::new(value),
                     },
                 })
             }
-            
-            _ => None
+
+            _ => None,
         }
     }
-    
+
     /// Check if an object escapes the current function scope
     pub fn check_object_escape(&self, ssa_value: &SSAValue) -> bool {
         use crate::analysis::value_tracking::EscapeAnalyzer;
-        
+
         let analyzer = EscapeAnalyzer::new(self.ssa, self.cfg);
         let def = RegisterDef {
             register: ssa_value.register,
             block_id: ssa_value.def_site.block_id,
             instruction_idx: ssa_value.def_site.instruction_idx,
         };
-        
+
         let result = analyzer.analyze_object_escape(&def);
         result.escapes
     }
-    
+
     /// Get the value of a register at a specific PC
     fn get_register_value_at_pc(&self, reg: u8, pc: usize) -> TrackedValue {
         // Try to find the SSA value for this register at this PC
-        if let Some(ssa_value) = self.ssa.get_value_after_instruction(reg, InstructionIndex::new(pc)) {
+        if let Some(ssa_value) = self
+            .ssa
+            .get_value_after_instruction(reg, InstructionIndex::new(pc))
+        {
             self.get_value(ssa_value)
         } else {
             TrackedValue::Unknown
@@ -491,8 +550,8 @@ impl<'a> ValueTracker<'a> {
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: 0,
-                    base_type: ObjectBaseType::Array { 
-                        initial_length: Some(*num_elements as usize) 
+                    base_type: ObjectBaseType::Array {
+                        initial_length: Some(*num_elements as usize),
                     },
                     mutations: Vec::new(),
                 }
@@ -509,8 +568,8 @@ impl<'a> ValueTracker<'a> {
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: 0,
-                    base_type: ObjectBaseType::Array { 
-                        initial_length: Some(*num_elements as usize) 
+                    base_type: ObjectBaseType::Array {
+                        initial_length: Some(*num_elements as usize),
                     },
                     mutations: Vec::new(),
                 }
@@ -525,10 +584,10 @@ impl<'a> ValueTracker<'a> {
                 // Track as mutable object with buffer
                 // TODO: Parse the buffer and add initial mutations
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
-                
+
                 // Find mutations by looking at uses of this SSA value
                 let mutations = self.find_mutations_for_ssa_value(ssa_value);
-                
+
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: mutations.len(),
@@ -545,10 +604,10 @@ impl<'a> ValueTracker<'a> {
                 // Track as mutable object with buffer
                 // TODO: Parse the buffer and add initial mutations
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
-                
+
                 // Find mutations by looking at uses of this SSA value
                 let mutations = self.find_mutations_for_ssa_value(ssa_value);
-                
+
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: mutations.len(),
@@ -561,15 +620,15 @@ impl<'a> ValueTracker<'a> {
             UnifiedInstruction::NewArray { operand_1, .. } => {
                 // Track as a mutable array with versioning
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
-                
+
                 // Find mutations by looking at uses of this SSA value
                 let mutations = self.find_mutations_for_ssa_value(ssa_value);
-                
+
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: mutations.len(),
-                    base_type: ObjectBaseType::Array { 
-                        initial_length: Some(*operand_1 as usize) 
+                    base_type: ObjectBaseType::Array {
+                        initial_length: Some(*operand_1 as usize),
                     },
                     mutations,
                 }
@@ -579,10 +638,10 @@ impl<'a> ValueTracker<'a> {
             UnifiedInstruction::NewObject { .. } => {
                 // Track as a mutable object with versioning
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
-                
+
                 // Find mutations by looking at uses of this SSA value
                 let mutations = self.find_mutations_for_ssa_value(ssa_value);
-                
+
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: mutations.len(),
@@ -595,10 +654,10 @@ impl<'a> ValueTracker<'a> {
             UnifiedInstruction::NewObjectWithParent { .. } => {
                 // Track as a mutable object with versioning
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
-                
+
                 // Find mutations by looking at uses of this SSA value
                 let mutations = self.find_mutations_for_ssa_value(ssa_value);
-                
+
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: mutations.len(),

@@ -489,23 +489,30 @@ pub fn analyze_cfg(
                             };
                             println!("      Declaration strategy: {}", strategy_str);
                         }
-                        
+
                         // Show value tracking information if available
                         if let Some(ref analysis) = func_analysis {
                             let value_tracker = analysis.value_tracker();
                             let tracked_value = value_tracker.get_value(ssa_value);
-                            
+
                             use crate::analysis::value_tracking::TrackedValue;
                             let value_str = match &tracked_value {
                                 TrackedValue::Constant(c) => format!("Constant({:?})", c),
-                                TrackedValue::Parameter { index, .. } => format!("Parameter({})", index),
+                                TrackedValue::Parameter { index, .. } => {
+                                    format!("Parameter({})", index)
+                                }
                                 TrackedValue::GlobalObject => "GlobalObject".to_string(),
                                 TrackedValue::PropertyAccess { property, .. } => {
                                     format!("PropertyAccess(.{})", property)
                                 }
                                 TrackedValue::Phi { .. } => "Phi".to_string(),
                                 TrackedValue::Unknown => "Unknown".to_string(),
-                                TrackedValue::MutableObject { creation_pc, version, base_type, mutations } => {
+                                TrackedValue::MutableObject {
+                                    creation_pc,
+                                    version,
+                                    base_type,
+                                    mutations,
+                                } => {
                                     use crate::analysis::value_tracking::ObjectBaseType;
                                     let type_str = match base_type {
                                         ObjectBaseType::Object => "Object",
@@ -519,16 +526,27 @@ pub fn analyze_cfg(
                                         ObjectBaseType::ObjectWithBuffer => "ObjectWithBuffer",
                                         ObjectBaseType::Function => "Function",
                                     };
-                                    format!("MutableObject({}, pc={}, v={}, mutations={})", 
-                                           type_str, creation_pc, version, mutations.len())
+                                    format!(
+                                        "MutableObject({}, pc={}, v={}, mutations={})",
+                                        type_str,
+                                        creation_pc,
+                                        version,
+                                        mutations.len()
+                                    )
                                 }
-                                TrackedValue::MergedObject { sources, mutations_after_merge } => {
-                                    format!("MergedObject(sources={}, mutations_after={})", 
-                                           sources.len(), mutations_after_merge.len())
+                                TrackedValue::MergedObject {
+                                    sources,
+                                    mutations_after_merge,
+                                } => {
+                                    format!(
+                                        "MergedObject(sources={}, mutations_after={})",
+                                        sources.len(),
+                                        mutations_after_merge.len()
+                                    )
                                 }
                             };
                             println!("      Tracked value: {}", value_str);
-                            
+
                             // If it's a mutable object, show mutations
                             if let TrackedValue::MutableObject { mutations, .. } = &tracked_value {
                                 if !mutations.is_empty() {
@@ -536,65 +554,75 @@ pub fn analyze_cfg(
                                     for mutation in mutations {
                                         let mutation_str = match &mutation.kind {
                                             MutationKind::PropertySet { key, value } => {
-                                                let key_str = if let TrackedValue::Constant(c) = &**key {
-                                                    format!("{:?}", c)
-                                                } else {
-                                                    "?".to_string()
-                                                };
-                                                let val_str = if let TrackedValue::Constant(c) = &**value {
-                                                    format!("{:?}", c)
-                                                } else {
-                                                    tracked_value_type(&**value)
-                                                };
+                                                let key_str =
+                                                    if let TrackedValue::Constant(c) = &**key {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        "?".to_string()
+                                                    };
+                                                let val_str =
+                                                    if let TrackedValue::Constant(c) = &**value {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        tracked_value_type(&**value)
+                                                    };
                                                 format!("PropertySet({} = {})", key_str, val_str)
                                             }
                                             MutationKind::ArraySet { index, value } => {
-                                                let idx_str = if let TrackedValue::Constant(c) = &**index {
-                                                    format!("{:?}", c)
-                                                } else {
-                                                    "?".to_string()
-                                                };
-                                                let val_str = if let TrackedValue::Constant(c) = &**value {
-                                                    format!("{:?}", c)
-                                                } else {
-                                                    tracked_value_type(&**value)
-                                                };
+                                                let idx_str =
+                                                    if let TrackedValue::Constant(c) = &**index {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        "?".to_string()
+                                                    };
+                                                let val_str =
+                                                    if let TrackedValue::Constant(c) = &**value {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        tracked_value_type(&**value)
+                                                    };
                                                 format!("ArraySet([{}] = {})", idx_str, val_str)
                                             }
                                             MutationKind::PropertyDefine { key, value: _ } => {
-                                                let key_str = if let TrackedValue::Constant(c) = &**key {
-                                                    format!("{:?}", c)
-                                                } else {
-                                                    "?".to_string()
-                                                };
+                                                let key_str =
+                                                    if let TrackedValue::Constant(c) = &**key {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        "?".to_string()
+                                                    };
                                                 format!("PropertyDefine({} = ...)", key_str)
                                             }
                                             MutationKind::ArrayPush { value } => {
-                                                let val_str = if let TrackedValue::Constant(c) = &**value {
-                                                    format!("{:?}", c)
-                                                } else {
-                                                    tracked_value_type(&**value)
-                                                };
+                                                let val_str =
+                                                    if let TrackedValue::Constant(c) = &**value {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        tracked_value_type(&**value)
+                                                    };
                                                 format!("ArrayPush({})", val_str)
                                             }
                                             MutationKind::ProtoSet { proto: _ } => {
                                                 format!("ProtoSet(...)")
                                             }
                                         };
-                                        println!("        Mutation@PC{}: {}", mutation.pc, mutation_str);
+                                        println!(
+                                            "        Mutation@PC{}: {}",
+                                            mutation.pc, mutation_str
+                                        );
                                     }
                                 }
-                                
+
                                 // Check if object escapes
                                 let escapes = value_tracker.check_object_escape(ssa_value);
                                 println!("        Escapes: {}", escapes);
-                                
+
                                 // Try to reconstruct the object as a literal
                                 if !escapes {
                                     use crate::analysis::value_tracking::reconstruction::LiteralReconstructor;
                                     let reconstructor = LiteralReconstructor::new(&func_ssa, &cfg);
-                                    let reconstruction = reconstructor.reconstruct(&tracked_value, ssa_value);
-                                    
+                                    let reconstruction =
+                                        reconstructor.reconstruct(&tracked_value, ssa_value);
+
                                     match reconstruction {
                                         crate::analysis::value_tracking::reconstruction::ReconstructionResult::Literal(js) => {
                                             println!("        Can be inlined as: {}", js);

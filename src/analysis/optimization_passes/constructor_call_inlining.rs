@@ -182,7 +182,7 @@ fn find_pattern_for_select(
     // Find the SSA values that SelectObject is actually using
     let select_this_def = find_definition_for_use_at(ctx, select_info.pc, select_this)?;
     let select_return_def = find_definition_for_use_at(ctx, select_info.pc, select_return)?;
-    
+
     trace!(
         "SelectObject at PC {} uses this from PC {} and return from PC {}",
         select_info.pc,
@@ -192,7 +192,10 @@ fn find_pattern_for_select(
 
     // Look for CreateThis that defines select_this and Construct that defines select_return
     // Only consider instructions in the same block as the SelectObject
-    for instr_info in all_instructions.iter().filter(|i| i.block_id == select_info.block_id) {
+    for instr_info in all_instructions
+        .iter()
+        .filter(|i| i.block_id == select_info.block_id)
+    {
         match &instr_info.instruction {
             UnifiedInstruction::CreateThis {
                 operand_0: create_dst,
@@ -207,7 +210,9 @@ fn find_pattern_for_select(
                     select_this_def.instruction_idx.value()
                 );
                 // Check if this is the specific CreateThis that defines the SSA value used by SelectObject
-                if *create_dst == select_this && instr_info.pc as usize == select_this_def.instruction_idx.value() {
+                if *create_dst == select_this
+                    && instr_info.pc as usize == select_this_def.instruction_idx.value()
+                {
                     // This CreateThis defines the 'this' operand of SelectObject
                     create_this_info = Some((instr_info, *fn_reg));
                     debug!("Found CreateThis at PC {} for SelectObject", instr_info.pc);
@@ -226,7 +231,9 @@ fn find_pattern_for_select(
                     select_return_def.instruction_idx.value()
                 );
                 // Check if this is the specific Construct that defines the SSA value used by SelectObject
-                if *construct_dst == select_return && instr_info.pc as usize == select_return_def.instruction_idx.value() {
+                if *construct_dst == select_return
+                    && instr_info.pc as usize == select_return_def.instruction_idx.value()
+                {
                     // This Construct defines the 'return' operand of SelectObject
                     construct_info = Some((instr_info, *fn_reg, *arg_count));
                     debug!("Found Construct at PC {} for SelectObject", instr_info.pc);
@@ -298,9 +305,9 @@ fn find_pattern_for_select(
             construct_info.block_id,
             crate::hbc::InstructionIndex::new(construct_info.pc as usize),
         );
-        
+
         let mut construct_this = None;
-        
+
         if let Some(call_site_info) = ctx.plan.call_site_analysis.call_sites.get(&call_site_key) {
             debug!(
                 "Found call site info for Construct at PC {}: arg_registers={:?}, arg_count={}",
@@ -333,8 +340,9 @@ fn find_pattern_for_select(
         }
 
         // Get the SSA value for the prototype used by CreateThis
-        let create_this_prototype = find_ssa_value_at_use(ctx, create_info.pc, create_prototype_reg);
-        
+        let create_this_prototype =
+            find_ssa_value_at_use(ctx, create_info.pc, create_prototype_reg);
+
         if let Some(ref proto) = create_this_prototype {
             debug!("Found prototype SSA value for CreateThis: {}", proto);
         }
@@ -359,7 +367,11 @@ fn find_pattern_for_select(
 }
 
 /// Find the definition that reaches a use at a specific PC for a register
-fn find_definition_for_use_at(ctx: &OptimizationContext, pc: u32, register: u8) -> Option<RegisterDef> {
+fn find_definition_for_use_at(
+    ctx: &OptimizationContext,
+    pc: u32,
+    register: u8,
+) -> Option<RegisterDef> {
     let ssa = &ctx.function_analysis.ssa;
     let instruction_idx = crate::hbc::InstructionIndex::new(pc as usize);
 
@@ -428,12 +440,18 @@ fn process_constructor_pattern(
     // so they won't generate any statements
     let create_this_pc = pattern.create_this_result.def_site.instruction_idx;
     let construct_pc = crate::hbc::InstructionIndex::new(pattern.construct_pc as usize);
-    
-    ctx.plan.consumed_instructions.insert((pattern.create_this_result.def_site.block_id, create_this_pc));
-    ctx.plan.consumed_instructions.insert((pattern.construct_result.def_site.block_id, construct_pc));
-    
-    debug!("Marked CreateThis at PC {:?} and Construct at PC {} as consumed instructions", 
-           create_this_pc, pattern.construct_pc);
+
+    ctx.plan
+        .consumed_instructions
+        .insert((pattern.create_this_result.def_site.block_id, create_this_pc));
+    ctx.plan
+        .consumed_instructions
+        .insert((pattern.construct_result.def_site.block_id, construct_pc));
+
+    debug!(
+        "Marked CreateThis at PC {:?} and Construct at PC {} as consumed instructions",
+        create_this_pc, pattern.construct_pc
+    );
 
     // Mark all uses of the intermediate values as consumed
     // These intermediate values won't need to be declared or assigned
@@ -443,19 +461,22 @@ fn process_constructor_pattern(
 
     // Mark Construct result uses as consumed
     mark_all_uses_consumed(ctx, &pattern.construct_result);
-    
+
     // Mark the 'this' value passed to Construct as consumed
     // This is often a copy of create_this_result (like var6_b = var1_a)
     if let Some(ref construct_this) = pattern.construct_this {
         mark_all_uses_consumed(ctx, construct_this);
-        
+
         // Also mark the Mov instruction that creates this copy as consumed
         let mov_pc = construct_this.def_site.instruction_idx;
         let mov_block = construct_this.def_site.block_id;
         ctx.plan.consumed_instructions.insert((mov_block, mov_pc));
-        debug!("Marked Mov instruction at PC {:?} as consumed (construct 'this' copy)", mov_pc);
+        debug!(
+            "Marked Mov instruction at PC {:?} as consumed (construct 'this' copy)",
+            mov_pc
+        );
     }
-    
+
     // Mark the prototype value used by CreateThis as consumed
     // This is often something like var1_m = var9.prototype
     if let Some(ref create_this_prototype) = pattern.create_this_prototype {

@@ -43,7 +43,10 @@ pub struct CatchHandler {
 
 impl<'a> Cfg<'a> {
     /// Analyze exception handlers in the function
-    pub fn analyze_exception_handlers(&self, ssa: &crate::cfg::ssa::SSAAnalysis) -> Option<ExceptionAnalysis> {
+    pub fn analyze_exception_handlers(
+        &self,
+        ssa: &crate::cfg::ssa::SSAAnalysis,
+    ) -> Option<ExceptionAnalysis> {
         // Get the parsed header for this function
         let parsed_header = self
             .hbc_file()
@@ -170,7 +173,11 @@ impl<'a> Cfg<'a> {
     }
 
     /// Merge overlapping or nested exception regions and detect finally blocks
-    fn merge_exception_regions(&self, mut regions: Vec<ExceptionRegion>, ssa: &crate::cfg::ssa::SSAAnalysis) -> Vec<ExceptionRegion> {
+    fn merge_exception_regions(
+        &self,
+        mut regions: Vec<ExceptionRegion>,
+        ssa: &crate::cfg::ssa::SSAAnalysis,
+    ) -> Vec<ExceptionRegion> {
         // Sort regions by start index, then by catch target
         regions.sort_by(|a, b| {
             a.try_start_idx.cmp(&b.try_start_idx).then_with(|| {
@@ -284,9 +291,7 @@ impl<'a> Cfg<'a> {
         // First instruction should be Catch
         let (catch_idx, catch_register) = match instructions.first() {
             Some(instr) => match &instr.instruction {
-                UnifiedInstruction::Catch { operand_0 } => {
-                    (instr.instruction_index, *operand_0)
-                }
+                UnifiedInstruction::Catch { operand_0 } => (instr.instruction_index, *operand_0),
                 _ => return false,
             },
             _ => return false,
@@ -295,9 +300,7 @@ impl<'a> Cfg<'a> {
         // Last instruction should be Throw
         let (throw_idx, throws_register) = match instructions.last() {
             Some(instr) => match &instr.instruction {
-                UnifiedInstruction::Throw { operand_0 } => {
-                    (instr.instruction_index, *operand_0)
-                }
+                UnifiedInstruction::Throw { operand_0 } => (instr.instruction_index, *operand_0),
                 _ => return false,
             },
             _ => return false,
@@ -311,7 +314,7 @@ impl<'a> Cfg<'a> {
             instruction_idx: catch_idx,
         };
 
-        // Find the SSA value used by Throw  
+        // Find the SSA value used by Throw
         let throw_use = crate::cfg::ssa::types::RegisterUse {
             register: throws_register,
             block_id: block,

@@ -9,7 +9,7 @@ use super::control_flow_plan::{
 };
 use crate::analysis::optimization_passes::{
     CallSimplificationPass, ConstantInliningPass, ConstructorCallInliningPass,
-    GlobalThisInliningPass, ObjectLiteralInliningPass, OptimizationPass, ParameterInliningPass, 
+    GlobalThisInliningPass, ObjectLiteralInliningPass, OptimizationPass, ParameterInliningPass,
     PropertyAccessInliningPass,
 };
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker, UseStrategy};

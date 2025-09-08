@@ -10,8 +10,8 @@ use crate::analysis::value_tracking::pattern_detection::{
 use crate::analysis::value_tracking::types::{
     ConstantValue, ObjectBaseType, ObjectMutation, TrackedValue,
 };
-use crate::cfg::ssa::SSAAnalysis;
 use crate::cfg::ssa::types::SSAValue;
+use crate::cfg::ssa::SSAAnalysis;
 use crate::cfg::Cfg;
 use std::collections::HashMap;
 
@@ -52,47 +52,37 @@ impl<'a> LiteralReconstructor<'a> {
     /// Attempt to reconstruct a tracked value as a literal
     pub fn reconstruct(&self, value: &TrackedValue, ssa_value: &SSAValue) -> ReconstructionResult {
         match value {
-            TrackedValue::Constant(c) => {
-                ReconstructionResult::Literal(self.constant_to_js(c))
-            }
-            
+            TrackedValue::Constant(c) => ReconstructionResult::Literal(self.constant_to_js(c)),
+
             TrackedValue::MutableObject {
                 creation_pc,
                 base_type,
                 mutations,
                 ..
-            } => {
-                self.reconstruct_mutable_object(*creation_pc, base_type, mutations, ssa_value)
-            }
-            
+            } => self.reconstruct_mutable_object(*creation_pc, base_type, mutations, ssa_value),
+
             TrackedValue::Unknown => {
                 ReconstructionResult::CannotReconstruct("Value is unknown".to_string())
             }
-            
+
             TrackedValue::Parameter { index, .. } => {
-                ReconstructionResult::CannotReconstruct(
-                    format!("Value is parameter {}", index)
-                )
+                ReconstructionResult::CannotReconstruct(format!("Value is parameter {}", index))
             }
-            
-            TrackedValue::GlobalObject => {
-                ReconstructionResult::Literal("globalThis".to_string())
-            }
-            
+
+            TrackedValue::GlobalObject => ReconstructionResult::Literal("globalThis".to_string()),
+
             TrackedValue::PropertyAccess { object, property } => {
                 match self.reconstruct(object, ssa_value) {
                     ReconstructionResult::Literal(obj_js) => {
                         ReconstructionResult::Literal(format!("{}.{}", obj_js, property))
                     }
                     _ => ReconstructionResult::CannotReconstruct(
-                        "Cannot reconstruct property access base".to_string()
+                        "Cannot reconstruct property access base".to_string(),
                     ),
                 }
             }
-            
-            _ => ReconstructionResult::CannotReconstruct(
-                format!("Cannot reconstruct {:?}", value)
-            ),
+
+            _ => ReconstructionResult::CannotReconstruct(format!("Cannot reconstruct {:?}", value)),
         }
     }
 
@@ -112,63 +102,69 @@ impl<'a> LiteralReconstructor<'a> {
             instruction_idx: ssa_value.def_site.instruction_idx,
         };
         let escape_result = escape_analyzer.analyze_object_escape(&def);
-        
+
         if !escape_result.safe_to_inline {
-            let reasons = escape_result.reasons.iter()
+            let reasons = escape_result
+                .reasons
+                .iter()
                 .map(|r| format!("{:?}", r))
                 .collect::<Vec<_>>()
                 .join(", ");
-            return ReconstructionResult::CannotReconstruct(
-                format!("Object not safe to inline: {} (escapes: {})", reasons, escape_result.escapes)
-            );
+            return ReconstructionResult::CannotReconstruct(format!(
+                "Object not safe to inline: {} (escapes: {})",
+                reasons, escape_result.escapes
+            ));
         }
-        
+
         // Detect pattern
         let pattern = PatternDetector::detect_pattern(base_type, mutations, creation_pc as u32);
-        
+
         // Check if pattern is safe to inline
         if !PatternDetector::is_safe_to_inline(&pattern) {
             return ReconstructionResult::CannotReconstruct(
-                "Pattern is not safe to inline".to_string()
+                "Pattern is not safe to inline".to_string(),
             );
         }
-        
+
         // Reconstruct based on pattern
         match pattern {
             ConstructionPattern::SimpleObjectLiteral { properties } => {
                 self.reconstruct_simple_object(&properties)
             }
-            
+
             ConstructionPattern::SimpleArrayLiteral { elements } => {
                 self.reconstruct_simple_array(&elements)
             }
-            
+
             ConstructionPattern::SparseArray { elements, length } => {
                 self.reconstruct_sparse_array(&elements, length)
             }
-            
+
             _ => ReconstructionResult::CannotReconstruct(
-                "Complex pattern cannot be reconstructed".to_string()
+                "Complex pattern cannot be reconstructed".to_string(),
             ),
         }
     }
 
     /// Reconstruct a simple object literal
-    fn reconstruct_simple_object(&self, properties: &[(String, PropertyValue)]) -> ReconstructionResult {
+    fn reconstruct_simple_object(
+        &self,
+        properties: &[(String, PropertyValue)],
+    ) -> ReconstructionResult {
         if properties.is_empty() {
             return ReconstructionResult::Literal("{}".to_string());
         }
-        
+
         let mut parts = Vec::new();
         let mut dynamic_parts = Vec::new();
-        
+
         for (key, value) in properties {
             let key_js = if Self::is_valid_identifier(key) {
                 key.clone()
             } else {
                 format!("\"{}\"", Self::escape_string(key))
             };
-            
+
             match value {
                 PropertyValue::Constant(val) => {
                     // Parse the debug format back to clean JS
@@ -185,15 +181,16 @@ impl<'a> LiteralReconstructor<'a> {
                     });
                 }
                 PropertyValue::Unknown => {
-                    return ReconstructionResult::CannotReconstruct(
-                        format!("Unknown value for property '{}'", key)
-                    );
+                    return ReconstructionResult::CannotReconstruct(format!(
+                        "Unknown value for property '{}'",
+                        key
+                    ));
                 }
             }
         }
-        
+
         let js = format!("{{ {} }}", parts.join(", "));
-        
+
         if dynamic_parts.is_empty() {
             ReconstructionResult::Literal(js)
         } else {
@@ -209,10 +206,10 @@ impl<'a> LiteralReconstructor<'a> {
         if elements.is_empty() {
             return ReconstructionResult::Literal("[]".to_string());
         }
-        
+
         let mut parts = Vec::new();
         let mut dynamic_parts = Vec::new();
-        
+
         for (i, elem) in elements.iter().enumerate() {
             match elem {
                 ArrayElement::Constant(val) => {
@@ -232,15 +229,16 @@ impl<'a> LiteralReconstructor<'a> {
                     parts.push("".to_string()); // Empty slot for sparse array
                 }
                 ArrayElement::Unknown => {
-                    return ReconstructionResult::CannotReconstruct(
-                        format!("Unknown element at index {}", i)
-                    );
+                    return ReconstructionResult::CannotReconstruct(format!(
+                        "Unknown element at index {}",
+                        i
+                    ));
                 }
             }
         }
-        
+
         let js = format!("[{}]", parts.join(", "));
-        
+
         if dynamic_parts.is_empty() {
             ReconstructionResult::Literal(js)
         } else {
@@ -260,7 +258,7 @@ impl<'a> LiteralReconstructor<'a> {
         // For sparse arrays, we'll use array literal with holes
         let mut parts = vec!["".to_string(); length];
         let mut dynamic_parts = Vec::new();
-        
+
         for (idx, elem) in elements {
             match elem {
                 ArrayElement::Constant(val) => {
@@ -276,16 +274,17 @@ impl<'a> LiteralReconstructor<'a> {
                     });
                 }
                 ArrayElement::Unknown => {
-                    return ReconstructionResult::CannotReconstruct(
-                        format!("Unknown element at index {}", idx)
-                    );
+                    return ReconstructionResult::CannotReconstruct(format!(
+                        "Unknown element at index {}",
+                        idx
+                    ));
                 }
                 _ => {}
             }
         }
-        
+
         let js = format!("[{}]", parts.join(", "));
-        
+
         if dynamic_parts.is_empty() {
             ReconstructionResult::Literal(js)
         } else {
@@ -300,7 +299,7 @@ impl<'a> LiteralReconstructor<'a> {
     fn constant_to_js(&self, value: &ConstantValue) -> String {
         Self::constant_to_js_static(value)
     }
-    
+
     /// Static version for testing
     fn constant_to_js_static(value: &ConstantValue) -> String {
         match value {
@@ -322,13 +321,15 @@ impl<'a> LiteralReconstructor<'a> {
             ConstantValue::Null => "null".to_string(),
             ConstantValue::Undefined => "undefined".to_string(),
             ConstantValue::ArrayLiteral(elements) => {
-                let parts: Vec<String> = elements.iter()
+                let parts: Vec<String> = elements
+                    .iter()
                     .map(|e| Self::constant_to_js_static(e))
                     .collect();
                 format!("[{}]", parts.join(", "))
             }
             ConstantValue::ObjectLiteral(props) => {
-                let parts: Vec<String> = props.iter()
+                let parts: Vec<String> = props
+                    .iter()
                     .map(|(k, v)| {
                         let key = if Self::is_valid_identifier(k) {
                             k.clone()
@@ -348,13 +349,14 @@ impl<'a> LiteralReconstructor<'a> {
         if s.is_empty() {
             return false;
         }
-        
+
         let first = s.chars().next().unwrap();
         if !first.is_alphabetic() && first != '_' && first != '$' {
             return false;
         }
-        
-        s.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+
+        s.chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
     }
 
     /// Escape a string for JavaScript
@@ -371,12 +373,12 @@ impl<'a> LiteralReconstructor<'a> {
             })
             .collect()
     }
-    
+
     /// Clean a debug format value string to proper JS
     fn clean_debug_value(val: &str) -> String {
         // Handle common debug formats
         if val.starts_with("Number(") && val.ends_with(")") {
-            let num_str = &val[7..val.len()-1];
+            let num_str = &val[7..val.len() - 1];
             // Remove unnecessary decimal point for integers
             if let Ok(n) = num_str.parse::<f64>() {
                 if n.fract() == 0.0 && n.abs() < 1e10 {
@@ -385,9 +387,9 @@ impl<'a> LiteralReconstructor<'a> {
             }
             return num_str.to_string();
         } else if val.starts_with("String(\"") && val.ends_with("\")") {
-            return val[7..val.len()-1].to_string();
+            return val[7..val.len() - 1].to_string();
         } else if val.starts_with("Boolean(") && val.ends_with(")") {
-            return val[8..val.len()-1].to_string();
+            return val[8..val.len() - 1].to_string();
         } else if val == "Null" {
             return "null".to_string();
         } else if val == "Undefined" {
@@ -408,7 +410,9 @@ mod tests {
             "42"
         );
         assert_eq!(
-            LiteralReconstructor::constant_to_js_static(&ConstantValue::String("hello".to_string())),
+            LiteralReconstructor::constant_to_js_static(&ConstantValue::String(
+                "hello".to_string()
+            )),
             "\"hello\""
         );
         assert_eq!(
@@ -443,7 +447,7 @@ mod tests {
         assert!(LiteralReconstructor::is_valid_identifier("_bar"));
         assert!(LiteralReconstructor::is_valid_identifier("$baz"));
         assert!(LiteralReconstructor::is_valid_identifier("foo123"));
-        
+
         assert!(!LiteralReconstructor::is_valid_identifier("123foo"));
         assert!(!LiteralReconstructor::is_valid_identifier("foo-bar"));
         assert!(!LiteralReconstructor::is_valid_identifier("foo bar"));
