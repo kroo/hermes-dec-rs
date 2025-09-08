@@ -776,6 +776,14 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                     // Build as a regular conditional structure
                     let conditional_structure = self.build_conditional_structure(chain.clone());
                     elements.push(SequentialElement::Structure(conditional_structure));
+                    
+                    // Mark all blocks that were processed by the conditional structure
+                    // This includes any nested structures like switches
+                    for &b in &sorted_blocks {
+                        if self.processed_blocks.contains(&b) {
+                            processed_in_body.insert(b);
+                        }
+                    }
                 }
                 continue;
             }
@@ -939,16 +947,27 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
             // Build the true branch - use all blocks identified in the branch
             let original_true_branch = if first_branch.branch_blocks.is_empty() {
-                self.plan.create_structure(ControlFlowKind::Empty)
+                // Branch blocks might be empty if the branch entry is a switch dispatch
+                // In that case, try to build control structure from the branch entry
+                if let Some(structure) = self.try_build_control_structure(first_branch.branch_entry) {
+                    structure
+                } else {
+                    self.plan.create_structure(ControlFlowKind::Empty)
+                }
             } else if first_branch.branch_blocks.len() == 1 {
                 // Single block branch
                 let block = first_branch.branch_blocks[0];
-                self.processed_blocks.insert(block);
-                self.plan.create_structure(ControlFlowKind::BasicBlock {
-                    block,
-                    instruction_count: self.cfg.graph()[block].instructions().len(),
-                    is_synthetic: false,
-                })
+                // Check if this block starts a control structure
+                if let Some(structure) = self.try_build_control_structure(block) {
+                    structure
+                } else {
+                    self.processed_blocks.insert(block);
+                    self.plan.create_structure(ControlFlowKind::BasicBlock {
+                        block,
+                        instruction_count: self.cfg.graph()[block].instructions().len(),
+                        is_synthetic: false,
+                    })
+                }
             } else {
                 // Multiple blocks - build from the identified blocks
                 self.build_branch_from_blocks(&first_branch.branch_blocks)
@@ -958,15 +977,26 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             let original_false_branch = if chain.branches.len() > 1 {
                 if let Some(second_branch) = chain.branches.get(1) {
                     if second_branch.branch_blocks.is_empty() {
-                        Some(self.plan.create_structure(ControlFlowKind::Empty))
+                        // Branch blocks might be empty if the branch entry is a switch dispatch
+                        // In that case, try to build control structure from the branch entry
+                        if let Some(structure) = self.try_build_control_structure(second_branch.branch_entry) {
+                            Some(structure)
+                        } else {
+                            Some(self.plan.create_structure(ControlFlowKind::Empty))
+                        }
                     } else if second_branch.branch_blocks.len() == 1 {
                         let block = second_branch.branch_blocks[0];
-                        self.processed_blocks.insert(block);
-                        Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
-                            block,
-                            instruction_count: self.cfg.graph()[block].instructions().len(),
-                            is_synthetic: false,
-                        }))
+                        // Check if this block starts a control structure
+                        if let Some(structure) = self.try_build_control_structure(block) {
+                            Some(structure)
+                        } else {
+                            self.processed_blocks.insert(block);
+                            Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
+                                block,
+                                instruction_count: self.cfg.graph()[block].instructions().len(),
+                                is_synthetic: false,
+                            }))
+                        }
                     } else {
                         Some(self.build_branch_from_blocks(&second_branch.branch_blocks))
                     }
@@ -2111,27 +2141,69 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     fn build_branch_from_blocks(&mut self, blocks: &[NodeIndex]) -> StructureId {
         use crate::analysis::control_flow_plan::SequentialElement;
 
-        // Mark all blocks as processed
-        for &block in blocks {
-            self.processed_blocks.insert(block);
-        }
-
-        // Build sequential structure from the blocks
         if blocks.is_empty() {
-            self.plan.create_structure(ControlFlowKind::Empty)
+            return self.plan.create_structure(ControlFlowKind::Empty);
         } else if blocks.len() == 1 {
             let block = blocks[0];
-            self.plan.create_structure(ControlFlowKind::BasicBlock {
+            // Check if this single block starts a control structure
+            if let Some(structure) = self.try_build_control_structure(block) {
+                return structure;
+            }
+            // Otherwise, mark as processed and create a basic block
+            self.processed_blocks.insert(block);
+            return self.plan.create_structure(ControlFlowKind::BasicBlock {
                 block,
                 instruction_count: self.cfg.graph()[block].instructions().len(),
                 is_synthetic: false,
-            })
+            });
+        }
+
+        // Multiple blocks - need to detect nested control flow patterns
+        let mut elements = Vec::new();
+        let mut processed_in_branch = HashSet::new();
+        
+        // Sort blocks by index to process them in order
+        let mut sorted_blocks = blocks.to_vec();
+        sorted_blocks.sort_by_key(|b| b.index());
+
+        for &block in &sorted_blocks {
+            if processed_in_branch.contains(&block) || self.processed_blocks.contains(&block) {
+                continue;
+            }
+
+            // Check if this block starts a control flow pattern
+            if let Some(structure) = self.try_build_control_structure(block) {
+                elements.push(SequentialElement::Structure(structure));
+                // Mark all blocks handled by the structure as processed
+                // The structure builder already marks them in self.processed_blocks
+                for &b in blocks {
+                    if self.processed_blocks.contains(&b) {
+                        processed_in_branch.insert(b);
+                    }
+                }
+            } else {
+                // Regular block
+                self.processed_blocks.insert(block);
+                processed_in_branch.insert(block);
+                elements.push(SequentialElement::Block(block));
+            }
+        }
+
+        // Create the appropriate structure
+        if elements.is_empty() {
+            self.plan.create_structure(ControlFlowKind::Empty)
+        } else if elements.len() == 1 {
+            match elements.into_iter().next().unwrap() {
+                SequentialElement::Block(block) => {
+                    self.plan.create_structure(ControlFlowKind::BasicBlock {
+                        block,
+                        instruction_count: self.cfg.graph()[block].instructions().len(),
+                        is_synthetic: false,
+                    })
+                }
+                SequentialElement::Structure(id) => id,
+            }
         } else {
-            // Create sequential elements for all blocks
-            let elements: Vec<SequentialElement> = blocks
-                .iter()
-                .map(|&block| SequentialElement::Block(block))
-                .collect();
             self.plan
                 .create_structure(ControlFlowKind::Sequential { elements })
         }
