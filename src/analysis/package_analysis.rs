@@ -579,6 +579,29 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
         }
     }
 
+    // Compute indegree for hub filtering and consumers (reverse adjacency)
+    let mut indeg: HashMap<String, usize> = HashMap::new();
+    for (k, dset) in &deps {
+        for d in dset { *indeg.entry(d.clone()).or_insert(0) += 1; }
+        indeg.entry(k.clone()).or_insert(0); // ensure present
+    }
+    let mut consumers: HashMap<String, HashSet<String>> = HashMap::new();
+    for (k, dset) in &deps {
+        for d in dset { consumers.entry(d.clone()).or_default().insert(k.clone()); }
+    }
+
+    // Helpers
+    fn jaccard_filtered(a: &HashSet<String>, b: &HashSet<String>, indeg: &HashMap<String, usize>, hub_cutoff: usize) -> f32 {
+        let filt = |s: &HashSet<String>| -> HashSet<String> {
+            s.iter().filter(|x| indeg.get(*x).copied().unwrap_or(0) < hub_cutoff).cloned().collect()
+        };
+        let af = filt(a); let bf = filt(b);
+        if af.is_empty() && bf.is_empty() { return 0.0; }
+        let inter = af.intersection(&bf).count() as f32;
+        let uni = (af.len() + bf.len()).saturating_sub(inter as usize) as f32;
+        if uni <= 0.0 { 0.0 } else { inter / uni }
+    }
+
     // Pairwise strengths
     let mut strength: HashMap<(String, String), f32> = HashMap::new();
     let keys: Vec<String> = deps.keys().cloned().collect();
@@ -590,43 +613,39 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
             let db = deps.get(b).unwrap();
 
             let mut s = 0.0f32;
+            // Bidirectional / unidirectional
             let a_to_b = da.contains(b);
             let b_to_a = db.contains(a);
-            if a_to_b && b_to_a {
-                s += 0.6;
-            } else if a_to_b || b_to_a {
-                s += 0.3;
-            }
+            if a_to_b && b_to_a { s += 0.6; }
+            else if a_to_b || b_to_a { s += 0.35; }
 
-            // Shared dependencies
-            let shared = da.intersection(db).count() as f32;
-            if shared > 0.0 {
-                s += (0.1 * shared).min(0.4);
-            }
+            // Shared dependencies (Jaccard, hub-filtered)
+            let j_dep = jaccard_filtered(da, db, &indeg, 100);
+            s += 0.5 * j_dep as f32;
 
-            // Transitive dependencies A->X->B or B->X->A
+            // Shared consumers (reverse adjacency)
+            let empty_hs: HashSet<String> = HashSet::new();
+            let ca_ref = consumers.get(a).unwrap_or(&empty_hs);
+            let cb_ref = consumers.get(b).unwrap_or(&empty_hs);
+            let j_con = jaccard_filtered(ca_ref, cb_ref, &indeg, 100);
+            s += 0.3 * j_con as f32;
+
+            // Transitive hint
             let mut trans = false;
             for x in da {
-                if let Some(dx) = deps.get(x) {
-                    if dx.contains(b) {
-                        trans = true;
-                        break;
-                    }
-                }
+                if let Some(dx) = deps.get(x) { if dx.contains(b) { trans = true; break; } }
             }
-            for x in db {
-                if let Some(dx) = deps.get(x) {
-                    if dx.contains(a) {
-                        trans = true;
-                        break;
-                    }
+            if !trans {
+                for x in db {
+                    if let Some(dx) = deps.get(x) { if dx.contains(a) { trans = true; break; } }
                 }
             }
             if trans { s += 0.1; }
 
             if s > 0.0 {
-                strength.insert((a.clone(), b.clone()), s);
-                strength.insert((b.clone(), a.clone()), s);
+                let s_cap = s.min(1.0);
+                strength.insert((a.clone(), b.clone()), s_cap);
+                strength.insert((b.clone(), a.clone()), s_cap);
             }
         }
     }
@@ -653,7 +672,7 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
         }
     }
 
-    let threshold = 0.7f32;
+    let threshold = 0.55f32;
     let mut uf = UF::new(&keys);
     for ((a, b), w) in &strength { if *w >= threshold { uf.union(a, b); } }
 
@@ -690,18 +709,42 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
             }
         }
 
-        // For size-2 clusters, require very high pair strength; otherwise skip
+        // For size-2 clusters, require strong pair strength; otherwise skip
         if size == 2 {
             let w = strength.get(&(members[0].clone(), members[1].clone())).copied().unwrap_or(0.0);
-            if w < 0.9 { continue; }
+            if w < 0.75 { continue; }
         }
 
         // Pattern detection
         let pattern = detect_cluster_pattern(&members, &deps);
 
+        // Initial cluster
         clusters.push(DependencyCluster { id: cid, modules: members.clone(), size, avg_strength: avg, pattern, external_edges: ext_edges });
-        for m in members { key_to_cluster.insert(m, cid); }
+        for m in &clusters.last().unwrap().modules { key_to_cluster.insert(m.clone(), cid); }
         cid += 1;
+    }
+
+    // Expansion: attach neighbors with at least k strong ties (k=2) to clusters of size>=3
+    let k_required = 1usize;
+    for cl in &mut clusters {
+        if cl.size < 3 { continue; }
+        let current_members: HashSet<String> = cl.modules.iter().cloned().collect();
+        let mut to_add: Vec<String> = Vec::new();
+        for n in &keys {
+            if current_members.contains(n) { continue; }
+            if key_to_cluster.contains_key(n) { continue; }
+            let mut ties = 0usize;
+            for m in &cl.modules {
+                if let Some(w) = strength.get(&(n.clone(), m.clone())) { if *w >= 0.5 { ties += 1; } }
+                if ties >= k_required { break; }
+            }
+            if ties >= k_required { to_add.push(n.clone()); }
+        }
+        for n in to_add {
+            cl.modules.push(n.clone());
+            cl.size += 1;
+            key_to_cluster.insert(n, cl.id);
+        }
     }
 
     // Annotate modules with cluster id and optionally override cluster label
@@ -761,12 +804,11 @@ fn compute_cluster_stats(report: &mut PackageReport) {
     let mut clustered_edges = 0usize;
     for m in &report.modules {
         let src_cid = m.cluster_id;
-        if let Some(src_key) = module_key(m) {
-            for d in &m.dependencies {
-                total_edges += 1;
-                if let (Some(scid), Some(&dcid)) = (src_cid, key_to_cluster.get(d)) {
-                    if scid == dcid { clustered_edges += 1; }
-                }
+        // let _src_key = module_key(m);
+        for d in &m.dependencies {
+            total_edges += 1;
+            if let (Some(scid), Some(&dcid)) = (src_cid, key_to_cluster.get(d)) {
+                if scid == dcid { clustered_edges += 1; }
             }
         }
     }
