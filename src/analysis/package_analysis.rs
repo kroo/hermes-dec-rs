@@ -45,6 +45,8 @@ pub struct ModuleInfo {
     pub indegree: Option<usize>,
     /// Simple cluster label based on heuristics (entry/core/feature/deep/shared)
     pub cluster: Option<String>,
+    /// Assigned dependency cluster id
+    pub cluster_id: Option<usize>,
 }
 
 /// High-level package report
@@ -54,6 +56,8 @@ pub struct PackageReport {
     pub modules: Vec<ModuleInfo>,
     /// Detected entry modules by module ID (string or numeric rendered as string)
     pub entrypoints: Vec<String>,
+    /// Discovered dependency clusters
+    pub clusters: Vec<DependencyCluster>,
 }
 
 /// Analyze a Hermes HBC file for Metro bundle structure and module graph.
@@ -368,8 +372,9 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
         string_count: hbc.header.string_count(),
     };
 
-    let mut report = PackageReport { stats, modules, entrypoints: detected_entries };
+    let mut report = PackageReport { stats, modules, entrypoints: detected_entries, clusters: Vec::new() };
     annotate_dependency_clusters(&mut report);
+    compute_dependency_clusters(&mut report);
     Ok(report)
 }
 
@@ -554,6 +559,180 @@ fn annotate_dependency_clusters(report: &mut PackageReport) {
     }
 }
 
+/// Compute cluster groupings based on pairwise connection strengths.
+fn compute_dependency_clusters(report: &mut PackageReport) {
+    use std::collections::{HashMap, HashSet};
+
+    fn module_key(m: &ModuleInfo) -> Option<String> {
+        if let Some(n) = m.module_id_u32 { Some(n.to_string()) } else { m.module_id_str.clone() }
+    }
+
+    // Build adjacency
+    let mut deps: HashMap<String, HashSet<String>> = HashMap::new();
+    for m in &report.modules {
+        if let Some(k) = module_key(m) {
+            let set: HashSet<String> = m.dependencies.iter().cloned().collect();
+            deps.insert(k, set);
+        }
+    }
+
+    // Pairwise strengths
+    let mut strength: HashMap<(String, String), f32> = HashMap::new();
+    let keys: Vec<String> = deps.keys().cloned().collect();
+    for i in 0..keys.len() {
+        for j in (i + 1)..keys.len() {
+            let a = &keys[i];
+            let b = &keys[j];
+            let da = deps.get(a).unwrap();
+            let db = deps.get(b).unwrap();
+
+            let mut s = 0.0f32;
+            let a_to_b = da.contains(b);
+            let b_to_a = db.contains(a);
+            if a_to_b && b_to_a {
+                s += 0.6;
+            } else if a_to_b || b_to_a {
+                s += 0.3;
+            }
+
+            // Shared dependencies
+            let shared = da.intersection(db).count() as f32;
+            if shared > 0.0 {
+                s += (0.1 * shared).min(0.4);
+            }
+
+            // Transitive dependencies A->X->B or B->X->A
+            let mut trans = false;
+            for x in da {
+                if let Some(dx) = deps.get(x) {
+                    if dx.contains(b) {
+                        trans = true;
+                        break;
+                    }
+                }
+            }
+            for x in db {
+                if let Some(dx) = deps.get(x) {
+                    if dx.contains(a) {
+                        trans = true;
+                        break;
+                    }
+                }
+            }
+            if trans { s += 0.1; }
+
+            if s > 0.0 {
+                strength.insert((a.clone(), b.clone()), s);
+                strength.insert((b.clone(), a.clone()), s);
+            }
+        }
+    }
+
+    // Union-Find
+    struct UF { parent: HashMap<String, String>, size: HashMap<String, usize> }
+    impl UF {
+        fn new(nodes: &[String]) -> Self {
+            let mut parent = HashMap::new();
+            let mut size = HashMap::new();
+            for n in nodes { parent.insert(n.clone(), n.clone()); size.insert(n.clone(), 1); }
+            Self { parent, size }
+        }
+        fn find(&mut self, x: &String) -> String {
+            let p = self.parent.get(x).cloned().unwrap();
+            if &p != x { let root = self.find(&p); self.parent.insert(x.clone(), root.clone()); root } else { p }
+        }
+        fn union(&mut self, a: &String, b: &String) {
+            let ra = self.find(a); let rb = self.find(b);
+            if ra == rb { return; }
+            let sa = *self.size.get(&ra).unwrap(); let sb = *self.size.get(&rb).unwrap();
+            if sa >= sb { self.parent.insert(rb.clone(), ra.clone()); *self.size.get_mut(&ra).unwrap() += sb; }
+            else { self.parent.insert(ra.clone(), rb.clone()); *self.size.get_mut(&rb).unwrap() += sa; }
+        }
+    }
+
+    let threshold = 0.7f32;
+    let mut uf = UF::new(&keys);
+    for ((a, b), w) in &strength { if *w >= threshold { uf.union(a, b); } }
+
+    // Build clusters using the union-find with unions applied
+    let mut root_to_members: HashMap<String, Vec<String>> = HashMap::new();
+    for k in &keys {
+        let r = uf.find(k);
+        root_to_members.entry(r).or_default().push(k.clone());
+    }
+
+    // Compute cluster metrics and patterns
+    let mut clusters: Vec<DependencyCluster> = Vec::new();
+    let mut key_to_cluster: HashMap<String, usize> = HashMap::new();
+    let mut cid = 0usize;
+    for (_root, members) in root_to_members.into_iter() {
+        if members.len() <= 1 { continue; }
+        // Average internal strength
+        let mut total = 0.0f32; let mut cnt = 0usize;
+        for i in 0..members.len() { for j in (i+1)..members.len() {
+            if let Some(w) = strength.get(&(members[i].clone(), members[j].clone())) { total += *w; cnt += 1; }
+        }}
+        let avg = if cnt > 0 { total / (cnt as f32) } else { 0.0 };
+
+        // External edges count
+        let set: HashSet<String> = members.iter().cloned().collect();
+        let mut ext_edges = 0usize;
+        for m in &members {
+            if let Some(dset) = deps.get(m) {
+                for d in dset {
+                    if !set.contains(d) { ext_edges += 1; }
+                }
+            }
+        }
+
+        // Pattern detection
+        let pattern = detect_cluster_pattern(&members, &deps);
+
+        clusters.push(DependencyCluster { id: cid, modules: members.clone(), size: members.len(), avg_strength: avg, pattern, external_edges: ext_edges });
+        for m in members { key_to_cluster.insert(m, cid); }
+        cid += 1;
+    }
+
+    // Annotate modules with cluster id and optionally override cluster label
+    for m in &mut report.modules {
+        let key = module_key(m);
+        if let Some(k) = key { if let Some(id) = key_to_cluster.get(&k) { m.cluster_id = Some(*id); } }
+    }
+
+    report.clusters = clusters;
+}
+
+fn detect_cluster_pattern(members: &[String], deps: &std::collections::HashMap<String, std::collections::HashSet<String>>) -> String {
+    use std::collections::HashSet;
+    let set: HashSet<String> = members.iter().cloned().collect();
+    // Build internal degrees
+    let mut deg_in = vec![0usize; members.len()];
+    let mut deg_out = vec![0usize; members.len()];
+    for (i, m) in members.iter().enumerate() {
+        if let Some(ds) = deps.get(m) {
+            for d in ds {
+                if set.contains(d) {
+                    deg_out[i] += 1;
+                    if let Some(j) = members.iter().position(|x| x == d) { deg_in[j] += 1; }
+                }
+            }
+        }
+    }
+    let n = members.len();
+    let sum_in: usize = deg_in.iter().sum();
+    let sum_out: usize = deg_out.iter().sum();
+    let max_in = *deg_in.iter().max().unwrap_or(&0);
+    // Tight cluster: sizeable and well-connected
+    if n > 5 && (sum_in + sum_out) as f32 / (n as f32) >= 4.0 { return "tight".into(); }
+    // Star: one node with high indegree relative to others
+    if max_in >= (n.saturating_sub(1)).max(1) / 2 { return "star".into(); }
+    // Chain: internal degrees mostly <=2
+    let deg_ok = deg_in.iter().zip(deg_out.iter()).filter(|(a,b)| (**a + **b) <= 2).count();
+    if deg_ok == n { return "chain".into(); }
+    // Island: small external connectivity implied by caller
+    "cluster".into()
+}
+
 // This will parse through function 0, looking for a structure matching the following:
 //
 // [PRE-CODE] + [MODULES] + [POST-CODE]
@@ -615,3 +794,12 @@ fn annotate_dependency_clusters(report: &mut PackageReport) {
 //   }
 // }
 // ```
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct DependencyCluster {
+    pub id: usize,
+    pub modules: Vec<String>,
+    pub size: usize,
+    pub avg_strength: f32,
+    pub pattern: String,
+    pub external_edges: usize,
+}
