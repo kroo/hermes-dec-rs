@@ -40,6 +40,11 @@ pub struct ModuleInfo {
     pub dependencies: Vec<String>,
     /// True if this module appears to be executed from post-code (entrypoint)
     pub is_entry: bool,
+    /// Dependency graph metrics
+    pub depth: Option<usize>,
+    pub indegree: Option<usize>,
+    /// Simple cluster label based on heuristics (entry/core/feature/deep/shared)
+    pub cluster: Option<String>,
 }
 
 /// High-level package report
@@ -149,6 +154,35 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
                 .collect();
         calls.sort_by_key(|(pc, _)| pc.0);
 
+        // Helper: summarize a tracked value for logging
+        fn summarize_tracked_value(
+            v: &crate::analysis::value_tracking::types::TrackedValue,
+        ) -> String {
+            use crate::analysis::value_tracking::types::{ConstantValue as CV, ObjectBaseType, TrackedValue as TV};
+            match v {
+                TV::Constant(CV::String(s)) => format!("Constant(String:{})", s.chars().take(40).collect::<String>()),
+                TV::Constant(CV::Number(n)) => format!("Constant(Number:{})", n),
+                TV::Constant(CV::Boolean(b)) => format!("Constant(Boolean:{})", b),
+                TV::Constant(CV::Null) => "Constant(Null)".to_string(),
+                TV::Constant(CV::Undefined) => "Constant(Undefined)".to_string(),
+                TV::Constant(CV::ArrayLiteral(elems)) => format!("Constant(Array:{} elements)", elems.len()),
+                TV::Constant(CV::ObjectLiteral(props)) => format!("Constant(Object:{} props)", props.len()),
+                TV::Parameter { index, .. } => format!("Parameter#index{}", index),
+                TV::GlobalObject => "GlobalObject".to_string(),
+                TV::PropertyAccess { property, .. } => format!("PropertyAccess(.{})", property),
+                TV::MutableObject { base_type, mutations, .. } => {
+                    let kind = match base_type {
+                        ObjectBaseType::Object => "Object",
+                        ObjectBaseType::Array { .. } => "Array",
+                        ObjectBaseType::ObjectWithBuffer => "ObjectWithBuffer",
+                        ObjectBaseType::Function => "Function",
+                    };
+                    format!("Mutable({} with {} mutations)", kind, mutations.len())
+                }
+                _ => "Unknown".to_string(),
+            }
+        }
+
         // Iterate calls and detect __d registrations and require entrypoints
         for (pc, info) in calls {
             // Determine callee
@@ -175,62 +209,69 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
             if let Some(name) = &callee_name {
                 match name.as_str() {
                     "__d" => {
-                        // Expected args: fn, moduleId, dependencyMap, [verboseName]
-                        let mut module = ModuleInfo::default();
+                        // Strict pattern: require >= 3 args and CreateClosure first arg; moduleId must be constant string/number
+                        if arg_vals.len() < 3 {
+                            log::warn!("__d call at pc {} has {} args (expected >=3) — skipping", pc.0, arg_vals.len());
+                            continue;
+                        }
 
-                        // module function id if closure
-                        if let Some(fn_tv) = arg_vals.get(0) {
-                            // Try to inspect def instruction for CreateClosure
-                            if let crate::analysis::value_tracking::types::TrackedValue::Parameter { ssa_value: _, .. }
-                            | crate::analysis::value_tracking::types::TrackedValue::Phi { ssa_value: _ }
-                            | crate::analysis::value_tracking::types::TrackedValue::MutableObject { .. }
-                            | crate::analysis::value_tracking::types::TrackedValue::PropertyAccess { .. }
-                            | crate::analysis::value_tracking::types::TrackedValue::Constant(_)
-                            | crate::analysis::value_tracking::types::TrackedValue::GlobalObject
-                            | crate::analysis::value_tracking::types::TrackedValue::Unknown = fn_tv
-                            {
-                                // Best-effort: walk to SSA def site for the callee register itself
-                                if let Some(fn_ssa) = ssa.get_value_before_instruction(info.argument_registers[1], pc) {
-                                    let block = &cfg.graph()[fn_ssa.def_site.block_id];
-                                    let inst_offset = fn_ssa.def_site.instruction_idx.value()
-                                        - block.start_pc().value();
-                                    if let Some(instr) = block.instructions().get(inst_offset) {
-                                        match &instr.instruction {
-                                            UnifiedInstruction::CreateClosure { operand_2, .. }
-                                            | UnifiedInstruction::CreateAsyncClosure { operand_2, .. }
-                                            | UnifiedInstruction::CreateGeneratorClosure { operand_2, .. } => {
-                                                module.function_id = Some(*operand_2 as u32);
-                                            }
-                                            UnifiedInstruction::CreateClosureLongIndex { operand_2, .. }
-                                            | UnifiedInstruction::CreateAsyncClosureLongIndex { operand_2, .. }
-                                            | UnifiedInstruction::CreateGeneratorClosureLongIndex { operand_2, .. } => {
-                                                module.function_id = Some(*operand_2 as u32);
-                                            }
-                                            _ => {}
-                                        }
+                        // module function id must be CreateClosure target
+                        let mut function_id: Option<u32> = None;
+                        if let Some(fn_ssa) = ssa.get_value_before_instruction(info.argument_registers[1], pc) {
+                            let block = &cfg.graph()[fn_ssa.def_site.block_id];
+                            let inst_offset = fn_ssa.def_site.instruction_idx.value() - block.start_pc().value();
+                            if let Some(instr) = block.instructions().get(inst_offset) {
+                                match &instr.instruction {
+                                    UnifiedInstruction::CreateClosure { operand_2, .. }
+                                    | UnifiedInstruction::CreateAsyncClosure { operand_2, .. }
+                                    | UnifiedInstruction::CreateGeneratorClosure { operand_2, .. } => {
+                                        function_id = Some(*operand_2 as u32);
                                     }
+                                    UnifiedInstruction::CreateClosureLongIndex { operand_2, .. }
+                                    | UnifiedInstruction::CreateAsyncClosureLongIndex { operand_2, .. }
+                                    | UnifiedInstruction::CreateGeneratorClosureLongIndex { operand_2, .. } => {
+                                        function_id = Some(*operand_2 as u32);
+                                    }
+                                    _ => {}
                                 }
                             }
                         }
-
-                        // moduleId (2nd arg)
-                        if let Some(id_tv) = arg_vals.get(1) {
-                            if let Some(s) = const_string_or_number(id_tv) {
-                                if let Ok(n) = s.parse::<u32>() {
-                                    module.module_id_u32 = Some(n);
-                                } else {
-                                    module.module_id_str = Some(s.clone());
-                                }
-                            }
+                        if function_id.is_none() {
+                            log::warn!("__d call at pc {} — first arg is not a CreateClosure; skipping", pc.0);
+                            continue;
                         }
 
-                        // dependencyMap (3rd arg)
-                        if let Some(dep_tv) = arg_vals.get(2) {
-                            // Attempt to extract dependency IDs from array/object literals
-                            let deps = extract_dependencies(dep_tv);
-                            if !deps.is_empty() {
-                                module.dependencies = deps;
+                        // moduleId (2nd arg) must be constant string/number
+                        let module_id_str = match const_string_or_number(&arg_vals[1]) {
+                            Some(s) => s,
+                            None => {
+                                log::warn!("__d call at pc {} — second arg (moduleId) not constant; skipping", pc.0);
+                                continue;
                             }
+                        };
+
+                        // dependencyMap (3rd arg) — extract and log details
+                        let dep_tv = &arg_vals[2];
+                        let deps = extract_dependencies(dep_tv);
+                        log::info!(
+                            "__d at pc {}: fn_id={}, module_id={}, dep_arg={}, deps_extracted={}{}",
+                            pc.0,
+                            function_id.unwrap(),
+                            module_id_str,
+                            summarize_tracked_value(dep_tv),
+                            deps.len(),
+                            if deps.is_empty() { "".to_string() } else { format!(", sample=[{}]", deps.iter().take(5).cloned().collect::<Vec<_>>().join(", ")) }
+                        );
+
+                        let mut module = ModuleInfo::default();
+                        module.function_id = function_id;
+                        if let Ok(n) = module_id_str.parse::<u32>() {
+                            module.module_id_u32 = Some(n);
+                        } else {
+                            module.module_id_str = Some(module_id_str.clone());
+                        }
+                        if !deps.is_empty() {
+                            module.dependencies = deps;
                         }
 
                         // verboseName (dev bundles)
@@ -240,20 +281,20 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
                             }
                         }
 
-                        // Merge into existing list if we can match by function_id or module_id
+                        // Merge by function_id/module_id
                         if let Some(fid) = module.function_id {
                             if let Some(existing) = modules.iter_mut().find(|m| m.function_id == Some(fid)) {
-                                // Update fields
                                 if module.module_id_u32.is_some() { existing.module_id_u32 = module.module_id_u32; }
                                 if module.module_id_str.is_some() { existing.module_id_str = module.module_id_str.clone(); }
                                 if module.filename.is_some() { existing.filename = module.filename.clone(); }
+                                if !module.dependencies.is_empty() { existing.dependencies = module.dependencies.clone(); }
                             } else {
                                 modules.push(module);
                             }
                         } else if module.module_id_u32.is_some() || module.module_id_str.is_some() {
-                            // No function id; match by module id if present
                             if let Some(existing) = modules.iter_mut().find(|m| m.module_id_u32 == module.module_id_u32 && m.module_id_str == module.module_id_str) {
                                 if module.filename.is_some() { existing.filename = module.filename.clone(); }
+                                if !module.dependencies.is_empty() { existing.dependencies = module.dependencies.clone(); }
                             } else {
                                 modules.push(module);
                             }
@@ -273,6 +314,8 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
                     _ => {}
                 }
             }
+
+            // No fallback handling — only process explicit __d calls
         }
 
         // Additionally detect direct calls to known function IDs in function 0
@@ -325,11 +368,9 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
         string_count: hbc.header.string_count(),
     };
 
-    Ok(PackageReport {
-        stats,
-        modules,
-        entrypoints: detected_entries,
-    })
+    let mut report = PackageReport { stats, modules, entrypoints: detected_entries };
+    annotate_dependency_clusters(&mut report);
+    Ok(report)
 }
 
 /// Extract dependency IDs from a tracked value representing Metro dependency map
@@ -440,6 +481,77 @@ fn extract_dependencies(
     }
 
     Vec::new()
+}
+
+/// Compute simple dependency clustering and annotate modules with graph metrics
+fn annotate_dependency_clusters(report: &mut PackageReport) {
+    // Build id key for modules and adjacency
+    fn module_key(m: &ModuleInfo) -> Option<String> {
+        if let Some(n) = m.module_id_u32 { Some(n.to_string()) }
+        else { m.module_id_str.clone() }
+    }
+
+    use std::collections::{HashMap, VecDeque, HashSet};
+    let mut key_to_index: HashMap<String, usize> = HashMap::new();
+    for (i, m) in report.modules.iter().enumerate() {
+        if let Some(k) = module_key(m) {
+            key_to_index.insert(k, i);
+        }
+    }
+
+    let mut indegree: HashMap<String, usize> = HashMap::new();
+    let mut adj: HashMap<String, Vec<String>> = HashMap::new();
+    for m in &report.modules {
+        if let Some(k) = module_key(m) {
+            let mut edges = Vec::new();
+            for d in &m.dependencies {
+                edges.push(d.clone());
+                *indegree.entry(d.clone()).or_insert(0) += 1;
+            }
+            adj.insert(k, edges);
+        }
+    }
+
+    // BFS from entrypoints to compute depth
+    let mut depth_map: HashMap<String, usize> = HashMap::new();
+    let mut q: VecDeque<(String, usize)> = VecDeque::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for e in &report.entrypoints {
+        q.push_back((e.clone(), 0));
+        seen.insert(e.clone());
+        depth_map.insert(e.clone(), 0);
+    }
+    while let Some((u, d)) = q.pop_front() {
+        if let Some(children) = adj.get(&u) {
+            for v in children {
+                if !seen.contains(v) {
+                    seen.insert(v.clone());
+                    depth_map.insert(v.clone(), d + 1);
+                    q.push_back((v.clone(), d + 1));
+                }
+            }
+        }
+    }
+
+    // Apply metrics + clustering
+    for m in &mut report.modules {
+        if let Some(k) = module_key(m) {
+            m.depth = depth_map.get(&k).copied();
+            m.indegree = indegree.get(&k).copied();
+            // Cluster label based on depth and indegree
+            let cluster = if m.is_entry {
+                Some("entry".to_string())
+            } else if let Some(dep) = m.depth {
+                if dep == 1 { Some("core".to_string()) }
+                else if dep <= 3 { Some("feature".to_string()) }
+                else { Some("deep".to_string()) }
+            } else { None };
+
+            // Shared override for high indegree
+            let high_in = m.indegree.unwrap_or(0) >= 25;
+            m.cluster = if high_in { Some("shared".to_string()) } else { cluster };
+        }
+    }
 }
 
 // This will parse through function 0, looking for a structure matching the following:

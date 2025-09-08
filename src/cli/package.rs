@@ -25,17 +25,36 @@ pub fn package_analyze(input: &Path, json: bool, summary: bool) -> DecompilerRes
 
     if !summary {
         for m in &report.modules {
-            let name = m
-                .filename
-                .as_deref()
-                .or(Some("<static>"))
-                .unwrap_or("");
             let entry_mark = if m.is_entry { "*" } else { " " };
-            let fn_str = m
-                .function_id
-                .map(|v| v.to_string())
+            let fn_str = m.function_id.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
+            let mid = m
+                .module_id_u32
+                .map(|n| n.to_string())
+                .or_else(|| m.module_id_str.clone())
                 .unwrap_or_else(|| "-".into());
-            println!("{} fn={} sym={} {} (deps: {})", entry_mark, fn_str, m.symbol_id.map(|v| v.to_string()).unwrap_or_else(|| "-".into()), name, m.dependencies.len());
+            let name = m.filename.as_deref().unwrap_or("");
+            let depth = m.depth.map(|d| d.to_string()).unwrap_or_else(|| "-".into());
+            let indeg = m.indegree.map(|d| d.to_string()).unwrap_or_else(|| "0".into());
+            let cluster = m.cluster.as_deref().unwrap_or("-");
+            // Sample first up to 4 deps for readability
+            let sample = if m.dependencies.is_empty() {
+                String::new()
+            } else {
+                let take = m.dependencies.iter().take(4).cloned().collect::<Vec<_>>();
+                format!(" [{}]", take.join(", "))
+            };
+            println!(
+                "{} mid={} fn={} deps={} depth={} indeg={} cluster={} {}{}",
+                entry_mark,
+                mid,
+                fn_str,
+                m.dependencies.len(),
+                depth,
+                indeg,
+                cluster,
+                name,
+                sample
+            );
         }
     }
 

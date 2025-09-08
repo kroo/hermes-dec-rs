@@ -538,21 +538,48 @@ impl<'a> ValueTracker<'a> {
                 },
             ),
 
-            // Array creation with buffer
+            // Array creation with buffer (pre-populated from serialized literals)
             UnifiedInstruction::NewArrayWithBuffer {
                 operand_1: _size_hint,
                 operand_2: num_elements,
+                operand_3: buffer_offset,
                 ..
             } => {
-                // For now, track as mutable array
-                // TODO: Parse the buffer and add initial mutations
+                let arrays_data = self.hbc_file.serialized_literals.arrays_data;
+                let start = *buffer_offset as usize;
+                let count = *num_elements as usize;
+                if start < arrays_data.len() {
+                    let slice = &arrays_data[start..];
+                    if let Ok(slp_array) = crate::hbc::serialized_literal_parser::unpack_slp_array(slice, Some(count)) {
+                        let mut out = Vec::with_capacity(slp_array.items.len());
+                        for item in slp_array.items {
+                            use crate::hbc::serialized_literal_parser::SLPValue;
+                            match item {
+                                SLPValue::Null => out.push(ConstantValue::Null),
+                                SLPValue::True => out.push(ConstantValue::Boolean(true)),
+                                SLPValue::False => out.push(ConstantValue::Boolean(false)),
+                                SLPValue::Number(n) => out.push(ConstantValue::Number(n)),
+                                SLPValue::Integer(i) => out.push(ConstantValue::Number(i as f64)),
+                                SLPValue::LongString(id) => {
+                                    if let Ok(s) = self.hbc_file.strings.get(id) { out.push(ConstantValue::String(s)); }
+                                }
+                                SLPValue::ShortString(id) => {
+                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) { out.push(ConstantValue::String(s)); }
+                                }
+                                SLPValue::ByteString(id) => {
+                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) { out.push(ConstantValue::String(s)); }
+                                }
+                            }
+                        }
+                        return TrackedValue::Constant(ConstantValue::ArrayLiteral(out));
+                    }
+                }
+                // Fallback if parsing fails
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: 0,
-                    base_type: ObjectBaseType::Array {
-                        initial_length: Some(*num_elements as usize),
-                    },
+                    base_type: ObjectBaseType::Array { initial_length: Some(count) },
                     mutations: Vec::new(),
                 }
             }
@@ -560,34 +587,105 @@ impl<'a> ValueTracker<'a> {
             UnifiedInstruction::NewArrayWithBufferLong {
                 operand_1: _size_hint,
                 operand_2: num_elements,
+                operand_3: buffer_offset,
                 ..
             } => {
-                // For now, track as mutable array
-                // TODO: Parse the buffer and add initial mutations
+                let arrays_data = self.hbc_file.serialized_literals.arrays_data;
+                let start = *buffer_offset as usize;
+                let count = *num_elements as usize;
+                if start < arrays_data.len() {
+                    let slice = &arrays_data[start..];
+                    if let Ok(slp_array) = crate::hbc::serialized_literal_parser::unpack_slp_array(slice, Some(count)) {
+                        let mut out = Vec::with_capacity(slp_array.items.len());
+                        for item in slp_array.items {
+                            use crate::hbc::serialized_literal_parser::SLPValue;
+                            match item {
+                                SLPValue::Null => out.push(ConstantValue::Null),
+                                SLPValue::True => out.push(ConstantValue::Boolean(true)),
+                                SLPValue::False => out.push(ConstantValue::Boolean(false)),
+                                SLPValue::Number(n) => out.push(ConstantValue::Number(n)),
+                                SLPValue::Integer(i) => out.push(ConstantValue::Number(i as f64)),
+                                SLPValue::LongString(id) => {
+                                    if let Ok(s) = self.hbc_file.strings.get(id) { out.push(ConstantValue::String(s)); }
+                                }
+                                SLPValue::ShortString(id) => {
+                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) { out.push(ConstantValue::String(s)); }
+                                }
+                                SLPValue::ByteString(id) => {
+                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) { out.push(ConstantValue::String(s)); }
+                                }
+                            }
+                        }
+                        return TrackedValue::Constant(ConstantValue::ArrayLiteral(out));
+                    }
+                }
+                // Fallback if parsing fails
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: 0,
-                    base_type: ObjectBaseType::Array {
-                        initial_length: Some(*num_elements as usize),
-                    },
+                    base_type: ObjectBaseType::Array { initial_length: Some(count) },
                     mutations: Vec::new(),
                 }
             }
 
-            // Object creation with buffer
+            // Object creation with buffer (keys/values serialized)
             UnifiedInstruction::NewObjectWithBuffer {
                 operand_1: _size_hint,
-                operand_2: _num_elements,
+                operand_2: num_props,
+                operand_3: keys_offset,
+                operand_4: values_offset,
                 ..
             } => {
-                // Track as mutable object with buffer
-                // TODO: Parse the buffer and add initial mutations
+                let keys_data = self.hbc_file.serialized_literals.object_keys_data;
+                let vals_data = self.hbc_file.serialized_literals.object_values_data;
+                let kstart = *keys_offset as usize;
+                let vstart = *values_offset as usize;
+                let count = *num_props as usize;
+                if kstart < keys_data.len() && vstart < vals_data.len() {
+                    let kslice = &keys_data[kstart..];
+                    let vslice = &vals_data[vstart..];
+                    if let (Ok(karr), Ok(varr)) = (
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(kslice, Some(count)),
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(vslice, Some(count)),
+                    ) {
+                        use crate::hbc::serialized_literal_parser::SLPValue;
+                        let mut props: Vec<(String, ConstantValue)> = Vec::with_capacity(count);
+                        for i in 0..count {
+                            let key_cv = match karr.items.get(i) {
+                                Some(SLPValue::LongString(id)) => self.hbc_file.strings.get(*id).ok().map(ConstantValue::String),
+                                Some(SLPValue::ShortString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::ByteString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::Number(n)) => Some(ConstantValue::String(n.to_string())),
+                                Some(SLPValue::Integer(n)) => Some(ConstantValue::String(n.to_string())),
+                                Some(SLPValue::True) => Some(ConstantValue::String("true".into())),
+                                Some(SLPValue::False) => Some(ConstantValue::String("false".into())),
+                                Some(SLPValue::Null) => Some(ConstantValue::String("null".into())),
+                                None => None,
+                            };
+                            let val_cv = match varr.items.get(i) {
+                                Some(SLPValue::LongString(id)) => self.hbc_file.strings.get(*id).ok().map(ConstantValue::String),
+                                Some(SLPValue::ShortString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::ByteString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::Number(n)) => Some(ConstantValue::Number(*n)),
+                                Some(SLPValue::Integer(n)) => Some(ConstantValue::Number(*n as f64)),
+                                Some(SLPValue::True) => Some(ConstantValue::Boolean(true)),
+                                Some(SLPValue::False) => Some(ConstantValue::Boolean(false)),
+                                Some(SLPValue::Null) => Some(ConstantValue::Null),
+                                None => None,
+                            };
+                            if let (Some(ConstantValue::String(k)), Some(v)) = (key_cv, val_cv) {
+                                props.push((k, v));
+                            }
+                        }
+                        if !props.is_empty() {
+                            return TrackedValue::Constant(ConstantValue::ObjectLiteral(props));
+                        }
+                    }
+                }
+                // Fallback
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
-
-                // Find mutations by looking at uses of this SSA value
                 let mutations = self.find_mutations_for_ssa_value(ssa_value);
-
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: mutations.len(),
@@ -598,16 +696,60 @@ impl<'a> ValueTracker<'a> {
 
             UnifiedInstruction::NewObjectWithBufferLong {
                 operand_1: _size_hint,
-                operand_2: _num_elements,
+                operand_2: num_props,
+                operand_3: keys_offset,
+                operand_4: values_offset,
                 ..
             } => {
-                // Track as mutable object with buffer
-                // TODO: Parse the buffer and add initial mutations
+                let keys_data = self.hbc_file.serialized_literals.object_keys_data;
+                let vals_data = self.hbc_file.serialized_literals.object_values_data;
+                let kstart = *keys_offset as usize;
+                let vstart = *values_offset as usize;
+                let count = *num_props as usize;
+                if kstart < keys_data.len() && vstart < vals_data.len() {
+                    let kslice = &keys_data[kstart..];
+                    let vslice = &vals_data[vstart..];
+                    if let (Ok(karr), Ok(varr)) = (
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(kslice, Some(count)),
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(vslice, Some(count)),
+                    ) {
+                        use crate::hbc::serialized_literal_parser::SLPValue;
+                        let mut props: Vec<(String, ConstantValue)> = Vec::with_capacity(count);
+                        for i in 0..count {
+                            let key_cv = match karr.items.get(i) {
+                                Some(SLPValue::LongString(id)) => self.hbc_file.strings.get(*id).ok().map(ConstantValue::String),
+                                Some(SLPValue::ShortString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::ByteString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::Number(n)) => Some(ConstantValue::String(n.to_string())),
+                                Some(SLPValue::Integer(n)) => Some(ConstantValue::String(n.to_string())),
+                                Some(SLPValue::True) => Some(ConstantValue::String("true".into())),
+                                Some(SLPValue::False) => Some(ConstantValue::String("false".into())),
+                                Some(SLPValue::Null) => Some(ConstantValue::String("null".into())),
+                                None => None,
+                            };
+                            let val_cv = match varr.items.get(i) {
+                                Some(SLPValue::LongString(id)) => self.hbc_file.strings.get(*id).ok().map(ConstantValue::String),
+                                Some(SLPValue::ShortString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::ByteString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::Number(n)) => Some(ConstantValue::Number(*n)),
+                                Some(SLPValue::Integer(n)) => Some(ConstantValue::Number(*n as f64)),
+                                Some(SLPValue::True) => Some(ConstantValue::Boolean(true)),
+                                Some(SLPValue::False) => Some(ConstantValue::Boolean(false)),
+                                Some(SLPValue::Null) => Some(ConstantValue::Null),
+                                None => None,
+                            };
+                            if let (Some(ConstantValue::String(k)), Some(v)) = (key_cv, val_cv) {
+                                props.push((k, v));
+                            }
+                        }
+                        if !props.is_empty() {
+                            return TrackedValue::Constant(ConstantValue::ObjectLiteral(props));
+                        }
+                    }
+                }
+                // Fallback
                 let creation_pc = ssa_value.def_site.instruction_idx.value();
-
-                // Find mutations by looking at uses of this SSA value
                 let mutations = self.find_mutations_for_ssa_value(ssa_value);
-
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: mutations.len(),
