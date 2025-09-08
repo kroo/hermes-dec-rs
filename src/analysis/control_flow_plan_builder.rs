@@ -9,7 +9,7 @@ use crate::analysis::control_flow_plan::{
 };
 use crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer;
 use crate::analysis::FunctionAnalysis;
-use crate::cfg::analysis::{ConditionalChain, PostDominatorAnalysis, SwitchRegion};
+use crate::cfg::analysis::{ConditionalChain, LoopAnalysis, PostDominatorAnalysis, SwitchRegion};
 use crate::cfg::ssa::{RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::sparse_switch_analyzer::SparseSwitchAnalyzer;
 use crate::cfg::switch_analysis::SwitchInfo;
@@ -37,6 +37,8 @@ pub struct ControlFlowPlanBuilder<'a> {
     catch_blocks: HashSet<NodeIndex>,
     /// Inline configuration for optimization passes
     inline_config: InlineConfig,
+    /// Pre-computed loop analysis for this function
+    loop_analysis: LoopAnalysis,
 }
 
 impl<'a> ControlFlowPlanBuilder<'a> {
@@ -52,6 +54,8 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             HashSet::new()
         };
 
+        let loop_analysis = cfg.analyze_loops();
+
         Self {
             plan: ControlFlowPlan::new(),
             cfg,
@@ -61,6 +65,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             post_dominators,
             catch_blocks,
             inline_config: InlineConfig::default(),
+            loop_analysis,
         }
     }
 
@@ -133,23 +138,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 self.plan.set_root(root);
                 return self.plan;
             }
-        }
-
-        // Get conditional chains if any
-        if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
-            if !conditional_analysis.chains.is_empty() {
-                let root = self.build_from_conditional_analysis(&conditional_analysis);
-                self.plan.set_root(root);
-                return self.plan;
-            }
-        }
-
-        // Get loop analysis
-        let loop_analysis = self.cfg.analyze_loops();
-        if !loop_analysis.loops.is_empty() {
-            let root = self.build_from_loop_analysis(&loop_analysis);
-            self.plan.set_root(root);
-            return self.plan;
         }
 
         // Fallback: build sequential structure from entry
@@ -316,15 +304,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     }
 
     /// Build from loop analysis
-    fn build_from_loop_analysis(
-        &mut self,
-        analysis: &crate::cfg::analysis::LoopAnalysis,
-    ) -> StructureId {
-        // TODO: Implement loop building
-        let _ = analysis;
-        self.plan.create_structure(ControlFlowKind::Empty)
-    }
-
     /// Try to build a control flow structure starting at this block
     fn try_build_control_structure(&mut self, block: NodeIndex) -> Option<StructureId> {
         // Don't try to detect patterns in already processed blocks
@@ -352,7 +331,114 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             }
         }
 
-        // 3. Check for conditional chains starting at this block
+        // 3. Check for loops starting at this block
+        if let Some(loop_idx) = self
+            .loop_analysis
+            .loops
+            .iter()
+            .position(|l| l.primary_header() == block)
+        {
+            let loop_info = self.loop_analysis.loops[loop_idx].clone();
+
+            // Mark all blocks in the loop as processed
+            for &b in &loop_info.body_nodes {
+                self.processed_blocks.insert(b);
+            }
+            for &header in &loop_info.headers {
+                self.processed_blocks.insert(header);
+            }
+
+            // Build the loop body structure
+            let loop_body = self.build_sequential_from_blocks(&loop_info.body_nodes);
+
+            // Convert cfg LoopType to control flow plan LoopType
+            let loop_type = match loop_info.loop_type {
+                crate::cfg::analysis::LoopType::While => {
+                    crate::analysis::control_flow_plan::LoopType::While
+                }
+                crate::cfg::analysis::LoopType::DoWhile => {
+                    crate::analysis::control_flow_plan::LoopType::DoWhile
+                }
+                crate::cfg::analysis::LoopType::For => {
+                    crate::analysis::control_flow_plan::LoopType::For
+                }
+                crate::cfg::analysis::LoopType::ForIn => {
+                    crate::analysis::control_flow_plan::LoopType::ForIn
+                }
+                crate::cfg::analysis::LoopType::ForOf => {
+                    crate::analysis::control_flow_plan::LoopType::ForOf
+                }
+            };
+
+            // Extract full condition expression from the loop header
+            let header = loop_info.primary_header();
+            let condition_expr = self.extract_loop_condition_info(header);
+            let (condition, condition_use) = condition_expr
+                .as_ref()
+                .map(|expr| expr.extract_legacy_format())
+                .unwrap_or((None, None));
+
+            let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
+                loop_type,
+                header_block: header,
+                condition_expr,
+                condition,
+                condition_use,
+                body: loop_body,
+                update: None,          // TODO: Detect update statements for for-loops
+                break_target: None,    // TODO: Track break targets
+                continue_target: None, // TODO: Track continue targets
+            });
+
+            // Record entry and exit blocks for sequential traversal
+            if let Some(s) = self.plan.get_structure_mut(loop_structure) {
+                s.entry_blocks.push(header);
+                s.exit_blocks.extend(loop_info.exit_nodes.iter().copied());
+            }
+
+            return Some(loop_structure);
+        } else {
+            // Fallback: detect simple self-loop patterns if analysis didn't find loops
+            let mut has_self_edge = false;
+            let mut exit_nodes = Vec::new();
+            for edge in self.cfg.graph().edges(block) {
+                if edge.target() == block {
+                    has_self_edge = true;
+                } else {
+                    exit_nodes.push(edge.target());
+                }
+            }
+            if has_self_edge {
+                self.processed_blocks.insert(block);
+                let mut body_nodes = std::collections::HashSet::new();
+                body_nodes.insert(block);
+                let loop_body = self.build_sequential_from_blocks(&body_nodes);
+                let header = block;
+                let condition_expr = self.extract_loop_condition_info(header);
+                let (condition, condition_use) = condition_expr
+                    .as_ref()
+                    .map(|expr| expr.extract_legacy_format())
+                    .unwrap_or((None, None));
+                let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
+                    loop_type: crate::analysis::control_flow_plan::LoopType::While,
+                    header_block: header,
+                    condition_expr,
+                    condition,
+                    condition_use,
+                    body: loop_body,
+                    update: None,
+                    break_target: None,
+                    continue_target: None,
+                });
+                if let Some(s) = self.plan.get_structure_mut(loop_structure) {
+                    s.entry_blocks.push(header);
+                    s.exit_blocks.extend(exit_nodes);
+                }
+                return Some(loop_structure);
+            }
+        }
+
+        // 4. Check for conditional chains starting at this block
         if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
             // Check all top-level chains
             for chain in &conditional_analysis.chains {
@@ -361,8 +447,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 }
             }
         }
-
-        // 4. TODO: Could also check for loops here
 
         None
     }
@@ -812,15 +896,26 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                     crate::cfg::analysis::LoopType::For => {
                         crate::analysis::control_flow_plan::LoopType::For
                     }
+                    crate::cfg::analysis::LoopType::ForIn => {
+                        crate::analysis::control_flow_plan::LoopType::ForIn
+                    }
+                    crate::cfg::analysis::LoopType::ForOf => {
+                        crate::analysis::control_flow_plan::LoopType::ForOf
+                    }
                 };
 
-                // Extract condition info from the loop header
+                // Extract full condition expression from the loop header
                 let header = loop_info.primary_header();
-                let (condition, condition_use) = self.extract_loop_condition_info(header);
+                let condition_expr = self.extract_loop_condition_info(header);
+                let (condition, condition_use) = condition_expr
+                    .as_ref()
+                    .map(|expr| expr.extract_legacy_format())
+                    .unwrap_or((None, None));
 
                 let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
                     loop_type,
                     header_block: header,
+                    condition_expr,
                     condition,
                     condition_use,
                     body: loop_body,
@@ -1402,26 +1497,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         }
     }
 
-    /// Extract condition SSAValue and RegisterUse for loops (backward compatibility)
+    /// Extract the full condition expression for loop headers
     fn extract_loop_condition_info(
         &self,
         condition_block: NodeIndex,
-    ) -> (Option<SSAValue>, Option<RegisterUse>) {
-        // Get comparison expression and extract the first operand for backward compatibility
-        if let Some(comparison) = self.extract_condition_info(condition_block) {
-            match comparison {
-                ComparisonExpression::SimpleCondition {
-                    operand,
-                    operand_use,
-                } => (Some(operand), Some(operand_use)),
-                ComparisonExpression::BinaryComparison { left, left_use, .. } => {
-                    // For loops, just return the left operand for now
-                    (Some(left), Some(left_use))
-                }
-            }
-        } else {
-            (None, None)
-        }
+    ) -> Option<ComparisonExpression> {
+        self.extract_condition_info(condition_block)
     }
 
     /// Find the next sequential block after a given block
