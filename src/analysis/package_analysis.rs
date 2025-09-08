@@ -80,8 +80,9 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
     }
 
     // Detect entrypoints by scanning function 0 for direct calls to module functions
-    // Prepare CFG/SSA for function 0 to analyze calls (__d registrations and require entrypoints)
+    // Prepare CFG/SSA for function 0 to analyze calls (__d registrations and __r/require entrypoints)
     let mut detected_entries: Vec<String> = Vec::new();
+    let mut detected_entries_ordered: Vec<String> = Vec::new();
     if hbc.functions.count() > 0 {
         let mut cfg = Cfg::new(hbc, 0);
         cfg.build();
@@ -139,10 +140,19 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
             }
         }
 
+        // Iterate calls in source order by PC
+        let mut calls: Vec<(InstructionIndex, &crate::analysis::call_site_analysis::CallSiteInfo)> =
+            call_analysis
+                .call_sites
+                .iter()
+                .map(|((_bid, pc), info)| (*pc, info))
+                .collect();
+        calls.sort_by_key(|(pc, _)| pc.0);
+
         // Iterate calls and detect __d registrations and require entrypoints
-        for ((_block_id, pc), info) in &call_analysis.call_sites {
+        for (pc, info) in calls {
             // Determine callee
-            let callee_tv = resolve_reg(info.callee_register, *pc);
+            let callee_tv = resolve_reg(info.callee_register, pc);
             let (is_global, path) = flatten_property_path(&callee_tv);
 
             // Map to practical name
@@ -159,7 +169,7 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
                 if i == 0 {
                     continue;
                 }
-                arg_vals.push(resolve_reg(*reg, *pc));
+                arg_vals.push(resolve_reg(*reg, pc));
             }
 
             if let Some(name) = &callee_name {
@@ -180,7 +190,7 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
                             | crate::analysis::value_tracking::types::TrackedValue::Unknown = fn_tv
                             {
                                 // Best-effort: walk to SSA def site for the callee register itself
-                                if let Some(fn_ssa) = ssa.get_value_before_instruction(info.argument_registers[1], *pc) {
+                                if let Some(fn_ssa) = ssa.get_value_before_instruction(info.argument_registers[1], pc) {
                                     let block = &cfg.graph()[fn_ssa.def_site.block_id];
                                     let inst_offset = fn_ssa.def_site.instruction_idx.value()
                                         - block.start_pc().value();
@@ -203,7 +213,7 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
                             }
                         }
 
-                        // moduleId
+                        // moduleId (2nd arg)
                         if let Some(id_tv) = arg_vals.get(1) {
                             if let Some(s) = const_string_or_number(id_tv) {
                                 if let Ok(n) = s.parse::<u32>() {
@@ -211,6 +221,15 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
                                 } else {
                                     module.module_id_str = Some(s.clone());
                                 }
+                            }
+                        }
+
+                        // dependencyMap (3rd arg)
+                        if let Some(dep_tv) = arg_vals.get(2) {
+                            // Attempt to extract dependency IDs from array/object literals
+                            let deps = extract_dependencies(dep_tv);
+                            if !deps.is_empty() {
+                                module.dependencies = deps;
                             }
                         }
 
@@ -241,10 +260,11 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
                         }
                     }
 
-                    "require" => {
+                    "require" | "__r" => {
                         // require(moduleId) entry execution
                         if let Some(first_arg) = arg_vals.get(0) {
                             if let Some(s) = const_string_or_number(first_arg) {
+                                detected_entries_ordered.push(s.clone());
                                 detected_entries.push(s);
                             }
                         }
@@ -284,6 +304,9 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
     detected_entries.sort();
     detected_entries.dedup();
 
+    // Last __r is typically the main entry; keep ordered list in report via entrypoints order
+    // For now we keep only unique set in entrypoints field, but could expose main separately later
+
     // Mark modules with matching module IDs as entries
     for m in &mut modules {
         let id_str = m
@@ -307,6 +330,116 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
         modules,
         entrypoints: detected_entries,
     })
+}
+
+/// Extract dependency IDs from a tracked value representing Metro dependency map
+fn extract_dependencies(
+    v: &crate::analysis::value_tracking::types::TrackedValue,
+) -> Vec<String> {
+    use crate::analysis::value_tracking::types::{ConstantValue as CV, MutationKind, TrackedValue as TV};
+
+    // Constant array literal
+    if let TV::Constant(CV::ArrayLiteral(elems)) = v {
+        return elems
+            .iter()
+            .filter_map(|c| match c {
+                CV::String(s) => Some(s.clone()),
+                CV::Number(n) => Some(if n.fract() == 0.0 {
+                    (*n as i64).to_string()
+                } else {
+                    n.to_string()
+                }),
+                _ => None,
+            })
+            .collect();
+    }
+
+    // Mutable array constructed then filled
+    if let TV::MutableObject {
+        base_type: crate::analysis::value_tracking::types::ObjectBaseType::Array { .. },
+        mutations,
+        ..
+    } = v
+    {
+        let mut max_index = 0usize;
+        let mut items: std::collections::BTreeMap<usize, String> = std::collections::BTreeMap::new();
+        for m in mutations {
+            if let MutationKind::ArraySet { index, value } = &m.kind {
+                // index is Constant(Number)
+                if let TV::Constant(CV::Number(n)) = index.as_ref() {
+                    let idx = *n as usize;
+                    max_index = max_index.max(idx);
+                    // value constant
+                    if let Some(s) = match value.as_ref() {
+                        TV::Constant(CV::String(s)) => Some(s.clone()),
+                        TV::Constant(CV::Number(n)) => Some(if n.fract() == 0.0 {
+                            (*n as i64).to_string()
+                        } else {
+                            n.to_string()
+                        }),
+                        _ => None,
+                    } {
+                        items.insert(idx, s);
+                    }
+                }
+            }
+        }
+        if !items.is_empty() {
+            let mut out = Vec::with_capacity(max_index + 1);
+            for i in 0..=max_index {
+                if let Some(s) = items.get(&i) {
+                    out.push(s.clone());
+                } else {
+                    out.push("".to_string()); // placeholder for holes
+                }
+            }
+            // Trim trailing empty slots
+            while let Some(last) = out.last() {
+                if last.is_empty() {
+                    out.pop();
+                } else {
+                    break;
+                }
+            }
+            return out;
+        }
+    }
+
+    // Object format: numeric keys and optional paths field
+    if let TV::MutableObject {
+        base_type: crate::analysis::value_tracking::types::ObjectBaseType::Object,
+        mutations,
+        ..
+    } = v
+    {
+        let mut pairs: Vec<(usize, String)> = Vec::new();
+        for m in mutations {
+            if let MutationKind::PropertySet { key, value } = &m.kind {
+                // key may be string constant numeric (e.g., "0")
+                if let TV::Constant(CV::String(k)) = key.as_ref() {
+                    if let Ok(idx) = k.parse::<usize>() {
+                        if let Some(s) = match value.as_ref() {
+                            TV::Constant(CV::String(s)) => Some(s.clone()),
+                            TV::Constant(CV::Number(n)) => Some(if n.fract() == 0.0 {
+                                (*n as i64).to_string()
+                            } else {
+                                n.to_string()
+                            }),
+                            _ => None,
+                        } {
+                            pairs.push((idx, s));
+                        }
+                    }
+                }
+            }
+        }
+        if !pairs.is_empty() {
+            pairs.sort_by_key(|(i, _)| *i);
+            return pairs.into_iter().map(|(_, s)| s).collect();
+        }
+    }
+
+    Vec::new()
 }
 
 // This will parse through function 0, looking for a structure matching the following:
