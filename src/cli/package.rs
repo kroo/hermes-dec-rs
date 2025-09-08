@@ -5,7 +5,7 @@ use std::path::Path;
 
 pub fn package_analyze(input: &Path, json: bool, summary: bool) -> DecompilerResult<()> {
     let data = std::fs::read(input).map_err(DecompilerError::from)?;
-    let hbc = HbcFile::parse(&data).map_err(DecompilerError::Internal)?;
+    let hbc = HbcFile::parse(&data).map_err(|e| DecompilerError::Internal { message: e })?;
 
     let report = analyze_package(&hbc)?;
 
@@ -31,16 +31,11 @@ pub fn package_analyze(input: &Path, json: bool, summary: bool) -> DecompilerRes
                 .or(Some("<static>"))
                 .unwrap_or("");
             let entry_mark = if m.is_entry { "*" } else { " " };
-            println!(
-                "{} fn={} sym={} {} (deps: {})",
-                entry_mark,
-                m.function_id,
-                m.symbol_id
-                    .map(|v| v.to_string())
-                    .unwrap_or_else(|| "-".into()),
-                name,
-                m.dependencies.len()
-            );
+            let fn_str = m
+                .function_id
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "-".into());
+            println!("{} fn={} sym={} {} (deps: {})", entry_mark, fn_str, m.symbol_id.map(|v| v.to_string()).unwrap_or_else(|| "-".into()), name, m.dependencies.len());
         }
     }
 
