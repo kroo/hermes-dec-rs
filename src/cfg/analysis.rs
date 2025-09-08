@@ -113,6 +113,10 @@ pub enum LoopType {
     For,
     /// Do-while loop (condition at exit)
     DoWhile,
+    /// For-in loop
+    ForIn,
+    /// For-of loop
+    ForOf,
 }
 
 /// Natural loop information
