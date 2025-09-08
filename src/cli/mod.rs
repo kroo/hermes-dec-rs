@@ -37,6 +37,9 @@ pub enum Commands {
         /// Decompile nested function definitions (experimental)
         #[arg(long)]
         decompile_nested: bool,
+        /// Inline object literals when safe (experimental)
+        #[arg(long)]
+        inline_object_literals: bool,
     },
     /// Disassemble Hermes bytecode to assembly-like format
     Disasm {
@@ -95,15 +98,27 @@ impl Cli {
                 output,
                 comments,
                 decompile_nested,
+                inline_object_literals,
             } => {
-                decompile::decompile(
-                    &input,
-                    function,
-                    output.as_deref(),
-                    &comments,
-                    false,
+                let args = decompile::DecompileArgs {
+                    input_path: input,
+                    function_index: function,
+                    output_path: output,
+                    comments,
+                    skip_validation: false,
                     decompile_nested,
-                )?;
+                    inline_constants: None,
+                    inline_all_constants: None,
+                    inline_property_access: None,
+                    inline_all_property_access: None,
+                    inline_global_this: None,
+                    inline_parameters: None,
+                    inline_constructor_calls: None,
+                    inline_object_literals: Some(inline_object_literals),
+                    simplify_calls: None,
+                    unsafe_simplify_calls: None,
+                };
+                decompile::decompile(&args)?;
             }
             Commands::Disasm { input } => {
                 disasm::disasm(&input)?;
@@ -138,7 +153,10 @@ impl Cli {
                 function,
                 verbose,
             } => {
-                analyze_cfg::analyze_cfg(&input, function, verbose)?;
+                // Use default optimization settings for the simplified CLI
+                analyze_cfg::analyze_cfg(
+                    &input, function, verbose, false, false, false, false, false, false, false,
+                )?;
             }
         }
 

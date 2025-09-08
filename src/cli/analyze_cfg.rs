@@ -8,12 +8,24 @@ use crate::analysis::{FunctionAnalysis, GlobalSSAAnalyzer};
 use crate::ast::variables::VariableMapper;
 use crate::cfg::ssa::DuplicatedSSAValue;
 use crate::cfg::Cfg;
+use crate::decompiler::InlineConfig;
 use crate::hbc::HbcFile;
 use anyhow::Result;
 use std::path::Path;
 
 /// Analyze the control flow graph for a specific function
-pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result<()> {
+pub fn analyze_cfg(
+    input: &Path,
+    function_index: usize,
+    verbose: bool,
+    inline_all_constants: bool,
+    inline_all_property_access: bool,
+    unsafe_simplify_calls: bool,
+    inline_global_this: bool,
+    inline_parameters: bool,
+    inline_constructor_calls: bool,
+    inline_object_literals: bool,
+) -> Result<()> {
     // Read the HBC file
     let file_data = std::fs::read(input)?;
     let hbc_file = HbcFile::parse(&file_data).map_err(|e| anyhow::anyhow!(e))?;
@@ -83,8 +95,20 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
 
     // Build ControlFlowPlan if we have FunctionAnalysis
     let control_flow_plan = func_analysis.as_ref().map(|fa| {
-        let builder =
+        let mut builder =
             crate::analysis::control_flow_plan_builder::ControlFlowPlanBuilder::new(&cfg, fa);
+
+        // Apply optimization settings
+        let mut inline_config = InlineConfig::default();
+        inline_config.inline_all_constants = inline_all_constants;
+        inline_config.inline_all_property_access = inline_all_property_access;
+        inline_config.unsafe_simplify_calls = unsafe_simplify_calls;
+        inline_config.inline_global_this = inline_global_this;
+        inline_config.inline_parameters = inline_parameters;
+        inline_config.inline_constructor_calls = inline_constructor_calls;
+        inline_config.inline_object_literals = inline_object_literals;
+        builder.set_inline_config(inline_config);
+
         // The builder.build() method already analyzes the plan internally
         builder.build()
     });
@@ -465,6 +489,154 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                             };
                             println!("      Declaration strategy: {}", strategy_str);
                         }
+
+                        // Show value tracking information if available
+                        if let Some(ref analysis) = func_analysis {
+                            let value_tracker = analysis.value_tracker();
+                            let tracked_value = value_tracker.get_value(ssa_value);
+
+                            use crate::analysis::value_tracking::TrackedValue;
+                            let value_str = match &tracked_value {
+                                TrackedValue::Constant(c) => format!("Constant({:?})", c),
+                                TrackedValue::Parameter { index, .. } => {
+                                    format!("Parameter({})", index)
+                                }
+                                TrackedValue::GlobalObject => "GlobalObject".to_string(),
+                                TrackedValue::PropertyAccess { property, .. } => {
+                                    format!("PropertyAccess(.{})", property)
+                                }
+                                TrackedValue::Phi { .. } => "Phi".to_string(),
+                                TrackedValue::Unknown => "Unknown".to_string(),
+                                TrackedValue::MutableObject {
+                                    creation_pc,
+                                    version,
+                                    base_type,
+                                    mutations,
+                                } => {
+                                    use crate::analysis::value_tracking::ObjectBaseType;
+                                    let type_str = match base_type {
+                                        ObjectBaseType::Object => "Object",
+                                        ObjectBaseType::Array { initial_length } => {
+                                            if let Some(len) = initial_length {
+                                                &format!("Array[{}]", len)
+                                            } else {
+                                                "Array"
+                                            }
+                                        }
+                                        ObjectBaseType::ObjectWithBuffer => "ObjectWithBuffer",
+                                        ObjectBaseType::Function => "Function",
+                                    };
+                                    format!(
+                                        "MutableObject({}, pc={}, v={}, mutations={})",
+                                        type_str,
+                                        creation_pc,
+                                        version,
+                                        mutations.len()
+                                    )
+                                }
+                                TrackedValue::MergedObject {
+                                    sources,
+                                    mutations_after_merge,
+                                } => {
+                                    format!(
+                                        "MergedObject(sources={}, mutations_after={})",
+                                        sources.len(),
+                                        mutations_after_merge.len()
+                                    )
+                                }
+                            };
+                            println!("      Tracked value: {}", value_str);
+
+                            // If it's a mutable object, show mutations
+                            if let TrackedValue::MutableObject { mutations, .. } = &tracked_value {
+                                if !mutations.is_empty() {
+                                    use crate::analysis::value_tracking::MutationKind;
+                                    for mutation in mutations {
+                                        let mutation_str = match &mutation.kind {
+                                            MutationKind::PropertySet { key, value } => {
+                                                let key_str =
+                                                    if let TrackedValue::Constant(c) = &**key {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        "?".to_string()
+                                                    };
+                                                let val_str =
+                                                    if let TrackedValue::Constant(c) = &**value {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        tracked_value_type(&**value)
+                                                    };
+                                                format!("PropertySet({} = {})", key_str, val_str)
+                                            }
+                                            MutationKind::ArraySet { index, value } => {
+                                                let idx_str =
+                                                    if let TrackedValue::Constant(c) = &**index {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        "?".to_string()
+                                                    };
+                                                let val_str =
+                                                    if let TrackedValue::Constant(c) = &**value {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        tracked_value_type(&**value)
+                                                    };
+                                                format!("ArraySet([{}] = {})", idx_str, val_str)
+                                            }
+                                            MutationKind::PropertyDefine { key, value: _ } => {
+                                                let key_str =
+                                                    if let TrackedValue::Constant(c) = &**key {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        "?".to_string()
+                                                    };
+                                                format!("PropertyDefine({} = ...)", key_str)
+                                            }
+                                            MutationKind::ArrayPush { value } => {
+                                                let val_str =
+                                                    if let TrackedValue::Constant(c) = &**value {
+                                                        format!("{:?}", c)
+                                                    } else {
+                                                        tracked_value_type(&**value)
+                                                    };
+                                                format!("ArrayPush({})", val_str)
+                                            }
+                                            MutationKind::ProtoSet { proto: _ } => {
+                                                format!("ProtoSet(...)")
+                                            }
+                                        };
+                                        println!(
+                                            "        Mutation@PC{}: {}",
+                                            mutation.pc, mutation_str
+                                        );
+                                    }
+                                }
+
+                                // Check if object escapes
+                                let escapes = value_tracker.check_object_escape(ssa_value);
+                                println!("        Escapes: {}", escapes);
+
+                                // Try to reconstruct the object as a literal
+                                if !escapes {
+                                    use crate::analysis::value_tracking::reconstruction::LiteralReconstructor;
+                                    let reconstructor = LiteralReconstructor::new(&func_ssa, &cfg);
+                                    let reconstruction =
+                                        reconstructor.reconstruct(&tracked_value, ssa_value);
+
+                                    match reconstruction {
+                                        crate::analysis::value_tracking::reconstruction::ReconstructionResult::Literal(js) => {
+                                            println!("        Can be inlined as: {}", js);
+                                        }
+                                        crate::analysis::value_tracking::reconstruction::ReconstructionResult::Partial { template, .. } => {
+                                            println!("        Partial reconstruction: {}", template);
+                                        }
+                                        crate::analysis::value_tracking::reconstruction::ReconstructionResult::CannotReconstruct(reason) => {
+                                            println!("        Cannot reconstruct: {}", reason);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         println!(
                             "    ERROR: Invalid SSA value!  No SSA value found for register {}",
@@ -533,6 +705,19 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
                                     UseStrategy::UseVariable => "UseVariable".to_string(),
                                     UseStrategy::InlineValue(ref val) => {
                                         format!("InlineValue({:?})", val)
+                                    }
+                                    UseStrategy::InlineTrackedValue(ref val) => {
+                                        format!("InlineTrackedValue({:?})", val)
+                                    }
+                                    UseStrategy::InlineParameter { param_index } => {
+                                        format!("InlineParameter({})", param_index)
+                                    }
+                                    UseStrategy::InlineGlobalThis => "InlineGlobalThis".to_string(),
+                                    UseStrategy::SimplifyCall { is_method_call } => {
+                                        format!("SimplifyCall(method: {})", is_method_call)
+                                    }
+                                    UseStrategy::DeclareObjectLiteral { emit_position, .. } => {
+                                        format!("DeclareObjectLiteral({:?})", emit_position)
                                     }
                                 };
                                 println!("      Use strategy: {}", strategy_str);
@@ -629,10 +814,97 @@ pub fn analyze_cfg(input: &Path, function_index: usize, verbose: bool) -> Result
         }
     }
 
+    // Print constant value tracking if we have function analysis
+    if let Some(fa) = func_analysis.as_ref() {
+        println!("\n=== Constant Value Tracking ===");
+        let value_tracker =
+            crate::analysis::value_tracker::ValueTracker::new(&fa.cfg, &fa.ssa, &hbc_file);
+
+        // Track all SSA values
+        let mut constant_values = Vec::new();
+        let mut phi_values = Vec::new();
+        let mut param_values = Vec::new();
+
+        for (_def_site, ssa_value) in &fa.ssa.ssa_values {
+            let tracked = value_tracker.get_value(ssa_value);
+            use crate::analysis::value_tracker::TrackedValue;
+            match tracked {
+                TrackedValue::Constant(c) => {
+                    constant_values.push((ssa_value.clone(), c));
+                }
+                TrackedValue::Parameter { index, ssa_value } => {
+                    param_values.push((ssa_value, index));
+                }
+                TrackedValue::Phi { ssa_value } => {
+                    phi_values.push(ssa_value);
+                }
+                TrackedValue::GlobalObject => {
+                    // Could track global object references if needed
+                }
+                TrackedValue::PropertyAccess { .. } => {
+                    // Could track property accesses if needed
+                }
+                TrackedValue::Unknown => {
+                    // Don't print unknown values to reduce noise
+                }
+                TrackedValue::MutableObject { .. } => {
+                    // Could track mutable objects if needed
+                }
+                TrackedValue::MergedObject { .. } => {
+                    // Could track merged objects if needed
+                }
+            }
+        }
+
+        // Print parameters
+        if !param_values.is_empty() {
+            println!("Parameters:");
+            for (ssa_value, index) in param_values {
+                println!("  {} = Parameter(index={})", ssa_value, index);
+            }
+        }
+
+        // Print PHI results
+        if !phi_values.is_empty() {
+            println!("PHI Results:");
+            for ssa_value in phi_values {
+                println!("  {} = PHI result", ssa_value);
+            }
+        }
+
+        // Print constant values sorted by SSA value
+        if !constant_values.is_empty() {
+            println!("Constants:");
+            constant_values.sort_by_key(|(ssa, _)| (ssa.register, ssa.version));
+            for (ssa_value, constant) in constant_values {
+                println!(
+                    "  {} = {}",
+                    ssa_value,
+                    format_constant_value(&constant, &hbc_file)
+                );
+            }
+        }
+    }
+
     Ok(())
 }
 
 /// Recursively print conditional chain information
+/// Get a simple type name for a tracked value
+fn tracked_value_type(value: &crate::analysis::value_tracking::TrackedValue) -> String {
+    use crate::analysis::value_tracking::TrackedValue;
+    match value {
+        TrackedValue::Constant(_) => "Const".to_string(),
+        TrackedValue::Parameter { index, .. } => format!("Param{}", index),
+        TrackedValue::GlobalObject => "Global".to_string(),
+        TrackedValue::PropertyAccess { .. } => "PropAccess".to_string(),
+        TrackedValue::Phi { .. } => "Phi".to_string(),
+        TrackedValue::Unknown => "Unknown".to_string(),
+        TrackedValue::MutableObject { .. } => "MutableObj".to_string(),
+        TrackedValue::MergedObject { .. } => "MergedObj".to_string(),
+    }
+}
+
 fn print_chain_recursive(
     chain: &crate::cfg::analysis::ConditionalChain,
     indent: usize,
@@ -859,7 +1131,7 @@ fn print_switch_region(
                             println!("        Case {} (keys {:?}):", i, case.keys);
 
                             // Create a temporary case group to analyze PHI contributions
-                            let _group = crate::cfg::switch_analysis::CaseGroup {
+                            let group = crate::cfg::switch_analysis::CaseGroup {
                                 keys: case.keys.clone(),
                                 target_block: case.target_block,
                                 setup: case.setup.clone(),
@@ -875,32 +1147,13 @@ fn print_switch_region(
                                     .map(|ssa| ssa.name())
                                     .unwrap_or_else(|| format!("r{}", phi_node.register));
 
-                                // TODO: Re-enable once ControlFlowPlanConverter is implemented
-                                /*
-                                if let Some(value) = switch_converter
-                                    .find_phi_contribution_for_case(&group, phi_node)
-                                {
-                                    println!(
-                                        "          {} = {}",
-                                        phi_name,
-                                        format_constant_value(&value, hbc_file)
-                                    );
+                                // For now, just show which value this case contributes
+                                // The actual PHI contribution analysis is handled by the control flow plan
+                                if group.target_block != shared_tail.block_id {
+                                    println!("          {} = <computed in case block>", phi_name);
                                 } else {
-                                    // Check if this case flows through a block that computes a value
-                                    if group.target_block != shared_tail.block_id {
-                                        println!("          {} = <computed value>", phi_name);
-                                    } else {
-                                        println!(
-                                            "          {} = <no contribution found>",
-                                            phi_name
-                                        );
-                                    }
+                                    println!("          {} = <direct jump to tail>", phi_name);
                                 }
-                                */
-                                println!(
-                                    "          {} = <analysis disabled during refactoring>",
-                                    phi_name
-                                );
                             }
                         }
 
@@ -958,5 +1211,7 @@ fn format_constant_value(value: &crate::analysis::ConstantValue, _hbc_file: &Hbc
         ConstantValue::Boolean(b) => format!("Boolean({})", b),
         ConstantValue::Null => "Null".to_string(),
         ConstantValue::Undefined => "Undefined".to_string(),
+        ConstantValue::ArrayLiteral(elements) => format!("Array[{}]", elements.len()),
+        ConstantValue::ObjectLiteral(props) => format!("Object{{{} props}}", props.len()),
     }
 }

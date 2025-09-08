@@ -1,0 +1,104 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: cfa9542d935dccaf77b3ab37a9d87c0d4b49d6d2
+  Function count: 2
+  String count: 14
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 13..18] #8236AAAB: global
+s1[ASCII, 23..26] #1C35E808: test
+s2[ASCII, 0..11] #F3091991: customGlobal
+s3[ASCII, 11..13] #00018270: log
+s4[ASCII, 13..22] #235B2AD4: globalThis
+s5[ASCII, 17..17] #1C182460: a
+s6[ASCII, 23..45] #5A7E6397: testArrayObjectInlining
+s7[ASCII, 46..49] #DC53DBCF: Math
+s8[ASCII, 50..52] #00018E43: arr
+s9[ASCII, 53..55] #00018A52: obj
+s10[ASCII, 54..54] #629A2BFD: b
+s11[ASCII, 56..56] #5A3857F6: c
+s12[ASCII, 56..62] console
+s13[ASCII, 63..65] max
+
+Array Buffer:
+Integer(1)
+Integer(2)
+Integer(3)
+Integer(4)
+Integer(5)
+Integer(10)
+Integer(20)
+Integer(30)
+Object Key Buffer:
+[String 5]
+[String 10]
+Object Value Buffer:
+[int 1]
+[int 2]
+
+Function<global>0(1 params, 9 registers, 0 symbols):
+  DeclareGlobalVar  "testArrayObjectInlining"
+  CreateEnvironment r0
+  CreateClosure     r1, r0, Function<testArrayObjectInlining>1
+  GetGlobalObject   r0
+  PutById           r0, r1, 1, "testArrayObjectInlining"
+  GetByIdShort      r1, r0, 1, "testArrayObjectInlining"
+  LoadConstUndefined r0
+  Call1             r0, r1, r0
+  Ret               r0
+
+Function<testArrayObjectInlining>1(1 params, 17 registers, 0 symbols):
+  NewArrayWithBuffer r0, 3, 3, 0
+  GetGlobalObject   r1
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  Call2             r2, r2, r3, r0
+  TryGetById        r4, r1, 1, "console"
+  GetByIdShort      r3, r4, 2, "log"
+  NewObjectWithBuffer r2, 2, 2, 0, 0
+  Call2             r2, r3, r4, r2
+  NewObject         r4
+  NewArrayWithBuffer r2, 2, 2, 13
+  PutNewOwnByIdShort r4, r2, "arr"
+  NewObject         r2
+  LoadConstUInt8    r3, 3
+  PutNewOwnByIdShort r2, r3, "c"
+  PutNewOwnByIdShort r4, r2, "obj"
+  TryGetById        r3, r1, 1, "console"
+  GetByIdShort      r2, r3, 2, "log"
+  Call2             r2, r2, r3, r4
+  TryGetById        r4, r1, 3, "Math"
+  GetByIdShort      r3, r4, 4, "max"
+  NewArray          r2, 0
+  NewArrayWithBuffer r8, 3, 3, 23
+  LoadConstZero     r7
+  Mov               r9, r2
+  CallBuiltin       r5, 46, 4
+  Mov               r9, r3
+  Mov               r8, r2
+  Mov               r7, r4
+  CallBuiltin       r2, 47, 4
+  TryGetById        r1, r1, 5, "globalThis"
+  GetByIdShort      r2, r1, 6, "customGlobal"
+  GetByIdShort      r3, r1, 1, "console"
+  JmpFalse          L1, r2
+  LoadConstUndefined r1
+  Call1             r1, r2, r1
+L1:
+  JmpFalse          L2, r3
+  GetByIdShort      r2, r3, 2, "log"
+  LoadConstString   r1, "test"
+  Call2             r1, r2, r3, r1
+L2:
+  Ret               r0
+

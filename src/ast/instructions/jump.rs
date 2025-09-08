@@ -51,17 +51,11 @@ impl<'a> JumpHelpers<'a> for InstructionToStatementConverter<'a> {
         comparison_op: &str,
         target_offset: i32,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let left_var = self.register_manager.get_variable_name(left_reg);
-        let right_var = self.register_manager.get_variable_name(right_reg);
-
         let span = Span::default();
 
-        // Create left and right expressions
-        let left_atom = self.ast_builder.allocator.alloc_str(&left_var);
-        let left_expr = self.ast_builder.expression_identifier(span, left_atom);
-
-        let right_atom = self.ast_builder.allocator.alloc_str(&right_var);
-        let right_expr = self.ast_builder.expression_identifier(span, right_atom);
+        // Use register_to_expression to handle inlining properly
+        let left_expr = self.register_to_expression(left_reg)?;
+        let right_expr = self.register_to_expression(right_reg)?;
 
         // Map comparison operation to binary operator
         let binary_op = match comparison_op {
@@ -103,11 +97,8 @@ impl<'a> JumpHelpers<'a> for InstructionToStatementConverter<'a> {
         jump_type: JumpType,
         target_offset: i32,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let condition_var = self.register_manager.get_variable_name(condition_reg);
-
-        let span = Span::default();
-        let condition_atom = self.ast_builder.allocator.alloc_str(&condition_var);
-        let condition_expr = self.ast_builder.expression_identifier(span, condition_atom);
+        // Use register_to_expression to handle inlining properly
+        let condition_expr = self.register_to_expression(condition_reg)?;
 
         Ok(InstructionResult::JumpCondition(JumpCondition {
             condition_expression: Some(condition_expr),
@@ -132,13 +123,10 @@ impl<'a> JumpHelpers<'a> for InstructionToStatementConverter<'a> {
         condition_reg: u8,
         target_offset: i32,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let condition_var = self.register_manager.get_variable_name(condition_reg);
-
         let span = Span::default();
 
-        // Create condition expression
-        let condition_atom = self.ast_builder.allocator.alloc_str(&condition_var);
-        let condition_expr = self.ast_builder.expression_identifier(span, condition_atom);
+        // Use register_to_expression to handle inlining properly
+        let condition_expr = self.register_to_expression(condition_reg)?;
 
         // Create undefined expression
         let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");

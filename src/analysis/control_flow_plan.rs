@@ -11,8 +11,34 @@ use crate::cfg::ssa::types::DuplicationContext;
 use crate::cfg::ssa::{DuplicatedSSAValue, RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey, SetupInstruction, SwitchInfo};
 use crate::generated::generated_traits::BinaryOperator;
+use crate::hbc::InstructionIndex;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
+
+/// Information about a constructor pattern (CreateThis/Construct/SelectObject)
+#[derive(Debug, Clone)]
+pub struct ConstructorPattern {
+    /// The constructor function SSA value
+    pub constructor: SSAValue,
+    /// The arguments to the constructor
+    pub arguments: Vec<SSAValue>,
+    /// The 'this' value passed to Construct (often a copy of create_this_result)
+    pub construct_this: Option<SSAValue>,
+    /// The prototype value used by CreateThis (should be consumed)
+    pub create_this_prototype: Option<SSAValue>,
+    /// The CreateThis result (intermediate, will be consumed)
+    pub create_this_result: SSAValue,
+    /// The Construct result (intermediate, will be consumed)
+    pub construct_result: SSAValue,
+    /// PC of the SelectObject instruction (for AST generation context)
+    pub select_object_pc: u32,
+    /// PC of the Construct instruction (to get register info during AST generation)
+    pub construct_pc: u32,
+    /// Register containing the constructor function at Construct
+    pub constructor_reg: u8,
+    /// Number of arguments
+    pub arg_count: u8,
+}
 
 /// Unique identifier for a control flow structure
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -76,6 +102,18 @@ pub struct ControlFlowPlan {
 
     /// Call site analysis with argument registers for each Call/Construct
     pub call_site_analysis: CallSiteAnalysis,
+
+    /// SSA values that must be inlined (e.g., source operands of setup instructions)
+    /// These values' defining instructions won't be in the generated code path
+    pub mandatory_inline: HashSet<SSAValue>,
+
+    /// Constructor patterns detected in the function
+    /// Maps SelectObject result SSA value to the constructor pattern info
+    pub constructor_patterns: HashMap<SSAValue, ConstructorPattern>,
+
+    /// Instructions that have been consumed and should be skipped during generation
+    /// Key: (block_id, instruction_index)
+    pub consumed_instructions: HashSet<(NodeIndex, InstructionIndex)>,
 
     /// Next available structure ID
     next_structure_id: usize,
@@ -451,8 +489,11 @@ impl ControlFlowPlan {
             scope_boundaries: HashMap::new(),
             phi_deconstructions: HashMap::new(),
             phi_results: HashSet::new(),
-            next_structure_id: 1,
             call_site_analysis: CallSiteAnalysis::new(),
+            mandatory_inline: HashSet::new(),
+            constructor_patterns: HashMap::new(),
+            consumed_instructions: HashSet::new(),
+            next_structure_id: 1,
         }
     }
 
@@ -1060,7 +1101,7 @@ impl ControlFlowPlan {
                 false_branch,
             } => {
                 writeln!(f, "Conditional")?;
-                writeln!(f, "{}  Condition block: {} (contains condition evaluation + any other instructions)", 
+                writeln!(f, "{}  Condition block: {} (contains condition evaluation + any other instructions)",
                     indent_str, condition_block.index())?;
                 if let Some(expr) = condition_expr {
                     writeln!(

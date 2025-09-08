@@ -17,8 +17,10 @@ pub mod function_analysis;
 pub mod function_classifier;
 pub mod global_ssa;
 pub mod hbc_analysis;
+pub mod optimization_passes;
 pub mod ssa_usage_tracker;
 pub mod value_tracker;
+pub mod value_tracking;
 
 pub use call_site_analysis::{CallSiteAnalysis, CallSiteInfo};
 pub use constructor_detector::{ConstructorDetector, ConstructorInfo};
@@ -29,3 +31,4 @@ pub use function_classifier::{FunctionClassifier, FunctionType};
 pub use global_ssa::{GlobalAnalysisResult, GlobalSSAAnalyzer};
 pub use hbc_analysis::HbcAnalysis;
 pub use value_tracker::{ConstantValue, TrackedValue, ValueTracker};
+pub use value_tracking::{EscapeAnalysisResult, EscapeAnalyzer, EscapeReason};

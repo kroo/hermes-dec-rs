@@ -1,6 +1,8 @@
 use super::types::{RegisterDef, RegisterUse, SSAAnalysis, SSAValue};
 use super::SSAError;
-use crate::{cfg::Cfg, generated::instruction_analysis};
+use crate::{
+    analysis::call_site_analysis::CallSiteAnalysis, cfg::Cfg, generated::instruction_analysis,
+};
 use petgraph::algo::dominators::Dominators;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
@@ -10,6 +12,9 @@ pub fn rename_to_ssa(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Result<(), SSAErr
     let dominators = cfg
         .analyze_dominators()
         .ok_or_else(|| SSAError::RenamingError("Failed to compute dominators".to_string()))?;
+
+    // Build call site analysis to properly track argument registers
+    let call_site_analysis = CallSiteAnalysis::analyze(cfg);
 
     // Version counters for each register
     let mut version_counters: HashMap<u8, u32> = HashMap::new();
@@ -32,6 +37,7 @@ pub fn rename_to_ssa(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Result<(), SSAErr
         &dominators,
         &mut version_counters,
         &mut value_stacks,
+        &call_site_analysis,
     )?;
 
     Ok(())
@@ -61,6 +67,7 @@ fn rename_block(
     dominators: &Dominators<NodeIndex>,
     version_counters: &mut HashMap<u8, u32>,
     value_stacks: &mut HashMap<u8, Vec<SSAValue>>,
+    call_site_analysis: &CallSiteAnalysis,
 ) -> Result<(), SSAError> {
     let mut new_values = Vec::new();
 
@@ -95,7 +102,20 @@ fn rename_block(
     let block = &cfg.graph()[block_id];
     for (inst_idx, hbc_instruction) in block.instructions().iter().enumerate() {
         let pc = block.start_pc() + inst_idx as u32;
-        let usage = instruction_analysis::analyze_register_usage(&hbc_instruction.instruction);
+        let mut usage = instruction_analysis::analyze_register_usage(&hbc_instruction.instruction);
+
+        // Check if this instruction has call site info (for proper argument tracking)
+        if let Some(call_info) = call_site_analysis
+            .call_sites
+            .get(&(block_id, hbc_instruction.instruction_index))
+        {
+            // Add all argument registers from the call site analysis
+            for &arg_reg in &call_info.argument_registers {
+                if !usage.sources.contains(&arg_reg) {
+                    usage.sources.push(arg_reg);
+                }
+            }
+        }
 
         // Rename uses (build use-def chains)
         for source_reg in usage.sources {
@@ -169,6 +189,7 @@ fn rename_block(
                 dominators,
                 version_counters,
                 value_stacks,
+                call_site_analysis,
             )?;
         }
     }

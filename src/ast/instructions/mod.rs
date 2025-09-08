@@ -15,7 +15,10 @@ use crate::cfg::ssa::DuplicationContext;
 use crate::cfg::switch_analysis::switch_info::CaseGroup;
 use crate::hbc::InstructionIndex;
 use crate::{analysis::GlobalAnalysisResult, generated::unified_instructions::UnifiedInstruction};
-use oxc_ast::{ast::Statement, AstBuilder as OxcAstBuilder};
+use oxc_ast::{
+    ast::{Expression, Statement},
+    AstBuilder as OxcAstBuilder,
+};
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -28,6 +31,79 @@ mod jump;
 mod misc;
 mod objects;
 mod variables;
+
+/// Check if a property name is a standard global that doesn't need globalThis prefix
+fn is_standard_global(property: &str) -> bool {
+    matches!(
+        property,
+        "console"
+            | "Math"
+            | "Object"
+            | "Array"
+            | "String"
+            | "Number"
+            | "Boolean"
+            | "Date"
+            | "RegExp"
+            | "Error"
+            | "JSON"
+            | "Promise"
+            | "Map"
+            | "Set"
+            | "WeakMap"
+            | "WeakSet"
+            | "Symbol"
+            | "Proxy"
+            | "Reflect"
+            | "BigInt"
+            | "Int8Array"
+            | "Uint8Array"
+            | "Uint8ClampedArray"
+            | "Int16Array"
+            | "Uint16Array"
+            | "Int32Array"
+            | "Uint32Array"
+            | "Float32Array"
+            | "Float64Array"
+            | "BigInt64Array"
+            | "BigUint64Array"
+            | "ArrayBuffer"
+            | "SharedArrayBuffer"
+            | "DataView"
+            | "Atomics"
+            | "encodeURI"
+            | "encodeURIComponent"
+            | "decodeURI"
+            | "decodeURIComponent"
+            | "eval"
+            | "isFinite"
+            | "isNaN"
+            | "parseFloat"
+            | "parseInt"
+            | "URL"
+            | "URLSearchParams"
+            | "TextEncoder"
+            | "TextDecoder"
+            | "WebAssembly"
+            | "Intl"
+            | "Buffer"
+            | "process"
+            | "global"
+            | "window"
+            | "document"
+            | "setTimeout"
+            | "clearTimeout"
+            | "setInterval"
+            | "clearInterval"
+            | "setImmediate"
+            | "clearImmediate"
+            | "requestAnimationFrame"
+            | "cancelAnimationFrame"
+            | "fetch"
+            | "crypto"
+            | "performance"
+    )
+}
 
 use arithmetic::ArithmeticHelpers;
 use constants::ConstantHelpers;
@@ -112,6 +188,10 @@ pub struct InstructionToStatementConverter<'a> {
     current_duplication_context: Option<DuplicationContext>,
     /// The control flow plan (shared ownership)
     pub control_flow_plan: Rc<crate::analysis::control_flow_plan::ControlFlowPlan>,
+    /// Inline configuration settings
+    pub inline_config: crate::decompiler::InlineConfig,
+    /// Variable mapper for consistent naming
+    variable_mapper: crate::ast::variables::VariableMapper,
 }
 
 impl<'a> InstructionToStatementConverter<'a> {
@@ -132,7 +212,19 @@ impl<'a> InstructionToStatementConverter<'a> {
             undeclared_variables: HashSet::new(),
             current_duplication_context: None,
             control_flow_plan: control_flow_plan_rc,
+            inline_config: crate::decompiler::InlineConfig::default(),
+            variable_mapper: crate::ast::variables::VariableMapper::new(),
         }
+    }
+
+    /// Set the inline configuration
+    pub fn set_inline_config(&mut self, config: crate::decompiler::InlineConfig) {
+        self.inline_config = config;
+    }
+
+    /// Set the variable mapper
+    pub fn set_variable_mapper(&mut self, mapper: crate::ast::variables::VariableMapper) {
+        self.variable_mapper = mapper;
     }
 
     /// Set the current program counter for context-aware operations
@@ -215,6 +307,53 @@ impl<'a> InstructionToStatementConverter<'a> {
         &mut self.expression_context
     }
 
+    /// Check if a declaration should be skipped for the given destination register
+    pub fn should_skip_declaration(&self, dest_reg: u8) -> bool {
+        if let Some(ssa_value) = self.register_manager.get_current_ssa_value(dest_reg) {
+            let dup_ssa = if let Some(context) = self.register_manager.current_duplication_context()
+            {
+                DuplicatedSSAValue {
+                    original: ssa_value,
+                    duplication_context: Some(context.clone()),
+                }
+            } else {
+                DuplicatedSSAValue::original(ssa_value)
+            };
+
+            // Check if this declaration should be skipped
+            if let Some(DeclarationStrategy::Skip) =
+                self.control_flow_plan.get_declaration_strategy(&dup_ssa)
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Get the declaration strategy for the given destination register
+    pub fn get_declaration_strategy_for_register(
+        &self,
+        dest_reg: u8,
+    ) -> Option<DeclarationStrategy> {
+        if let Some(ssa_value) = self.register_manager.get_current_ssa_value(dest_reg) {
+            let dup_ssa = if let Some(context) = self.register_manager.current_duplication_context()
+            {
+                DuplicatedSSAValue {
+                    original: ssa_value,
+                    duplication_context: Some(context.clone()),
+                }
+            } else {
+                DuplicatedSSAValue::original(ssa_value)
+            };
+
+            self.control_flow_plan
+                .get_declaration_strategy(&dup_ssa)
+                .cloned()
+        } else {
+            None
+        }
+    }
+
     /// Get the global analyzer from HBC analysis
     pub fn global_analyzer(&self) -> &Arc<GlobalAnalysisResult> {
         &self.hbc_analysis.global_analysis
@@ -231,45 +370,17 @@ impl<'a> InstructionToStatementConverter<'a> {
         &mut self,
         register: u8,
     ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
-        let span = oxc_span::Span::default();
-        let var_name = self.register_manager.get_variable_name(register);
-
-        // Check if we have SSA information and use strategies
-        if let (Some(current_pc), Some(current_block)) = (
-            self.register_manager.current_pc(),
-            self.register_manager.current_block(),
-        ) {
-            if let Some(ssa_value) = self.register_manager.get_current_ssa_for_register(register) {
-                let use_site = crate::cfg::ssa::RegisterUse {
-                    register,
-                    block_id: current_block,
-                    instruction_idx: current_pc,
-                };
-                let dup_value = crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone());
-
-                if let Some(strategy) = self
-                    .control_flow_plan
-                    .use_strategies
-                    .get(&(dup_value, use_site))
-                {
-                    match strategy {
-                        crate::analysis::ssa_usage_tracker::UseStrategy::InlineValue(constant) => {
-                            // Create a constant expression
-                            return self.create_constant_expression(constant);
-                        }
-                        crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
-                            // Use the variable reference
-                            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-                            return Ok(self.ast_builder.expression_identifier(span, var_atom));
-                        }
-                    }
-                }
-            }
+        // Try to get SSA value for the register
+        if let Some(ssa_value) = self.register_manager.get_current_ssa_for_register(register) {
+            // Use the common implementation
+            self.ssa_value_to_expression_internal(&ssa_value, None)
+        } else {
+            // No SSA info, just use variable name
+            let span = oxc_span::Span::default();
+            let var_name = self.register_manager.get_variable_name(register);
+            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+            Ok(self.ast_builder.expression_identifier(span, var_atom))
         }
-
-        // Default: use variable reference
-        let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-        Ok(self.ast_builder.expression_identifier(span, var_atom))
     }
 
     /// Convert a source register operand to an expression (for reading values)
@@ -417,7 +528,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                 operand_1,
                 operand_2,
                 ..
-            } => self.create_property_assignment_by_value(*operand_0, *operand_1, *operand_2),
+            } => self.create_property_assignment_by_value(*operand_0, *operand_2, *operand_1),
 
             // Control flow that generates statements
             Ret { operand_0, .. } => self.create_return_statement(*operand_0),
@@ -1821,6 +1932,101 @@ impl<'a> InstructionToStatementConverter<'a> {
         ))
     }
 
+    /// Create a statement for a register assignment based on its declaration strategy
+    pub fn create_register_assignment_statement(
+        &mut self,
+        dest_reg: u8,
+        init_expression: oxc_ast::ast::Expression<'a>,
+    ) -> Result<Statement<'a>, StatementConversionError> {
+        let dest_var = self
+            .register_manager
+            .create_new_variable_for_register(dest_reg);
+
+        // Check the declaration strategy for this register
+        match self.get_declaration_strategy_for_register(dest_reg) {
+            Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::AssignOnly) => {
+                // Create assignment only (no declaration)
+                let span = oxc_span::Span::default();
+                let var_atom = self.ast_builder.allocator.alloc_str(&dest_var);
+                let assign_expr = self.ast_builder.expression_assignment(
+                    span,
+                    oxc_ast::ast::AssignmentOperator::Assign,
+                    oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
+                        self.ast_builder.alloc(oxc_ast::ast::IdentifierReference {
+                            span,
+                            name: oxc_span::Atom::from(var_atom),
+                            reference_id: std::cell::Cell::new(None),
+                        }),
+                    ),
+                    init_expression,
+                );
+                Ok(self.ast_builder.statement_expression(span, assign_expr))
+            }
+            Some(
+                crate::analysis::ssa_usage_tracker::DeclarationStrategy::DeclareAndInitialize {
+                    kind,
+                },
+            ) => {
+                // Create declaration with the specified kind
+                let declaration_kind = match kind {
+                    VariableKind::Const => oxc_ast::ast::VariableDeclarationKind::Const,
+                    VariableKind::Let => oxc_ast::ast::VariableDeclarationKind::Let,
+                };
+                self.create_variable_declaration(&dest_var, Some(init_expression), declaration_kind)
+            }
+            Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::Skip) => {
+                // Skip - the value is fully inlined, no statement needed
+                Ok(self.ast_builder.statement_empty(oxc_span::Span::default()))
+            }
+            Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::SideEffectOnly) => {
+                // Execute for side effects only, create an expression statement
+                let span = oxc_span::Span::default();
+                Ok(self.ast_builder.statement_expression(span, init_expression))
+            }
+            Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::DeclareAtDominator {
+                kind: _,
+                ..
+            }) => {
+                // The variable declaration (with 'kind' as const/let) is already handled
+                // in ControlFlowPlanConverter::convert_basic_block() at the dominator block.
+                // Here we only generate the assignment statement
+                let span = oxc_span::Span::default();
+                let var_atom = self.ast_builder.allocator.alloc_str(&dest_var);
+                let assign_expr = self.ast_builder.expression_assignment(
+                    span,
+                    oxc_ast::ast::AssignmentOperator::Assign,
+                    oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
+                        self.ast_builder.alloc(oxc_ast::ast::IdentifierReference {
+                            span,
+                            name: oxc_span::Atom::from(var_atom),
+                            reference_id: std::cell::Cell::new(None),
+                        }),
+                    ),
+                    init_expression,
+                );
+                Ok(self.ast_builder.statement_expression(span, assign_expr))
+            }
+            None => {
+                // No strategy - shouldn't happen, fall back to assignment
+                let span = oxc_span::Span::default();
+                let var_atom = self.ast_builder.allocator.alloc_str(&dest_var);
+                let assign_expr = self.ast_builder.expression_assignment(
+                    span,
+                    oxc_ast::ast::AssignmentOperator::Assign,
+                    oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
+                        self.ast_builder.alloc(oxc_ast::ast::IdentifierReference {
+                            span,
+                            name: oxc_span::Atom::from(var_atom),
+                            reference_id: std::cell::Cell::new(None),
+                        }),
+                    ),
+                    init_expression,
+                );
+                Ok(self.ast_builder.statement_expression(span, assign_expr))
+            }
+        }
+    }
+
     /// Create a variable declaration or assignment based on whether the variable was already declared
     pub fn create_variable_declaration_or_assignment(
         &mut self,
@@ -1875,6 +2081,125 @@ impl<'a> InstructionToStatementConverter<'a> {
         }
     }
 
+    /// Create an expression from an SSA value, respecting use strategies
+    pub fn ssa_value_to_expression(
+        &mut self,
+        ssa_value: &crate::cfg::ssa::SSAValue,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        // Use the common implementation
+        self.ssa_value_to_expression_internal(ssa_value, None)
+    }
+
+    /// Create an expression from an SSA value at a specific use site
+    pub fn ssa_value_to_expression_at_use_site(
+        &mut self,
+        ssa_value: &crate::cfg::ssa::SSAValue,
+        use_site: crate::cfg::ssa::RegisterUse,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        // Use the common implementation with the specified use site
+        self.ssa_value_to_expression_internal(ssa_value, Some(use_site))
+    }
+
+    /// Internal method for creating expression from SSA value with optional use site override
+    fn ssa_value_to_expression_internal(
+        &mut self,
+        ssa_value: &crate::cfg::ssa::SSAValue,
+        use_site_override: Option<crate::cfg::ssa::RegisterUse>,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        let span = oxc_span::Span::default();
+
+        // Get current PC and block for use site lookup, or use override
+        let use_site = if let Some(override_site) = use_site_override {
+            override_site
+        } else if let (Some(current_pc), Some(current_block)) = (
+            self.register_manager.current_pc(),
+            self.register_manager.current_block(),
+        ) {
+            crate::cfg::ssa::RegisterUse {
+                register: ssa_value.register,
+                block_id: current_block,
+                instruction_idx: current_pc,
+            }
+        } else {
+            // No PC/block info, just use variable name
+            let dup_value = crate::cfg::ssa::types::DuplicatedSSAValue::original(ssa_value.clone());
+            let var_name = self
+                .register_manager
+                .get_variable_name_for_duplicated(&dup_value);
+            let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+            return Ok(self.ast_builder.expression_identifier(span, var_atom));
+        };
+
+        // Create duplicated SSA value with current context if any
+        let dup_value = if let Some(context) = self.register_manager.current_duplication_context() {
+            crate::cfg::ssa::DuplicatedSSAValue {
+                original: ssa_value.clone(),
+                duplication_context: Some(context.clone()),
+            }
+        } else {
+            crate::cfg::ssa::DuplicatedSSAValue::original(ssa_value.clone())
+        };
+
+        log::debug!(
+            "Looking up use strategy for {} at {:?} with context: {}",
+            ssa_value,
+            use_site,
+            dup_value.context_description()
+        );
+
+        // Look up use strategy
+        let key = (dup_value.clone(), use_site.clone());
+        if let Some(strategy) = self.control_flow_plan.use_strategies.get(&key) {
+            log::debug!("Found use strategy for key {:?}: {:?}", key, strategy);
+            match strategy {
+                crate::analysis::ssa_usage_tracker::UseStrategy::InlineValue(constant) => {
+                    log::debug!("Inlining constant: {:?}", constant);
+                    return self.create_constant_expression(constant);
+                }
+                crate::analysis::ssa_usage_tracker::UseStrategy::InlineTrackedValue(
+                    tracked_value,
+                ) => {
+                    log::debug!("Inlining tracked value: {:?}", tracked_value);
+                    return Ok(self.create_property_access_expression(tracked_value)?);
+                }
+                crate::analysis::ssa_usage_tracker::UseStrategy::InlineGlobalThis => {
+                    log::debug!("Inlining globalThis");
+                    let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                    return Ok(self.ast_builder.expression_identifier(span, global_atom));
+                }
+                crate::analysis::ssa_usage_tracker::UseStrategy::InlineParameter {
+                    param_index,
+                } => {
+                    let param_name = self.variable_mapper.get_parameter_name(*param_index);
+                    log::debug!("Inlining parameter: {}", param_name);
+                    let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
+                    return Ok(self.ast_builder.expression_identifier(span, param_atom));
+                }
+                crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall { .. }
+                | crate::analysis::ssa_usage_tracker::UseStrategy::DeclareObjectLiteral {
+                    ..
+                }
+                | crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
+                    // Use the variable reference
+                    // DeclareObjectLiteral should only be at definition sites, not use sites
+                    let var_name = self
+                        .register_manager
+                        .get_variable_name_for_duplicated(&dup_value);
+                    log::debug!("Using variable: {}", var_name);
+                    let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+                    return Ok(self.ast_builder.expression_identifier(span, var_atom));
+                }
+            }
+        }
+
+        // No use strategy found, use variable name
+        let var_name = self
+            .register_manager
+            .get_variable_name_for_duplicated(&dup_value);
+        let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+        Ok(self.ast_builder.expression_identifier(span, var_atom))
+    }
+
     /// Create a constant expression from a ConstantValue
     pub fn create_constant_expression(
         &self,
@@ -1899,8 +2224,103 @@ impl<'a> InstructionToStatementConverter<'a> {
                 let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
                 self.ast_builder.expression_identifier(span, undefined_atom)
             }
+            ConstantValue::ArrayLiteral(elements) => {
+                let mut array_elements = self.ast_builder.vec();
+                for element in elements {
+                    let element_expr = self.create_constant_expression(element)?;
+                    array_elements.push(oxc_ast::ast::ArrayExpressionElement::from(element_expr));
+                }
+                self.ast_builder.expression_array(span, array_elements)
+            }
+            ConstantValue::ObjectLiteral(properties) => {
+                let mut object_properties = self.ast_builder.vec();
+                for (key, value) in properties {
+                    let key_atom = self.ast_builder.allocator.alloc_str(key);
+                    let key_ident = self.ast_builder.identifier_name(span, key_atom);
+                    let property_key = oxc_ast::ast::PropertyKey::StaticIdentifier(
+                        self.ast_builder.alloc(key_ident),
+                    );
+                    let value_expr = self.create_constant_expression(value)?;
+                    let property = self.ast_builder.object_property(
+                        span,
+                        oxc_ast::ast::PropertyKind::Init,
+                        property_key,
+                        value_expr,
+                        false,
+                        false,
+                        false,
+                    );
+                    object_properties.push(oxc_ast::ast::ObjectPropertyKind::ObjectProperty(
+                        self.ast_builder.alloc(property),
+                    ));
+                }
+                self.ast_builder.expression_object(span, object_properties)
+            }
         };
         Ok(expr)
+    }
+
+    /// Create a property access expression from a TrackedValue
+    pub fn create_property_access_expression(
+        &self,
+        tracked_value: &crate::analysis::value_tracker::TrackedValue,
+    ) -> Result<oxc_ast::ast::Expression<'a>, StatementConversionError> {
+        use crate::analysis::value_tracker::TrackedValue;
+
+        let span = oxc_span::Span::default();
+
+        match tracked_value {
+            TrackedValue::PropertyAccess { object, property } => {
+                // Recursively build the object expression
+                let object_expr = self.create_property_access_expression(object)?;
+
+                // Check if this is a global property access that can be simplified
+                // For example, globalThis.console can be simplified to just console
+                if let TrackedValue::GlobalObject = &**object {
+                    // Check if this is a standard global property
+                    if is_standard_global(property) {
+                        // Just use the property name directly
+                        let prop_atom = self.ast_builder.allocator.alloc_str(property);
+                        return Ok(self.ast_builder.expression_identifier(span, prop_atom));
+                    }
+                }
+
+                // Create the member expression
+                let prop_atom = self.ast_builder.allocator.alloc_str(property);
+                let property_ident = self.ast_builder.identifier_name(span, prop_atom);
+                let member = self.ast_builder.member_expression_static(
+                    span,
+                    object_expr,
+                    property_ident,
+                    false, // optional
+                );
+                Ok(Expression::from(member))
+            }
+            TrackedValue::GlobalObject => {
+                // Use globalThis as the base
+                let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                Ok(self.ast_builder.expression_identifier(span, global_atom))
+            }
+            TrackedValue::Constant(value) => {
+                // If for some reason we have a constant in the chain, inline it
+                self.create_constant_expression(value)
+            }
+            TrackedValue::Parameter { .. }
+            | TrackedValue::Phi { .. }
+            | TrackedValue::Unknown
+            | TrackedValue::MutableObject { .. }
+            | TrackedValue::MergedObject { .. } => {
+                // These shouldn't appear in property access chains normally
+                // But if they do, we have a problem - we can't inline them properly
+                // This is likely a bug in the tracking logic
+                log::warn!(
+                    "Unexpected TrackedValue in property access chain: {:?}",
+                    tracked_value
+                );
+                let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                Ok(self.ast_builder.expression_identifier(span, undefined_atom))
+            }
+        }
     }
 
     /// Create a return statement: `return expression;`
@@ -1927,9 +2347,9 @@ impl<'a> InstructionToStatementConverter<'a> {
         let actual_param_count = if param_count > 0 { param_count - 1 } else { 0 };
 
         for i in 0..actual_param_count {
-            // Parameters are named starting from arg0, arg1, etc.
-            // TODO: Analyze function body to determine better parameter names based on usage patterns
-            let param_name = format!("arg{}", i);
+            // Parameters are named using the variable mapper
+            // param_index starts at 1 since 0 is 'this'
+            let param_name = self.variable_mapper.get_parameter_name((i + 1) as u8);
             let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
 
             // Create binding identifier for the parameter

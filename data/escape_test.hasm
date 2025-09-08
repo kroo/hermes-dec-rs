@@ -1,0 +1,86 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: ec027fb16d0729fbcd1efe0d5f273208ffb888e8
+  Function count: 5
+  String count: 10
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 29..34] #361E46C8: global
+s1[ASCII, 0..27] #1C35E808: objectEscapesViaFunctionCall
+s2[ASCII, 27..29] #629A2BFD: log
+s3[ASCII, 35..41] #01A8A0A2: console
+s4[ASCII, 42..63] #07E38639: objectEscapesViaReturn
+s5[ASCII, 63..68] #52CAD514: nested
+s6[ASCII, 69..87] #87581E96: objectDoesNotEscape
+s7[ASCII, 88..110] #0001E7F9: objectEscapesViaStorage
+s8[ASCII, 111..111] #0001E3E8: x
+s9[ASCII, 112..112] y
+
+Array Buffer:
+
+Function<global>0(1 params, 3 registers, 0 symbols):
+  DeclareGlobalVar  "objectDoesNotEscape"
+  DeclareGlobalVar  "objectEscapesViaReturn"
+  DeclareGlobalVar  "objectEscapesViaFunctionCall"
+  DeclareGlobalVar  "objectEscapesViaStorage"
+  CreateEnvironment r0
+  CreateClosure     r2, r0, Function<objectDoesNotEscape>1
+  GetGlobalObject   r1
+  PutById           r1, r2, 1, "objectDoesNotEscape"
+  CreateClosure     r2, r0, Function<objectEscapesViaReturn>2
+  PutById           r1, r2, 2, "objectEscapesViaReturn"
+  CreateClosure     r2, r0, Function<objectEscapesViaFunctionCall>3
+  PutById           r1, r2, 3, "objectEscapesViaFunctionCall"
+  CreateClosure     r0, r0, Function<objectEscapesViaStorage>4
+  PutById           r1, r0, 4, "objectEscapesViaStorage"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<objectDoesNotEscape>1(1 params, 2 registers, 0 symbols):
+  NewObject         r0
+  LoadConstUInt8    r1, 1
+  PutById           r0, r1, 1, "x"
+  LoadConstUInt8    r1, 2
+  PutById           r0, r1, 2, "y"
+  GetByIdShort      r1, r0, 1, "x"
+  GetByIdShort      r0, r0, 2, "y"
+  Add               r0, r1, r0
+  Ret               r0
+
+Function<objectEscapesViaReturn>2(1 params, 2 registers, 0 symbols):
+  NewObject         r0
+  LoadConstUInt8    r1, 1
+  PutById           r0, r1, 1, "x"
+  LoadConstUInt8    r1, 2
+  PutById           r0, r1, 2, "y"
+  Ret               r0
+
+Function<objectEscapesViaFunctionCall>3(1 params, 11 registers, 0 symbols):
+  NewObject         r2
+  LoadConstUInt8    r0, 1
+  PutById           r2, r0, 1, "x"
+  GetGlobalObject   r0
+  TryGetById        r1, r0, 1, "console"
+  GetByIdShort      r0, r1, 2, "log"
+  Call2             r0, r0, r1, r2
+  LoadConstUInt8    r0, 42
+  Ret               r0
+
+Function<objectEscapesViaStorage>4(1 params, 3 registers, 0 symbols):
+  NewObject         r0
+  NewObject         r1
+  LoadConstUInt8    r2, 1
+  PutById           r1, r2, 1, "x"
+  PutById           r0, r1, 2, "nested"
+  Ret               r0
+

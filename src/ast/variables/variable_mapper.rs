@@ -215,6 +215,7 @@ impl VariableMapping {
     }
 }
 
+#[derive(Clone)]
 pub struct VariableMapper {
     reserved_names: HashSet<String>,
 }
@@ -272,6 +273,25 @@ impl VariableMapper {
         }
 
         Self { reserved_names }
+    }
+
+    /// Get the name for a function parameter (static method)
+    /// param_index: 0 = 'this', 1 = first arg, 2 = second arg, etc.
+    pub fn get_parameter_name_static(param_index: u8) -> String {
+        if param_index == 0 {
+            "this".to_string()
+        } else {
+            // For now, use the standard naming convention
+            // In the future, this could be enhanced to use better names
+            // based on parameter usage analysis
+            format!("arg{}", param_index - 1)
+        }
+    }
+
+    /// Get the name for a function parameter
+    /// param_index: 0 = 'this', 1 = first arg, 2 = second arg, etc.
+    pub fn get_parameter_name(&self, param_index: u8) -> String {
+        Self::get_parameter_name_static(param_index)
     }
 
     /// Generate comprehensive variable mapping from SSA analysis

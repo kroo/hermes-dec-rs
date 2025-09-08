@@ -75,6 +75,55 @@ enum Commands {
         /// Decompile nested function definitions (experimental)
         #[arg(long)]
         decompile_nested: bool,
+
+        /// Enable all safe optimizations (equivalent to setting all safe optimization flags)
+        #[arg(long, conflicts_with_all = &["optimize_all"])]
+        optimize_safe: bool,
+
+        /// Enable ALL optimizations including unsafe ones (USE WITH CAUTION)
+        #[arg(long, conflicts_with_all = &["optimize_safe"])]
+        optimize_all: bool,
+
+        /// Inline constant values that are used only once
+        #[arg(long)]
+        inline_constants: bool,
+
+        /// Aggressively inline all constant values regardless of usage count
+        #[arg(long)]
+        inline_all_constants: bool,
+
+        /// Inline property access chains that are used only once
+        #[arg(long)]
+        inline_property_access: bool,
+
+        /// Aggressively inline all property access chains regardless of usage count
+        #[arg(long)]
+        inline_all_property_access: bool,
+
+        /// Inline all uses of globalThis
+        #[arg(long)]
+        inline_global_this: bool,
+
+        /// Simplify call patterns like fn.call(undefined, ...) to fn(...)
+        #[arg(long)]
+        simplify_calls: bool,
+
+        /// Unsafely simplify method calls (e.g., obj.fn.call(obj, args) -> obj.fn(args))
+        /// Warning: This transformation is not semantics-preserving in all cases
+        #[arg(long)]
+        unsafe_simplify_calls: bool,
+
+        /// Inline parameter references to use original parameter names (this, arg0, arg1, etc.)
+        #[arg(long)]
+        inline_parameters: bool,
+
+        /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
+        #[arg(long)]
+        inline_constructor_calls: bool,
+
+        /// Inline object literals when safe (experimental)
+        #[arg(long)]
+        inline_object_literals: bool,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -112,6 +161,55 @@ enum Commands {
         /// Show verbose analysis (dominance frontiers, liveness)
         #[arg(short, long)]
         verbose: bool,
+
+        /// Enable all safe optimizations (equivalent to setting all safe optimization flags)
+        #[arg(long, conflicts_with_all = &["optimize_all"])]
+        optimize_safe: bool,
+
+        /// Enable ALL optimizations including unsafe ones (USE WITH CAUTION)
+        #[arg(long, conflicts_with_all = &["optimize_safe"])]
+        optimize_all: bool,
+
+        /// Inline constant values that are used only once
+        #[arg(long)]
+        inline_constants: bool,
+
+        /// Aggressively inline all constant values regardless of usage count
+        #[arg(long)]
+        inline_all_constants: bool,
+
+        /// Inline property access chains that are used only once
+        #[arg(long)]
+        inline_property_access: bool,
+
+        /// Aggressively inline all property access chains regardless of usage count
+        #[arg(long)]
+        inline_all_property_access: bool,
+
+        /// Inline all uses of globalThis
+        #[arg(long)]
+        inline_global_this: bool,
+
+        /// Simplify call patterns like fn.call(undefined, ...) to fn(...)
+        #[arg(long)]
+        simplify_calls: bool,
+
+        /// Unsafely simplify method calls (e.g., obj.fn.call(obj, args) -> obj.fn(args))
+        /// Warning: This transformation is not semantics-preserving in all cases
+        #[arg(long)]
+        unsafe_simplify_calls: bool,
+
+        /// Inline parameter references to use original parameter names (this, arg0, arg1, etc.)
+        #[arg(long)]
+        inline_parameters: bool,
+
+        /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
+        #[arg(long)]
+        inline_constructor_calls: bool,
+
+        /// Inline object literals when safe (experimental)
+        #[arg(long)]
+        inline_object_literals: bool,
     },
 }
 
@@ -137,18 +235,76 @@ fn main() -> Result<()> {
             comments,
             skip_validation,
             decompile_nested,
+            optimize_safe,
+            optimize_all,
+            inline_constants,
+            inline_all_constants,
+            inline_property_access,
+            inline_all_property_access,
+            inline_global_this,
+            simplify_calls,
+            unsafe_simplify_calls,
+            inline_parameters,
+            inline_constructor_calls,
+            inline_object_literals,
             format: _,
             minify: _,
             hbc_version: _,
-        } => cli::decompile::decompile(
-            &input,
-            function,
-            output.as_ref().map(|v| &**v),
-            &comments,
-            skip_validation,
-            decompile_nested,
-        )
-        .map_err(|e| miette!("{}", e)),
+        } => {
+            // Apply optimization presets
+            let (
+                inline_constants,
+                inline_all_constants,
+                inline_property_access,
+                inline_all_property_access,
+                inline_global_this,
+                simplify_calls,
+                unsafe_simplify_calls,
+                inline_parameters,
+                inline_constructor_calls,
+                inline_object_literals,
+            ) = if optimize_all {
+                // Enable ALL optimizations
+                (true, true, true, true, true, true, true, true, true, true)
+            } else if optimize_safe {
+                // Enable safe optimizations only
+                (true, true, true, true, true, true, false, true, true, true)
+            } else {
+                // Use individual flags
+                (
+                    inline_constants,
+                    inline_all_constants,
+                    inline_property_access,
+                    inline_all_property_access,
+                    inline_global_this,
+                    simplify_calls,
+                    unsafe_simplify_calls,
+                    inline_parameters,
+                    inline_constructor_calls,
+                    inline_object_literals,
+                )
+            };
+
+            let args = cli::decompile::DecompileArgs {
+                input_path: input,
+                function_index: function,
+                output_path: output,
+                comments,
+                skip_validation,
+                decompile_nested,
+                inline_constants: Some(inline_constants),
+                inline_all_constants: Some(inline_all_constants),
+                inline_property_access: Some(inline_property_access),
+                inline_all_property_access: Some(inline_all_property_access),
+                inline_global_this: Some(inline_global_this),
+                simplify_calls: Some(simplify_calls),
+                unsafe_simplify_calls: Some(unsafe_simplify_calls),
+                inline_parameters: Some(inline_parameters),
+                inline_constructor_calls: Some(inline_constructor_calls),
+                inline_object_literals: Some(inline_object_literals),
+            };
+            cli::decompile::decompile(&args).map_err(|e| miette!("{}", e))
+        }
         Commands::Generate { force: _ } => {
             cli::generate::generate_instructions().map_err(|e| miette!("{}", e))
         }
@@ -170,6 +326,66 @@ fn main() -> Result<()> {
             input,
             function,
             verbose,
-        } => cli::analyze_cfg::analyze_cfg(&input, function, verbose).map_err(|e| miette!("{}", e)),
+            optimize_safe,
+            optimize_all,
+            inline_constants,
+            inline_all_constants,
+            inline_property_access,
+            inline_all_property_access,
+            inline_global_this,
+            simplify_calls,
+            unsafe_simplify_calls,
+            inline_parameters,
+            inline_constructor_calls,
+            inline_object_literals,
+        } => {
+            // Apply optimization presets
+            let (
+                _inline_constants, // Not used in analyze_cfg yet
+                inline_all_constants,
+                _inline_property_access, // Not used in analyze_cfg yet
+                inline_all_property_access,
+                inline_global_this,
+                _simplify_calls, // Not used in analyze_cfg yet
+                unsafe_simplify_calls,
+                inline_parameters,
+                inline_constructor_calls,
+                inline_object_literals,
+            ) = if optimize_all {
+                // Enable ALL optimizations
+                (true, true, true, true, true, true, true, true, true, true)
+            } else if optimize_safe {
+                // Enable safe optimizations only
+                (true, true, true, true, true, true, false, true, true, true)
+            } else {
+                // Use individual flags
+                (
+                    inline_constants,
+                    inline_all_constants,
+                    inline_property_access,
+                    inline_all_property_access,
+                    inline_global_this,
+                    simplify_calls,
+                    unsafe_simplify_calls,
+                    inline_parameters,
+                    inline_constructor_calls,
+                    inline_object_literals,
+                )
+            };
+
+            cli::analyze_cfg::analyze_cfg(
+                &input,
+                function,
+                verbose,
+                inline_all_constants,
+                inline_all_property_access,
+                unsafe_simplify_calls,
+                inline_global_this,
+                inline_parameters,
+                inline_constructor_calls,
+                inline_object_literals,
+            )
+            .map_err(|e| miette!("{}", e))
+        }
     }
 }

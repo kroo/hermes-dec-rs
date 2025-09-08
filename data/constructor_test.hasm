@@ -1,0 +1,216 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 88e6a482b96c58c655eb2628c73a09925b73f9c1
+  Function count: 5
+  String count: 35
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 3..12] #555DB1D6: 2024-01-01
+s1[ASCII, 13..23] #5BD5EE37: Basic error
+s2[ASCII, 29..35] #7649BEC5: MyClass
+s3[ASCII, 36..48] #9F3080AD: Range error: 
+s4[ASCII, 49..63] #388ACB1C: Type error test
+s5[ASCII, 60..63] #E347C7F7: test
+s6[ASCII, 76..80] #4EBF6843: flags
+s7[ASCII, 81..82] #E7ECD7B6: gi
+s8[ASCII, 87..92] #63D87C1C: global
+s9[ASCII, 98..104] #B976BAAB: pattern
+s10[ASCII, 0..3] #CD347266: arr2
+s11[ASCII, 19..21] #02514033: err
+s12[ASCII, 23..27] #86528635: regex
+s13[ASCII, 23..28] #9102A3D0: regex1
+s14[ASCII, 60..75] #9615E9FA: testConstructors
+s15[ASCII, 82..86] #3519139E: inst1
+s16[ASCII, 93..98] #931326BA: RegExp
+s17[ASCII, 104..107] #5A7E6397: name
+s18[ASCII, 106..112] #555DB5C7: message
+s19[ASCII, 113..117] #3141F763: Array
+s20[ASCII, 118..121] #B141B051: Date
+s21[ASCII, 120..135] #5871E7C8: testErrorInCatch
+s22[ASCII, 136..145] #5871E3D9: RangeError
+s23[ASCII, 141..145] #2B6CD370: Error
+s24[ASCII, 146..151] #807C5F3D: Object
+s25[ASCII, 151..173] testMultiArgConstructor
+s26[ASCII, 174..182] TypeError
+s27[ASCII, 183..185] arr
+s28[ASCII, 183..186] arr1
+s29[ASCII, 187..191] cause
+s30[ASCII, 191..194] err1
+s31[ASCII, 195..199] date1
+s32[ASCII, 200..204] date2
+s33[ASCII, 205..208] obj1
+s34[ASCII, 209..217] prototype
+
+Array Buffer:
+
+Function<global>0(1 params, 10 registers, 0 symbols):
+  DeclareGlobalVar  "testConstructors"
+  DeclareGlobalVar  "testErrorInCatch"
+  DeclareGlobalVar  "testMultiArgConstructor"
+  CreateEnvironment r1
+  CreateClosure     r2, r1, Function<testConstructors>1
+  GetGlobalObject   r0
+  PutById           r0, r2, 1, "testConstructors"
+  CreateClosure     r2, r1, Function<testErrorInCatch>3
+  PutById           r0, r2, 2, "testErrorInCatch"
+  CreateClosure     r1, r1, Function<testMultiArgConstructor>4
+  PutById           r0, r1, 3, "testMultiArgConstructor"
+  GetByIdShort      r1, r0, 1, "testConstructors"
+  LoadConstUndefined r0
+  Call1             r0, r1, r0
+  Ret               r0
+
+Function<testConstructors>1(1 params, 21 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateClosure     r9, r0, Function<MyClass>2
+  GetGlobalObject   r0
+  TryGetById        r3, r0, 1, "Error"
+  GetByIdShort      r1, r3, 2, "prototype"
+  CreateThis        r2, r1, r3
+  LoadConstString   r13, "Basic error"
+  Mov               r14, r2
+  Construct         r1, r3, 2
+  SelectObject      r8, r2, r1
+  TryGetById        r3, r0, 3, "Array"
+  GetByIdShort      r1, r3, 2, "prototype"
+  CreateThis        r2, r1, r3
+  LoadConstUInt8    r13, 5
+  Mov               r14, r2
+  Construct         r1, r3, 2
+  SelectObject      r7, r2, r1
+  TryGetById        r5, r0, 3, "Array"
+  GetByIdShort      r1, r5, 2, "prototype"
+  CreateThis        r2, r1, r5
+  LoadConstUInt8    r13, 1
+  LoadConstUInt8    r12, 2
+  LoadConstUInt8    r11, 3
+  Mov               r14, r2
+  Construct         r1, r5, 4
+  SelectObject      r6, r2, r1
+  TryGetById        r1, r0, 4, "Object"
+  GetByIdShort      r2, r1, 2, "prototype"
+  CreateThis        r2, r2, r1
+  Mov               r14, r2
+  Construct         r1, r1, 1
+  SelectObject      r5, r2, r1
+  TryGetById        r1, r0, 5, "Date"
+  GetByIdShort      r2, r1, 2, "prototype"
+  CreateThis        r2, r2, r1
+  Mov               r14, r2
+  Construct         r1, r1, 1
+  SelectObject      r4, r2, r1
+  TryGetById        r3, r0, 5, "Date"
+  GetByIdShort      r1, r3, 2, "prototype"
+  CreateThis        r2, r1, r3
+  LoadConstString   r13, "2024-01-01"
+  Mov               r14, r2
+  Construct         r1, r3, 2
+  SelectObject      r3, r2, r1
+  TryGetById        r10, r0, 6, "RegExp"
+  GetByIdShort      r0, r10, 2, "prototype"
+  CreateThis        r2, r0, r10
+  LoadConstString   r0, "test"
+  LoadConstString   r12, "gi"
+  Mov               r14, r2
+  Mov               r13, r0
+  Construct         r1, r10, 3
+  SelectObject      r2, r2, r1
+  GetByIdShort      r1, r9, 2, "prototype"
+  CreateThis        r1, r1, r9
+  Mov               r14, r1
+  Construct         r0, r9, 2
+  SelectObject      r1, r1, r0
+  NewObject         r0
+  PutNewOwnByIdShort r0, r8, "err1"
+  PutNewOwnByIdShort r0, r7, "arr1"
+  PutNewOwnByIdShort r0, r6, "arr2"
+  PutNewOwnByIdShort r0, r5, "obj1"
+  PutNewOwnByIdShort r0, r4, "date1"
+  PutNewOwnByIdShort r0, r3, "date2"
+  PutNewOwnByIdShort r0, r2, "regex1"
+  PutNewOwnByIdShort r0, r1, "inst1"
+  Ret               r0
+
+Function<MyClass>2(2 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadThisNS        r0
+  PutById           r0, r1, 1, "name"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<testErrorInCatch>3(1 params, 11 registers, 0 symbols):
+L1:
+  GetGlobalObject   r0
+  TryGetById        r2, r0, 1, "TypeError"
+  GetByIdShort      r0, r2, 2, "prototype"
+  CreateThis        r1, r0, r2
+  LoadConstString   r3, "Type error test"
+  Mov               r4, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+L2:
+  Catch             r0
+  GetGlobalObject   r1
+  TryGetById        r2, r1, 3, "RangeError"
+  GetByIdShort      r1, r0, 4, "message"
+  LoadConstString   r0, "Range error: "
+  Add               r3, r0, r1
+  GetByIdShort      r1, r2, 2, "prototype"
+  CreateThis        r1, r1, r2
+  Mov               r4, r1
+  Construct         r0, r2, 2
+  SelectObject      r0, r1, r0
+  Throw             r0
+
+Exception Handlers:
+0: start = L1, end = L2, target = L2
+
+Function<testMultiArgConstructor>4(1 params, 21 registers, 0 symbols):
+  GetGlobalObject   r0
+  TryGetById        r4, r0, 1, "Error"
+  NewObject         r3
+  LoadConstString   r1, "test"
+  PutNewOwnByIdShort r3, r1, "cause"
+  GetByIdShort      r1, r4, 2, "prototype"
+  CreateThis        r2, r1, r4
+  LoadConstString   r13, "Error"
+  Mov               r14, r2
+  Mov               r12, r3
+  Construct         r1, r4, 3
+  SelectObject      r3, r2, r1
+  TryGetById        r5, r0, 3, "RegExp"
+  GetByIdShort      r1, r5, 2, "prototype"
+  CreateThis        r2, r1, r5
+  LoadConstString   r13, "pattern"
+  LoadConstString   r12, "flags"
+  Mov               r14, r2
+  Construct         r1, r5, 3
+  SelectObject      r2, r2, r1
+  TryGetById        r8, r0, 4, "Array"
+  GetByIdShort      r0, r8, 2, "prototype"
+  CreateThis        r1, r0, r8
+  LoadConstUInt8    r13, 1
+  LoadConstUInt8    r12, 2
+  LoadConstUInt8    r11, 3
+  LoadConstUInt8    r10, 4
+  LoadConstUInt8    r9, 5
+  Mov               r14, r1
+  Construct         r0, r8, 6
+  SelectObject      r1, r1, r0
+  NewObject         r0
+  PutNewOwnByIdShort r0, r3, "err"
+  PutNewOwnByIdShort r0, r2, "regex"
+  PutNewOwnByIdShort r0, r1, "arr"
+  Ret               r0
+

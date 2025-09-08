@@ -1,0 +1,93 @@
+// CFG analysis for constructor_test2
+// Generated from data/constructor_test2.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-14)\l  0: DeclareGlobalVar  \"testCustomConstructor\"\l  1: DeclareGlobalVar  \"testBuiltins\"\l  2: CreateEnvironment r1\l  3: CreateClosure     r2, r1, Function<testCustomConstructor>1\l  4: GetGlobalObject   r0\l  5: PutById           r0, r2, 1, \"testCustomConstructor\"\l  6: CreateClosure     r1, r1, Function<testBuiltins>4\l  7: PutById           r0, r1, 2, \"testBuiltins\"\l  8: GetByIdShort      r2, r0, 1, \"testCustomConstructor\"\l  9: LoadConstUndefined r1\l  10: Call1             r2, r2, r1\l  11: GetByIdShort      r0, r0, 2, \"testBuiltins\"\l  12: Call1             r0, r0, r1\l  13: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-29)\l  0: CreateEnvironment r0\l  1: CreateClosure     r7, r0, Function<Person>2\l  2: CreateClosure     r5, r0, Function<Animal>3\l  3: GetByIdShort      r0, r7, 1, \"prototype\"\l  4: CreateThis        r1, r0, r7\l  5: LoadConstString   r9, \"Alice\"\l  6: LoadConstUInt8    r8, 30\l  7: Mov               r10, r1\l  8: Construct         r0, r7, 3\l  9: SelectObject      r4, r1, r0\l  10: GetByIdShort      r0, r7, 1, \"prototype\"\l  11: CreateThis        r1, r0, r7\l  12: LoadConstString   r9, \"Bob\"\l  13: LoadConstUInt8    r8, 25\l  14: Mov               r10, r1\l  15: Construct         r0, r7, 3\l  16: SelectObject      r3, r1, r0\l  17: GetByIdShort      r0, r5, 1, \"prototype\"\l  18: CreateThis        r1, r0, r5\l  19: LoadConstString   r9, \"Dog\"\l  20: Mov               r10, r1\l  21: Construct         r0, r5, 2\l  22: SelectObject      r2, r1, r0\l  23: GetGlobalObject   r0\l  24: TryGetById        r1, r0, 2, \"Math\"\l  25: GetByIdShort      r0, r1, 3, \"random\"\l  26: Call1             r1, r0, r1\l  27: LoadConstDouble   r0, 0.5\l  28: JGreater          L1, r1, r0\l" ]
+    f1_n1 [ label = "Block 1 (PC 29-36)\l  0: GetByIdShort      r0, r5, 1, \"prototype\"\l  1: CreateThis        r1, r0, r5\l  2: LoadConstString   r9, \"Cat\"\l  3: Mov               r10, r1\l  4: Construct         r0, r5, 2\l  5: SelectObject      r1, r1, r0\l  6: Jmp               L2\l" ]
+    f1_n2 [ label = "Block 2 (PC 36-43) [L1]\l  0: GetByIdShort      r0, r7, 1, \"prototype\"\l  1: CreateThis        r5, r0, r7\l  2: LoadConstString   r9, \"Charlie\"\l  3: LoadConstUInt8    r8, 35\l  4: Mov               r10, r5\l  5: Construct         r0, r7, 3\l  6: SelectObject      r1, r5, r0\l" ]
+    f1_n3 [ label = "Block 3 (PC 43-49) [L2]\l  0: NewObject         r0\l  1: PutNewOwnByIdShort r0, r4, \"p1\"\l  2: PutNewOwnByIdShort r0, r3, \"p2\"\l  3: PutNewOwnByIdShort r0, r2, \"a1\"\l  4: PutNewOwnByIdShort r0, r1, \"p3\"\l  5: Ret               r0\l" ]
+    f1_n4 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n2 [label="True"]
+    f1_n0 -> f1_n1 [label="False"]
+    f1_n1 -> f1_n3 [label="Uncond"]
+    f1_n2 -> f1_n3 [label="Fall"]
+    f1_n3 -> f1_n4 [label="Uncond"]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [ label = "Block 0 (PC 0-7)\l  0: LoadThisNS        r1\l  1: LoadParam         r0, 1\l  2: PutById           r1, r0, 1, \"name\"\l  3: LoadParam         r0, 2\l  4: PutById           r1, r0, 2, \"age\"\l  5: LoadConstUndefined r0\l  6: Ret               r0\l" ]
+    f2_n1 [ label = "EXIT" ]
+
+    f2_n0 -> f2_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-5)\l  0: LoadParam         r1, 1\l  1: LoadThisNS        r0\l  2: PutById           r0, r1, 1, \"type\"\l  3: LoadConstUndefined r0\l  4: Ret               r0\l" ]
+    f3_n1 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_4 {
+    label = "Function 4";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f4_n0 [ label = "Block 0 (PC 0-40)\l  0: GetGlobalObject   r0\l  1: TryGetById        r1, r0, 1, \"Map\"\l  2: GetByIdShort      r2, r1, 2, \"prototype\"\l  3: CreateThis        r2, r2, r1\l  4: Mov               r8, r2\l  5: Construct         r1, r1, 1\l  6: SelectObject      r5, r2, r1\l  7: TryGetById        r1, r0, 3, \"Set\"\l  8: GetByIdShort      r2, r1, 2, \"prototype\"\l  9: CreateThis        r2, r2, r1\l  10: Mov               r8, r2\l  11: Construct         r1, r1, 1\l  12: SelectObject      r4, r2, r1\l  13: TryGetById        r1, r0, 4, \"WeakMap\"\l  14: GetByIdShort      r2, r1, 2, \"prototype\"\l  15: CreateThis        r2, r2, r1\l  16: Mov               r8, r2\l  17: Construct         r1, r1, 1\l  18: SelectObject      r3, r2, r1\l  19: TryGetById        r1, r0, 5, \"WeakSet\"\l  20: GetByIdShort      r2, r1, 2, \"prototype\"\l  21: CreateThis        r2, r2, r1\l  22: Mov               r8, r2\l  23: Construct         r1, r1, 1\l  24: SelectObject      r2, r2, r1\l  25: TryGetById        r6, r0, 6, \"Promise\"\l  26: GetByIdShort      r0, r6, 2, \"prototype\"\l  27: CreateThis        r1, r0, r6\l  28: CreateEnvironment r0\l  29: CreateClosure     r7, r0, Function<>5\l  30: Mov               r8, r1\l  31: Construct         r0, r6, 2\l  32: SelectObject      r1, r1, r0\l  33: NewObject         r0\l  34: PutNewOwnByIdShort r0, r5, \"map\"\l  35: PutNewOwnByIdShort r0, r4, \"set\"\l  36: PutNewOwnByIdShort r0, r3, \"weakMap\"\l  37: PutNewOwnByIdShort r0, r2, \"weakSet\"\l  38: PutNewOwnByIdShort r0, r1, \"promise\"\l  39: Ret               r0\l" ]
+    f4_n1 [ label = "EXIT" ]
+
+    f4_n0 -> f4_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_5 {
+    label = "Function 5";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f5_n0 [ label = "Block 0 (PC 0-5)\l  0: LoadParam         r2, 1\l  1: LoadConstUndefined r0\l  2: LoadConstUInt8    r1, 42\l  3: Call2             r1, r2, r0, r1\l  4: Ret               r0\l" ]
+    f5_n1 [ label = "EXIT" ]
+
+    f5_n0 -> f5_n1 [label="Uncond"]
+  }
+
+}

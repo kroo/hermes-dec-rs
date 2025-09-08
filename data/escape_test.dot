@@ -1,0 +1,73 @@
+// CFG analysis for escape_test
+// Generated from data/escape_test.hbc
+
+digraph {
+  rankdir=TB;
+  node [shape=box, fontname="monospace"];
+
+  subgraph cluster_function_0 {
+    label = "Function 0";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f0_n0 [ label = "Block 0 (PC 0-16)\l  0: DeclareGlobalVar  \"objectDoesNotEscape\"\l  1: DeclareGlobalVar  \"objectEscapesViaReturn\"\l  2: DeclareGlobalVar  \"objectEscapesViaFunctionCall\"\l  3: DeclareGlobalVar  \"objectEscapesViaStorage\"\l  4: CreateEnvironment r0\l  5: CreateClosure     r2, r0, Function<objectDoesNotEscape>1\l  6: GetGlobalObject   r1\l  7: PutById           r1, r2, 1, \"objectDoesNotEscape\"\l  8: CreateClosure     r2, r0, Function<objectEscapesViaReturn>2\l  9: PutById           r1, r2, 2, \"objectEscapesViaReturn\"\l  10: CreateClosure     r2, r0, Function<objectEscapesViaFunctionCall>3\l  11: PutById           r1, r2, 3, \"objectEscapesViaFunctionCall\"\l  12: CreateClosure     r0, r0, Function<objectEscapesViaStorage>4\l  13: PutById           r1, r0, 4, \"objectEscapesViaStorage\"\l  14: LoadConstUndefined r0\l  15: Ret               r0\l" ]
+    f0_n1 [ label = "EXIT" ]
+
+    f0_n0 -> f0_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_1 {
+    label = "Function 1";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f1_n0 [ label = "Block 0 (PC 0-9)\l  0: NewObject         r0\l  1: LoadConstUInt8    r1, 1\l  2: PutById           r0, r1, 1, \"x\"\l  3: LoadConstUInt8    r1, 2\l  4: PutById           r0, r1, 2, \"y\"\l  5: GetByIdShort      r1, r0, 1, \"x\"\l  6: GetByIdShort      r0, r0, 2, \"y\"\l  7: Add               r0, r1, r0\l  8: Ret               r0\l" ]
+    f1_n1 [ label = "EXIT" ]
+
+    f1_n0 -> f1_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_2 {
+    label = "Function 2";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f2_n0 [ label = "Block 0 (PC 0-6)\l  0: NewObject         r0\l  1: LoadConstUInt8    r1, 1\l  2: PutById           r0, r1, 1, \"x\"\l  3: LoadConstUInt8    r1, 2\l  4: PutById           r0, r1, 2, \"y\"\l  5: Ret               r0\l" ]
+    f2_n1 [ label = "EXIT" ]
+
+    f2_n0 -> f2_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_3 {
+    label = "Function 3";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f3_n0 [ label = "Block 0 (PC 0-9)\l  0: NewObject         r2\l  1: LoadConstUInt8    r0, 1\l  2: PutById           r2, r0, 1, \"x\"\l  3: GetGlobalObject   r0\l  4: TryGetById        r1, r0, 1, \"console\"\l  5: GetByIdShort      r0, r1, 2, \"log\"\l  6: Call2             r0, r0, r1, r2\l  7: LoadConstUInt8    r0, 42\l  8: Ret               r0\l" ]
+    f3_n1 [ label = "EXIT" ]
+
+    f3_n0 -> f3_n1 [label="Uncond"]
+  }
+
+  subgraph cluster_function_4 {
+    label = "Function 4";
+    style = filled;
+    color = lightgrey;
+
+    edge [fontname="Arial"];
+
+    f4_n0 [ label = "Block 0 (PC 0-6)\l  0: NewObject         r0\l  1: NewObject         r1\l  2: LoadConstUInt8    r2, 1\l  3: PutById           r1, r2, 1, \"x\"\l  4: PutById           r0, r1, 2, \"nested\"\l  5: Ret               r0\l" ]
+    f4_n1 [ label = "EXIT" ]
+
+    f4_n0 -> f4_n1 [label="Uncond"]
+  }
+
+}

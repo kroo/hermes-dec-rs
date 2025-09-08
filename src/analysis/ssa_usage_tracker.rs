@@ -7,6 +7,7 @@ use crate::analysis::{ConstantValue, FunctionAnalysis, TrackedValue};
 use crate::cfg::ssa::types::{
     DuplicatedSSAValue, DuplicationContext, RegisterUse, SSAAnalysis, SSAValue,
 };
+use crate::hbc::InstructionIndex;
 use log::{debug, trace};
 use petgraph::algo::dominators::Dominators;
 use petgraph::graph::NodeIndex;
@@ -82,6 +83,42 @@ pub enum UseStrategy {
 
     /// Inline the constant value directly
     InlineValue(ConstantValue),
+
+    /// Inline a tracked value (property access, object literal, etc.)
+    InlineTrackedValue(TrackedValue),
+
+    /// Inline globalThis directly
+    InlineGlobalThis,
+
+    /// Inline parameter reference directly (this, arg0, arg1, etc.)
+    InlineParameter { param_index: u8 },
+
+    /// Simplify call pattern (for 'this' argument in Call instructions)
+    /// Contains the function expression and whether it matches the object.method pattern
+    SimplifyCall { is_method_call: bool },
+
+    /// Declare an object literal at a specific position
+    /// Used for inlining object creation with mutations as a single literal
+    DeclareObjectLiteral {
+        /// The tracked value representing the object with all mutations
+        tracked_value: TrackedValue,
+        /// Where to emit the declaration
+        emit_position: EmitPosition,
+    },
+}
+
+/// Position where a declaration should be emitted
+#[derive(Debug, Clone, PartialEq)]
+pub enum EmitPosition {
+    /// Emit at the original object creation instruction
+    AtCreation,
+    /// Emit at a specific mutation instruction
+    AtMutation {
+        /// Block containing the mutation
+        block_id: NodeIndex,
+        /// Instruction index of the mutation
+        instruction_idx: InstructionIndex,
+    },
 }
 
 impl<'a> SSAUsageTracker<'a> {
@@ -389,15 +426,6 @@ impl<'a> SSAUsageTracker<'a> {
         dup_ssa_value: &DuplicatedSSAValue,
         call_site_analysis: Option<&crate::analysis::call_site_analysis::CallSiteAnalysis>,
     ) -> bool {
-        // First check if this value is used as an implicit argument in a Call/Construct
-        if self.is_implicit_argument(dup_ssa_value.original_ssa_value(), call_site_analysis) {
-            trace!(
-                "{} is used as an implicit argument, not eliminated",
-                dup_ssa_value.original_ssa_value()
-            );
-            return false;
-        }
-
         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
 
         if all_uses.is_empty() {
@@ -409,7 +437,7 @@ impl<'a> SSAUsageTracker<'a> {
             return true;
         }
 
-        // Check if all uses have been consumed
+        // Check if all uses have been consumed first
         if let Some(consumed) = self.consumed_uses.get(dup_ssa_value) {
             let is_eliminated = all_uses.iter().all(|use_site| consumed.contains(use_site));
             trace!(
@@ -419,16 +447,28 @@ impl<'a> SSAUsageTracker<'a> {
                 consumed.len(),
                 is_eliminated
             );
-            is_eliminated
+            if is_eliminated {
+                return true;
+            }
         } else {
             trace!(
                 "{} has {} uses, 0 consumed, not eliminated",
                 dup_ssa_value.original_ssa_value(),
                 all_uses.len()
             );
-            // No consumed uses tracked, so not eliminated
-            false
         }
+
+        // Only check for implicit arguments if not already eliminated
+        if self.is_implicit_argument(dup_ssa_value.original_ssa_value(), call_site_analysis) {
+            trace!(
+                "{} is used as an implicit argument, not eliminated",
+                dup_ssa_value.original_ssa_value()
+            );
+            return false;
+        }
+
+        // Not eliminated
+        false
     }
 
     /// Determine the declaration strategy for a (potentially duplicated) SSA value at its definition site
@@ -452,8 +492,28 @@ impl<'a> SSAUsageTracker<'a> {
     ) -> DeclarationStrategy {
         let ssa_value = dup_ssa_value.original_ssa_value();
 
-        // Check for side effects first - even if a value has no uses,
-        // we need to execute the instruction if it has side effects
+        // Check if this value is part of a PHI group OR is a PHI operand with a used result
+        // PHI operands need to be assigned even if they appear to have no direct uses
+        let is_phi_related =
+            if let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis {
+                if let Some(coalesced_rep) = var_analysis.coalesced_values.get(ssa_value) {
+                    trace!(
+                        "{} is part of PHI group with representative {}",
+                        ssa_value,
+                        coalesced_rep
+                    );
+                    true // This is part of a coalesced PHI group
+                } else {
+                    // Not coalesced, but check if it's a PHI operand with a used result
+                    self.is_phi_operand_with_used_result(ssa_value)
+                }
+            } else {
+                // No variable analysis, still check if it's a PHI operand
+                self.is_phi_operand_with_used_result(ssa_value)
+            };
+
+        // Always check for side effects, regardless of PHI status
+        // Function calls and other side-effect instructions need to be executed even if PHI-related
         if let Some(block) = self
             .function_analysis
             .cfg
@@ -463,6 +523,11 @@ impl<'a> SSAUsageTracker<'a> {
             for instr in &block.instructions {
                 if instr.instruction_index == ssa_value.def_site.instruction_idx {
                     if has_side_effects(&instr.instruction) {
+                        log::debug!(
+                            "Instruction at {} has side effects: {:?}",
+                            ssa_value,
+                            instr.instruction
+                        );
                         // Check if this value has any uses
                         let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
                         if all_uses.is_empty()
@@ -471,6 +536,27 @@ impl<'a> SSAUsageTracker<'a> {
                                 call_site_analysis,
                             )
                         {
+                            log::debug!(
+                                "SSA value {} has no uses or is fully eliminated",
+                                ssa_value
+                            );
+                            // Special case: Array/object literals with constant contents can be eliminated
+                            let is_literal = self.is_eliminable_literal(&instr.instruction);
+                            log::debug!("Is eliminable literal: {}", is_literal);
+                            if is_literal {
+                                // Check if this is a constant array/object that can be eliminated
+                                let value_tracker = self.function_analysis.value_tracker();
+                                let tracked_value = value_tracker.get_value(ssa_value);
+                                if let TrackedValue::Constant(_) = tracked_value {
+                                    trace!(
+                                        "SSA value {} is an unused constant literal, using Skip",
+                                        ssa_value
+                                    );
+                                    return DeclarationStrategy::Skip;
+                                }
+                            }
+
+                            // All other instructions with side effects should be executed for side effects
                             trace!(
                                 "SSA value {} has side effects but no uses, using SideEffectOnly",
                                 ssa_value
@@ -481,6 +567,10 @@ impl<'a> SSAUsageTracker<'a> {
                     break;
                 }
             }
+        }
+
+        if !is_phi_related {
+            // Additional non-PHI checks can go here if needed
         }
 
         // Special handling for PHI result values
@@ -540,13 +630,29 @@ impl<'a> SSAUsageTracker<'a> {
         // 2. Check if fully eliminated (considering duplication context)
         // Only check this AFTER checking for PHI operands
         // Side effects were already checked above
-        if self.is_duplicated_fully_eliminated_with_context(dup_ssa_value, call_site_analysis) {
+        let is_eliminated =
+            self.is_duplicated_fully_eliminated_with_context(dup_ssa_value, call_site_analysis);
+        if is_eliminated {
             debug!(
                 "SSA value {} (context: {}) is fully eliminated with no side effects, using Skip",
                 ssa_value,
                 dup_ssa_value.context_description()
             );
             return DeclarationStrategy::Skip;
+        } else {
+            // Log why it's not eliminated for debugging
+            let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
+            let consumed_uses = self
+                .consumed_uses
+                .get(dup_ssa_value)
+                .map(|s| s.len())
+                .unwrap_or(0);
+            trace!(
+                "SSA value {} has {} uses, {} consumed, not eliminated",
+                ssa_value,
+                all_uses.len(),
+                consumed_uses
+            );
         }
 
         // 3. Single SSA value - declare at definition
@@ -597,6 +703,23 @@ impl<'a> SSAUsageTracker<'a> {
         self.perform_cascading_elimination(&empty_duplicated_blocks);
     }
 
+    /// Check if an instruction is an array/object literal that can be eliminated if unused
+    fn is_eliminable_literal(
+        &self,
+        instruction: &crate::generated::unified_instructions::UnifiedInstruction,
+    ) -> bool {
+        use crate::generated::unified_instructions::UnifiedInstruction;
+        matches!(
+            instruction,
+            UnifiedInstruction::NewArrayWithBuffer { .. }
+                | UnifiedInstruction::NewArrayWithBufferLong { .. }
+                | UnifiedInstruction::NewObjectWithBuffer { .. }
+                | UnifiedInstruction::NewObjectWithBufferLong { .. }
+                | UnifiedInstruction::NewArray { .. }
+                | UnifiedInstruction::NewObject { .. }
+        )
+    }
+
     /// Check if an SSA value is a PHI result
     fn is_phi_result(&self, ssa_value: &SSAValue) -> bool {
         // Check if this SSA value is the result of a PHI function
@@ -604,6 +727,41 @@ impl<'a> SSAUsageTracker<'a> {
             for phi in phi_list {
                 if &phi.result == ssa_value {
                     return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if a value is used as a PHI operand where the PHI result is used
+    fn is_phi_operand_with_used_result(&self, ssa_value: &SSAValue) -> bool {
+        // Check all PHI functions to see if this value is an operand
+        for phi_list in self.ssa().phi_functions.values() {
+            for phi in phi_list {
+                // Check if this value is an operand of this PHI
+                if phi.operands.values().any(|operand| operand == ssa_value) {
+                    // This value is a PHI operand - now check if the PHI result is used
+                    // First check direct uses
+                    let phi_result_uses = self.ssa().get_ssa_value_uses(&phi.result);
+                    if !phi_result_uses.is_empty() {
+                        trace!(
+                            "SSA value {} is PHI operand for {} which has {} uses",
+                            ssa_value,
+                            phi.result,
+                            phi_result_uses.len()
+                        );
+                        return true;
+                    }
+
+                    // Also recursively check if the PHI result itself feeds into another used PHI
+                    if self.is_phi_operand_with_used_result(&phi.result) {
+                        trace!(
+                            "SSA value {} is PHI operand for {} which feeds into another used PHI",
+                            ssa_value,
+                            phi.result
+                        );
+                        return true;
+                    }
                 }
             }
         }
@@ -1006,19 +1164,13 @@ fn has_side_effects(
         // Iterator operations follow iterator protocol, can throw
         | UnifiedInstruction::IteratorBegin { .. }
         | UnifiedInstruction::IteratorNext { .. }
-        // Property access can call getters, can throw
-        | UnifiedInstruction::GetById { .. }
-        | UnifiedInstruction::GetByIdShort { .. }
-        | UnifiedInstruction::GetByIdLong { .. }
-        | UnifiedInstruction::TryGetById { .. }
-        | UnifiedInstruction::TryGetByIdLong { .. }
+        // GetByVal can call getters or computed properties, can throw
         | UnifiedInstruction::GetByVal { .. }
         | UnifiedInstruction::GetPNameList { .. }
         // Exception handling must not be eliminated
         | UnifiedInstruction::Catch { .. }
         // Meta properties and special values might be needed
         | UnifiedInstruction::GetNewTarget { .. }
-        | UnifiedInstruction::GetGlobalObject { .. }
         | UnifiedInstruction::GetArgumentsLength { .. }
         | UnifiedInstruction::GetArgumentsPropByVal { .. }
         | UnifiedInstruction::ReifyArguments { .. }

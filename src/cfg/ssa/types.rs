@@ -433,24 +433,36 @@ impl SSAAnalysis {
         register: u8,
         instruction_idx: InstructionIndex,
     ) -> Option<&SSAValue> {
-        // First check if there's a PHI function at this PC
-        // PHI functions conceptually execute before any regular instruction at the same PC
-        if let Some(phi_value) = self
+        // First, find which block this instruction is in
+        let block_for_instruction = self
             .definitions
             .iter()
-            .filter(|def| def.register == register && def.instruction_idx == instruction_idx)
-            .find_map(|def| {
-                // Check if this definition is from a PHI function
-                self.ssa_values.get(def).filter(|ssa_val| {
-                    // Check if any block has a PHI function with this result
-                    self.phi_functions.values().any(|phis| {
-                        phis.iter()
-                            .any(|phi| phi.result.def_site == ssa_val.def_site)
-                    })
-                })
-            })
-        {
-            return Some(phi_value);
+            .find(|def| def.instruction_idx == instruction_idx)
+            .map(|def| def.block_id);
+
+        // If we know the block, check if there's a PHI function for this register in this block
+        // PHI functions conceptually execute at the start of a block, so if we're looking for
+        // a value before any instruction in that block (except the first), we should use the PHI result
+        if let Some(block_id) = block_for_instruction {
+            if let Some(phis) = self.phi_functions.get(&block_id) {
+                if let Some(phi) = phis.iter().find(|phi| phi.register == register) {
+                    // Check if this instruction is AFTER the block start
+                    // We need to find the first instruction index in this block
+                    let block_start_idx = self
+                        .definitions
+                        .iter()
+                        .filter(|def| def.block_id == block_id)
+                        .map(|def| def.instruction_idx)
+                        .min();
+
+                    // If this instruction is after the block start, use the PHI result
+                    if let Some(start_idx) = block_start_idx {
+                        if instruction_idx > start_idx {
+                            return Some(&phi.result);
+                        }
+                    }
+                }
+            }
         }
 
         // Otherwise find the most recent definition BEFORE this PC

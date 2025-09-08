@@ -20,12 +20,87 @@ use oxc_ast::AstBuilder;
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
+/// Check if a property name is a standard global that doesn't need globalThis prefix
+fn is_standard_global(property: &str) -> bool {
+    matches!(
+        property,
+        "console"
+            | "Math"
+            | "Object"
+            | "Array"
+            | "String"
+            | "Number"
+            | "Boolean"
+            | "Date"
+            | "RegExp"
+            | "Error"
+            | "JSON"
+            | "Promise"
+            | "Map"
+            | "Set"
+            | "WeakMap"
+            | "WeakSet"
+            | "Symbol"
+            | "Proxy"
+            | "Reflect"
+            | "BigInt"
+            | "Int8Array"
+            | "Uint8Array"
+            | "Uint8ClampedArray"
+            | "Int16Array"
+            | "Uint16Array"
+            | "Int32Array"
+            | "Uint32Array"
+            | "Float32Array"
+            | "Float64Array"
+            | "BigInt64Array"
+            | "BigUint64Array"
+            | "ArrayBuffer"
+            | "SharedArrayBuffer"
+            | "DataView"
+            | "Atomics"
+            | "encodeURI"
+            | "encodeURIComponent"
+            | "decodeURI"
+            | "decodeURIComponent"
+            | "eval"
+            | "isFinite"
+            | "isNaN"
+            | "parseFloat"
+            | "parseInt"
+            | "URL"
+            | "URLSearchParams"
+            | "TextEncoder"
+            | "TextDecoder"
+            | "WebAssembly"
+            | "Intl"
+            | "Buffer"
+            | "process"
+            | "global"
+            | "window"
+            | "document"
+            | "setTimeout"
+            | "clearTimeout"
+            | "setInterval"
+            | "clearInterval"
+            | "setImmediate"
+            | "clearImmediate"
+            | "requestAnimationFrame"
+            | "cancelAnimationFrame"
+            | "fetch"
+            | "crypto"
+            | "performance"
+    )
+}
+
 /// Converts a ControlFlowPlan into JavaScript AST
 pub struct ControlFlowPlanConverter<'a> {
     /// AST builder for creating nodes
     ast_builder: &'a AstBuilder<'a>,
     /// HBC analysis for function information
     hbc_analysis: &'a crate::analysis::HbcAnalysis<'a>,
+    /// HBC file reference
+    hbc_file: &'a HbcFile<'a>,
     /// Function index we're converting
     function_index: u32,
     /// Instruction-to-statement converter for basic blocks
@@ -38,6 +113,8 @@ pub struct ControlFlowPlanConverter<'a> {
     include_instruction_comments: bool,
     /// Comment manager for attaching comments to statements
     comment_manager: Option<AddressCommentManager>,
+    /// Variable mapper for consistent naming
+    variable_mapper: crate::ast::variables::VariableMapper,
 }
 
 impl<'a> ControlFlowPlanConverter<'a> {
@@ -51,6 +128,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         plan: ControlFlowPlan,
         include_ssa_comments: bool,
         include_instruction_comments: bool,
+        inline_config: &crate::decompiler::InlineConfig,
     ) -> Self {
         let expression_context = ExpressionContext::with_context(
             hbc,
@@ -66,6 +144,9 @@ impl<'a> ControlFlowPlanConverter<'a> {
             plan,
         );
 
+        // Set the inline configuration
+        instruction_converter.set_inline_config(inline_config.clone());
+
         // Generate variable mapping from SSA analysis
         let mut variable_mapper = crate::ast::variables::VariableMapper::new();
         if let Ok(variable_mapping) =
@@ -77,9 +158,13 @@ impl<'a> ControlFlowPlanConverter<'a> {
                 .set_variable_mapping(variable_mapping);
         }
 
+        // Set the variable mapper in the instruction converter
+        instruction_converter.set_variable_mapper(variable_mapper.clone());
+
         Self {
             ast_builder,
             hbc_analysis,
+            hbc_file: hbc,
             function_index,
             instruction_converter,
             variable_names: HashMap::new(),
@@ -90,12 +175,19 @@ impl<'a> ControlFlowPlanConverter<'a> {
             } else {
                 None
             },
+            variable_mapper,
         }
     }
 
     /// Take the comment manager (transfers ownership)
     pub fn take_comment_manager(&mut self) -> Option<AddressCommentManager> {
         self.comment_manager.take()
+    }
+
+    /// Set whether to decompile nested functions
+    pub fn set_decompile_nested(&mut self, decompile_nested: bool) {
+        self.instruction_converter
+            .set_decompile_nested(decompile_nested);
     }
 
     /// Convert the entire plan to statements
@@ -122,6 +214,11 @@ impl<'a> ControlFlowPlanConverter<'a> {
         context: Option<&DuplicationContext>,
     ) {
         if let Some(structure) = plan.structures.get(&structure_id) {
+            log::debug!(
+                "Converting structure {:?}: type = {:?}",
+                structure_id,
+                structure.kind
+            );
             // Check if this is a duplicated structure and update context
             let ctx = if let Some(dup_info) = &structure.duplication_info {
                 Some(&dup_info.context)
@@ -262,131 +359,125 @@ impl<'a> ControlFlowPlanConverter<'a> {
     /// Convert a single block (not the whole structure)
     fn convert_single_block(
         &mut self,
-        plan: &ControlFlowPlan,
+        _plan: &ControlFlowPlan,
         block_idx: NodeIndex,
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
-        // Get the basic block from the function analysis
-        if let Some(function_analysis) = self
-            .hbc_analysis
-            .get_function_analysis_ref(self.function_index)
+        // Try to get function from HBC analysis first, or build it if needed
+        match self
+            .hbc_file
+            .functions
+            .get(self.function_index, self.hbc_file)
         {
-            if let Some(block) = function_analysis.cfg.graph().node_weight(block_idx) {
-                // Convert each instruction in the block
-                for hbc_instruction in &block.instructions {
-                    if self.include_instruction_comments {
-                        // Add instruction comment
-                        let comment_text = format!(
-                            "// {} @{}: {:?}",
-                            hbc_instruction.instruction_index.0,
-                            hbc_instruction.offset,
-                            hbc_instruction.instruction
-                        );
-                        // TODO: Add proper comment support when needed
-                        // For now, just skip the comment
-                        _ = comment_text;
-                    }
+            Ok(f) => f,
+            Err(_) => return, // Can't get function, skip block
+        };
 
-                    // Update current PC for source maps
+        // Build CFG to get the block
+        let mut cfg = crate::cfg::Cfg::new(self.hbc_file, self.function_index);
+        cfg.build();
+
+        // Get the basic block from the CFG
+        if let Some(block) = cfg.graph().node_weight(block_idx) {
+            log::debug!(
+                "Converting single block {} with {} instructions",
+                block_idx.index(),
+                block.instructions.len()
+            );
+            // Convert each instruction in the block
+            for hbc_instruction in &block.instructions {
+                if self.include_instruction_comments {
+                    // Add instruction comment
+                    let comment_text = format!(
+                        "// {} @{}: {:?}",
+                        hbc_instruction.instruction_index.0,
+                        hbc_instruction.offset,
+                        hbc_instruction.instruction
+                    );
+                    // TODO: Add proper comment support when needed
+                    // For now, just skip the comment
+                    _ = comment_text;
+                }
+
+                // Update current PC for source maps
+                self.instruction_converter
+                    .set_current_pc(hbc_instruction.instruction_index.0 as u32);
+
+                // Set current block for use strategy lookups
+                self.instruction_converter
+                    .register_manager_mut()
+                    .set_current_block(block_idx);
+
+                // Set duplication context if present
+                if let Some(ctx) = context {
                     self.instruction_converter
-                        .set_current_pc(hbc_instruction.instruction_index.0 as u32);
+                        .set_duplication_context(Some(ctx.clone()));
+                }
 
-                    // Set current block for use strategy lookups
-                    self.instruction_converter
-                        .register_manager_mut()
-                        .set_current_block(block_idx);
+                // Convert instruction to statement(s) - apply PHI replacements if we have a context
+                // This is where the duplication context matters - we need to replace PHI values
+                match self
+                    .instruction_converter
+                    .convert_instruction(&hbc_instruction.instruction)
+                {
+                    Ok(result) => {
+                        // Handle the result based on its type
+                        match result {
+                            crate::ast::InstructionResult::Statement(stmt) => {
+                                // Prepare comments before borrowing comment_manager
+                                let instruction_comment = if self.include_instruction_comments {
+                                    Some(format!(
+                                        "PC {} (duplicated): {}",
+                                        hbc_instruction.instruction_index.0,
+                                        hbc_instruction
+                                            .format_instruction(self.hbc_analysis.hbc_file)
+                                    ))
+                                } else {
+                                    None
+                                };
 
-                    // Set duplication context if present
-                    if let Some(ctx) = context {
-                        self.instruction_converter
-                            .set_duplication_context(Some(ctx.clone()));
-                    }
+                                let ssa_comment: Option<String> = None; // Skip SSA comments in single block conversion for now
 
-                    // Convert instruction to statement(s) - apply PHI replacements if we have a context
-                    // This is where the duplication context matters - we need to replace PHI values
-                    match self
-                        .instruction_converter
-                        .convert_instruction(&hbc_instruction.instruction)
-                    {
-                        Ok(result) => {
-                            // Handle the result based on its type
-                            match result {
-                                crate::ast::InstructionResult::Statement(stmt) => {
-                                    // Prepare comments before borrowing comment_manager
-                                    let instruction_comment = if self.include_instruction_comments {
-                                        Some(format!(
-                                            "PC {} (duplicated): {}",
-                                            hbc_instruction.instruction_index.0,
-                                            hbc_instruction
-                                                .format_instruction(self.hbc_analysis.hbc_file)
-                                        ))
-                                    } else {
-                                        None
-                                    };
-
-                                    let ssa_comment = if self.include_ssa_comments {
-                                        // Use the duplicated version if we have a duplication context
-                                        if let Some(ctx) = context {
-                                            self.format_ssa_info_duplicated(
-                                                plan,
-                                                block_idx,
-                                                hbc_instruction.instruction_index,
-                                                &function_analysis.ssa,
-                                                ctx,
-                                            )
-                                        } else {
-                                            self.format_ssa_info(
-                                                plan,
-                                                block_idx,
-                                                hbc_instruction.instruction_index,
-                                                &function_analysis.ssa,
-                                            )
-                                        }
-                                    } else {
-                                        None
-                                    };
-
-                                    // Now add comments if we have a comment manager
-                                    if let Some(ref mut comment_manager) = self.comment_manager {
-                                        if let Some(instr_info) = instruction_comment {
-                                            comment_manager.add_comment(
-                                                &stmt,
-                                                instr_info,
-                                                CommentKind::Line,
-                                                CommentPosition::Leading,
-                                            );
-                                        }
-
-                                        if let Some(ssa_info) = ssa_comment {
-                                            comment_manager.add_comment(
-                                                &stmt,
-                                                ssa_info,
-                                                CommentKind::Line,
-                                                CommentPosition::Leading,
-                                            );
-                                        }
+                                // Now add comments if we have a comment manager
+                                if let Some(ref mut comment_manager) = self.comment_manager {
+                                    if let Some(instr_info) = instruction_comment {
+                                        comment_manager.add_comment(
+                                            &stmt,
+                                            instr_info,
+                                            CommentKind::Line,
+                                            CommentPosition::Leading,
+                                        );
                                     }
 
-                                    statements.push(stmt);
+                                    if let Some(ssa_info) = ssa_comment {
+                                        comment_manager.add_comment(
+                                            &stmt,
+                                            ssa_info,
+                                            CommentKind::Line,
+                                            CommentPosition::Leading,
+                                        );
+                                    }
                                 }
-                                crate::ast::InstructionResult::None => {
-                                    // No statement generated
-                                }
-                                _ => {
-                                    // Other result types not expected for basic block instructions
-                                }
+
+                                statements.push(stmt);
+                            }
+                            crate::ast::InstructionResult::None => {
+                                // No statement generated
+                            }
+                            _ => {
+                                // Other result types not expected for basic block instructions
                             }
                         }
-                        Err(_) => {
-                            // Skip instructions that fail to convert
-                        }
                     }
+                    Err(_) => {
+                        // Skip instructions that fail to convert
+                    }
+                }
 
-                    // Clear duplication context
-                    if context.is_some() {
-                        self.instruction_converter.set_duplication_context(None);
-                    }
+                // Clear duplication context
+                if context.is_some() {
+                    self.instruction_converter.set_duplication_context(None);
                 }
             }
         }
@@ -724,7 +815,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             }
 
                             // Convert the setup instruction using the regular instruction converter
-                            // This ensures we use the same logic as for normal basic blocks
+                            // Setup instructions are just regular instructions that were hoisted
                             let block_id = setup_instr.ssa_value.def_site.block_id;
                             let instruction_idx = setup_instr.ssa_value.def_site.instruction_idx;
 
@@ -749,8 +840,20 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                     // Handle the instruction result
                                     match instr_result {
                                         crate::ast::InstructionResult::Statement(stmt) => {
-                                            // Prepare the setup comment before borrowing comment_manager
-                                            let setup_comment = if self.include_ssa_comments {
+                                            // Prepare comments before borrowing comment_manager
+                                            let instruction_comment =
+                                                if self.include_instruction_comments {
+                                                    // Setup instructions are hoisted from comparison blocks
+                                                    Some(format!(
+                                                        "PC {} (setup): {:?}",
+                                                        setup_instr.instruction.instruction_index.0,
+                                                        setup_instr.instruction.instruction
+                                                    ))
+                                                } else {
+                                                    None
+                                                };
+
+                                            let ssa_comment = if self.include_ssa_comments {
                                                 let var_name = self.get_variable_name(&dup_ssa);
                                                 Some(format!(
                                                     "Setup: {} [r{}_{}]",
@@ -762,14 +865,23 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                                 None
                                             };
 
-                                            // Add setup comment to the statement
+                                            // Add comments to the statement
                                             if let Some(ref mut comment_manager) =
                                                 self.comment_manager
                                             {
-                                                if let Some(ssa_comment) = setup_comment {
+                                                if let Some(comment) = instruction_comment {
                                                     comment_manager.add_comment(
                                                         &stmt,
-                                                        ssa_comment,
+                                                        comment,
+                                                        CommentKind::Line,
+                                                        CommentPosition::Leading,
+                                                    );
+                                                }
+
+                                                if let Some(comment) = ssa_comment {
+                                                    comment_manager.add_comment(
+                                                        &stmt,
+                                                        comment,
                                                         CommentKind::Line,
                                                         CommentPosition::Leading,
                                                     );
@@ -782,8 +894,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                         crate::ast::InstructionResult::JumpCondition(_) => {
                                             // Setup instructions shouldn't be jumps
                                             log::warn!(
-                                                "Unexpected jump instruction in setup at PC {}: {:?}",
-                                                instruction_idx.0,
+                                                "Unexpected jump instruction in setup: {:?}",
                                                 setup_instr.instruction.instruction.name()
                                             );
                                         }
@@ -793,16 +904,13 @@ impl<'a> ControlFlowPlanConverter<'a> {
                                     }
                                 }
                                 Err(e) => {
-                                    log::warn!(
-                                        "Failed to convert setup instruction at PC {}: {:?}",
-                                        instruction_idx.0,
-                                        e
-                                    );
+                                    log::warn!("Failed to convert setup instruction: {:?}", e);
                                 }
                             }
                         }
                     }
 
+                    log::debug!("Converting case group body: structure {:?}", group.body);
                     self.convert_structure_id(plan, group.body, &mut case_statements, context);
 
                     // Handle fallthrough by duplicating blocks from the next group
@@ -1212,66 +1320,97 @@ impl<'a> ControlFlowPlanConverter<'a> {
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
-        // Get the function analysis to access the CFG
-        if let Some(function_analysis) = self
+        // Try to get function analysis from HBC analysis cache first
+        // If not cached, build it temporarily for this block
+        let temp_analysis;
+        let function_analysis = if let Some(cached) = self
             .hbc_analysis
             .get_function_analysis_ref(self.function_index)
         {
-            // Get the block from the CFG
-            if let Some(block) = function_analysis.cfg.graph().node_weight(block_id) {
-                // Set the duplication context for the instruction converter
+            cached
+        } else {
+            // Build temporary analysis for nested functions
+            let function = match self
+                .hbc_file
+                .functions
+                .get(self.function_index, self.hbc_file)
+            {
+                Ok(f) => f,
+                Err(_) => return,
+            };
+
+            let mut cfg = crate::cfg::Cfg::new(self.hbc_file, self.function_index);
+            cfg.build();
+
+            let ssa = match crate::cfg::ssa::construct_ssa(&cfg, self.function_index) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+
+            temp_analysis = crate::analysis::FunctionAnalysis::new(
+                function,
+                cfg,
+                ssa,
+                self.hbc_file,
+                self.function_index,
+            );
+            &temp_analysis
+        };
+
+        // Get the block from the CFG
+        if let Some(block) = function_analysis.cfg.graph().node_weight(block_id) {
+            // Set the duplication context for the instruction converter
+            self.instruction_converter
+                .set_duplication_context(context.cloned());
+
+            let instructions = block.instructions();
+            let total_count = instructions.len();
+
+            // Calculate the range of instructions to convert
+            let start_idx = skip_start;
+            let end_idx = total_count.saturating_sub(skip_end);
+
+            // Convert only the instructions in the range
+            for (idx, hbc_instruction) in instructions.iter().enumerate() {
+                // Skip instructions outside our range
+                if idx < start_idx || idx >= end_idx {
+                    continue;
+                }
+
+                // Set the current PC for context
                 self.instruction_converter
-                    .set_duplication_context(context.cloned());
+                    .set_current_pc(hbc_instruction.instruction_index.0 as u32);
 
-                let instructions = block.instructions();
-                let total_count = instructions.len();
+                // Set current block for use strategy lookups
+                self.instruction_converter
+                    .register_manager_mut()
+                    .set_current_block(block_id);
 
-                // Calculate the range of instructions to convert
-                let start_idx = skip_start;
-                let end_idx = total_count.saturating_sub(skip_end);
-
-                // Convert only the instructions in the range
-                for (idx, hbc_instruction) in instructions.iter().enumerate() {
-                    // Skip instructions outside our range
-                    if idx < start_idx || idx >= end_idx {
-                        continue;
-                    }
-
-                    // Set the current PC for context
-                    self.instruction_converter
-                        .set_current_pc(hbc_instruction.instruction_index.0 as u32);
-
-                    // Set current block for use strategy lookups
-                    self.instruction_converter
-                        .register_manager_mut()
-                        .set_current_block(block_id);
-
-                    // Convert instruction to statement(s)
-                    match self
-                        .instruction_converter
-                        .convert_instruction(&hbc_instruction.instruction)
-                    {
-                        Ok(result) => {
-                            // Handle the result based on its type
-                            match result {
-                                crate::ast::InstructionResult::Statement(stmt) => {
-                                    statements.push(stmt);
-                                }
-                                crate::ast::InstructionResult::None => {
-                                    // No statement generated
-                                }
-                                _ => {
-                                    // Other result types not expected for finally block instructions
-                                }
+                // Convert instruction to statement(s)
+                match self
+                    .instruction_converter
+                    .convert_instruction(&hbc_instruction.instruction)
+                {
+                    Ok(result) => {
+                        // Handle the result based on its type
+                        match result {
+                            crate::ast::InstructionResult::Statement(stmt) => {
+                                statements.push(stmt);
+                            }
+                            crate::ast::InstructionResult::None => {
+                                // No statement generated
+                            }
+                            _ => {
+                                // Other result types not expected for finally block instructions
                             }
                         }
-                        Err(e) => {
-                            log::warn!(
-                                "Failed to convert instruction at PC {}: {:?}",
-                                hbc_instruction.instruction_index.0,
-                                e
-                            );
-                        }
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to convert instruction at PC {}: {:?}",
+                            hbc_instruction.instruction_index.0,
+                            e
+                        );
                     }
                 }
             }
@@ -1367,8 +1506,35 @@ impl<'a> ControlFlowPlanConverter<'a> {
         // Handle any PHI deconstructions for this block
         let phi_key = (block_id, context.cloned());
         if let Some(phi_info) = plan.phi_deconstructions.get(&phi_key) {
+            log::debug!(
+                "Applying PHI replacements for block {} with context {:?}",
+                block_id.index(),
+                context
+            );
             // Apply PHI replacements
             for (original, replacement) in &phi_info.replacements {
+                // Check the declaration strategy for the PHI result in this context
+                // If it's Skip, we don't need the assignment
+                let dup_original = if let Some(ctx) = context {
+                    crate::cfg::ssa::DuplicatedSSAValue {
+                        original: original.clone(),
+                        duplication_context: Some(ctx.clone()),
+                    }
+                } else {
+                    crate::cfg::ssa::DuplicatedSSAValue::original(original.clone())
+                };
+
+                // Check if the PHI result has Skip strategy (meaning it's fully inlined)
+                if let Some(crate::analysis::ssa_usage_tracker::DeclarationStrategy::Skip) =
+                    plan.declaration_strategies.get(&dup_original)
+                {
+                    log::debug!(
+                        "Skipping PHI replacement assignment for {} -> {} (PHI result has Skip strategy)",
+                        original, replacement
+                    );
+                    continue;
+                }
+
                 // Create assignment: phi_var = replacement_value
                 let var_name = self.get_variable_name_for_ssa(original);
                 let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
@@ -1393,163 +1559,206 @@ impl<'a> ControlFlowPlanConverter<'a> {
             }
         }
 
-        // Get the function analysis to access the CFG
-        if let Some(function_analysis) = self
+        // Try to get function analysis from HBC analysis cache first
+        // If not cached, build it temporarily for this block
+        let temp_analysis;
+        let function_analysis = if let Some(cached) = self
             .hbc_analysis
             .get_function_analysis_ref(self.function_index)
         {
-            // Get the block from the CFG
-            if let Some(block) = function_analysis.cfg.graph().node_weight(block_id) {
-                // Set the duplication context for the instruction converter
-                self.instruction_converter
-                    .set_duplication_context(context.cloned());
+            cached
+        } else {
+            // Build temporary analysis for nested functions
+            let function = match self
+                .hbc_file
+                .functions
+                .get(self.function_index, self.hbc_file)
+            {
+                Ok(f) => f,
+                Err(_) => return,
+            };
 
-                // Check if this is a catch block and skip the first instruction (Catch)
-                let skip_first = if let Some(first_instr) = block.instructions.first() {
-                    matches!(
-                        &first_instr.instruction,
-                        crate::generated::unified_instructions::UnifiedInstruction::Catch { .. }
+            let mut cfg = crate::cfg::Cfg::new(self.hbc_file, self.function_index);
+            cfg.build();
+
+            let ssa = match crate::cfg::ssa::construct_ssa(&cfg, self.function_index) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
+
+            temp_analysis = crate::analysis::FunctionAnalysis::new(
+                function,
+                cfg,
+                ssa,
+                self.hbc_file,
+                self.function_index,
+            );
+            &temp_analysis
+        };
+
+        // Get the block from the CFG
+        if let Some(block) = function_analysis.cfg.graph().node_weight(block_id) {
+            // Set the duplication context for the instruction converter
+            self.instruction_converter
+                .set_duplication_context(context.cloned());
+
+            // Check if this is a catch block and skip the first instruction (Catch)
+            let skip_first = if let Some(first_instr) = block.instructions.first() {
+                matches!(
+                    &first_instr.instruction,
+                    crate::generated::unified_instructions::UnifiedInstruction::Catch { .. }
+                )
+            } else {
+                false
+            };
+
+            // Convert each instruction in the block
+            // If instruction_count is non-zero, only convert that many instructions
+            let instructions_to_convert = if instruction_count > 0 {
+                &block.instructions[..instruction_count.min(block.instructions.len())]
+            } else {
+                &block.instructions[..]
+            };
+
+            // Skip the first instruction if it's a Catch
+            let instructions_iter = if skip_first {
+                instructions_to_convert.iter().skip(1)
+            } else {
+                instructions_to_convert.iter().skip(0)
+            };
+
+            for hbc_instruction in instructions_iter {
+                // First check if this instruction has been consumed (e.g., object mutations that are inlined)
+                if plan
+                    .consumed_instructions
+                    .contains(&(block_id, hbc_instruction.instruction_index))
+                {
+                    log::debug!(
+                        "Skipping consumed instruction at block {:?} instruction {:?}",
+                        block_id,
+                        hbc_instruction.instruction_index
+                    );
+                    continue;
+                }
+
+                // Check if this instruction defines a value that should be skipped
+                let should_skip = if let Some(target_reg) =
+                    crate::generated::instruction_analysis::analyze_register_usage(
+                        &hbc_instruction.instruction,
                     )
+                    .target
+                {
+                    // Find the SSA value defined at this instruction
+                    let mut skip = false;
+                    for (def, ssa_value) in &function_analysis.ssa.ssa_values {
+                        if def.block_id == block_id
+                            && def.instruction_idx == hbc_instruction.instruction_index
+                            && def.register == target_reg
+                        {
+                            let dup_value = DuplicatedSSAValue {
+                                original: ssa_value.clone(),
+                                duplication_context: context.cloned(),
+                            };
+
+                            if let Some(strategy) = plan.declaration_strategies.get(&dup_value) {
+                                if matches!(strategy, DeclarationStrategy::Skip) {
+                                    skip = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    skip
                 } else {
                     false
                 };
 
-                // Convert each instruction in the block
-                // If instruction_count is non-zero, only convert that many instructions
-                let instructions_to_convert = if instruction_count > 0 {
-                    &block.instructions[..instruction_count.min(block.instructions.len())]
-                } else {
-                    &block.instructions[..]
-                };
+                if should_skip {
+                    // Skip this instruction - it's been eliminated
+                    continue;
+                }
 
-                // Skip the first instruction if it's a Catch
-                let instructions_iter = if skip_first {
-                    instructions_to_convert.iter().skip(1)
-                } else {
-                    instructions_to_convert.iter().skip(0)
-                };
+                // Set the current PC for context
+                self.instruction_converter
+                    .set_current_pc(hbc_instruction.instruction_index.0 as u32);
 
-                for hbc_instruction in instructions_iter {
-                    // Check if this instruction defines a value that should be skipped
-                    let should_skip = if let Some(target_reg) =
-                        crate::generated::instruction_analysis::analyze_register_usage(
-                            &hbc_instruction.instruction,
-                        )
-                        .target
-                    {
-                        // Find the SSA value defined at this instruction
-                        let mut skip = false;
-                        for (def, ssa_value) in &function_analysis.ssa.ssa_values {
-                            if def.block_id == block_id
-                                && def.instruction_idx == hbc_instruction.instruction_index
-                                && def.register == target_reg
-                            {
-                                let dup_value = DuplicatedSSAValue {
-                                    original: ssa_value.clone(),
-                                    duplication_context: context.cloned(),
+                // Set current block for use strategy lookups
+                self.instruction_converter
+                    .register_manager_mut()
+                    .set_current_block(block_id);
+
+                // Convert instruction to statement(s)
+                match self
+                    .instruction_converter
+                    .convert_instruction(&hbc_instruction.instruction)
+                {
+                    Ok(result) => {
+                        // Handle the result based on its type
+                        match result {
+                            crate::ast::InstructionResult::Statement(stmt) => {
+                                // Prepare comments before borrowing comment_manager
+                                let instruction_comment = if self.include_instruction_comments {
+                                    let comment = format!(
+                                        "PC {}: {}",
+                                        hbc_instruction.instruction_index.0,
+                                        hbc_instruction
+                                            .format_instruction(self.hbc_analysis.hbc_file)
+                                    );
+                                    Some(comment)
+                                } else {
+                                    None
                                 };
 
-                                if let Some(strategy) = plan.declaration_strategies.get(&dup_value)
-                                {
-                                    if matches!(strategy, DeclarationStrategy::Skip) {
-                                        skip = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        skip
-                    } else {
-                        false
-                    };
+                                let ssa_comment = if self.include_ssa_comments {
+                                    self.format_ssa_info(
+                                        plan,
+                                        block_id,
+                                        hbc_instruction.instruction_index,
+                                        &function_analysis.ssa,
+                                    )
+                                } else {
+                                    None
+                                };
 
-                    if should_skip {
-                        // Skip this instruction - it's been eliminated
-                        continue;
-                    }
-
-                    // Set the current PC for context
-                    self.instruction_converter
-                        .set_current_pc(hbc_instruction.instruction_index.0 as u32);
-
-                    // Set current block for use strategy lookups
-                    self.instruction_converter
-                        .register_manager_mut()
-                        .set_current_block(block_id);
-
-                    // Convert instruction to statement(s)
-                    match self
-                        .instruction_converter
-                        .convert_instruction(&hbc_instruction.instruction)
-                    {
-                        Ok(result) => {
-                            // Handle the result based on its type
-                            match result {
-                                crate::ast::InstructionResult::Statement(stmt) => {
-                                    // Prepare comments before borrowing comment_manager
-                                    let instruction_comment = if self.include_instruction_comments {
-                                        let comment = format!(
-                                            "PC {}: {}",
-                                            hbc_instruction.instruction_index.0,
-                                            hbc_instruction
-                                                .format_instruction(self.hbc_analysis.hbc_file)
+                                // Now add comments if we have a comment manager
+                                if let Some(ref mut comment_manager) = self.comment_manager {
+                                    if let Some(instr_info) = instruction_comment {
+                                        comment_manager.add_comment(
+                                            &stmt,
+                                            instr_info,
+                                            CommentKind::Line,
+                                            CommentPosition::Leading,
                                         );
-                                        Some(comment)
-                                    } else {
-                                        None
-                                    };
-
-                                    let ssa_comment = if self.include_ssa_comments {
-                                        self.format_ssa_info(
-                                            plan,
-                                            block_id,
-                                            hbc_instruction.instruction_index,
-                                            &function_analysis.ssa,
-                                        )
-                                    } else {
-                                        None
-                                    };
-
-                                    // Now add comments if we have a comment manager
-                                    if let Some(ref mut comment_manager) = self.comment_manager {
-                                        if let Some(instr_info) = instruction_comment {
-                                            comment_manager.add_comment(
-                                                &stmt,
-                                                instr_info,
-                                                CommentKind::Line,
-                                                CommentPosition::Leading,
-                                            );
-                                        }
-
-                                        if let Some(ssa_info) = ssa_comment {
-                                            comment_manager.add_comment(
-                                                &stmt,
-                                                ssa_info,
-                                                CommentKind::Line,
-                                                CommentPosition::Leading,
-                                            );
-                                        }
                                     }
 
-                                    statements.push(stmt);
+                                    if let Some(ssa_info) = ssa_comment {
+                                        comment_manager.add_comment(
+                                            &stmt,
+                                            ssa_info,
+                                            CommentKind::Line,
+                                            CommentPosition::Leading,
+                                        );
+                                    }
                                 }
-                                crate::ast::InstructionResult::JumpCondition(_) => {
-                                    // Jumps are handled by the control flow structure
-                                    // We don't need to generate them here
-                                }
-                                crate::ast::InstructionResult::None => {
-                                    // No statement generated
-                                }
+
+                                statements.push(stmt);
+                            }
+                            crate::ast::InstructionResult::JumpCondition(_) => {
+                                // Jumps are handled by the control flow structure
+                                // We don't need to generate them here
+                            }
+                            crate::ast::InstructionResult::None => {
+                                // No statement generated
                             }
                         }
-                        Err(e) => {
-                            // Add error comment
-                            let error_comment = format!(
-                                "// Error converting instruction at {}: {}",
-                                hbc_instruction.instruction_index.0, e
-                            );
-                            statements.push(self.create_comment_statement(&error_comment));
-                        }
+                    }
+                    Err(e) => {
+                        // Add error comment
+                        let error_comment = format!(
+                            "// Error converting instruction at {}: {}",
+                            hbc_instruction.instruction_index.0, e
+                        );
+                        statements.push(self.create_comment_statement(&error_comment));
                     }
                 }
             }
@@ -1581,6 +1790,38 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     UseStrategy::InlineValue(constant) => {
                         // Inline the constant value directly
                         return self.create_constant_expression(constant);
+                    }
+                    UseStrategy::InlineTrackedValue(tracked_value) => {
+                        // Inline the tracked value (property access, object literal, etc.)
+                        return self.create_property_access_expression(tracked_value);
+                    }
+                    UseStrategy::SimplifyCall { .. } => {
+                        // This is handled in Call instructions, fallback to variable
+                        let name = self.get_variable_name(&dup_value);
+                        let name_atom = self.ast_builder.allocator.alloc_str(&name);
+                        let span = oxc_span::SPAN;
+                        return self.ast_builder.expression_identifier(span, name_atom);
+                    }
+                    UseStrategy::InlineGlobalThis => {
+                        // Inline globalThis directly
+                        let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                        let span = oxc_span::SPAN;
+                        return self.ast_builder.expression_identifier(span, global_atom);
+                    }
+                    UseStrategy::DeclareObjectLiteral { .. } => {
+                        // This strategy is for definition sites, not use sites
+                        // Fallback to variable for uses
+                        let name = self.get_variable_name(&dup_value);
+                        let name_atom = self.ast_builder.allocator.alloc_str(&name);
+                        let span = oxc_span::SPAN;
+                        return self.ast_builder.expression_identifier(span, name_atom);
+                    }
+                    UseStrategy::InlineParameter { param_index } => {
+                        // Inline parameter directly
+                        let param_name = self.variable_mapper.get_parameter_name(*param_index);
+                        let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
+                        let span = oxc_span::SPAN;
+                        return self.ast_builder.expression_identifier(span, param_atom);
                     }
                     UseStrategy::UseVariable => {
                         // Fall through to use variable name
@@ -1643,6 +1884,98 @@ impl<'a> ControlFlowPlanConverter<'a> {
                 self.ast_builder
                     .expression_identifier(oxc_span::SPAN, undefined_atom)
             }
+            ConstantValue::ArrayLiteral(elements) => {
+                let mut array_elements = self.ast_builder.vec();
+                for element in elements {
+                    let element_expr = self.create_constant_expression(element);
+                    array_elements.push(oxc_ast::ast::ArrayExpressionElement::from(element_expr));
+                }
+                self.ast_builder
+                    .expression_array(oxc_span::SPAN, array_elements)
+            }
+            ConstantValue::ObjectLiteral(properties) => {
+                let mut object_properties = self.ast_builder.vec();
+                for (key, value) in properties {
+                    let key_atom = self.ast_builder.allocator.alloc_str(key);
+                    let key_ident = self.ast_builder.identifier_name(oxc_span::SPAN, key_atom);
+                    let property_key = oxc_ast::ast::PropertyKey::StaticIdentifier(
+                        self.ast_builder.alloc(key_ident),
+                    );
+                    let value_expr = self.create_constant_expression(value);
+                    let property = self.ast_builder.object_property(
+                        oxc_span::SPAN,
+                        oxc_ast::ast::PropertyKind::Init,
+                        property_key,
+                        value_expr,
+                        false,
+                        false,
+                        false,
+                    );
+                    object_properties.push(oxc_ast::ast::ObjectPropertyKind::ObjectProperty(
+                        self.ast_builder.alloc(property),
+                    ));
+                }
+                self.ast_builder
+                    .expression_object(oxc_span::SPAN, object_properties)
+            }
+        }
+    }
+
+    /// Create a property access expression from a TrackedValue
+    fn create_property_access_expression(
+        &self,
+        tracked_value: &crate::analysis::value_tracker::TrackedValue,
+    ) -> Expression<'a> {
+        use crate::analysis::value_tracker::TrackedValue;
+
+        match tracked_value {
+            TrackedValue::PropertyAccess { object, property } => {
+                // Recursively build the object expression
+                let object_expr = self.create_property_access_expression(object);
+
+                // Check if this is a global property access that can be simplified
+                if let TrackedValue::GlobalObject = &**object {
+                    // Check if this is a standard global property
+                    if is_standard_global(property) {
+                        // Just use the property name directly
+                        let prop_atom = self.ast_builder.allocator.alloc_str(property);
+                        return self
+                            .ast_builder
+                            .expression_identifier(oxc_span::SPAN, prop_atom);
+                    }
+                }
+
+                // Create the member expression
+                let prop_atom = self.ast_builder.allocator.alloc_str(property);
+                let property_ident = self.ast_builder.identifier_name(oxc_span::SPAN, prop_atom);
+                let member = self.ast_builder.member_expression_static(
+                    oxc_span::SPAN,
+                    object_expr,
+                    property_ident,
+                    false, // optional
+                );
+                Expression::from(member)
+            }
+            TrackedValue::GlobalObject => {
+                // Use globalThis as the base
+                let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                self.ast_builder
+                    .expression_identifier(oxc_span::SPAN, global_atom)
+            }
+            TrackedValue::Constant(value) => {
+                // If for some reason we have a constant in the chain, inline it
+                self.create_constant_expression(value)
+            }
+            TrackedValue::Parameter { .. }
+            | TrackedValue::Phi { .. }
+            | TrackedValue::Unknown
+            | TrackedValue::MutableObject { .. }
+            | TrackedValue::MergedObject { .. } => {
+                // These shouldn't appear in property access chains, but handle gracefully
+                let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                self.ast_builder
+                    .expression_identifier(oxc_span::SPAN, undefined_atom)
+            }
         }
     }
 
@@ -1665,56 +1998,10 @@ impl<'a> ControlFlowPlanConverter<'a> {
         }
 
         // Get the proper variable name from the register manager's mapping
-        let mut name = self
+        let name = self
             .instruction_converter
             .register_manager()
             .get_variable_name_for_duplicated(value);
-
-        // Fix parameter names: convert param{register} to arg{param_index}
-        // This is a workaround for the fact that parameters are named based on register
-        // instead of parameter index
-        log::debug!(
-            "get_variable_name: Got name '{}' for SSA value {:?}",
-            name,
-            value
-        );
-        if name.starts_with("param") {
-            // Try to extract the register number
-            if let Some(reg_str) = name.strip_prefix("param") {
-                if let Ok(reg_num) = reg_str.parse::<u8>() {
-                    // Look for LoadParam instructions in Block 0 that load to this register
-                    if let Some(function_analysis) = self
-                        .hbc_analysis
-                        .get_function_analysis_ref(self.function_index)
-                    {
-                        let cfg = &function_analysis.cfg;
-                        // Block 0 contains the LoadParam instructions
-                        let block_0 = petgraph::graph::NodeIndex::new(0);
-                        if let Some(block) = cfg.graph().node_weight(block_0) {
-                            // Search through instructions in Block 0 for LoadParam to this register
-                            for instr in block.instructions() {
-                                use crate::generated::unified_instructions::UnifiedInstruction;
-                                if let UnifiedInstruction::LoadParam {
-                                    operand_0,
-                                    operand_1,
-                                } = &instr.instruction
-                                {
-                                    // Check if this LoadParam loads to our register
-                                    if *operand_0 == reg_num {
-                                        // operand_1 is the parameter index
-                                        let new_name = format!("arg{}", operand_1);
-                                        log::debug!("Fixing parameter name: {} -> {} (register r{}, param index {})", 
-                                                  name, new_name, reg_num, operand_1);
-                                        name = new_name;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         self.variable_names.insert(value.clone(), name.clone());
         name
@@ -1793,109 +2080,14 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             match strategy {
                                 UseStrategy::UseVariable => "var",
                                 UseStrategy::InlineValue(_) => "inline",
+                                UseStrategy::InlineTrackedValue(_) => "inline-tracked",
+                                UseStrategy::InlineGlobalThis => "inline-global",
+                                UseStrategy::SimplifyCall { .. } => "simplify-call",
+                                UseStrategy::InlineParameter { .. } => "inline-param",
+                                UseStrategy::DeclareObjectLiteral { .. } => "declare-obj",
                             }
                         } else {
                             ""
-                        };
-
-                        comment_parts.push(format!(
-                            "USE[{}]: r{} → r{}_{} [{}]",
-                            strategy_str,
-                            use_site.register,
-                            ssa_value.register,
-                            ssa_value.version,
-                            var_name
-                        ));
-                    }
-                }
-            }
-        }
-
-        if comment_parts.is_empty() {
-            None
-        } else {
-            Some(comment_parts.join(", "))
-        }
-    }
-
-    /// Format SSA information for duplicated instructions with context
-    fn format_ssa_info_duplicated(
-        &mut self,
-        plan: &ControlFlowPlan,
-        block_id: NodeIndex,
-        instruction_index: crate::hbc::InstructionIndex,
-        ssa_analysis: &crate::cfg::ssa::SSAAnalysis,
-        duplication_context: &DuplicationContext,
-    ) -> Option<String> {
-        let mut comment_parts = Vec::new();
-
-        // Find SSA definitions and uses at this instruction index
-        for def in &ssa_analysis.definitions {
-            if def.instruction_idx == instruction_index && def.block_id == block_id {
-                if let Some(ssa_value) = ssa_analysis.ssa_values.get(def) {
-                    let dup_value = DuplicatedSSAValue {
-                        original: ssa_value.clone(),
-                        duplication_context: Some(duplication_context.clone()),
-                    };
-                    let var_name = self.get_variable_name(&dup_value);
-
-                    // Get the declaration strategy from the plan
-                    let strategy_str = if let Some(strategy) =
-                        plan.declaration_strategies.get(&dup_value)
-                    {
-                        match strategy {
-                            DeclarationStrategy::DeclareAndInitialize { kind } => match kind {
-                                VariableKind::Const => "const/dup",
-                                VariableKind::Let => "let/dup",
-                            },
-                            DeclarationStrategy::DeclareAtDominator { kind, .. } => match kind {
-                                VariableKind::Const => "const@dom/dup",
-                                VariableKind::Let => "let@dom/dup",
-                            },
-                            DeclarationStrategy::AssignOnly => "assign/dup",
-                            DeclarationStrategy::Skip => "skip/dup",
-                            DeclarationStrategy::SideEffectOnly => "side-effect/dup",
-                        }
-                    } else {
-                        "dup"
-                    };
-
-                    comment_parts.push(format!(
-                        "DEF[{}]: r{} → r{}_{} [{}]",
-                        strategy_str, def.register, ssa_value.register, ssa_value.version, var_name
-                    ));
-                }
-            }
-        }
-
-        for use_site in &ssa_analysis.uses {
-            if use_site.instruction_idx == instruction_index && use_site.block_id == block_id {
-                if let Some(def_site) = ssa_analysis.use_def_chains.get(use_site) {
-                    if let Some(ssa_value) = ssa_analysis.ssa_values.get(def_site) {
-                        // For duplicated blocks, try to use the duplicated value
-                        let dup_value = DuplicatedSSAValue {
-                            original: ssa_value.clone(),
-                            duplication_context: Some(duplication_context.clone()),
-                        };
-
-                        // Try to get the duplicated variable name first, fall back to original if not found
-                        let var_name = if self.variable_names.contains_key(&dup_value) {
-                            self.get_variable_name(&dup_value)
-                        } else {
-                            let original_dup = DuplicatedSSAValue::original(ssa_value.clone());
-                            self.get_variable_name(&original_dup)
-                        };
-
-                        // Get the use strategy from the plan
-                        let use_key = (dup_value.clone(), use_site.clone());
-                        let strategy_str = if let Some(strategy) = plan.use_strategies.get(&use_key)
-                        {
-                            match strategy {
-                                UseStrategy::UseVariable => "var/dup",
-                                UseStrategy::InlineValue(_) => "inline/dup",
-                            }
-                        } else {
-                            "dup"
                         };
 
                         comment_parts.push(format!(

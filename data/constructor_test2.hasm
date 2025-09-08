@@ -1,0 +1,185 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 6f16e389f2f30e19d75a2c0bf9fc05624f820e93
+  Function count: 6
+  String count: 31
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..-1] #5BB2994F: 
+s1[ASCII, 0..4] #E7ECD7B6: Alice
+s2[ASCII, 5..10] #4F3F0B6A: Animal
+s3[ASCII, 11..13] #5CEFCE7D: Bob
+s4[ASCII, 14..16] #073CCE9C: Cat
+s5[ASCII, 28..34] #1C182460: Charlie
+s6[ASCII, 35..37] #9D007186: Dog
+s7[ASCII, 37..42] #BB2047C7: global
+s8[ASCII, 43..48] #C9C6D0C0: Person
+s9[ASCII, 16..27] #FBAEEB97: testBuiltins
+s10[ASCII, 48..51] #078F05C2: name
+s11[ASCII, 52..58] #50223B1A: WeakMap
+s12[ASCII, 56..58] #5A39B07E: Map
+s13[ASCII, 58..59] #073CD2ED: p1
+s14[ASCII, 60..63] #061436BB: Math
+s15[ASCII, 64..70] #58AA06D9: Promise
+s16[ASCII, 69..71] #2140EE0D: set
+s17[ASCII, 72..78] #073CD6FA: WeakSet
+s18[ASCII, 76..78] #882ABD3A: Set
+s19[ASCII, 78..98] #807C5F3D: testCustomConstructor
+s20[ASCII, 98..103] #665957A7: random
+s21[ASCII, 103..105] #A729692F: map
+s22[ASCII, 105..106] p2
+s23[ASCII, 107..108] a1
+s24[ASCII, 109..111] age
+s25[ASCII, 112..118] weakMap
+s26[ASCII, 118..119] p3
+s27[ASCII, 120..126] promise
+s28[ASCII, 127..135] prototype
+s29[ASCII, 132..135] type
+s30[ASCII, 136..142] weakSet
+
+Array Buffer:
+
+Function<global>0(1 params, 10 registers, 0 symbols):
+  DeclareGlobalVar  "testCustomConstructor"
+  DeclareGlobalVar  "testBuiltins"
+  CreateEnvironment r1
+  CreateClosure     r2, r1, Function<testCustomConstructor>1
+  GetGlobalObject   r0
+  PutById           r0, r2, 1, "testCustomConstructor"
+  CreateClosure     r1, r1, Function<testBuiltins>4
+  PutById           r0, r1, 2, "testBuiltins"
+  GetByIdShort      r2, r0, 1, "testCustomConstructor"
+  LoadConstUndefined r1
+  Call1             r2, r2, r1
+  GetByIdShort      r0, r0, 2, "testBuiltins"
+  Call1             r0, r0, r1
+  Ret               r0
+
+Function<testCustomConstructor>1(1 params, 17 registers, 0 symbols):
+  CreateEnvironment r0
+  CreateClosure     r7, r0, Function<Person>2
+  CreateClosure     r5, r0, Function<Animal>3
+  GetByIdShort      r0, r7, 1, "prototype"
+  CreateThis        r1, r0, r7
+  LoadConstString   r9, "Alice"
+  LoadConstUInt8    r8, 30
+  Mov               r10, r1
+  Construct         r0, r7, 3
+  SelectObject      r4, r1, r0
+  GetByIdShort      r0, r7, 1, "prototype"
+  CreateThis        r1, r0, r7
+  LoadConstString   r9, "Bob"
+  LoadConstUInt8    r8, 25
+  Mov               r10, r1
+  Construct         r0, r7, 3
+  SelectObject      r3, r1, r0
+  GetByIdShort      r0, r5, 1, "prototype"
+  CreateThis        r1, r0, r5
+  LoadConstString   r9, "Dog"
+  Mov               r10, r1
+  Construct         r0, r5, 2
+  SelectObject      r2, r1, r0
+  GetGlobalObject   r0
+  TryGetById        r1, r0, 2, "Math"
+  GetByIdShort      r0, r1, 3, "random"
+  Call1             r1, r0, r1
+  LoadConstDouble   r0, 0.5
+  JGreater          L1, r1, r0
+  GetByIdShort      r0, r5, 1, "prototype"
+  CreateThis        r1, r0, r5
+  LoadConstString   r9, "Cat"
+  Mov               r10, r1
+  Construct         r0, r5, 2
+  SelectObject      r1, r1, r0
+  Jmp               L2
+L1:
+  GetByIdShort      r0, r7, 1, "prototype"
+  CreateThis        r5, r0, r7
+  LoadConstString   r9, "Charlie"
+  LoadConstUInt8    r8, 35
+  Mov               r10, r5
+  Construct         r0, r7, 3
+  SelectObject      r1, r5, r0
+L2:
+  NewObject         r0
+  PutNewOwnByIdShort r0, r4, "p1"
+  PutNewOwnByIdShort r0, r3, "p2"
+  PutNewOwnByIdShort r0, r2, "a1"
+  PutNewOwnByIdShort r0, r1, "p3"
+  Ret               r0
+
+Function<Person>2(3 params, 2 registers, 0 symbols):
+  LoadThisNS        r1
+  LoadParam         r0, 1
+  PutById           r1, r0, 1, "name"
+  LoadParam         r0, 2
+  PutById           r1, r0, 2, "age"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<Animal>3(2 params, 2 registers, 0 symbols):
+  LoadParam         r1, 1
+  LoadThisNS        r0
+  PutById           r0, r1, 1, "type"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<testBuiltins>4(1 params, 15 registers, 0 symbols):
+  GetGlobalObject   r0
+  TryGetById        r1, r0, 1, "Map"
+  GetByIdShort      r2, r1, 2, "prototype"
+  CreateThis        r2, r2, r1
+  Mov               r8, r2
+  Construct         r1, r1, 1
+  SelectObject      r5, r2, r1
+  TryGetById        r1, r0, 3, "Set"
+  GetByIdShort      r2, r1, 2, "prototype"
+  CreateThis        r2, r2, r1
+  Mov               r8, r2
+  Construct         r1, r1, 1
+  SelectObject      r4, r2, r1
+  TryGetById        r1, r0, 4, "WeakMap"
+  GetByIdShort      r2, r1, 2, "prototype"
+  CreateThis        r2, r2, r1
+  Mov               r8, r2
+  Construct         r1, r1, 1
+  SelectObject      r3, r2, r1
+  TryGetById        r1, r0, 5, "WeakSet"
+  GetByIdShort      r2, r1, 2, "prototype"
+  CreateThis        r2, r2, r1
+  Mov               r8, r2
+  Construct         r1, r1, 1
+  SelectObject      r2, r2, r1
+  TryGetById        r6, r0, 6, "Promise"
+  GetByIdShort      r0, r6, 2, "prototype"
+  CreateThis        r1, r0, r6
+  CreateEnvironment r0
+  CreateClosure     r7, r0, Function<>5
+  Mov               r8, r1
+  Construct         r0, r6, 2
+  SelectObject      r1, r1, r0
+  NewObject         r0
+  PutNewOwnByIdShort r0, r5, "map"
+  PutNewOwnByIdShort r0, r4, "set"
+  PutNewOwnByIdShort r0, r3, "weakMap"
+  PutNewOwnByIdShort r0, r2, "weakSet"
+  PutNewOwnByIdShort r0, r1, "promise"
+  Ret               r0
+
+Function<>5(2 params, 11 registers, 0 symbols):
+  LoadParam         r2, 1
+  LoadConstUndefined r0
+  LoadConstUInt8    r1, 42
+  Call2             r1, r2, r0, r1
+  Ret               r0
+

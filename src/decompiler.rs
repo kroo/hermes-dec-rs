@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Main decompiler module
 //!
 //! This module orchestrates the entire decompilation process from HBC to JavaScript.
@@ -27,6 +26,173 @@ pub struct Decompiler {
     function_cache: HashMap<u32, String>,
 }
 
+/// Configuration for inlining optimizations
+#[derive(Debug, Clone)]
+pub struct InlineConfig {
+    /// Inline constant values that are used only once
+    pub inline_constants: bool,
+    /// Aggressively inline all constant values
+    pub inline_all_constants: bool,
+    /// Inline property access chains that are used only once
+    pub inline_property_access: bool,
+    /// Aggressively inline all property access chains
+    pub inline_all_property_access: bool,
+    /// Inline all globalThis accesses (enabled by default when any inlining is enabled)
+    pub inline_global_this: bool,
+    /// Simplify call patterns like fn.call(undefined, ...) to fn(...)
+    pub simplify_calls: bool,
+    /// Unsafely simplify method calls (e.g., obj.fn.call(obj, args) -> obj.fn(args))
+    ///
+    /// WARNING: This optimization is NOT semantics-preserving in all cases.
+    /// It assumes:
+    /// - Function.prototype.call hasn't been modified
+    /// - The function object doesn't have its own "call" property
+    /// - No accessor/reactivity concerns on the object or function property
+    /// - The callee is an ordinary ECMAScript function (not a Proxy or exotic callable)
+    ///
+    /// Only enable this if you're certain these conditions hold in your code.
+    pub unsafe_simplify_calls: bool,
+    /// Inline parameter references to use original parameter names (this, arg0, arg1, etc.)
+    pub inline_parameters: bool,
+    /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
+    pub inline_constructor_calls: bool,
+    /// Inline object literals when safe (experimental)
+    pub inline_object_literals: bool,
+}
+
+impl Default for InlineConfig {
+    fn default() -> Self {
+        Self {
+            inline_constants: false,
+            inline_all_constants: false,
+            inline_property_access: false,
+            inline_all_property_access: false,
+            inline_global_this: false,
+            simplify_calls: false,
+            unsafe_simplify_calls: false,
+            inline_parameters: false,
+            inline_constructor_calls: false,
+            inline_object_literals: false,
+        }
+    }
+}
+
+impl InlineConfig {
+    /// Check if any inlining is enabled
+    pub fn any_enabled(&self) -> bool {
+        self.inline_constants
+            || self.inline_all_constants
+            || self.inline_property_access
+            || self.inline_all_property_access
+            || self.inline_global_this
+            || self.simplify_calls
+            || self.unsafe_simplify_calls
+    }
+
+    /// Create from individual CLI flags
+    pub fn from_cli_flags(
+        inline_constants: bool,
+        inline_all_constants: bool,
+        inline_property_access: bool,
+        inline_all_property_access: bool,
+        inline_global_this: Option<bool>,
+        simplify_calls: Option<bool>,
+        unsafe_simplify_calls: Option<bool>,
+        inline_parameters: Option<bool>,
+        inline_constructor_calls: Option<bool>,
+        inline_object_literals: Option<bool>,
+    ) -> Self {
+        // Enable global_this inlining by default if any other inlining is enabled
+        let any_inline = inline_constants
+            || inline_all_constants
+            || inline_property_access
+            || inline_all_property_access;
+        let inline_global_this = inline_global_this.unwrap_or(any_inline);
+
+        Self {
+            inline_constants,
+            inline_all_constants,
+            inline_property_access,
+            inline_all_property_access,
+            inline_global_this,
+            simplify_calls: simplify_calls.unwrap_or(any_inline),
+            unsafe_simplify_calls: unsafe_simplify_calls.unwrap_or(false),
+            inline_parameters: inline_parameters.unwrap_or(false),
+            inline_constructor_calls: inline_constructor_calls.unwrap_or(false),
+            inline_object_literals: inline_object_literals.unwrap_or(false),
+        }
+    }
+}
+
+/// Options for decompilation
+#[derive(Debug, Clone)]
+pub struct DecompileOptions {
+    /// Include instruction comments
+    pub include_instruction_comments: bool,
+    /// Include SSA comments
+    pub include_ssa_comments: bool,
+    /// Skip validation
+    pub skip_validation: bool,
+    /// Decompile nested functions
+    pub decompile_nested: bool,
+    /// Inlining configuration
+    pub inline_config: InlineConfig,
+}
+
+impl Default for DecompileOptions {
+    fn default() -> Self {
+        Self {
+            include_instruction_comments: false,
+            include_ssa_comments: false,
+            skip_validation: false,
+            decompile_nested: false,
+            inline_config: InlineConfig::default(),
+        }
+    }
+}
+
+impl DecompileOptions {
+    /// Create options from comment string and flags
+    pub fn from_cli(
+        comments: &str,
+        skip_validation: bool,
+        decompile_nested: bool,
+        inline_constants: bool,
+        inline_all_constants: bool,
+        inline_property_access: bool,
+        inline_all_property_access: bool,
+        inline_global_this: Option<bool>,
+        simplify_calls: Option<bool>,
+        unsafe_simplify_calls: Option<bool>,
+        inline_parameters: Option<bool>,
+        inline_constructor_calls: Option<bool>,
+        inline_object_literals: Option<bool>,
+    ) -> Self {
+        let include_instruction_comments =
+            comments.contains("instructions") || comments.contains("pc");
+        let include_ssa_comments = comments.contains("ssa");
+
+        Self {
+            include_instruction_comments,
+            include_ssa_comments,
+            skip_validation,
+            decompile_nested,
+            inline_config: InlineConfig::from_cli_flags(
+                inline_constants,
+                inline_all_constants,
+                inline_property_access,
+                inline_all_property_access,
+                inline_global_this,
+                simplify_calls,
+                unsafe_simplify_calls,
+                inline_parameters,
+                inline_constructor_calls,
+                inline_object_literals,
+            ),
+        }
+    }
+}
+
 /// Result of function decompilation - AST node and metadata
 pub struct FunctionDecompilationResult<'a> {
     /// The function body statements
@@ -53,14 +219,8 @@ pub struct FunctionDecompiler<'a> {
     function_index: u32,
     /// Global analysis result (shared)
     global_analysis: Arc<GlobalAnalysisResult>,
-    /// Whether to include instruction comments
-    include_instruction_comments: bool,
-    /// Whether to include SSA comments
-    include_ssa_comments: bool,
-    /// Whether to skip validation
-    skip_validation: bool,
-    /// Whether to decompile nested functions
-    decompile_nested: bool,
+    /// Decompilation options
+    options: DecompileOptions,
 }
 
 impl Decompiler {
@@ -110,17 +270,7 @@ impl Decompiler {
         hbc_file: &HbcFile,
         function_index: u32,
     ) -> DecompilerResult<String> {
-        self.decompile_function_with_options(hbc_file, function_index, "none")
-    }
-
-    /// Decompile a single function with options
-    pub fn decompile_function_with_options(
-        &mut self,
-        hbc_file: &HbcFile,
-        function_index: u32,
-        comments: &str,
-    ) -> DecompilerResult<String> {
-        self.decompile_function_with_full_options(hbc_file, function_index, comments, false)
+        self.decompile_function_with_full_options(hbc_file, function_index, "none", false)
     }
 
     /// Decompile a single function with full options
@@ -149,8 +299,33 @@ impl Decompiler {
         skip_validation: bool,
         decompile_nested: bool,
     ) -> DecompilerResult<String> {
+        let options = DecompileOptions::from_cli(
+            comments,
+            skip_validation,
+            decompile_nested,
+            false,
+            false,
+            false,
+            false,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        self.decompile_function_with_options(hbc_file, function_index, options)
+    }
+
+    /// Decompile a single function with options
+    pub fn decompile_function_with_options(
+        &mut self,
+        hbc_file: &HbcFile,
+        function_index: u32,
+        options: DecompileOptions,
+    ) -> DecompilerResult<String> {
         // Check cache first
-        if !decompile_nested && self.function_cache.contains_key(&function_index) {
+        if !options.decompile_nested && self.function_cache.contains_key(&function_index) {
             return Ok(self.function_cache[&function_index].clone());
         }
 
@@ -170,24 +345,19 @@ impl Decompiler {
 
         let global_analysis = self.global_analysis.as_ref().unwrap().clone();
 
-        // Parse comment types
-        let comment_types: Vec<&str> = comments.split(',').map(|s| s.trim()).collect();
-        let include_instruction_comments = comment_types.contains(&"instructions");
-        let include_ssa_comments = comment_types.contains(&"ssa");
-
         // Create allocator and AST builder for this decompilation
         let allocator = Allocator::default();
         let ast_builder = OxcAstBuilder::new(&allocator);
+
+        // Save decompile_nested flag before moving options
+        let decompile_nested = options.decompile_nested;
 
         // Create a function decompiler
         let function_decompiler = FunctionDecompiler {
             hbc_file,
             function_index,
             global_analysis,
-            include_instruction_comments,
-            include_ssa_comments,
-            skip_validation,
-            decompile_nested,
+            options,
         };
 
         // Create HBC analysis for this file
@@ -352,10 +522,12 @@ impl<'a> FunctionDecompiler<'a> {
         let mut plan = plan_builder.build();
 
         // Analyze the plan to determine declaration and use strategies
-        let analyzer = crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::new(
-            &mut plan,
-            function_analysis,
-        );
+        let analyzer =
+            crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer::with_inline_config(
+                &mut plan,
+                function_analysis,
+                &self.options.inline_config,
+            );
         analyzer.analyze();
 
         // Convert the plan to AST
@@ -366,9 +538,14 @@ impl<'a> FunctionDecompiler<'a> {
             self.function_index,
             function_analysis,
             plan,
-            self.include_ssa_comments,
-            self.include_instruction_comments,
+            self.options.include_ssa_comments,
+            self.options.include_instruction_comments,
+            &self.options.inline_config,
         );
+
+        // Set whether to decompile nested functions
+        converter.set_decompile_nested(self.options.decompile_nested);
+
         let all_statements = converter.convert_to_ast();
 
         // Take the comment manager back from the converter
@@ -415,6 +592,7 @@ impl<'a> FunctionDecompiler<'a> {
         let max_param_idx = default_params.keys().max().copied().unwrap_or(0);
 
         // Also check all LoadParam instructions to find the maximum parameter index
+        // Note: LoadParam indices include the implicit 'this' at index 0
         let max_load_param_idx = if let Ok(func) = self
             .hbc_file
             .functions
@@ -433,19 +611,25 @@ impl<'a> FunctionDecompiler<'a> {
         };
 
         // Use the maximum of the metadata count and the highest parameter index found
+        // Note: max_load_param_idx already includes 'this', so we don't add 1
+        // max_param_idx is for default parameters and needs +1 since it's 0-based
         let actual_param_count = if is_global_function {
             0 // Global function should never show parameters
         } else {
             metadata_param_count
                 .max(max_param_idx + 1)
-                .max(max_load_param_idx + 1) as usize
+                .max(max_load_param_idx) as usize
         };
 
         // Convert param_names vector to vector of strings
         let param_names: Vec<String> = if actual_param_count > 0 {
             (0..actual_param_count)
                 .map(|i| {
-                    let param_name = format!("arg{}", i);
+                    // param_index starts at 1 since 0 is 'this'
+                    let param_name =
+                        crate::ast::variables::VariableMapper::get_parameter_name_static(
+                            (i + 1) as u8,
+                        );
                     // Check if this parameter has a default value
                     if let Some(default_info) = default_params.get(&(i as u32)) {
                         // Extract the default value from the instruction
