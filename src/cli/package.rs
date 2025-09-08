@@ -28,6 +28,34 @@ pub fn package_analyze(input: &Path, json: bool, summary: bool) -> DecompilerRes
     let pct = if te > 0 { (ce as f64) * 100.0 / (te as f64) } else { 0.0 };
     println!("Clustered deps: {}/{} ({:.1}%)", ce, te, pct);
 
+    // Strength metrics (brief)
+    let sm = &report.strength_metrics;
+    let pct_pairs = if sm.total_pairs > 0 { (sm.edges_ge_threshold as f64) * 100.0 / (sm.total_pairs as f64) } else { 0.0 };
+    println!(
+        "Strength: thresh={:.2}, edges>=thresh: {}/{} ({:.1}%), avg_s={:.3}, avg_J(dep)={:.3}, avg_J(cons)={:.3}",
+        sm.threshold, sm.edges_ge_threshold, sm.total_pairs, pct_pairs, sm.avg_strength_over_edges, sm.avg_jaccard_deps_over_pairs, sm.avg_jaccard_consumers_over_pairs
+    );
+    println!(
+        "Counts: bidir={}, unidir={}, transitive={}",
+        sm.bidirectional_count, sm.unidirectional_count, sm.transitive_count
+    );
+
+    // Main entry and cluster summary
+    println!("Main: {}", report.main.as_deref().unwrap_or("-"));
+    let cs = &report.cluster_summary;
+    println!(
+        "Clusters: total={} | sizes: 2-4={}, 5-9={}, 10-19={}, 20+={} | patterns: tight={}, star={}, chain={}, cluster={}",
+        cs.total,
+        cs.buckets.s02_04,
+        cs.buckets.s05_09,
+        cs.buckets.s10_19,
+        cs.buckets.s20_plus,
+        cs.tight,
+        cs.star,
+        cs.chain,
+        cs.cluster
+    );
+
     if !summary {
         for m in &report.modules {
             let entry_mark = if m.is_entry { "*" } else { " " };

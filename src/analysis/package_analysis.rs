@@ -60,6 +60,12 @@ pub struct PackageReport {
     pub clusters: Vec<DependencyCluster>,
     /// Statistics about clustering coverage
     pub cluster_stats: ClusterStats,
+    /// Strength/edge metrics to help tune clustering
+    pub strength_metrics: StrengthMetrics,
+    /// The likely main entry module (last __r in suffix), if found
+    pub main: Option<String>,
+    /// Cluster summary for quick inspection
+    pub cluster_summary: ClusterSummary,
 }
 
 /// Analyze a Hermes HBC file for Metro bundle structure and module graph.
@@ -374,10 +380,22 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
         string_count: hbc.header.string_count(),
     };
 
-    let mut report = PackageReport { stats, modules, entrypoints: detected_entries, clusters: Vec::new(), cluster_stats: ClusterStats::default() };
+    // The likely main module is the last __r invocation we observed (if any)
+    let main_entry = detected_entries_ordered.last().cloned();
+    let mut report = PackageReport {
+        stats,
+        modules,
+        entrypoints: detected_entries,
+        clusters: Vec::new(),
+        cluster_stats: ClusterStats::default(),
+        strength_metrics: StrengthMetrics::default(),
+        main: main_entry,
+        cluster_summary: ClusterSummary::default(),
+    };
     annotate_dependency_clusters(&mut report);
     compute_dependency_clusters(&mut report);
     compute_cluster_stats(&mut report);
+    compute_cluster_summary(&mut report);
     Ok(report)
 }
 
@@ -602,8 +620,18 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
         if uni <= 0.0 { 0.0 } else { inter / uni }
     }
 
-    // Pairwise strengths
+    // Pairwise strengths + metrics
     let mut strength: HashMap<(String, String), f32> = HashMap::new();
+    let mut total_pairs: usize = 0;
+    let mut pairs_with_edge: usize = 0;
+    let mut edges_ge_threshold: usize = 0;
+    let mut sum_strength_edges: f64 = 0.0;
+    let mut sum_jaccard_deps_over_pairs: f64 = 0.0;
+    let mut sum_jaccard_cons_over_pairs: f64 = 0.0;
+    let mut bidir_count: usize = 0;
+    let mut unidir_count: usize = 0;
+    let mut trans_count: usize = 0;
+    let mut top_edges: Vec<EdgeDebug> = Vec::new();
     let keys: Vec<String> = deps.keys().cloned().collect();
     for i in 0..keys.len() {
         for j in (i + 1)..keys.len() {
@@ -611,17 +639,19 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
             let b = &keys[j];
             let da = deps.get(a).unwrap();
             let db = deps.get(b).unwrap();
+            total_pairs += 1;
 
             let mut s = 0.0f32;
             // Bidirectional / unidirectional
             let a_to_b = da.contains(b);
             let b_to_a = db.contains(a);
-            if a_to_b && b_to_a { s += 0.6; }
-            else if a_to_b || b_to_a { s += 0.35; }
+            if a_to_b && b_to_a { s += 0.6; bidir_count += 1; }
+            else if a_to_b || b_to_a { s += 0.35; unidir_count += 1; }
 
             // Shared dependencies (Jaccard, hub-filtered)
             let j_dep = jaccard_filtered(da, db, &indeg, 100);
             s += 0.5 * j_dep as f32;
+            sum_jaccard_deps_over_pairs += j_dep as f64;
 
             // Shared consumers (reverse adjacency)
             let empty_hs: HashSet<String> = HashSet::new();
@@ -629,6 +659,7 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
             let cb_ref = consumers.get(b).unwrap_or(&empty_hs);
             let j_con = jaccard_filtered(ca_ref, cb_ref, &indeg, 100);
             s += 0.3 * j_con as f32;
+            sum_jaccard_cons_over_pairs += j_con as f64;
 
             // Transitive hint
             let mut trans = false;
@@ -640,12 +671,28 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
                     if let Some(dx) = deps.get(x) { if dx.contains(a) { trans = true; break; } }
                 }
             }
-            if trans { s += 0.1; }
+            if trans { s += 0.1; trans_count += 1; }
 
             if s > 0.0 {
                 let s_cap = s.min(1.0);
                 strength.insert((a.clone(), b.clone()), s_cap);
                 strength.insert((b.clone(), a.clone()), s_cap);
+                pairs_with_edge += 1;
+                sum_strength_edges += s_cap as f64;
+                if s_cap >= 0.55 {
+                    edges_ge_threshold += 1;
+                }
+                // Maintain top edges list (capped)
+                if top_edges.len() < 100 {
+                    top_edges.push(EdgeDebug { a: a.clone(), b: b.clone(), strength: s_cap, bidirectional: a_to_b && b_to_a, unidirectional: a_to_b ^ b_to_a, jaccard_deps: j_dep, jaccard_consumers: j_con, transitive: trans });
+                } else {
+                    // Replace worst if this is better
+                    if let Some((idx, _)) = top_edges.iter().enumerate().min_by(|a, b| a.1.strength.partial_cmp(&b.1.strength).unwrap()) {
+                        if s_cap > top_edges[idx].strength {
+                            top_edges[idx] = EdgeDebug { a: a.clone(), b: b.clone(), strength: s_cap, bidirectional: a_to_b && b_to_a, unidirectional: a_to_b ^ b_to_a, jaccard_deps: j_dep, jaccard_consumers: j_con, transitive: trans };
+                        }
+                    }
+                }
             }
         }
     }
@@ -724,8 +771,7 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
         cid += 1;
     }
 
-    // Expansion: attach neighbors with at least k strong ties (k=2) to clusters of size>=3
-    let k_required = 1usize;
+    // Expansion: attach neighbors with aggregate strength >= 1.0 to clusters of size>=3
     for cl in &mut clusters {
         if cl.size < 3 { continue; }
         let current_members: HashSet<String> = cl.modules.iter().cloned().collect();
@@ -733,12 +779,8 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
         for n in &keys {
             if current_members.contains(n) { continue; }
             if key_to_cluster.contains_key(n) { continue; }
-            let mut ties = 0usize;
-            for m in &cl.modules {
-                if let Some(w) = strength.get(&(n.clone(), m.clone())) { if *w >= 0.5 { ties += 1; } }
-                if ties >= k_required { break; }
-            }
-            if ties >= k_required { to_add.push(n.clone()); }
+            let s_sum: f32 = cl.modules.iter().map(|m| *strength.get(&(n.clone(), m.clone())).unwrap_or(&0.0)).sum();
+            if s_sum >= 1.0 { to_add.push(n.clone()); }
         }
         for n in to_add {
             cl.modules.push(n.clone());
@@ -754,6 +796,25 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
     }
 
     report.clusters = clusters;
+    // Strength metrics
+    let avg_strength = if pairs_with_edge > 0 { (sum_strength_edges / pairs_with_edge as f64) as f32 } else { 0.0 };
+    let avg_j_dep = if total_pairs > 0 { (sum_jaccard_deps_over_pairs / total_pairs as f64) as f32 } else { 0.0 };
+    let avg_j_con = if total_pairs > 0 { (sum_jaccard_cons_over_pairs / total_pairs as f64) as f32 } else { 0.0 };
+    // Sort descending top edges
+    top_edges.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap());
+    report.strength_metrics = StrengthMetrics {
+        threshold,
+        total_pairs,
+        pairs_with_edge,
+        edges_ge_threshold,
+        avg_strength_over_edges: avg_strength,
+        avg_jaccard_deps_over_pairs: avg_j_dep,
+        avg_jaccard_consumers_over_pairs: avg_j_con,
+        bidirectional_count: bidir_count,
+        unidirectional_count: unidir_count,
+        transitive_count: trans_count,
+        top_edges,
+    };
 }
 
 fn detect_cluster_pattern(members: &[String], deps: &std::collections::HashMap<String, std::collections::HashSet<String>>) -> String {
@@ -814,6 +875,29 @@ fn compute_cluster_stats(report: &mut PackageReport) {
     }
     let ratio = if total_edges > 0 { (clustered_edges as f32) / (total_edges as f32) } else { 0.0 };
     report.cluster_stats = ClusterStats { total_edges, clustered_edges, clustered_ratio: ratio };
+}
+
+fn compute_cluster_summary(report: &mut PackageReport) {
+    let mut summary = ClusterSummary::default();
+    summary.total = report.clusters.len();
+    let mut buckets = ClusterSizeBuckets::default();
+    for c in &report.clusters {
+        match c.size {
+            0..=1 => {}
+            2..=4 => buckets.s02_04 += 1,
+            5..=9 => buckets.s05_09 += 1,
+            10..=19 => buckets.s10_19 += 1,
+            _ => buckets.s20_plus += 1,
+        }
+        match c.pattern.as_str() {
+            "tight" => summary.tight += 1,
+            "star" => summary.star += 1,
+            "chain" => summary.chain += 1,
+            _ => summary.cluster += 1,
+        }
+    }
+    summary.buckets = buckets;
+    report.cluster_summary = summary;
 }
 
 // This will parse through function 0, looking for a structure matching the following:
@@ -892,4 +976,49 @@ pub struct ClusterStats {
     pub total_edges: usize,
     pub clustered_edges: usize,
     pub clustered_ratio: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct StrengthMetrics {
+    pub threshold: f32,
+    pub total_pairs: usize,
+    pub pairs_with_edge: usize,
+    pub edges_ge_threshold: usize,
+    pub avg_strength_over_edges: f32,
+    pub avg_jaccard_deps_over_pairs: f32,
+    pub avg_jaccard_consumers_over_pairs: f32,
+    pub bidirectional_count: usize,
+    pub unidirectional_count: usize,
+    pub transitive_count: usize,
+    pub top_edges: Vec<EdgeDebug>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EdgeDebug {
+    pub a: String,
+    pub b: String,
+    pub strength: f32,
+    pub bidirectional: bool,
+    pub unidirectional: bool,
+    pub jaccard_deps: f32,
+    pub jaccard_consumers: f32,
+    pub transitive: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ClusterSummary {
+    pub total: usize,
+    pub buckets: ClusterSizeBuckets,
+    pub tight: usize,
+    pub star: usize,
+    pub chain: usize,
+    pub cluster: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ClusterSizeBuckets {
+    pub s02_04: usize,
+    pub s05_09: usize,
+    pub s10_19: usize,
+    pub s20_plus: usize,
 }
