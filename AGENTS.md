@@ -45,4 +45,4 @@
 ## Security & Configuration Tips
 - Avoid network access in tests unless mocked; prefer deterministic inputs.
 - Configure logs locally with `RUST_LOG=debug` for deep traces; keep default at `info` in docs/examples.
-- Opcode reference: `python docs/analyze_opcodes.py [OPCODE_NAME]` for quick instruction docs.
+- Opcode reference: `python3 docs/analyze_opcodes.py [OPCODE_NAME]` for quick instruction docs.
