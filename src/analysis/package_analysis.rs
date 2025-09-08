@@ -666,7 +666,9 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
     let mut key_to_cluster: HashMap<String, usize> = HashMap::new();
     let mut cid = 0usize;
     for (_root, members) in root_to_members.into_iter() {
-        if members.len() <= 1 { continue; }
+        let size = members.len();
+        // Skip singletons from clustering to avoid noise
+        if size <= 1 { continue; }
         // Average internal strength
         let mut total = 0.0f32; let mut cnt = 0usize;
         for i in 0..members.len() { for j in (i+1)..members.len() {
@@ -685,10 +687,16 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
             }
         }
 
+        // For size-2 clusters, require very high pair strength; otherwise skip
+        if size == 2 {
+            let w = strength.get(&(members[0].clone(), members[1].clone())).copied().unwrap_or(0.0);
+            if w < 0.9 { continue; }
+        }
+
         // Pattern detection
         let pattern = detect_cluster_pattern(&members, &deps);
 
-        clusters.push(DependencyCluster { id: cid, modules: members.clone(), size: members.len(), avg_strength: avg, pattern, external_edges: ext_edges });
+        clusters.push(DependencyCluster { id: cid, modules: members.clone(), size, avg_strength: avg, pattern, external_edges: ext_edges });
         for m in members { key_to_cluster.insert(m, cid); }
         cid += 1;
     }
@@ -705,6 +713,8 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
 fn detect_cluster_pattern(members: &[String], deps: &std::collections::HashMap<String, std::collections::HashSet<String>>) -> String {
     use std::collections::HashSet;
     let set: HashSet<String> = members.iter().cloned().collect();
+    if members.len() == 1 { return "island".into(); }
+    if members.len() == 2 { return "pair".into(); }
     // Build internal degrees
     let mut deg_in = vec![0usize; members.len()];
     let mut deg_out = vec![0usize; members.len()];
