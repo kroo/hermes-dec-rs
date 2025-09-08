@@ -222,87 +222,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         }
     }
 
-    /// Build from conditional analysis
-    fn build_from_conditional_analysis(
-        &mut self,
-        analysis: &crate::cfg::analysis::ConditionalAnalysis,
-    ) -> StructureId {
-        log::debug!("Building from {} conditional chains", analysis.chains.len());
-
-        // Build a sequence containing all conditional chains and unprocessed blocks
-        let mut structures = Vec::new();
-
-        // Process each conditional chain
-        for (i, chain) in analysis.chains.iter().enumerate() {
-            log::debug!(
-                "Processing conditional chain {}/{}",
-                i + 1,
-                analysis.chains.len()
-            );
-
-            // Skip if this chain's blocks have already been processed
-            // Check the first branch's condition block since chains don't have a single condition_block
-            let chain_already_processed = chain
-                .branches
-                .iter()
-                .any(|branch| self.processed_blocks.contains(&branch.condition_block));
-
-            if chain_already_processed {
-                log::debug!("  Chain {} already processed, skipping", i);
-                continue;
-            }
-
-            let structure = self.build_conditional_structure(chain.clone());
-            structures.push(structure);
-        }
-
-        // Now collect any remaining unprocessed blocks
-        let all_blocks: Vec<NodeIndex> = self
-            .cfg
-            .graph()
-            .node_indices()
-            .filter(|&idx| !self.cfg.graph()[idx].is_exit())
-            .collect();
-
-        log::debug!(
-            "Checking {} total blocks for unprocessed ones",
-            all_blocks.len()
-        );
-
-        for &block in &all_blocks {
-            if !self.processed_blocks.contains(&block) && !self.stop_blocks.contains(&block) {
-                log::debug!("  Found unprocessed block {}", block.index());
-
-                // Create a basic block structure for this unprocessed block
-                if let Some(structure) = self.try_build_basic_block(block) {
-                    structures.push(structure);
-                }
-            } else if block.index() == 3 {
-                log::debug!(
-                    "  Block 3 status: processed={}, stop={}",
-                    self.processed_blocks.contains(&block),
-                    self.stop_blocks.contains(&block)
-                );
-            }
-        }
-
-        // If we have multiple structures, wrap them in a sequence
-        match structures.len() {
-            0 => self.plan.create_structure(ControlFlowKind::Empty),
-            1 => structures[0],
-            _ => {
-                log::debug!("Creating sequence with {} structures", structures.len());
-                // Convert StructureId elements to SequentialElement
-                let elements: Vec<SequentialElement> = structures
-                    .into_iter()
-                    .map(|id| SequentialElement::Structure(id))
-                    .collect();
-                self.plan
-                    .create_structure(ControlFlowKind::Sequential { elements })
-            }
-        }
-    }
-
     /// Build from loop analysis
     /// Try to build a control flow structure starting at this block
     fn try_build_control_structure(&mut self, block: NodeIndex) -> Option<StructureId> {
@@ -2370,21 +2289,4 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         }
     }
 
-    /// Try to build a basic block structure if it hasn't been processed yet
-    fn try_build_basic_block(&mut self, block: NodeIndex) -> Option<StructureId> {
-        // Check if this block exists and hasn't been processed
-        if block.index() < self.cfg.graph().node_count() && !self.processed_blocks.contains(&block)
-        {
-            self.processed_blocks.insert(block);
-
-            let instruction_count = self.cfg.graph()[block].instructions().len();
-            Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
-                block,
-                instruction_count,
-                is_synthetic: false,
-            }))
-        } else {
-            None
-        }
-    }
 }
