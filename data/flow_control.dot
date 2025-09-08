@@ -117,7 +117,7 @@ digraph {
     f5_n1 -> f5_n2 [label="Fall"]
     f5_n2 -> f5_n4 [label="Uncond"]
     f5_n3 -> f5_n4 [label="Uncond"]
-    f5_n1 -> f5_n3 [label="Uncond"]
+    f5_n1 -> f5_n3 [label="Exception"]
   }
 
   subgraph cluster_function_6 {

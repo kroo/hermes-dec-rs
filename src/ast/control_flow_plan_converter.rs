@@ -184,19 +184,18 @@ impl<'a> ControlFlowPlanConverter<'a> {
             ControlFlowKind::Loop {
                 loop_type,
                 header_block,
-                condition,
-                condition_use,
+                condition_expr,
                 body,
                 update,
                 break_target,
                 continue_target,
+                ..
             } => {
                 self.convert_loop(
                     plan,
                     loop_type,
                     *header_block,
-                    condition.as_ref(),
-                    condition_use.as_ref(),
+                    condition_expr.as_ref(),
                     *body,
                     update.as_ref(),
                     break_target.as_ref(),
@@ -1056,8 +1055,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         plan: &ControlFlowPlan,
         loop_type: &LoopType,
         _header_block: NodeIndex,
-        condition: Option<&SSAValue>,
-        condition_use: Option<&RegisterUse>,
+        condition_expr: Option<&ComparisonExpression>,
         body: StructureId,
         update: Option<&StructureId>,
         _break_target: Option<&StructureId>,
@@ -1065,9 +1063,9 @@ impl<'a> ControlFlowPlanConverter<'a> {
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
-        // Get the test expression
-        let test = if let Some(cond) = condition {
-            self.create_use_expression(cond, context, plan, condition_use.cloned())
+        // Build the test expression from the full comparison if available
+        let test = if let Some(comparison) = condition_expr {
+            self.create_comparison_expression(comparison, context, plan)
         } else {
             // Infinite loop: while (true)
             self.ast_builder

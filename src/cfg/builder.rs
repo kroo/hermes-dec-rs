@@ -96,7 +96,10 @@ impl<'a> CfgBuilder<'a> {
         self.add_edges(&mut graph, jump_table);
 
         // Add exception handler edges
-        log::debug!("Adding exception handler edges for function {}...", self.function_index);
+        log::debug!(
+            "Adding exception handler edges for function {}...",
+            self.function_index
+        );
         self.add_exception_handler_edges(&mut graph);
         log::debug!("Exception handler edges added, CFG build complete for function {} - {} nodes, {} edges", 
                    self.function_index, graph.node_count(), graph.edge_count());
@@ -262,12 +265,19 @@ impl<'a> CfgBuilder<'a> {
             .get_parsed_header(self.function_index)
         {
             let total_handlers = parsed_header.exc_handlers.len();
-            log::debug!("Processing {} exception handlers for function {}", 
-                       total_handlers, self.function_index);
-            
+            log::debug!(
+                "Processing {} exception handlers for function {}",
+                total_handlers,
+                self.function_index
+            );
+
             for (handler_idx, handler) in parsed_header.exc_handlers.iter().enumerate() {
-                log::debug!("Processing exception handler {}/{} for function {}", 
-                           handler_idx + 1, total_handlers, self.function_index);
+                log::debug!(
+                    "Processing exception handler {}/{} for function {}",
+                    handler_idx + 1,
+                    total_handlers,
+                    self.function_index
+                );
                 // Convert byte offsets to instruction indices using jump table
                 if let Some(try_start_idx) = self
                     .hbc_file
@@ -951,6 +961,8 @@ impl<'a> CfgBuilder<'a> {
                         crate::cfg::analysis::LoopType::While => "lightblue",
                         crate::cfg::analysis::LoopType::For => "lightgreen",
                         crate::cfg::analysis::LoopType::DoWhile => "lightyellow",
+                        crate::cfg::analysis::LoopType::ForIn => "lightgoldenrod",
+                        crate::cfg::analysis::LoopType::ForOf => "lightpink",
                     };
                     node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
 
@@ -1185,6 +1197,8 @@ impl<'a> CfgBuilder<'a> {
                         crate::cfg::analysis::LoopType::While => "lightblue",
                         crate::cfg::analysis::LoopType::For => "lightgreen",
                         crate::cfg::analysis::LoopType::DoWhile => "lightyellow",
+                        crate::cfg::analysis::LoopType::ForIn => "lightgoldenrod",
+                        crate::cfg::analysis::LoopType::ForOf => "lightpink",
                     };
                     node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
 
@@ -1369,6 +1383,8 @@ impl<'a> CfgBuilder<'a> {
                         crate::cfg::analysis::LoopType::While => ("lightblue", "While Loop"),
                         crate::cfg::analysis::LoopType::For => ("lightgreen", "For Loop"),
                         crate::cfg::analysis::LoopType::DoWhile => ("lightyellow", "Do-While Loop"),
+                        crate::cfg::analysis::LoopType::ForIn => ("lightgoldenrod", "For-In Loop"),
+                        crate::cfg::analysis::LoopType::ForOf => ("lightpink", "For-Of Loop"),
                     };
 
                     analysis_types.insert(format!("Loop: {}", loop_type_name));
@@ -1721,6 +1737,9 @@ impl<'a> CfgBuilder<'a> {
         dominator: NodeIndex,
         node: NodeIndex,
     ) -> bool {
+        if dominator == node {
+            return true;
+        }
         let mut current = node;
         while let Some(immediate_dom) = dominators.immediate_dominator(current) {
             if immediate_dom == dominator {
@@ -1767,15 +1786,58 @@ impl<'a> CfgBuilder<'a> {
     /// Classify the type of loop
     fn classify_loop_type(
         &self,
-        _graph: &DiGraph<Block, EdgeKind>,
+        graph: &DiGraph<Block, EdgeKind>,
         _header: NodeIndex,
         _tail: NodeIndex,
-        _loop_body: &HashSet<NodeIndex>,
+        loop_body: &HashSet<NodeIndex>,
     ) -> crate::cfg::analysis::LoopType {
         use crate::cfg::analysis::LoopType;
 
-        // For now, classify as While - we'll enhance this later
-        LoopType::While
+        // Look for distinctive iterator instructions to classify for-in/for-of loops
+        let mut has_for_in = false;
+        let mut has_for_of = false;
+        for node in loop_body {
+            let block = &graph[*node];
+            for inst in &block.instructions {
+                let name = inst.instruction.name();
+                match name {
+                    // Property name iteration used by for-in
+                    "GetPNames" | "GetNextPName" => has_for_in = true,
+                    // Iterator protocol used by for-of
+                    "IteratorBegin" | "IteratorNext" => has_for_of = true,
+                    _ => {}
+                }
+            }
+        }
+
+        // Helper to determine if a block ends in a conditional jump
+        let is_conditional = |name: &str| name.starts_with('J') && name != "Jmp";
+
+        let header_cond = graph[_header]
+            .instructions
+            .last()
+            .map(|i| is_conditional(i.instruction.name()))
+            .unwrap_or(false);
+        let tail_cond = graph[_tail]
+            .instructions
+            .last()
+            .map(|i| is_conditional(i.instruction.name()))
+            .unwrap_or(false);
+
+        if has_for_in {
+            LoopType::ForIn
+        } else if has_for_of {
+            LoopType::ForOf
+        } else if !header_cond && tail_cond {
+            LoopType::DoWhile
+        } else {
+            // Default to While when we can't confidently detect other loop types.
+            // The existing heuristic for distinguishing classic `for` loops from
+            // simple `while` loops was misclassifying basic while loops that have
+            // an unconditional back edge, so we keep those as `While` until more
+            // reliable detection is implemented.
+            LoopType::While
+        }
     }
 
     /// Find loop exit nodes
