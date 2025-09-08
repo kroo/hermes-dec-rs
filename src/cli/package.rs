@@ -22,6 +22,11 @@ pub fn package_analyze(input: &Path, json: bool, summary: bool) -> DecompilerRes
     println!("Strings:   {}", report.stats.string_count);
     println!("Modules:   {}", report.modules.len());
     println!("Entrypoints: {}", report.entrypoints.len());
+    // Cluster coverage statistics
+    let ce = report.cluster_stats.clustered_edges;
+    let te = report.cluster_stats.total_edges;
+    let pct = if te > 0 { (ce as f64) * 100.0 / (te as f64) } else { 0.0 };
+    println!("Clustered deps: {}/{} ({:.1}%)", ce, te, pct);
 
     if !summary {
         for m in &report.modules {

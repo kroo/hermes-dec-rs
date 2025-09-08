@@ -58,6 +58,8 @@ pub struct PackageReport {
     pub entrypoints: Vec<String>,
     /// Discovered dependency clusters
     pub clusters: Vec<DependencyCluster>,
+    /// Statistics about clustering coverage
+    pub cluster_stats: ClusterStats,
 }
 
 /// Analyze a Hermes HBC file for Metro bundle structure and module graph.
@@ -372,9 +374,10 @@ pub fn analyze_package(hbc: &HbcFile) -> DecompilerResult<PackageReport> {
         string_count: hbc.header.string_count(),
     };
 
-    let mut report = PackageReport { stats, modules, entrypoints: detected_entries, clusters: Vec::new() };
+    let mut report = PackageReport { stats, modules, entrypoints: detected_entries, clusters: Vec::new(), cluster_stats: ClusterStats::default() };
     annotate_dependency_clusters(&mut report);
     compute_dependency_clusters(&mut report);
+    compute_cluster_stats(&mut report);
     Ok(report)
 }
 
@@ -743,6 +746,34 @@ fn detect_cluster_pattern(members: &[String], deps: &std::collections::HashMap<S
     "cluster".into()
 }
 
+fn compute_cluster_stats(report: &mut PackageReport) {
+    use std::collections::HashMap;
+    fn module_key(m: &ModuleInfo) -> Option<String> {
+        if let Some(n) = m.module_id_u32 { Some(n.to_string()) } else { m.module_id_str.clone() }
+    }
+
+    let mut key_to_cluster: HashMap<String, usize> = HashMap::new();
+    for m in &report.modules {
+        if let (Some(k), Some(cid)) = (module_key(m), m.cluster_id) { key_to_cluster.insert(k, cid); }
+    }
+
+    let mut total_edges = 0usize;
+    let mut clustered_edges = 0usize;
+    for m in &report.modules {
+        let src_cid = m.cluster_id;
+        if let Some(src_key) = module_key(m) {
+            for d in &m.dependencies {
+                total_edges += 1;
+                if let (Some(scid), Some(&dcid)) = (src_cid, key_to_cluster.get(d)) {
+                    if scid == dcid { clustered_edges += 1; }
+                }
+            }
+        }
+    }
+    let ratio = if total_edges > 0 { (clustered_edges as f32) / (total_edges as f32) } else { 0.0 };
+    report.cluster_stats = ClusterStats { total_edges, clustered_edges, clustered_ratio: ratio };
+}
+
 // This will parse through function 0, looking for a structure matching the following:
 //
 // [PRE-CODE] + [MODULES] + [POST-CODE]
@@ -812,4 +843,11 @@ pub struct DependencyCluster {
     pub avg_strength: f32,
     pub pattern: String,
     pub external_edges: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ClusterStats {
+    pub total_edges: usize,
+    pub clustered_edges: usize,
+    pub clustered_ratio: f32,
 }
