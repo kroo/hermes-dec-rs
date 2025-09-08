@@ -123,16 +123,19 @@ pub fn analyze_call_simplification(ctx: &mut OptimizationContext) {
                             true
                         } else if ctx.inline_config.unsafe_simplify_calls {
                             // Unsafe simplification: obj.fn.call(obj, ...) -> obj.fn(...)
-                            // TODO: Implement proper safety checks as outlined in the safety checklist:
-                            // 1. Verify the callee is an ordinary ECMAScript function (not a Proxy, exotic callable, etc.)
-                            // 2. Ensure Function.prototype.call hasn't been modified
-                            // 3. Ensure the function object doesn't have its own "call" property
-                            // 4. Verify no accessor/reactivity concerns on the object or function property
-                            // 5. Check this behavior matches (strict mode, bound functions, etc.)
-                            // 6. Ensure it's a normal method call site (no optional chaining)
                             //
-                            // For now, we unsafely simplify all non-undefined 'this' values
-                            // This is NOT semantics-preserving in all cases!
+                            // WARNING: This optimization is NOT semantics-preserving in all cases!
+                            //
+                            // Safety requirements NOT currently verified:
+                            // 1. The callee must be an ordinary ECMAScript function (not a Proxy, exotic callable, etc.)
+                            // 2. Function.prototype.call must not have been modified
+                            // 3. The function object must not have its own "call" property
+                            // 4. No accessor/reactivity concerns on the object or function property
+                            // 5. 'this' behavior must match (strict mode, bound functions, etc.)
+                            // 6. Must be a normal method call site (no optional chaining)
+                            //
+                            // Currently, we unsafely simplify ALL non-undefined 'this' values.
+                            // Users should only enable this if they're certain their code meets these requirements.
                             if !is_undefined {
                                 log::debug!(
                                     "Marking call at block {}, PC {} for UNSAFE simplification (non-undefined 'this')",

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Main decompiler module
 //!
 //! This module orchestrates the entire decompilation process from HBC to JavaScript.
@@ -43,6 +42,15 @@ pub struct InlineConfig {
     /// Simplify call patterns like fn.call(undefined, ...) to fn(...)
     pub simplify_calls: bool,
     /// Unsafely simplify method calls (e.g., obj.fn.call(obj, args) -> obj.fn(args))
+    ///
+    /// WARNING: This optimization is NOT semantics-preserving in all cases.
+    /// It assumes:
+    /// - Function.prototype.call hasn't been modified
+    /// - The function object doesn't have its own "call" property
+    /// - No accessor/reactivity concerns on the object or function property
+    /// - The callee is an ordinary ECMAScript function (not a Proxy or exotic callable)
+    ///
+    /// Only enable this if you're certain these conditions hold in your code.
     pub unsafe_simplify_calls: bool,
     /// Inline parameter references to use original parameter names (this, arg0, arg1, etc.)
     pub inline_parameters: bool,
