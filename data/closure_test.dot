@@ -64,7 +64,7 @@ digraph {
 
     edge [fontname="Arial"];
 
-    f4_n0 [ label = "Block 0 (PC 0-10)\l  0: LoadConstUndefined r4\l  1: LoadConstUndefined r0\l  2: ReifyArguments    r0\l  3: Mov               r3, r0\l  4: GetBuiltinClosure r2, 52\l  5: CreateEnvironment r0\l  6: CreateGeneratorClosure r1, r0, Function<?anon_0_asyncOuter>5\l  7: LoadThisNS        r0\l  8: Call4             r0, r2, r4, r1, r0, r3\l  9: Ret               r0\l" ]
+    f4_n0 [ label = "Block 0 (PC 0-10)\l  0: LoadConstUndefined r4\l  1: LoadConstUndefined r0\l  2: ReifyArguments    r0\l  3: Mov               r3, r0\l  4: GetBuiltinClosure r2, \"HermesBuiltin.apply\"\l  5: CreateEnvironment r0\l  6: CreateGeneratorClosure r1, r0, Function<?anon_0_asyncOuter>5\l  7: LoadThisNS        r0\l  8: Call4             r0, r2, r4, r1, r0, r3\l  9: Ret               r0\l" ]
     f4_n1 [ label = "EXIT" ]
 
     f4_n0 -> f4_n1 [label="Uncond"]
@@ -108,7 +108,7 @@ digraph {
 
     edge [fontname="Arial"];
 
-    f7_n0 [ label = "Block 0 (PC 0-10)\l  0: LoadConstUndefined r4\l  1: LoadConstUndefined r0\l  2: ReifyArguments    r0\l  3: Mov               r3, r0\l  4: GetBuiltinClosure r2, 52\l  5: CreateEnvironment r0\l  6: CreateGeneratorClosure r1, r0, Function<?anon_0_asyncInner>8\l  7: LoadThisNS        r0\l  8: Call4             r0, r2, r4, r1, r0, r3\l  9: Ret               r0\l" ]
+    f7_n0 [ label = "Block 0 (PC 0-10)\l  0: LoadConstUndefined r4\l  1: LoadConstUndefined r0\l  2: ReifyArguments    r0\l  3: Mov               r3, r0\l  4: GetBuiltinClosure r2, \"HermesBuiltin.apply\"\l  5: CreateEnvironment r0\l  6: CreateGeneratorClosure r1, r0, Function<?anon_0_asyncInner>8\l  7: LoadThisNS        r0\l  8: Call4             r0, r2, r4, r1, r0, r3\l  9: Ret               r0\l" ]
     f7_n1 [ label = "EXIT" ]
 
     f7_n0 -> f7_n1 [label="Uncond"]

@@ -78,7 +78,7 @@ digraph {
 
     edge [fontname="Arial"];
 
-    f3_n0 [ label = "Block 0 (PC 0-9)\l  0: LoadConstZero     r4\l  1: LoadConstZero     r6\l  2: CallBuiltin       r3, 45, 2\l  3: GetByIdShort      r2, r3, 1, \"reduce\"\l  4: CreateEnvironment r0\l  5: CreateClosure     r1, r0, Function<>4\l  6: Call3             r1, r2, r3, r1, r4\l  7: AsyncBreakCheck   \l  8: Ret               r1\l" ]
+    f3_n0 [ label = "Block 0 (PC 0-9)\l  0: LoadConstZero     r4\l  1: LoadConstZero     r6\l  2: CallBuiltin       r3, \"HermesBuiltin.ensureObject\", 2\l  3: GetByIdShort      r2, r3, 1, \"reduce\"\l  4: CreateEnvironment r0\l  5: CreateClosure     r1, r0, Function<>4\l  6: Call3             r1, r2, r3, r1, r4\l  7: AsyncBreakCheck   \l  8: Ret               r1\l" ]
     f3_n1 [ label = "EXIT" ]
 
     f3_n0 -> f3_n1 [label="Uncond"]
