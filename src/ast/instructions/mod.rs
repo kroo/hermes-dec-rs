@@ -2147,9 +2147,9 @@ impl<'a> InstructionToStatementConverter<'a> {
                     log::debug!("Inlining constant: {:?}", constant);
                     return self.create_constant_expression(constant);
                 }
-                crate::analysis::ssa_usage_tracker::UseStrategy::InlinePropertyAccess(tracked_value) => {
-                    log::debug!("Inlining property access: {:?}", tracked_value);
-                    return self.create_property_access_expression(tracked_value);
+                crate::analysis::ssa_usage_tracker::UseStrategy::InlineTrackedValue(tracked_value) => {
+                    log::debug!("Inlining tracked value: {:?}", tracked_value);
+                    return Ok(self.create_property_access_expression(tracked_value)?);
                 }
                 crate::analysis::ssa_usage_tracker::UseStrategy::InlineGlobalThis => {
                     log::debug!("Inlining globalThis");
@@ -2163,8 +2163,10 @@ impl<'a> InstructionToStatementConverter<'a> {
                     return Ok(self.ast_builder.expression_identifier(span, param_atom));
                 }
                 crate::analysis::ssa_usage_tracker::UseStrategy::SimplifyCall { .. } |
+                crate::analysis::ssa_usage_tracker::UseStrategy::DeclareObjectLiteral { .. } |
                 crate::analysis::ssa_usage_tracker::UseStrategy::UseVariable => {
                     // Use the variable reference
+                    // DeclareObjectLiteral should only be at definition sites, not use sites
                     let var_name = self.register_manager.get_variable_name_for_duplicated(&dup_value);
                     log::debug!("Using variable: {}", var_name);
                     let var_atom = self.ast_builder.allocator.alloc_str(&var_name);

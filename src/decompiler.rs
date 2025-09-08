@@ -48,6 +48,8 @@ pub struct InlineConfig {
     pub inline_parameters: bool,
     /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
     pub inline_constructor_calls: bool,
+    /// Inline object literals when safe (experimental)
+    pub inline_object_literals: bool,
 }
 
 impl Default for InlineConfig {
@@ -62,6 +64,7 @@ impl Default for InlineConfig {
             unsafe_simplify_calls: false,
             inline_parameters: false,
             inline_constructor_calls: false,
+            inline_object_literals: false,
         }
     }
 }
@@ -89,6 +92,7 @@ impl InlineConfig {
         unsafe_simplify_calls: Option<bool>,
         inline_parameters: Option<bool>,
         inline_constructor_calls: Option<bool>,
+        inline_object_literals: Option<bool>,
     ) -> Self {
         // Enable global_this inlining by default if any other inlining is enabled
         let any_inline = inline_constants
@@ -107,6 +111,7 @@ impl InlineConfig {
             unsafe_simplify_calls: unsafe_simplify_calls.unwrap_or(false),
             inline_parameters: inline_parameters.unwrap_or(false),
             inline_constructor_calls: inline_constructor_calls.unwrap_or(false),
+            inline_object_literals: inline_object_literals.unwrap_or(false),
         }
     }
 }
@@ -153,6 +158,7 @@ impl DecompileOptions {
         unsafe_simplify_calls: Option<bool>,
         inline_parameters: Option<bool>,
         inline_constructor_calls: Option<bool>,
+        inline_object_literals: Option<bool>,
     ) -> Self {
         let include_instruction_comments =
             comments.contains("instructions") || comments.contains("pc");
@@ -173,6 +179,7 @@ impl DecompileOptions {
                 unsafe_simplify_calls,
                 inline_parameters,
                 inline_constructor_calls,
+                inline_object_literals,
             ),
         }
     }
@@ -292,6 +299,7 @@ impl Decompiler {
             false,
             false,
             false,
+            None,
             None,
             None,
             None,

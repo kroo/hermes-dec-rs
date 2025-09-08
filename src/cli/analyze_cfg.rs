@@ -24,6 +24,7 @@ pub fn analyze_cfg(
     inline_global_this: bool,
     inline_parameters: bool,
     inline_constructor_calls: bool,
+    inline_object_literals: bool,
 ) -> Result<()> {
     // Read the HBC file
     let file_data = std::fs::read(input)?;
@@ -105,6 +106,7 @@ pub fn analyze_cfg(
         inline_config.inline_global_this = inline_global_this;
         inline_config.inline_parameters = inline_parameters;
         inline_config.inline_constructor_calls = inline_constructor_calls;
+        inline_config.inline_object_literals = inline_object_literals;
         builder.set_inline_config(inline_config);
 
         // The builder.build() method already analyzes the plan internally
@@ -676,8 +678,8 @@ pub fn analyze_cfg(
                                     UseStrategy::InlineValue(ref val) => {
                                         format!("InlineValue({:?})", val)
                                     }
-                                    UseStrategy::InlinePropertyAccess(ref val) => {
-                                        format!("InlinePropertyAccess({:?})", val)
+                                    UseStrategy::InlineTrackedValue(ref val) => {
+                                        format!("InlineTrackedValue({:?})", val)
                                     }
                                     UseStrategy::InlineParameter { param_index } => {
                                         format!("InlineParameter({})", param_index)
@@ -685,6 +687,9 @@ pub fn analyze_cfg(
                                     UseStrategy::InlineGlobalThis => "InlineGlobalThis".to_string(),
                                     UseStrategy::SimplifyCall { is_method_call } => {
                                         format!("SimplifyCall(method: {})", is_method_call)
+                                    }
+                                    UseStrategy::DeclareObjectLiteral { emit_position, .. } => {
+                                        format!("DeclareObjectLiteral({:?})", emit_position)
                                     }
                                 };
                                 println!("      Use strategy: {}", strategy_str);

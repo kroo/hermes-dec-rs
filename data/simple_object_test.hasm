@@ -1,0 +1,60 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 8520b801b028a0cd40a659fc5e6674c8f09acd64
+  Function count: 3
+  String count: 8
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 0..5] #AD6DB89F: global
+s1[ASCII, 6..10] #CDE37C13: hello
+s2[ASCII, 11..15] #0001E7F9: world
+s3[ASCII, 16..31] #0001E3E8: testSimpleObject
+s4[ASCII, 31..48] #0001EFDB: testArrayMutations
+s5[ASCII, 49..49] x
+s6[ASCII, 50..50] y
+s7[ASCII, 51..51] z
+
+Array Buffer:
+
+Function<global>0(1 params, 3 registers, 0 symbols):
+  DeclareGlobalVar  "testSimpleObject"
+  DeclareGlobalVar  "testArrayMutations"
+  CreateEnvironment r0
+  CreateClosure     r2, r0, Function<testSimpleObject>1
+  GetGlobalObject   r1
+  PutById           r1, r2, 1, "testSimpleObject"
+  CreateClosure     r0, r0, Function<testArrayMutations>2
+  PutById           r1, r0, 2, "testArrayMutations"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<testSimpleObject>1(1 params, 2 registers, 0 symbols):
+  NewObject         r0
+  LoadConstUInt8    r1, 1
+  PutById           r0, r1, 1, "x"
+  LoadConstUInt8    r1, 2
+  PutById           r0, r1, 2, "y"
+  LoadConstUInt8    r1, 3
+  PutById           r0, r1, 3, "z"
+  Ret               r0
+
+Function<testArrayMutations>2(1 params, 3 registers, 0 symbols):
+  NewArray          r0, 0
+  LoadConstString   r2, "hello"
+  LoadConstZero     r1
+  PutByVal          r0, r1, r2
+  LoadConstString   r2, "world"
+  LoadConstUInt8    r1, 1
+  PutByVal          r0, r1, r2
+  Ret               r0
+

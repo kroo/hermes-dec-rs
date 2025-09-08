@@ -120,6 +120,10 @@ enum Commands {
         /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
         #[arg(long)]
         inline_constructor_calls: bool,
+        
+        /// Inline object literals when safe (experimental)
+        #[arg(long)]
+        inline_object_literals: bool,
     },
 
     /// Generate unified instruction definitions from Hermes source
@@ -202,6 +206,10 @@ enum Commands {
         /// Inline constructor calls (CreateThis/Construct/SelectObject pattern to new Constructor(...))
         #[arg(long)]
         inline_constructor_calls: bool,
+        
+        /// Inline object literals when safe (experimental)
+        #[arg(long)]
+        inline_object_literals: bool,
     },
 }
 
@@ -238,6 +246,7 @@ fn main() -> Result<()> {
             unsafe_simplify_calls,
             inline_parameters,
             inline_constructor_calls,
+            inline_object_literals,
             format: _,
             minify: _,
             hbc_version: _,
@@ -253,12 +262,13 @@ fn main() -> Result<()> {
                 unsafe_simplify_calls,
                 inline_parameters,
                 inline_constructor_calls,
+                inline_object_literals,
             ) = if optimize_all {
                 // Enable ALL optimizations
-                (true, true, true, true, true, true, true, true, true)
+                (true, true, true, true, true, true, true, true, true, true)
             } else if optimize_safe {
                 // Enable safe optimizations only
-                (true, true, true, true, true, true, false, true, true)
+                (true, true, true, true, true, true, false, true, true, true)
             } else {
                 // Use individual flags
                 (
@@ -271,6 +281,7 @@ fn main() -> Result<()> {
                     unsafe_simplify_calls,
                     inline_parameters,
                     inline_constructor_calls,
+                    inline_object_literals,
                 )
             };
 
@@ -290,6 +301,7 @@ fn main() -> Result<()> {
                 unsafe_simplify_calls: Some(unsafe_simplify_calls),
                 inline_parameters: Some(inline_parameters),
                 inline_constructor_calls: Some(inline_constructor_calls),
+                inline_object_literals: Some(inline_object_literals),
             };
             cli::decompile::decompile(&args).map_err(|e| miette!("{}", e))
         }
@@ -325,6 +337,7 @@ fn main() -> Result<()> {
             unsafe_simplify_calls,
             inline_parameters,
             inline_constructor_calls,
+            inline_object_literals,
         } => {
             // Apply optimization presets
             let (
@@ -337,12 +350,13 @@ fn main() -> Result<()> {
                 unsafe_simplify_calls,
                 inline_parameters,
                 inline_constructor_calls,
+                inline_object_literals,
             ) = if optimize_all {
                 // Enable ALL optimizations
-                (true, true, true, true, true, true, true, true, true)
+                (true, true, true, true, true, true, true, true, true, true)
             } else if optimize_safe {
                 // Enable safe optimizations only
-                (true, true, true, true, true, true, false, true, true)
+                (true, true, true, true, true, true, false, true, true, true)
             } else {
                 // Use individual flags
                 (
@@ -355,6 +369,7 @@ fn main() -> Result<()> {
                     unsafe_simplify_calls,
                     inline_parameters,
                     inline_constructor_calls,
+                    inline_object_literals,
                 )
             };
 
@@ -368,6 +383,7 @@ fn main() -> Result<()> {
                 inline_global_this,
                 inline_parameters,
                 inline_constructor_calls,
+                inline_object_literals,
             )
             .map_err(|e| miette!("{}", e))
         }

@@ -6,6 +6,7 @@
 use super::{InstructionResult, InstructionToStatementConverter, StatementConversionError};
 use crate::ast::context::ExpressionContext;
 use crate::hbc::serialized_literal_parser::SLPValue;
+use oxc_ast::ast::*;
 use oxc_span::Span;
 
 /// Convert a key-value pair to an object property
@@ -449,6 +450,148 @@ pub trait ObjectHelpers<'a> {
     ) -> Result<InstructionResult<'a>, StatementConversionError>;
 }
 
+impl<'a> InstructionToStatementConverter<'a> {
+    /// Create an object literal expression from a TrackedValue
+    fn create_object_literal_from_tracked_value(
+        &mut self,
+        tracked_value: &crate::analysis::value_tracking::TrackedValue,
+    ) -> Result<Expression<'a>, StatementConversionError> {
+        use crate::analysis::value_tracking::{TrackedValue, MutationKind};
+        
+        let span = Span::default();
+        
+        match tracked_value {
+            TrackedValue::MutableObject { mutations, base_type, .. } => {
+                use crate::analysis::value_tracking::ObjectBaseType;
+                
+                // Check if this is an array or object
+                match base_type {
+                    ObjectBaseType::Array { .. } => {
+                        // Handle array literal
+                        let mut elements = Vec::new();
+                        let mut max_index = 0usize;
+                        
+                        // Collect array elements from mutations
+                        for mutation in mutations {
+                            if let MutationKind::PropertySet { key, value } = &mutation.kind {
+                                // Check for numeric index
+                                if let TrackedValue::Constant(crate::analysis::ConstantValue::Number(n)) = key.as_ref() {
+                                    let idx = *n as usize;
+                                    max_index = max_index.max(idx);
+                                    
+                                    // Ensure we have enough slots
+                                    while elements.len() <= idx {
+                                        elements.push(None);
+                                    }
+                                    
+                                    // Create the element expression
+                                    let elem_expr = self.create_expression_from_tracked_value(value.as_ref())?;
+                                    elements[idx] = Some(elem_expr);
+                                }
+                            }
+                        }
+                        
+                        // Convert to ArrayExpressionElement vec
+                        let mut array_elements = self.ast_builder.vec();
+                        for elem_opt in elements.into_iter().take(max_index + 1) {
+                            match elem_opt {
+                                Some(expr) => {
+                                    array_elements.push(ArrayExpressionElement::from(expr));
+                                }
+                                None => {
+                                    // Hole in array - create undefined
+                                    let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
+                                    let undefined_expr = self.ast_builder.expression_identifier(span, undefined_atom);
+                                    array_elements.push(ArrayExpressionElement::from(undefined_expr));
+                                }
+                            }
+                        }
+                        
+                        Ok(self.ast_builder.expression_array(span, array_elements))
+                    }
+                    _ => {
+                        // Handle object literal
+                        let mut properties = self.ast_builder.vec();
+                        
+                        // Convert each mutation to a property
+                        for mutation in mutations {
+                            if let MutationKind::PropertySet { key, value } = &mutation.kind {
+                                // Get the property key
+                                let prop_key = match key.as_ref() {
+                                    TrackedValue::Constant(crate::analysis::ConstantValue::String(s)) => {
+                                        let key_atom = self.ast_builder.allocator.alloc_str(s);
+                                        let identifier = self.ast_builder.identifier_name(span, key_atom);
+                                        PropertyKey::StaticIdentifier(self.ast_builder.alloc(identifier))
+                                    }
+                                    _ => {
+                                        // For non-string keys, fallback to computed property
+                                        // This is a simplification - we'd need more complex handling for computed properties
+                                        continue;
+                                    }
+                                };
+                                
+                                // Get the property value
+                                let prop_value = self.create_expression_from_tracked_value(value.as_ref())?;
+                                
+                                // Create the property
+                                let property = ObjectProperty {
+                                    span,
+                                    kind: PropertyKind::Init,
+                                    key: prop_key,
+                                    value: prop_value,
+                                    method: false,
+                                    shorthand: false,
+                                    computed: false,
+                                };
+                                
+                                properties.push(ObjectPropertyKind::ObjectProperty(
+                                    self.ast_builder.alloc(property)
+                                ));
+                            }
+                        }
+                        
+                        Ok(self.ast_builder.expression_object(span, properties))
+                    }
+                }
+            }
+            _ => {
+                // Fallback to empty object for non-object tracked values
+                Ok(self.ast_builder.expression_object(span, self.ast_builder.vec()))
+            }
+        }
+    }
+    
+    /// Create an expression from a TrackedValue
+    fn create_expression_from_tracked_value(
+        &mut self,
+        tracked_value: &crate::analysis::value_tracking::TrackedValue,
+    ) -> Result<Expression<'a>, StatementConversionError> {
+        use crate::analysis::value_tracking::TrackedValue;
+        
+        let span = Span::default();
+        
+        match tracked_value {
+            TrackedValue::Constant(constant) => {
+                self.create_constant_expression(constant)
+            }
+            TrackedValue::GlobalObject => {
+                let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
+                Ok(self.ast_builder.expression_identifier(span, global_atom))
+            }
+            TrackedValue::Parameter { index, .. } => {
+                let param_name = self.variable_mapper.get_parameter_name(*index as u8);
+                let param_atom = self.ast_builder.allocator.alloc_str(&param_name);
+                Ok(self.ast_builder.expression_identifier(span, param_atom))
+            }
+            _ => {
+                // For complex tracked values, generate undefined for now
+                Ok(self.ast_builder.expression_identifier(span, 
+                    self.ast_builder.allocator.alloc_str("undefined")))
+            }
+        }
+    }
+}
+
 impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
     fn create_property_assignment_by_id(
         &mut self,
@@ -624,6 +767,62 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         &mut self,
         dest_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this object creation has a DeclareObjectLiteral strategy
+        // We need to look up the strategy using the current block and instruction
+        let current_pc = self.expression_context.current_pc.0;
+        let current_block = self.expression_context.current_block
+            .and_then(|b| petgraph::graph::NodeIndex::new(b as usize).into())
+            .unwrap_or(petgraph::graph::NodeIndex::new(0));
+        
+        // Search for a DeclareObjectLiteral strategy at this location
+        // We need to iterate through use_strategies to find one that matches
+        for ((dup_value, use_site), strategy) in &self.control_flow_plan.use_strategies {
+            // Check if this is at our current location
+            if use_site.block_id == current_block 
+                && use_site.instruction_idx.0 == current_pc 
+                && use_site.register == dest_reg {
+                
+                // Check if the duplication context matches
+                let context_matches = match (&dup_value.duplication_context, &self.current_duplication_context) {
+                    (None, None) => true,
+                    (Some(a), Some(b)) => a == b,
+                    _ => false,
+                };
+                
+                if context_matches {
+                    if let crate::analysis::ssa_usage_tracker::UseStrategy::DeclareObjectLiteral { 
+                        tracked_value, 
+                        emit_position 
+                    } = strategy {
+                        use crate::analysis::ssa_usage_tracker::EmitPosition;
+                        
+                        // Check if we should emit at this position
+                        let should_emit_here = match emit_position {
+                            EmitPosition::AtCreation => true,
+                            EmitPosition::AtMutation { block_id, instruction_idx } => {
+                                *block_id == current_block && instruction_idx.0 == current_pc
+                            }
+                        };
+                        
+                        if should_emit_here {
+                            // Generate the object literal from the tracked value  
+                            // Clone tracked_value to avoid borrow issues
+                            let tracked_value_clone = tracked_value.clone();
+                            let obj_expr = self.create_object_literal_from_tracked_value(&tracked_value_clone)?;
+                            
+                            let dest_var = self
+                                .register_manager
+                                .create_new_variable_for_register(dest_reg);
+                            
+                            let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(obj_expr))?;
+                            return Ok(InstructionResult::Statement(stmt));
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Default: create empty object
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);
@@ -643,6 +842,59 @@ impl<'a> ObjectHelpers<'a> for InstructionToStatementConverter<'a> {
         dest_reg: u8,
         size: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
+        // Check if this array creation has a DeclareObjectLiteral strategy (for array literal inlining)
+        let current_pc = self.expression_context.current_pc.0;
+        let current_block = self.expression_context.current_block
+            .and_then(|b| petgraph::graph::NodeIndex::new(b as usize).into())
+            .unwrap_or(petgraph::graph::NodeIndex::new(0));
+        
+        // Search for a DeclareObjectLiteral strategy at this location
+        for ((dup_value, use_site), strategy) in &self.control_flow_plan.use_strategies {
+            // Check if this is at our current location
+            if use_site.block_id == current_block 
+                && use_site.instruction_idx.0 == current_pc 
+                && use_site.register == dest_reg {
+                
+                // Check if the duplication context matches
+                let context_matches = match (&dup_value.duplication_context, &self.current_duplication_context) {
+                    (None, None) => true,
+                    (Some(a), Some(b)) => a == b,
+                    _ => false,
+                };
+                
+                if context_matches {
+                    if let crate::analysis::ssa_usage_tracker::UseStrategy::DeclareObjectLiteral { 
+                        tracked_value, 
+                        emit_position 
+                    } = strategy {
+                        use crate::analysis::ssa_usage_tracker::EmitPosition;
+                        
+                        // Check if we should emit at this position
+                        let should_emit_here = match emit_position {
+                            EmitPosition::AtCreation => true,
+                            EmitPosition::AtMutation { block_id, instruction_idx } => {
+                                *block_id == current_block && instruction_idx.0 == current_pc
+                            }
+                        };
+                        
+                        if should_emit_here {
+                            // Generate the array literal from the tracked value
+                            let tracked_value_clone = tracked_value.clone();
+                            let array_expr = self.create_object_literal_from_tracked_value(&tracked_value_clone)?;
+                            
+                            let dest_var = self
+                                .register_manager
+                                .create_new_variable_for_register(dest_reg);
+                            
+                            let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(array_expr))?;
+                            return Ok(InstructionResult::Statement(stmt));
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Default: create array normally
         let dest_var = self
             .register_manager
             .create_new_variable_for_register(dest_reg);

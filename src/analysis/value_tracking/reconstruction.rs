@@ -113,13 +113,13 @@ impl<'a> LiteralReconstructor<'a> {
         };
         let escape_result = escape_analyzer.analyze_object_escape(&def);
         
-        if escape_result.escapes {
+        if !escape_result.safe_to_inline {
             let reasons = escape_result.reasons.iter()
                 .map(|r| format!("{:?}", r))
                 .collect::<Vec<_>>()
                 .join(", ");
             return ReconstructionResult::CannotReconstruct(
-                format!("Object escapes: {}", reasons)
+                format!("Object not safe to inline: {} (escapes: {})", reasons, escape_result.escapes)
             );
         }
         

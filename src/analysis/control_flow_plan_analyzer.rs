@@ -9,7 +9,8 @@ use super::control_flow_plan::{
 };
 use crate::analysis::optimization_passes::{
     CallSimplificationPass, ConstantInliningPass, ConstructorCallInliningPass,
-    GlobalThisInliningPass, OptimizationPass, ParameterInliningPass, PropertyAccessInliningPass,
+    GlobalThisInliningPass, ObjectLiteralInliningPass, OptimizationPass, ParameterInliningPass, 
+    PropertyAccessInliningPass,
 };
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, SSAUsageTracker, UseStrategy};
 use crate::analysis::FunctionAnalysis;
@@ -79,6 +80,7 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 None,
                 None,
                 None,
+                None,
             ),
         }
     }
@@ -122,13 +124,16 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
                 // Check if this use has an inline strategy
                 match self.plan.use_strategies.get(&key) {
                     Some(UseStrategy::InlineValue(_))
-                    | Some(UseStrategy::InlinePropertyAccess(_))
+                    | Some(UseStrategy::InlineTrackedValue(_))
                     | Some(UseStrategy::InlineGlobalThis)
                     | Some(UseStrategy::InlineParameter { .. }) => {
                         // Good, it's being inlined
                     }
                     Some(UseStrategy::SimplifyCall { .. }) => {
                         // This is OK - it's a call simplification, not a variable use
+                    }
+                    Some(UseStrategy::DeclareObjectLiteral { .. }) => {
+                        // This is OK - it's an object literal declaration
                     }
                     Some(UseStrategy::UseVariable) => {
                         log::error!(
@@ -203,6 +208,12 @@ impl<'a> ControlFlowPlanAnalyzer<'a> {
             )),
             // Constructor call inlining pass
             Box::new(ConstructorCallInliningPass::new(
+                self.function_analysis,
+                &self.inline_config,
+                &self.duplicated_blocks,
+            )),
+            // Object literal inlining pass
+            Box::new(ObjectLiteralInliningPass::new(
                 self.function_analysis,
                 &self.inline_config,
                 &self.duplicated_blocks,

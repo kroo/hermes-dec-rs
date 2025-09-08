@@ -7,6 +7,7 @@ use crate::analysis::{ConstantValue, FunctionAnalysis, TrackedValue};
 use crate::cfg::ssa::types::{
     DuplicatedSSAValue, DuplicationContext, RegisterUse, SSAAnalysis, SSAValue,
 };
+use crate::hbc::InstructionIndex;
 use log::{debug, trace};
 use petgraph::algo::dominators::Dominators;
 use petgraph::graph::NodeIndex;
@@ -83,8 +84,8 @@ pub enum UseStrategy {
     /// Inline the constant value directly
     InlineValue(ConstantValue),
 
-    /// Inline a property access chain
-    InlinePropertyAccess(TrackedValue),
+    /// Inline a tracked value (property access, object literal, etc.)
+    InlineTrackedValue(TrackedValue),
 
     /// Inline globalThis directly
     InlineGlobalThis,
@@ -95,6 +96,29 @@ pub enum UseStrategy {
     /// Simplify call pattern (for 'this' argument in Call instructions)
     /// Contains the function expression and whether it matches the object.method pattern
     SimplifyCall { is_method_call: bool },
+
+    /// Declare an object literal at a specific position
+    /// Used for inlining object creation with mutations as a single literal
+    DeclareObjectLiteral {
+        /// The tracked value representing the object with all mutations
+        tracked_value: TrackedValue,
+        /// Where to emit the declaration
+        emit_position: EmitPosition,
+    },
+}
+
+/// Position where a declaration should be emitted
+#[derive(Debug, Clone, PartialEq)]
+pub enum EmitPosition {
+    /// Emit at the original object creation instruction
+    AtCreation,
+    /// Emit at a specific mutation instruction
+    AtMutation {
+        /// Block containing the mutation
+        block_id: NodeIndex,
+        /// Instruction index of the mutation
+        instruction_idx: InstructionIndex,
+    },
 }
 
 impl<'a> SSAUsageTracker<'a> {
@@ -488,50 +512,58 @@ impl<'a> SSAUsageTracker<'a> {
                 self.is_phi_operand_with_used_result(ssa_value)
             };
 
-        if !is_phi_related {
-            // Not PHI-related, check for side effects
-            if let Some(block) = self
-                .function_analysis
-                .cfg
-                .graph()
-                .node_weight(ssa_value.def_site.block_id)
-            {
-                for instr in &block.instructions {
-                    if instr.instruction_index == ssa_value.def_site.instruction_idx {
-                        if has_side_effects(&instr.instruction) {
-                            // Check if this value has any uses
-                            let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
-                            if all_uses.is_empty()
-                                || self.is_duplicated_fully_eliminated_with_context(
-                                    dup_ssa_value,
-                                    call_site_analysis,
-                                )
-                            {
-                                // Special case: Array/object literals with constant contents can be eliminated
-                                if self.is_eliminable_literal(&instr.instruction) {
-                                    // Check if this is a constant array/object that can be eliminated
-                                    let value_tracker = self.function_analysis.value_tracker();
-                                    let tracked_value = value_tracker.get_value(ssa_value);
-                                    if let TrackedValue::Constant(_) = tracked_value {
-                                        trace!(
-                                            "SSA value {} is an unused constant literal, using Skip",
-                                            ssa_value
-                                        );
-                                        return DeclarationStrategy::Skip;
-                                    }
+        // Always check for side effects, regardless of PHI status
+        // Function calls and other side-effect instructions need to be executed even if PHI-related
+        if let Some(block) = self
+            .function_analysis
+            .cfg
+            .graph()
+            .node_weight(ssa_value.def_site.block_id)
+        {
+            for instr in &block.instructions {
+                if instr.instruction_index == ssa_value.def_site.instruction_idx {
+                    if has_side_effects(&instr.instruction) {
+                        log::debug!("Instruction at {} has side effects: {:?}", ssa_value, instr.instruction);
+                        // Check if this value has any uses
+                        let all_uses = self.get_all_uses_for_duplicated(dup_ssa_value);
+                        if all_uses.is_empty()
+                            || self.is_duplicated_fully_eliminated_with_context(
+                                dup_ssa_value,
+                                call_site_analysis,
+                            )
+                        {
+                            log::debug!("SSA value {} has no uses or is fully eliminated", ssa_value);
+                            // Special case: Array/object literals with constant contents can be eliminated
+                            let is_literal = self.is_eliminable_literal(&instr.instruction);
+                            log::debug!("Is eliminable literal: {}", is_literal);
+                            if is_literal {
+                                // Check if this is a constant array/object that can be eliminated
+                                let value_tracker = self.function_analysis.value_tracker();
+                                let tracked_value = value_tracker.get_value(ssa_value);
+                                if let TrackedValue::Constant(_) = tracked_value {
+                                    trace!(
+                                        "SSA value {} is an unused constant literal, using Skip",
+                                        ssa_value
+                                    );
+                                    return DeclarationStrategy::Skip;
                                 }
-
-                                trace!(
-                                    "SSA value {} has side effects but no uses, using SideEffectOnly",
-                                    ssa_value
-                                );
-                                return DeclarationStrategy::SideEffectOnly;
                             }
+
+                            // All other instructions with side effects should be executed for side effects
+                            trace!(
+                                "SSA value {} has side effects but no uses, using SideEffectOnly",
+                                ssa_value
+                            );
+                            return DeclarationStrategy::SideEffectOnly;
                         }
-                        break;
                     }
+                    break;
                 }
             }
+        }
+
+        if !is_phi_related {
+            // Additional non-PHI checks can go here if needed
         }
 
         // Special handling for PHI result values

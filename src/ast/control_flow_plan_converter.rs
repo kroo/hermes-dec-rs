@@ -1628,6 +1628,16 @@ impl<'a> ControlFlowPlanConverter<'a> {
             };
 
             for hbc_instruction in instructions_iter {
+                // First check if this instruction has been consumed (e.g., object mutations that are inlined)
+                if plan.consumed_instructions.contains(&(block_id, hbc_instruction.instruction_index)) {
+                    log::debug!(
+                        "Skipping consumed instruction at block {:?} instruction {:?}",
+                        block_id,
+                        hbc_instruction.instruction_index
+                    );
+                    continue;
+                }
+                
                 // Check if this instruction defines a value that should be skipped
                 let should_skip = if let Some(target_reg) =
                     crate::generated::instruction_analysis::analyze_register_usage(
@@ -1778,8 +1788,8 @@ impl<'a> ControlFlowPlanConverter<'a> {
                         // Inline the constant value directly
                         return self.create_constant_expression(constant);
                     }
-                    UseStrategy::InlinePropertyAccess(tracked_value) => {
-                        // Inline the property access chain
+                    UseStrategy::InlineTrackedValue(tracked_value) => {
+                        // Inline the tracked value (property access, object literal, etc.)
                         return self.create_property_access_expression(tracked_value);
                     }
                     UseStrategy::SimplifyCall { .. } => {
@@ -1794,6 +1804,14 @@ impl<'a> ControlFlowPlanConverter<'a> {
                         let global_atom = self.ast_builder.allocator.alloc_str("globalThis");
                         let span = oxc_span::SPAN;
                         return self.ast_builder.expression_identifier(span, global_atom);
+                    }
+                    UseStrategy::DeclareObjectLiteral { .. } => {
+                        // This strategy is for definition sites, not use sites
+                        // Fallback to variable for uses
+                        let name = self.get_variable_name(&dup_value);
+                        let name_atom = self.ast_builder.allocator.alloc_str(&name);
+                        let span = oxc_span::SPAN;
+                        return self.ast_builder.expression_identifier(span, name_atom);
                     }
                     UseStrategy::InlineParameter { param_index } => {
                         // Inline parameter directly
@@ -2059,10 +2077,11 @@ impl<'a> ControlFlowPlanConverter<'a> {
                             match strategy {
                                 UseStrategy::UseVariable => "var",
                                 UseStrategy::InlineValue(_) => "inline",
-                                UseStrategy::InlinePropertyAccess(_) => "inline-prop",
+                                UseStrategy::InlineTrackedValue(_) => "inline-tracked",
                                 UseStrategy::InlineGlobalThis => "inline-global",
                                 UseStrategy::SimplifyCall { .. } => "simplify-call",
                                 UseStrategy::InlineParameter { .. } => "inline-param",
+                                UseStrategy::DeclareObjectLiteral { .. } => "declare-obj",
                             }
                         } else {
                             ""

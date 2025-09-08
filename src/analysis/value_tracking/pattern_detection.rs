@@ -215,10 +215,44 @@ impl PatternDetector {
                     max_index = elements.len() - 1;
                 }
                 
-                MutationKind::PropertySet { .. } |
-                MutationKind::PropertyDefine { .. } => {
-                    // Arrays with non-numeric properties are complex
-                    return ConstructionPattern::Complex;
+                MutationKind::PropertySet { key, value } |
+                MutationKind::PropertyDefine { key, value } => {
+                    // Check if this is a numeric property (array index)
+                    if let TrackedValue::Constant(crate::analysis::value_tracking::types::ConstantValue::Number(n)) = &**key {
+                        let idx = *n as usize;
+                        max_index = max_index.max(idx);
+                        
+                        // Check if this creates a sparse array
+                        if idx > elements.len() && !is_sparse {
+                            is_sparse = true;
+                            // Convert existing elements to sparse representation
+                            for (i, elem) in elements.drain(..).enumerate() {
+                                if !matches!(elem, ArrayElement::Hole) {
+                                    sparse_elements.insert(i, elem);
+                                }
+                            }
+                        }
+                        
+                        // Convert value to ArrayElement
+                        let elem = match &**value {
+                            TrackedValue::Constant(c) => ArrayElement::Constant(format!("{:?}", c)),
+                            TrackedValue::Parameter { index, .. } => ArrayElement::Register(*index as u8),
+                            _ => ArrayElement::Unknown,
+                        };
+                        
+                        if is_sparse {
+                            sparse_elements.insert(idx, elem);
+                        } else {
+                            // Ensure we have enough elements
+                            while elements.len() <= idx {
+                                elements.push(ArrayElement::Hole);
+                            }
+                            elements[idx] = elem;
+                        }
+                    } else {
+                        // Non-numeric property on array makes it complex
+                        return ConstructionPattern::Complex;
+                    }
                 }
                 
                 _ => return ConstructionPattern::Complex,

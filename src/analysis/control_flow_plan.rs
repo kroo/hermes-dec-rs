@@ -11,6 +11,7 @@ use crate::cfg::ssa::types::DuplicationContext;
 use crate::cfg::ssa::{DuplicatedSSAValue, RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::switch_info::{CaseGroup, CaseKey, SetupInstruction, SwitchInfo};
 use crate::generated::generated_traits::BinaryOperator;
+use crate::hbc::InstructionIndex;
 use petgraph::graph::NodeIndex;
 use std::collections::{HashMap, HashSet};
 
@@ -109,6 +110,10 @@ pub struct ControlFlowPlan {
     /// Constructor patterns detected in the function
     /// Maps SelectObject result SSA value to the constructor pattern info
     pub constructor_patterns: HashMap<SSAValue, ConstructorPattern>,
+
+    /// Instructions that have been consumed and should be skipped during generation
+    /// Key: (block_id, instruction_index)
+    pub consumed_instructions: HashSet<(NodeIndex, InstructionIndex)>,
 
     /// Next available structure ID
     next_structure_id: usize,
@@ -487,6 +492,7 @@ impl ControlFlowPlan {
             call_site_analysis: CallSiteAnalysis::new(),
             mandatory_inline: HashSet::new(),
             constructor_patterns: HashMap::new(),
+            consumed_instructions: HashSet::new(),
             next_structure_id: 1,
         }
     }

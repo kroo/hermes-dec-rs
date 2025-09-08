@@ -40,7 +40,9 @@ impl<'a> OptimizationPass for PropertyAccessInliningPass<'a> {
     }
 
     fn should_run(&self) -> bool {
-        self.inline_config.inline_property_access || self.inline_config.inline_all_property_access
+        self.inline_config.inline_property_access 
+            || self.inline_config.inline_all_property_access
+            || self.inline_config.inline_object_literals
     }
 
     fn run(&mut self, plan: &mut ControlFlowPlan) {
@@ -213,7 +215,7 @@ pub fn perform_property_access_inlining(ctx: &mut OptimizationContext) {
     for (dup_value, use_site, tracked_value) in updates_to_apply {
         ctx.plan.use_strategies.insert(
             (dup_value.clone(), use_site.clone()),
-            UseStrategy::InlinePropertyAccess(tracked_value),
+            UseStrategy::InlineTrackedValue(tracked_value),
         );
 
         // Mark as consumed

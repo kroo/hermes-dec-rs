@@ -7,6 +7,7 @@ mod call_simplification;
 mod constant_inlining;
 mod constructor_call_inlining;
 mod global_this_inlining;
+mod object_literal_inlining;
 mod parameter_inlining;
 mod property_access_inlining;
 
@@ -17,6 +18,7 @@ pub use constructor_call_inlining::{
     perform_constructor_call_inlining, ConstructorCallInliningPass,
 };
 pub use global_this_inlining::{perform_global_this_inlining, GlobalThisInliningPass};
+pub use object_literal_inlining::{perform_object_literal_inlining, ObjectLiteralInliningPass};
 pub use parameter_inlining::{perform_parameter_inlining, ParameterInliningPass};
 pub use property_access_inlining::{perform_property_access_inlining, PropertyAccessInliningPass};
 

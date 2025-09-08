@@ -424,6 +424,17 @@ fn process_constructor_pattern(
         .constructor_patterns
         .insert(select_result.clone(), pattern.clone());
 
+    // Mark the CreateThis and Construct instructions themselves as consumed
+    // so they won't generate any statements
+    let create_this_pc = pattern.create_this_result.def_site.instruction_idx;
+    let construct_pc = crate::hbc::InstructionIndex::new(pattern.construct_pc as usize);
+    
+    ctx.plan.consumed_instructions.insert((pattern.create_this_result.def_site.block_id, create_this_pc));
+    ctx.plan.consumed_instructions.insert((pattern.construct_result.def_site.block_id, construct_pc));
+    
+    debug!("Marked CreateThis at PC {:?} and Construct at PC {} as consumed instructions", 
+           create_this_pc, pattern.construct_pc);
+
     // Mark all uses of the intermediate values as consumed
     // These intermediate values won't need to be declared or assigned
 
@@ -437,6 +448,12 @@ fn process_constructor_pattern(
     // This is often a copy of create_this_result (like var6_b = var1_a)
     if let Some(ref construct_this) = pattern.construct_this {
         mark_all_uses_consumed(ctx, construct_this);
+        
+        // Also mark the Mov instruction that creates this copy as consumed
+        let mov_pc = construct_this.def_site.instruction_idx;
+        let mov_block = construct_this.def_site.block_id;
+        ctx.plan.consumed_instructions.insert((mov_block, mov_pc));
+        debug!("Marked Mov instruction at PC {:?} as consumed (construct 'this' copy)", mov_pc);
     }
     
     // Mark the prototype value used by CreateThis as consumed

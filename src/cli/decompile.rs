@@ -21,6 +21,7 @@ pub struct DecompileArgs {
     pub unsafe_simplify_calls: Option<bool>,
     pub inline_parameters: Option<bool>,
     pub inline_constructor_calls: Option<bool>,
+    pub inline_object_literals: Option<bool>,
 }
 
 impl DecompileArgs {
@@ -39,6 +40,7 @@ impl DecompileArgs {
             self.unsafe_simplify_calls,
             self.inline_parameters,
             self.inline_constructor_calls,
+            self.inline_object_literals,
         )
     }
 }

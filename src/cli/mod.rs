@@ -37,6 +37,9 @@ pub enum Commands {
         /// Decompile nested function definitions (experimental)
         #[arg(long)]
         decompile_nested: bool,
+        /// Inline object literals when safe (experimental)
+        #[arg(long)]
+        inline_object_literals: bool,
     },
     /// Disassemble Hermes bytecode to assembly-like format
     Disasm {
@@ -95,6 +98,7 @@ impl Cli {
                 output,
                 comments,
                 decompile_nested,
+                inline_object_literals,
             } => {
                 let args = decompile::DecompileArgs {
                     input_path: input,
@@ -110,6 +114,7 @@ impl Cli {
                     inline_global_this: None,
                     inline_parameters: None,
                     inline_constructor_calls: None,
+                    inline_object_literals: Some(inline_object_literals),
                     simplify_calls: None,
                     unsafe_simplify_calls: None,
                 };
@@ -150,7 +155,7 @@ impl Cli {
             } => {
                 // Use default optimization settings for the simplified CLI
                 analyze_cfg::analyze_cfg(
-                    &input, function, verbose, false, false, false, false, false, false,
+                    &input, function, verbose, false, false, false, false, false, false, false,
                 )?;
             }
         }

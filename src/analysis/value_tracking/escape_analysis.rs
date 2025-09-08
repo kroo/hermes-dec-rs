@@ -38,6 +38,8 @@ pub struct EscapeAnalysisResult {
     pub reasons: Vec<EscapeReason>,
     /// Instructions where escape happens
     pub escape_points: Vec<InstructionIndex>,
+    /// Whether it's safe to inline this object as a literal despite escaping
+    pub safe_to_inline: bool,
 }
 
 impl EscapeAnalysisResult {
@@ -47,15 +49,19 @@ impl EscapeAnalysisResult {
             escapes: false,
             reasons: Vec::new(),
             escape_points: Vec::new(),
+            safe_to_inline: true,  // If it doesn't escape, it's safe to inline
         }
     }
 
     /// Create a result indicating the object escapes
     pub fn escapes_with(reason: EscapeReason, at: InstructionIndex) -> Self {
+        // By default, assume not safe to inline when escaping
+        // The analyze_object_escape method will refine this
         Self {
             escapes: true,
             reasons: vec![reason],
             escape_points: vec![at],
+            safe_to_inline: false,
         }
     }
 
@@ -64,6 +70,9 @@ impl EscapeAnalysisResult {
         self.escapes = true;
         self.reasons.push(reason);
         self.escape_points.push(at);
+        // When adding escapes, by default mark as not safe to inline
+        // The caller should update safe_to_inline based on the full analysis
+        self.safe_to_inline = false;
     }
 }
 
@@ -93,7 +102,72 @@ impl<'a> EscapeAnalyzer<'a> {
             }
         }
         
+        // Determine if it's safe to inline despite escaping
+        if result.escapes {
+            result.safe_to_inline = self.is_safe_to_inline(&result, object_def);
+        }
+        
         result
+    }
+    
+    /// Determine if an escaping object is still safe to inline
+    fn is_safe_to_inline(&self, escape_result: &EscapeAnalysisResult, object_def: &RegisterDef) -> bool {
+        // If it only escapes via return, it's always safe to inline
+        if escape_result.reasons.len() == 1 && matches!(escape_result.reasons[0], EscapeReason::Returned) {
+            return true;
+        }
+        
+        // If it escapes in other ways, we need to check that all mutations
+        // happen before the first escape point
+        if !escape_result.escape_points.is_empty() {
+            let first_escape = escape_result.escape_points.iter().min().unwrap();
+            
+            // Check all uses of the object
+            if let Some(uses) = self.ssa.def_use_chains.get(object_def) {
+                for use_site in uses {
+                    // Check if this use is a mutation (PutById, etc.)
+                    if let Some(block) = self.cfg.graph().node_weight(use_site.block_id) {
+                        if let Some(instr_info) = block.instructions().iter()
+                            .find(|i| i.instruction_index == use_site.instruction_idx) {
+                            
+                            // Check if this is a mutation instruction
+                            if Self::is_mutation_instruction(&instr_info.instruction, use_site.register) {
+                                // If the mutation happens after the first escape, not safe
+                                if use_site.instruction_idx > *first_escape {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // All mutations happen before escape
+            return true;
+        }
+        
+        false
+    }
+    
+    /// Check if an instruction is a mutation of the given object register
+    fn is_mutation_instruction(instruction: &UnifiedInstruction, obj_register: u8) -> bool {
+        use UnifiedInstruction::*;
+        
+        match instruction {
+            // PutById variants where the object is operand_0
+            PutById { operand_0, .. } |
+            PutByIdLong { operand_0, .. } |
+            PutNewOwnById { operand_0, .. } |
+            PutNewOwnByIdLong { operand_0, .. } |
+            PutNewOwnByIdShort { operand_0, .. } |
+            TryPutById { operand_0, .. } |
+            TryPutByIdLong { operand_0, .. } => *operand_0 == obj_register,
+            
+            // PutByVal where the object is operand_0
+            PutByVal { operand_0, .. } => *operand_0 == obj_register,
+            
+            _ => false,
+        }
     }
 
     /// Check if a specific use of the object causes it to escape
