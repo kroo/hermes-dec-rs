@@ -1,0 +1,4 @@
+{
+  "setup_script": "cargo build --all-targets --all-features",
+  "verification_script": "cargo fmt --all --check && cargo test --all-features"
+}
