@@ -68,4 +68,5 @@ docs/_build/
 
 # Temporary files
 *.tmp
-*.temp loop_visualization_demo.dot
+*.temp
+loop_visualization_demo.dot
