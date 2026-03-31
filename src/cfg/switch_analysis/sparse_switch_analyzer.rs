@@ -258,12 +258,18 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         ssa: &SSAAnalysis,
         postdom: &PostDominatorAnalysis,
     ) -> Option<SwitchInfo> {
+        log::debug!("detect_switch_pattern: start_block={}", start_block.index());
+
         // Quick check: does this block load a parameter or have a comparison?
         let first_block = &cfg.graph()[start_block];
         let discriminator = self.find_discriminator_with_ssa(first_block, start_block, ssa, cfg)?;
 
+        log::debug!("  Found discriminator: r{}", discriminator);
+
         // Safety checker for setup instructions
+        log::debug!("  Creating safety checker");
         let safety_checker = SetupSafetyChecker::new(cfg, ssa, postdom);
+        log::debug!("  Safety checker created");
 
         // First pass: collect all cases and their comparison blocks
         let mut cases = Vec::new();
@@ -272,11 +278,22 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         let mut visited = HashSet::new();
         let mut execution_order = 0;
 
+        log::debug!("  Starting case extraction loop");
         loop {
+            log::debug!("    Visiting comparison block {}", current_block.index());
+
             if !visited.insert(current_block) {
+                log::debug!(
+                    "    Block {} already visited, breaking",
+                    current_block.index()
+                );
                 break; // Avoid infinite loops
             }
 
+            log::debug!(
+                "    Calling extract_case_from_block_with_dispatch for block {}",
+                current_block.index()
+            );
             // Try to extract a case from this block
             if let Some(mut case_info) = self.extract_case_from_block_with_dispatch(
                 current_block,
@@ -399,6 +416,103 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         })
     }
 
+    /// Recover switch metadata from an already-detected switch region when full sparse-switch
+    /// pattern analysis declines to build a `SwitchInfo`.
+    pub fn synthesize_switch_info_from_region(
+        &self,
+        region: &crate::cfg::analysis::SwitchRegion,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+        postdom: &PostDominatorAnalysis,
+    ) -> Option<SwitchInfo> {
+        let dispatch_block = &cfg.graph()[region.dispatch];
+        let discriminator =
+            self.find_discriminator_with_ssa(dispatch_block, region.dispatch, ssa, cfg)?;
+        let safety_checker = SetupSafetyChecker::new(cfg, ssa, postdom);
+
+        let mut region_cases = region.cases.clone();
+        region_cases.sort_by_key(|case| case.case_index);
+
+        let mut cases = Vec::new();
+        let mut current_block = region.dispatch;
+        let mut visited = HashSet::new();
+
+        let total_cases = region_cases.len();
+        for (idx, switch_case) in region_cases.into_iter().enumerate() {
+            if !visited.insert(current_block) {
+                return None;
+            }
+
+            let mut case_info =
+                self.extract_case_from_block_for_region(current_block, discriminator, cfg, ssa)?;
+
+            case_info.execution_order = switch_case.case_index;
+            case_info.target_block = switch_case.case_head;
+
+            let entry_path =
+                self.build_entry_path(region.dispatch, case_info.comparison_block, cfg);
+            let mut setup = self.collect_setup_along_path(
+                &entry_path,
+                case_info.target_block,
+                discriminator,
+                cfg,
+                ssa,
+            );
+            setup.retain(|setup_instr| safety_checker.is_case_localizable(setup_instr));
+            case_info.setup = setup;
+
+            cases.push(case_info);
+            if idx + 1 < total_cases {
+                current_block = self.get_false_successor(current_block, cfg)?;
+            }
+        }
+
+        if cases.is_empty() {
+            return None;
+        }
+
+        let default_case = region.default_head.map(|target_block| DefaultCase {
+            target_block,
+            setup: SmallVec::new(),
+        });
+
+        let shared_tail = self
+            .detect_shared_tail(&cases, &default_case, postdom, cfg, ssa)
+            .or_else(|| {
+                (region.join_block.index() < cfg.graph().node_count()
+                    && !cfg.graph()[region.join_block].instructions().is_empty())
+                .then(|| SharedTailInfo {
+                    block_id: region.join_block,
+                    phi_nodes: self.analyze_phi_requirements(region.join_block, cfg, ssa),
+                })
+            });
+
+        let discriminator_instruction_index = cases
+            .first()
+            .and_then(|first_case| {
+                let block = &cfg.graph()[first_case.comparison_block];
+                block.instructions().iter().find_map(|instr| {
+                    matches!(
+                        &instr.instruction,
+                        UnifiedInstruction::JStrictEqual { .. }
+                            | UnifiedInstruction::JStrictEqualLong { .. }
+                            | UnifiedInstruction::JStrictNotEqual { .. }
+                            | UnifiedInstruction::JStrictNotEqualLong { .. }
+                    )
+                    .then_some(instr.instruction_index)
+                })
+            })
+            .unwrap_or_else(|| InstructionIndex::new(0));
+
+        Some(SwitchInfo {
+            discriminator,
+            discriminator_instruction_index,
+            cases,
+            default_case,
+            shared_tail,
+        })
+    }
+
     /// Find what register is being used as discriminator using SSA analysis
     fn find_discriminator_with_ssa(
         &self,
@@ -407,14 +521,8 @@ impl<'a> SparseSwitchAnalyzer<'a> {
         ssa: &SSAAnalysis,
         cfg: &Cfg<'a>,
     ) -> Option<u8> {
-        // Look for LoadParam as first instruction
-        if let Some(first) = block.instructions().first() {
-            if let UnifiedInstruction::LoadParam { operand_0, .. } = &first.instruction {
-                return Some(*operand_0);
-            }
-        }
-
-        // Look for comparison instruction and use ValueTracker to determine discriminator
+        // Prefer the comparison instruction itself so multi-parameter dispatch blocks don't
+        // accidentally pick the wrong `LoadParam`.
         if let Some(hbc_file) = self.hbc_file {
             let value_tracker = ValueTracker::new(cfg, ssa, hbc_file);
 
@@ -456,6 +564,13 @@ impl<'a> SparseSwitchAnalyzer<'a> {
                     }
                     _ => {}
                 }
+            }
+        }
+
+        // Fallback to the first loaded parameter only if we couldn't infer it from a comparison.
+        if let Some(first) = block.instructions().first() {
+            if let UnifiedInstruction::LoadParam { operand_0, .. } = &first.instruction {
+                return Some(*operand_0);
             }
         }
 
@@ -579,6 +694,102 @@ impl<'a> SparseSwitchAnalyzer<'a> {
             always_terminates,
             execution_order: 0, // Will be set by caller
         })
+    }
+
+    /// Extract case information for a known switch region comparison block.
+    ///
+    /// This is slightly more permissive than `extract_case_from_block_with_dispatch`: it also
+    /// understands a final `JStrictNotEqual*` guard where the case body is reached via the false
+    /// edge and the true edge jumps to the default/join path.
+    fn extract_case_from_block_for_region(
+        &self,
+        block_id: NodeIndex,
+        discriminator: u8,
+        cfg: &Cfg<'a>,
+        ssa: &SSAAnalysis,
+    ) -> Option<CaseInfo> {
+        let block = &cfg.graph()[block_id];
+        let value_tracker = self
+            .hbc_file
+            .map(|hbc_file| ValueTracker::new(cfg, ssa, hbc_file))?;
+
+        for instr in block.instructions() {
+            let (const_reg, target_block) = match &instr.instruction {
+                UnifiedInstruction::JStrictEqual {
+                    operand_1,
+                    operand_2,
+                    ..
+                }
+                | UnifiedInstruction::JStrictEqualLong {
+                    operand_1,
+                    operand_2,
+                    ..
+                } => {
+                    if *operand_1 == discriminator {
+                        (*operand_2, self.get_true_successor(block_id, cfg)?)
+                    } else if *operand_2 == discriminator {
+                        (*operand_1, self.get_true_successor(block_id, cfg)?)
+                    } else {
+                        continue;
+                    }
+                }
+                UnifiedInstruction::JStrictNotEqual {
+                    operand_1,
+                    operand_2,
+                    ..
+                }
+                | UnifiedInstruction::JStrictNotEqualLong {
+                    operand_1,
+                    operand_2,
+                    ..
+                } => {
+                    if *operand_1 == discriminator {
+                        (*operand_2, self.get_false_successor(block_id, cfg)?)
+                    } else if *operand_2 == discriminator {
+                        (*operand_1, self.get_false_successor(block_id, cfg)?)
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+
+            let tracked_value =
+                value_tracker.get_value_at_point(const_reg, block_id, instr.instruction_index);
+            let case_key = match tracked_value {
+                TrackedValue::Constant(ConstantValue::Number(n)) => {
+                    CaseKey::Number(OrderedFloat(n))
+                }
+                TrackedValue::Constant(ConstantValue::String(s)) => CaseKey::String(s),
+                TrackedValue::Constant(ConstantValue::Boolean(b)) => CaseKey::Boolean(b),
+                TrackedValue::Constant(ConstantValue::Null) => CaseKey::Null,
+                TrackedValue::Constant(ConstantValue::Undefined) => CaseKey::Undefined,
+                _ => continue,
+            };
+
+            let always_terminates = {
+                let target_block_data = &cfg.graph()[target_block];
+                target_block_data.instructions().iter().any(|target_instr| {
+                    matches!(
+                        &target_instr.instruction,
+                        UnifiedInstruction::Ret { .. }
+                            | UnifiedInstruction::Throw { .. }
+                            | UnifiedInstruction::ThrowIfUndefinedInst { .. }
+                    )
+                })
+            };
+
+            return Some(CaseInfo {
+                keys: vec![case_key],
+                comparison_block: block_id,
+                target_block,
+                setup: SmallVec::new(),
+                always_terminates,
+                execution_order: 0,
+            });
+        }
+
+        None
     }
 
     /// Get the true successor of a conditional jump

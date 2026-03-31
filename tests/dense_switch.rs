@@ -1,6 +1,13 @@
-use hermes_dec_rs::cli::disasm::disasm;
+use hermes_dec_rs::{cli::disasm::disasm, decompiler::Decompiler, hbc::HbcFile};
 use std::fs;
 use std::path::Path;
+
+fn decompile(hbc_path: &Path, func_index: u32) -> Option<String> {
+    let data = fs::read(hbc_path).ok()?;
+    let hbc = HbcFile::parse(&data).ok()?;
+    let mut decompiler = Decompiler::new().ok()?;
+    decompiler.decompile_function(&hbc, func_index).ok()
+}
 
 /// Test that dense switch instructions are parsed and disassembled correctly
 #[test]
@@ -194,4 +201,35 @@ fn test_dense_switch_hbc_parsing() {
             i
         );
     }
+}
+
+#[test]
+fn test_dense_switch_nested_join_regression() -> Result<(), Box<dyn std::error::Error>> {
+    let hbc_path = Path::new("data/dense_switch_test.hbc");
+    let output = decompile(hbc_path, 8).expect("Failed to decompile dense switch fixture");
+
+    assert!(
+        output.contains("switch (param2)"),
+        "expected outer nested switch in case 1:\n{}",
+        output
+    );
+    assert!(
+        output.contains("default: switch (param1)"),
+        "expected nested switch in the default branch of case 1:\n{}",
+        output
+    );
+    assert_eq!(
+        output.matches("a=1,b=other,c=other").count(),
+        1,
+        "dead tail for the inner switch default was emitted more than once:\n{}",
+        output
+    );
+    assert_eq!(
+        output.matches("a=1,b=other,c=2").count(),
+        1,
+        "dead tail for the inner switch case 2 was emitted more than once:\n{}",
+        output
+    );
+
+    Ok(())
 }

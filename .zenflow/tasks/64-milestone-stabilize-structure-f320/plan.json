@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "c27f1aa9-6557-4c4e-a544-ce3a0dee4dd3",
+      "name": "Baseline current control-flow regressions",
+      "description": "Capture current behavior for dense_switch_test function 8, while_loop function 1, sparse-switch cases, and exception-heavy fixtures to separate reconstruction bugs from missing assertions.",
+      "status": "Pending",
+      "sort_order": 0,
+      "start_new_chat": false,
+      "stop_after_completion": false,
+      "created_at": "2026-03-31T00:00:11.255114Z",
+      "updated_at": "2026-03-31T00:00:11.255114Z"
+    },
+    {
+      "id": "ebe121eb-ee93-47bc-9b7b-08cdb8d3e84c",
+      "name": "Stabilize nested switch reconstruction and join handling",
+      "description": "Finish planner/converter work so nested switches inside branches or case bodies reconstruct as structured regions without duplicating dead tails after inner joins.",
+      "status": "Pending",
+      "sort_order": 1,
+      "start_new_chat": false,
+      "stop_after_completion": false,
+      "created_at": "2026-03-31T00:00:11.255114Z",
+      "updated_at": "2026-03-31T00:00:11.255114Z"
+    },
+    {
+      "id": "823d1e64-e504-48ac-9556-ed96c06aa59d",
+      "name": "Fix loop classification and exception-region loop reconstruction",
+      "description": "Improve while vs do-while detection, route exception-region loops through loop-aware reconstruction, and define/document tested fallback behavior for for-in/for-of when needed.",
+      "status": "Pending",
+      "sort_order": 2,
+      "start_new_chat": false,
+      "stop_after_completion": false,
+      "created_at": "2026-03-31T00:00:11.255114Z",
+      "updated_at": "2026-03-31T00:00:11.255114Z"
+    },
+    {
+      "id": "7e0f40cf-91ac-4a00-b49b-ec6b8ce90fdc",
+      "name": "Replace sparse-switch depth guards with structural traversal",
+      "description": "Remove recursion-depth bailouts in sparse-switch analysis and replace them with CFG-bounded traversal while preserving explicit bailouts for unsupported patterns.",
+      "status": "Pending",
+      "sort_order": 3,
+      "start_new_chat": false,
+      "stop_after_completion": false,
+      "created_at": "2026-03-31T00:00:11.255114Z",
+      "updated_at": "2026-03-31T00:00:11.255114Z"
+    },
+    {
+      "id": "3a9115ee-8d9d-4c01-a2b5-e76bb2f4db5a",
+      "name": "Convert fixtures into regression tests and run targeted verification",
+      "description": "Turn loop and nested-control-flow fixtures into meaningful assertions and run the milestone verification commands to establish a clear completion bar.",
+      "status": "Pending",
+      "sort_order": 4,
+      "start_new_chat": false,
+      "stop_after_completion": false,
+      "created_at": "2026-03-31T00:00:11.255114Z",
+      "updated_at": "2026-03-31T00:00:11.255114Z"
+    }
+  ]
+}

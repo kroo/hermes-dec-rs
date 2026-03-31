@@ -1,0 +1,50 @@
+Bytecode File Information:
+  Bytecode version number: 96
+  Source hash: 7295dd3fcc1c1856ac0778bde4c339dc8658e2a9
+  Function count: 2
+  String count: 4
+  BigInt count: 0
+  String Kind Entry count: 2
+  RegExp count: 0
+  Segment ID: 0
+  CommonJS module count: 0
+  CommonJS module count (static): 0
+  Function source count: 0
+  Bytecode options:
+    staticBuiltins: 0
+    cjsModulesStaticallyResolved: 0
+
+Global String Table:
+s0[ASCII, 2..7] #1C35E808: global
+s1[ASCII, 0..2] #629A2BFD: log
+s2[ASCII, 8..14] #D1BFAA55: console
+s3[ASCII, 15..24] while_test
+
+Array Buffer:
+
+Function<global>0(1 params, 2 registers, 0 symbols):
+  DeclareGlobalVar  "while_test"
+  CreateEnvironment r0
+  CreateClosure     r1, r0, Function<while_test>1
+  GetGlobalObject   r0
+  PutById           r0, r1, 1, "while_test"
+  LoadConstUndefined r0
+  Ret               r0
+
+Function<while_test>1(2 params, 15 registers, 0 symbols):
+  LoadParam         r1, 1
+  GetGlobalObject   r3
+  LoadConstUInt8    r2, 3
+  Mov               r0, r1
+  JNotLess          L1, r0, r2
+L2:
+  Inc               r4, r1
+  TryGetById        r6, r3, 1, "console"
+  GetByIdShort      r5, r6, 2, "log"
+  Call2             r5, r5, r6, r4
+  Mov               r1, r4
+  Mov               r0, r1
+  JLess             L2, r0, r2
+L1:
+  Ret               r0
+

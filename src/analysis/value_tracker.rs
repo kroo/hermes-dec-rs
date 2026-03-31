@@ -37,6 +37,8 @@ pub struct ValueTracker<'a> {
     >,
     /// Current duplication context for value resolution
     current_context: Option<crate::cfg::ssa::DuplicationContext>,
+    /// Track visited SSA values during recursion to prevent infinite loops
+    visited: std::cell::RefCell<std::collections::HashSet<SSAValue>>,
 }
 
 impl<'a> ValueTracker<'a> {
@@ -48,6 +50,7 @@ impl<'a> ValueTracker<'a> {
             hbc_file,
             phi_deconstructions: None,
             current_context: None,
+            visited: std::cell::RefCell::new(std::collections::HashSet::new()),
         };
 
         // Note: Mutations are collected lazily when analyzing values
@@ -73,6 +76,7 @@ impl<'a> ValueTracker<'a> {
             hbc_file,
             phi_deconstructions: Some(phi_deconstructions),
             current_context: None,
+            visited: std::cell::RefCell::new(std::collections::HashSet::new()),
         }
     }
 
@@ -317,6 +321,19 @@ impl<'a> ValueTracker<'a> {
 
     /// Get the tracked value of an SSA value
     pub fn get_value(&self, ssa_value: &SSAValue) -> TrackedValue {
+        // Check if we've already visited this value to prevent infinite recursion
+        if !self.visited.borrow_mut().insert(ssa_value.clone()) {
+            log::debug!("Cycle detected in get_value for SSA value: {}", ssa_value);
+            return TrackedValue::Unknown;
+        }
+
+        // Ensure we remove the value from visited set when we're done
+        let result = self.get_value_internal(ssa_value);
+        self.visited.borrow_mut().remove(ssa_value);
+        result
+    }
+
+    fn get_value_internal(&self, ssa_value: &SSAValue) -> TrackedValue {
         // First, check if we have PHI deconstructions and if this SSA value is a PHI result
         // that has been replaced in the current context
         if let (Some(phi_decons), Some(ref context)) =

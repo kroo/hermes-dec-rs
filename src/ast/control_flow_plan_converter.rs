@@ -5,7 +5,7 @@
 
 use crate::analysis::control_flow_plan::{
     CaseGroupStructure, CatchClause, ComparisonExpression, ControlFlowKind, ControlFlowPlan,
-    LoopType, SequentialElement, StructureId,
+    FinallyClause, LoopType, SequentialElement, StructureId,
 };
 use crate::analysis::ssa_usage_tracker::{DeclarationStrategy, UseStrategy, VariableKind};
 use crate::analysis::value_tracker::ConstantValue;
@@ -13,6 +13,7 @@ use crate::ast::comments::{AddressCommentManager, CommentKind, CommentPosition};
 use crate::ast::{ExpressionContext, InstructionToStatementConverter};
 use crate::cfg::ssa::{DuplicatedSSAValue, DuplicationContext, RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::switch_info::{CaseKey, SwitchInfo};
+use crate::generated::unified_instructions::UnifiedInstruction;
 use crate::hbc::HbcFile;
 use oxc_allocator::Vec as OxcVec;
 use oxc_ast::ast::*;
@@ -349,10 +350,57 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     self.convert_basic_block(plan, *block_id, 0, false, statements, context);
                 }
                 SequentialElement::Structure(structure_id) => {
+                    let prior_len = statements.len();
                     self.convert_structure_id(plan, *structure_id, statements, context);
+                    if self.structure_terminates_sequential(plan, *structure_id)
+                        || self.new_statements_end_sequential(statements, prior_len)
+                    {
+                        break;
+                    }
                 }
             }
         }
+    }
+
+    fn structure_terminates_sequential(
+        &self,
+        plan: &ControlFlowPlan,
+        structure_id: StructureId,
+    ) -> bool {
+        let Some(structure) = plan.get_structure(structure_id) else {
+            return false;
+        };
+
+        match &structure.kind {
+            ControlFlowKind::Loop {
+                loop_type: LoopType::ForIn,
+                ..
+            } => true,
+            ControlFlowKind::Sequential { elements } => {
+                elements.iter().any(|element| match element {
+                    SequentialElement::Block(_) => false,
+                    SequentialElement::Structure(child) => {
+                        self.structure_terminates_sequential(plan, *child)
+                    }
+                })
+            }
+            _ => false,
+        }
+    }
+
+    fn new_statements_end_sequential(
+        &self,
+        statements: &OxcVec<'a, Statement<'a>>,
+        prior_len: usize,
+    ) -> bool {
+        if statements.len() <= prior_len {
+            return false;
+        }
+
+        matches!(
+            statements.last(),
+            Some(Statement::ThrowStatement(_) | Statement::ReturnStatement(_))
+        )
     }
 
     /// Convert a single block (not the whole structure)
@@ -1162,7 +1210,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         &mut self,
         plan: &ControlFlowPlan,
         loop_type: &LoopType,
-        _header_block: NodeIndex,
+        header_block: NodeIndex,
         condition_expr: Option<&ComparisonExpression>,
         body: StructureId,
         update: Option<&StructureId>,
@@ -1171,6 +1219,20 @@ impl<'a> ControlFlowPlanConverter<'a> {
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
+        if matches!(loop_type, LoopType::ForIn | LoopType::ForOf) {
+            self.convert_iterator_fallback_loop(
+                plan,
+                loop_type,
+                header_block,
+                condition_expr,
+                body,
+                update,
+                statements,
+                context,
+            );
+            return;
+        }
+
         // Build the test expression from the full comparison if available
         let test = if let Some(comparison) = condition_expr {
             self.create_comparison_expression(comparison, context, plan)
@@ -1212,14 +1274,317 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     .statement_while(oxc_span::SPAN, test, body_block);
                 statements.push(while_stmt);
             }
-            LoopType::ForIn | LoopType::ForOf => {
-                // TODO: Handle for-in/for-of loops
-                let while_stmt = self
-                    .ast_builder
-                    .statement_while(oxc_span::SPAN, test, body_block);
-                statements.push(while_stmt);
-            }
+            LoopType::ForIn | LoopType::ForOf => unreachable!("handled above"),
         }
+    }
+
+    fn convert_iterator_fallback_loop(
+        &mut self,
+        plan: &ControlFlowPlan,
+        loop_type: &LoopType,
+        header_block: NodeIndex,
+        condition_expr: Option<&ComparisonExpression>,
+        body: StructureId,
+        update: Option<&StructureId>,
+        statements: &mut OxcVec<'a, Statement<'a>>,
+        context: Option<&DuplicationContext>,
+    ) {
+        if matches!(loop_type, LoopType::ForIn) {
+            statements.push(self.create_unsupported_forin_fallback_statement());
+            return;
+        }
+
+        let mut loop_stmts = self.ast_builder.vec();
+        let mut cleanup_finally = None;
+
+        let consumed_header = self.convert_iterator_loop_header(
+            plan,
+            loop_type,
+            header_block,
+            condition_expr,
+            &mut loop_stmts,
+            context,
+        );
+
+        if let Some(body_structure) = plan.get_structure(body) {
+            match &body_structure.kind {
+                ControlFlowKind::Sequential { elements }
+                    if consumed_header
+                        && matches!(elements.first(), Some(SequentialElement::Block(block)) if *block == header_block) =>
+                {
+                    if let Some((try_body, finally_clause, trailing_elements)) =
+                        self.extract_iterator_cleanup_wrapper(plan, &elements[1..])
+                    {
+                        cleanup_finally = Some(finally_clause.clone());
+                        self.convert_structure_id(plan, try_body, &mut loop_stmts, context);
+                        self.convert_sequential(plan, trailing_elements, &mut loop_stmts, context);
+                    } else {
+                        self.convert_sequential(plan, &elements[1..], &mut loop_stmts, context);
+                    }
+                }
+                ControlFlowKind::BasicBlock { block, .. }
+                    if consumed_header && *block == header_block => {}
+                _ => {
+                    self.convert_structure_id(plan, body, &mut loop_stmts, context);
+                }
+            }
+        } else {
+            self.convert_structure_id(plan, body, &mut loop_stmts, context);
+        }
+
+        if let Some(update_id) = update {
+            self.convert_structure_id(plan, *update_id, &mut loop_stmts, context);
+        }
+
+        let loop_body = self.ast_builder.statement_block(oxc_span::SPAN, loop_stmts);
+        let loop_test = self
+            .ast_builder
+            .expression_boolean_literal(oxc_span::SPAN, true);
+        let while_stmt = self
+            .ast_builder
+            .statement_while(oxc_span::SPAN, loop_test, loop_body);
+
+        if let Some(finally_clause) = cleanup_finally {
+            let try_body = self
+                .ast_builder
+                .block_statement(oxc_span::SPAN, self.ast_builder.vec1(while_stmt));
+            let mut finally_stmts = self.ast_builder.vec();
+            self.convert_finally_block(
+                plan,
+                finally_clause.finally_block,
+                finally_clause.skip_start,
+                finally_clause.skip_end,
+                &mut finally_stmts,
+                context,
+            );
+            let finalizer = self
+                .ast_builder
+                .block_statement(oxc_span::SPAN, finally_stmts);
+            statements.push(self.ast_builder.statement_try(
+                oxc_span::SPAN,
+                try_body,
+                None::<oxc_ast::ast::CatchClause<'a>>,
+                Some(finalizer),
+            ));
+        } else {
+            statements.push(while_stmt);
+        }
+    }
+
+    fn extract_iterator_cleanup_wrapper<'b>(
+        &self,
+        plan: &'b ControlFlowPlan,
+        elements: &'b [SequentialElement],
+    ) -> Option<(StructureId, &'b FinallyClause, &'b [SequentialElement])> {
+        let SequentialElement::Structure(try_catch_id) = elements.first()? else {
+            return None;
+        };
+        let try_catch = plan.get_structure(*try_catch_id)?;
+        let ControlFlowKind::TryCatch {
+            try_body,
+            catch_clause: None,
+            finally_clause: Some(finally_clause),
+        } = &try_catch.kind
+        else {
+            return None;
+        };
+
+        if !self.is_iterator_close_finally_clause(finally_clause) {
+            return None;
+        }
+
+        Some((*try_body, finally_clause, &elements[1..]))
+    }
+
+    fn is_iterator_close_finally_clause(&self, finally_clause: &FinallyClause) -> bool {
+        let Some(function_analysis) = self
+            .hbc_analysis
+            .get_function_analysis_ref(self.function_index)
+        else {
+            return false;
+        };
+        let Some(block) = function_analysis
+            .cfg
+            .graph()
+            .node_weight(finally_clause.finally_block)
+        else {
+            return false;
+        };
+
+        let instructions = block.instructions();
+        let body_start = finally_clause.skip_start;
+        let body_end = instructions.len().saturating_sub(finally_clause.skip_end);
+        let body = &instructions[body_start..body_end];
+
+        body.len() == 1
+            && matches!(
+                body[0].instruction,
+                UnifiedInstruction::IteratorClose { .. }
+            )
+    }
+
+    fn create_unsupported_forin_fallback_statement(&self) -> Statement<'a> {
+        let span = oxc_span::SPAN;
+        let error_expr = self
+            .ast_builder
+            .expression_identifier(span, self.ast_builder.allocator.alloc_str("Error"));
+        let message_expr = self.ast_builder.expression_string_literal(
+            span,
+            self.ast_builder
+                .allocator
+                .alloc_str("Unsupported for-in loop fallback"),
+            None,
+        );
+        let mut args = self.ast_builder.vec();
+        args.push(Argument::from(message_expr));
+        let new_error_expr = self.ast_builder.expression_new(
+            span,
+            error_expr,
+            None::<oxc_ast::ast::TSTypeParameterInstantiation>,
+            args,
+        );
+
+        self.ast_builder.statement_throw(span, new_error_expr)
+    }
+
+    fn convert_iterator_loop_header(
+        &mut self,
+        plan: &ControlFlowPlan,
+        loop_type: &LoopType,
+        header_block: NodeIndex,
+        condition_expr: Option<&ComparisonExpression>,
+        statements: &mut OxcVec<'a, Statement<'a>>,
+        context: Option<&DuplicationContext>,
+    ) -> bool {
+        self.convert_basic_block(plan, header_block, 0, false, statements, context);
+
+        let Some(exit_test) =
+            self.create_iterator_exit_test(loop_type, header_block, condition_expr, plan, context)
+        else {
+            return false;
+        };
+
+        let break_stmt = self.ast_builder.statement_break(oxc_span::SPAN, None);
+        let consequent = self
+            .ast_builder
+            .statement_block(oxc_span::SPAN, self.ast_builder.vec1(break_stmt));
+        let if_stmt = self
+            .ast_builder
+            .statement_if(oxc_span::SPAN, exit_test, consequent, None);
+        statements.push(if_stmt);
+        true
+    }
+
+    fn create_iterator_exit_test(
+        &mut self,
+        loop_type: &LoopType,
+        header_block: NodeIndex,
+        condition_expr: Option<&ComparisonExpression>,
+        plan: &ControlFlowPlan,
+        context: Option<&DuplicationContext>,
+    ) -> Option<Expression<'a>> {
+        if matches!(loop_type, LoopType::ForOf) {
+            let ComparisonExpression::SimpleCondition {
+                operand,
+                operand_use,
+            } = condition_expr?
+            else {
+                return None;
+            };
+
+            let value_expr =
+                self.create_use_expression(operand, context, plan, Some(operand_use.clone()));
+            let undefined_expr = self.ast_builder.expression_identifier(
+                oxc_span::SPAN,
+                self.ast_builder.allocator.alloc_str("undefined"),
+            );
+
+            return Some(self.ast_builder.expression_binary(
+                oxc_span::SPAN,
+                value_expr,
+                oxc_ast::ast::BinaryOperator::StrictEquality,
+                undefined_expr,
+            ));
+        }
+
+        let jump_name = self.get_block_terminator_name(header_block)?;
+
+        match jump_name.as_str() {
+            "JmpUndefined" | "JmpUndefinedLong" => {
+                let ComparisonExpression::SimpleCondition {
+                    operand,
+                    operand_use,
+                } = condition_expr?
+                else {
+                    return None;
+                };
+
+                let value_expr =
+                    self.create_use_expression(operand, context, plan, Some(operand_use.clone()));
+                let undefined_expr = self.ast_builder.expression_identifier(
+                    oxc_span::SPAN,
+                    self.ast_builder.allocator.alloc_str("undefined"),
+                );
+
+                Some(self.ast_builder.expression_binary(
+                    oxc_span::SPAN,
+                    value_expr,
+                    oxc_ast::ast::BinaryOperator::StrictEquality,
+                    undefined_expr,
+                ))
+            }
+            "JmpFalse" | "JmpFalseLong" => {
+                let condition = self.create_comparison_expression(condition_expr?, context, plan);
+                Some(self.ast_builder.expression_unary(
+                    oxc_span::SPAN,
+                    oxc_ast::ast::UnaryOperator::LogicalNot,
+                    condition,
+                ))
+            }
+            name if name.starts_with('J') => {
+                Some(self.create_comparison_expression(condition_expr?, context, plan))
+            }
+            _ => None,
+        }
+    }
+
+    fn get_block_terminator_name(&self, block_id: NodeIndex) -> Option<String> {
+        if let Some(function_analysis) = self
+            .hbc_analysis
+            .get_function_analysis_ref(self.function_index)
+        {
+            return function_analysis
+                .cfg
+                .graph()
+                .node_weight(block_id)
+                .and_then(|block| block.instructions.last())
+                .map(|instr| instr.instruction.name().to_string());
+        }
+
+        let function = self
+            .hbc_file
+            .functions
+            .get(self.function_index, self.hbc_file)
+            .ok()?;
+
+        let mut cfg = crate::cfg::Cfg::new(self.hbc_file, self.function_index);
+        cfg.build();
+
+        let ssa = crate::cfg::ssa::construct_ssa(&cfg, self.function_index).ok()?;
+        let function_analysis = crate::analysis::FunctionAnalysis::new(
+            function,
+            cfg,
+            ssa,
+            self.hbc_file,
+            self.function_index,
+        );
+
+        function_analysis
+            .cfg
+            .graph()
+            .node_weight(block_id)
+            .and_then(|block| block.instructions.last())
+            .map(|instr| instr.instruction.name().to_string())
     }
 
     /// Convert a try-catch structure
