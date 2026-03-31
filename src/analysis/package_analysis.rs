@@ -1077,7 +1077,7 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
                     if let Some((idx, _)) = top_edges
                         .iter()
                         .enumerate()
-                        .min_by(|a, b| a.1.strength.partial_cmp(&b.1.strength).unwrap())
+                        .min_by(|a, b| a.1.strength.total_cmp(&b.1.strength))
                     {
                         if s_cap > top_edges[idx].strength {
                             top_edges[idx] = EdgeDebug {
@@ -1278,7 +1278,7 @@ fn compute_dependency_clusters(report: &mut PackageReport) {
         0.0
     };
     // Sort descending top edges
-    top_edges.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap());
+    top_edges.sort_by(|a, b| b.strength.total_cmp(&a.strength));
     report.strength_metrics = StrengthMetrics {
         threshold,
         total_pairs,
