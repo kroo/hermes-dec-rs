@@ -550,7 +550,9 @@ impl<'a> ValueTracker<'a> {
                 let count = *num_elements as usize;
                 if start < arrays_data.len() {
                     let slice = &arrays_data[start..];
-                    if let Ok(slp_array) = crate::hbc::serialized_literal_parser::unpack_slp_array(slice, Some(count)) {
+                    if let Ok(slp_array) =
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(slice, Some(count))
+                    {
                         let mut out = Vec::with_capacity(slp_array.items.len());
                         for item in slp_array.items {
                             use crate::hbc::serialized_literal_parser::SLPValue;
@@ -561,13 +563,19 @@ impl<'a> ValueTracker<'a> {
                                 SLPValue::Number(n) => out.push(ConstantValue::Number(n)),
                                 SLPValue::Integer(i) => out.push(ConstantValue::Number(i as f64)),
                                 SLPValue::LongString(id) => {
-                                    if let Ok(s) = self.hbc_file.strings.get(id) { out.push(ConstantValue::String(s)); }
+                                    if let Ok(s) = self.hbc_file.strings.get(id) {
+                                        out.push(ConstantValue::String(s));
+                                    }
                                 }
                                 SLPValue::ShortString(id) => {
-                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) { out.push(ConstantValue::String(s)); }
+                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) {
+                                        out.push(ConstantValue::String(s));
+                                    }
                                 }
                                 SLPValue::ByteString(id) => {
-                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) { out.push(ConstantValue::String(s)); }
+                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) {
+                                        out.push(ConstantValue::String(s));
+                                    }
                                 }
                             }
                         }
@@ -579,7 +587,9 @@ impl<'a> ValueTracker<'a> {
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: 0,
-                    base_type: ObjectBaseType::Array { initial_length: Some(count) },
+                    base_type: ObjectBaseType::Array {
+                        initial_length: Some(count),
+                    },
                     mutations: Vec::new(),
                 }
             }
@@ -595,7 +605,9 @@ impl<'a> ValueTracker<'a> {
                 let count = *num_elements as usize;
                 if start < arrays_data.len() {
                     let slice = &arrays_data[start..];
-                    if let Ok(slp_array) = crate::hbc::serialized_literal_parser::unpack_slp_array(slice, Some(count)) {
+                    if let Ok(slp_array) =
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(slice, Some(count))
+                    {
                         let mut out = Vec::with_capacity(slp_array.items.len());
                         for item in slp_array.items {
                             use crate::hbc::serialized_literal_parser::SLPValue;
@@ -606,13 +618,19 @@ impl<'a> ValueTracker<'a> {
                                 SLPValue::Number(n) => out.push(ConstantValue::Number(n)),
                                 SLPValue::Integer(i) => out.push(ConstantValue::Number(i as f64)),
                                 SLPValue::LongString(id) => {
-                                    if let Ok(s) = self.hbc_file.strings.get(id) { out.push(ConstantValue::String(s)); }
+                                    if let Ok(s) = self.hbc_file.strings.get(id) {
+                                        out.push(ConstantValue::String(s));
+                                    }
                                 }
                                 SLPValue::ShortString(id) => {
-                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) { out.push(ConstantValue::String(s)); }
+                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) {
+                                        out.push(ConstantValue::String(s));
+                                    }
                                 }
                                 SLPValue::ByteString(id) => {
-                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) { out.push(ConstantValue::String(s)); }
+                                    if let Ok(s) = self.hbc_file.strings.get(id as u32) {
+                                        out.push(ConstantValue::String(s));
+                                    }
                                 }
                             }
                         }
@@ -624,7 +642,9 @@ impl<'a> ValueTracker<'a> {
                 TrackedValue::MutableObject {
                     creation_pc,
                     version: 0,
-                    base_type: ObjectBaseType::Array { initial_length: Some(count) },
+                    base_type: ObjectBaseType::Array {
+                        initial_length: Some(count),
+                    },
                     mutations: Vec::new(),
                 }
             }
@@ -646,29 +666,73 @@ impl<'a> ValueTracker<'a> {
                     let kslice = &keys_data[kstart..];
                     let vslice = &vals_data[vstart..];
                     if let (Ok(karr), Ok(varr)) = (
-                        crate::hbc::serialized_literal_parser::unpack_slp_array(kslice, Some(count)),
-                        crate::hbc::serialized_literal_parser::unpack_slp_array(vslice, Some(count)),
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(
+                            kslice,
+                            Some(count),
+                        ),
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(
+                            vslice,
+                            Some(count),
+                        ),
                     ) {
                         use crate::hbc::serialized_literal_parser::SLPValue;
                         let mut props: Vec<(String, ConstantValue)> = Vec::with_capacity(count);
                         for i in 0..count {
                             let key_cv = match karr.items.get(i) {
-                                Some(SLPValue::LongString(id)) => self.hbc_file.strings.get(*id).ok().map(ConstantValue::String),
-                                Some(SLPValue::ShortString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
-                                Some(SLPValue::ByteString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
-                                Some(SLPValue::Number(n)) => Some(ConstantValue::String(n.to_string())),
-                                Some(SLPValue::Integer(n)) => Some(ConstantValue::String(n.to_string())),
+                                Some(SLPValue::LongString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::ShortString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id as u32)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::ByteString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id as u32)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::Number(n)) => {
+                                    Some(ConstantValue::String(n.to_string()))
+                                }
+                                Some(SLPValue::Integer(n)) => {
+                                    Some(ConstantValue::String(n.to_string()))
+                                }
                                 Some(SLPValue::True) => Some(ConstantValue::String("true".into())),
-                                Some(SLPValue::False) => Some(ConstantValue::String("false".into())),
+                                Some(SLPValue::False) => {
+                                    Some(ConstantValue::String("false".into()))
+                                }
                                 Some(SLPValue::Null) => Some(ConstantValue::String("null".into())),
                                 None => None,
                             };
                             let val_cv = match varr.items.get(i) {
-                                Some(SLPValue::LongString(id)) => self.hbc_file.strings.get(*id).ok().map(ConstantValue::String),
-                                Some(SLPValue::ShortString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
-                                Some(SLPValue::ByteString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::LongString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::ShortString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id as u32)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::ByteString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id as u32)
+                                    .ok()
+                                    .map(ConstantValue::String),
                                 Some(SLPValue::Number(n)) => Some(ConstantValue::Number(*n)),
-                                Some(SLPValue::Integer(n)) => Some(ConstantValue::Number(*n as f64)),
+                                Some(SLPValue::Integer(n)) => {
+                                    Some(ConstantValue::Number(*n as f64))
+                                }
                                 Some(SLPValue::True) => Some(ConstantValue::Boolean(true)),
                                 Some(SLPValue::False) => Some(ConstantValue::Boolean(false)),
                                 Some(SLPValue::Null) => Some(ConstantValue::Null),
@@ -710,29 +774,73 @@ impl<'a> ValueTracker<'a> {
                     let kslice = &keys_data[kstart..];
                     let vslice = &vals_data[vstart..];
                     if let (Ok(karr), Ok(varr)) = (
-                        crate::hbc::serialized_literal_parser::unpack_slp_array(kslice, Some(count)),
-                        crate::hbc::serialized_literal_parser::unpack_slp_array(vslice, Some(count)),
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(
+                            kslice,
+                            Some(count),
+                        ),
+                        crate::hbc::serialized_literal_parser::unpack_slp_array(
+                            vslice,
+                            Some(count),
+                        ),
                     ) {
                         use crate::hbc::serialized_literal_parser::SLPValue;
                         let mut props: Vec<(String, ConstantValue)> = Vec::with_capacity(count);
                         for i in 0..count {
                             let key_cv = match karr.items.get(i) {
-                                Some(SLPValue::LongString(id)) => self.hbc_file.strings.get(*id).ok().map(ConstantValue::String),
-                                Some(SLPValue::ShortString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
-                                Some(SLPValue::ByteString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
-                                Some(SLPValue::Number(n)) => Some(ConstantValue::String(n.to_string())),
-                                Some(SLPValue::Integer(n)) => Some(ConstantValue::String(n.to_string())),
+                                Some(SLPValue::LongString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::ShortString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id as u32)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::ByteString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id as u32)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::Number(n)) => {
+                                    Some(ConstantValue::String(n.to_string()))
+                                }
+                                Some(SLPValue::Integer(n)) => {
+                                    Some(ConstantValue::String(n.to_string()))
+                                }
                                 Some(SLPValue::True) => Some(ConstantValue::String("true".into())),
-                                Some(SLPValue::False) => Some(ConstantValue::String("false".into())),
+                                Some(SLPValue::False) => {
+                                    Some(ConstantValue::String("false".into()))
+                                }
                                 Some(SLPValue::Null) => Some(ConstantValue::String("null".into())),
                                 None => None,
                             };
                             let val_cv = match varr.items.get(i) {
-                                Some(SLPValue::LongString(id)) => self.hbc_file.strings.get(*id).ok().map(ConstantValue::String),
-                                Some(SLPValue::ShortString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
-                                Some(SLPValue::ByteString(id)) => self.hbc_file.strings.get(*id as u32).ok().map(ConstantValue::String),
+                                Some(SLPValue::LongString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::ShortString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id as u32)
+                                    .ok()
+                                    .map(ConstantValue::String),
+                                Some(SLPValue::ByteString(id)) => self
+                                    .hbc_file
+                                    .strings
+                                    .get(*id as u32)
+                                    .ok()
+                                    .map(ConstantValue::String),
                                 Some(SLPValue::Number(n)) => Some(ConstantValue::Number(*n)),
-                                Some(SLPValue::Integer(n)) => Some(ConstantValue::Number(*n as f64)),
+                                Some(SLPValue::Integer(n)) => {
+                                    Some(ConstantValue::Number(*n as f64))
+                                }
                                 Some(SLPValue::True) => Some(ConstantValue::Boolean(true)),
                                 Some(SLPValue::False) => Some(ConstantValue::Boolean(false)),
                                 Some(SLPValue::Null) => Some(ConstantValue::Null),
