@@ -233,3 +233,39 @@ fn test_dense_switch_nested_join_regression() -> Result<(), Box<dyn std::error::
 
     Ok(())
 }
+
+#[test]
+fn test_large_sparse_switch_fixture_decompiles_as_switch() {
+    let hbc_path = Path::new("data/dense_switch_test.hbc");
+    let output = decompile(hbc_path, 2).expect("Failed to decompile sparse switch fixture");
+
+    assert!(
+        output.contains("switch (param1)"),
+        "expected large sparse switch fixture to decompile as a switch:\n{}",
+        output
+    );
+
+    for case in [
+        "case 100:",
+        "case 200:",
+        "case 201:",
+        "case 400:",
+        "case 401:",
+        "case 403:",
+        "case 404:",
+        "case 500:",
+    ] {
+        assert!(
+            output.contains(case),
+            "expected sparse switch case `{}` in decompiled output:\n{}",
+            case,
+            output
+        );
+    }
+
+    assert!(
+        output.contains("default:"),
+        "expected sparse switch fixture to retain a default case:\n{}",
+        output
+    );
+}
