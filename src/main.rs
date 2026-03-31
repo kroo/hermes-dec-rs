@@ -211,6 +211,18 @@ enum Commands {
         #[arg(long)]
         inline_object_literals: bool,
     },
+
+    /// Analyze Metro/Metro-like package structure and module graph
+    PackageAnalyze {
+        /// Input HBC file
+        input: PathBuf,
+        /// Emit JSON report
+        #[arg(long)]
+        json: bool,
+        /// Print only high-level summary in text mode
+        #[arg(long)]
+        summary: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -387,5 +399,10 @@ fn main() -> Result<()> {
             )
             .map_err(|e| miette!("{}", e))
         }
+        Commands::PackageAnalyze {
+            input,
+            json,
+            summary,
+        } => cli::package::package_analyze(&input, json, summary).map_err(|e| miette!("{}", e)),
     }
 }
