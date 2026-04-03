@@ -152,6 +152,42 @@ impl SourceFetcher {
         Ok(def_file_path)
     }
 
+    /// Fetch the `Builtins.def` file for a specific version.
+    pub fn fetch_builtin_list(&self, version: &HbcVersion) -> Result<PathBuf> {
+        let version_dir = self.cache_dir.join(format!("v{}", version.version));
+        let builtin_file_path = version_dir.join("Builtins.def");
+
+        if builtin_file_path.exists() {
+            return Ok(builtin_file_path);
+        }
+
+        // Ensure we have the repository checked out for this version.
+        let _ = self.fetch_version(version)?;
+
+        let candidates = [
+            "include/hermes/FrontEndDefs/Builtins.def",
+            "include/hermes/VM/FrontEndDefs/Builtins.def",
+            "lib/FrontEndDefs/Builtins.def",
+            "lib/VM/FrontEndDefs/Builtins.def",
+            "VM/FrontEndDefs/Builtins.def",
+            "hermes/include/hermes/FrontEndDefs/Builtins.def",
+            "hermes/lib/VM/FrontEndDefs/Builtins.def",
+        ];
+
+        for candidate in &candidates {
+            let source = self.repo_path.join(candidate);
+            if source.exists() {
+                fs::copy(&source, &builtin_file_path).context("Failed to copy Builtins.def")?;
+                return Ok(builtin_file_path);
+            }
+        }
+
+        anyhow::bail!(
+            "Builtins.def not found in any expected location for version {}",
+            version.version
+        );
+    }
+
     /// Fetch source files for all versions in the registry
     pub fn fetch_all_versions(&self, registry: &VersionRegistry) -> Result<HashMap<u32, PathBuf>> {
         let mut fetched_files = HashMap::new();

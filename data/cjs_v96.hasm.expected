@@ -276,7 +276,7 @@ Offset in debug table: source 0x0122, scope 0x0000, textified callees 0x0000
 ; hbc_testcases/cjs/index.js:48:19
     LoadConstZero     r5
 ; hbc_testcases/cjs/index.js:48:19
-    CallBuiltin       r2, "HermesBuiltin.copyRestArgs", 2
+    CallBuiltin       r2, "HermesBuiltin.ensureObject", 2
 ; hbc_testcases/cjs/index.js:48:43
     GetByIdShort      r1, r2, 1, "reduce"
 ; hbc_testcases/cjs/index.js:48:43

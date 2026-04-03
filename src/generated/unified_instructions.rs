@@ -1382,7 +1382,11 @@ macro_rules! define_instructions {
                     }
                     UnifiedInstruction::GetBuiltinClosure { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
+                        if let Some(name) = crate::generated::lookup_builtin_name(hbc_file.header.version(), *operand_1) {
+                            operands.push(format!("\"{}\"", name));
+                        } else {
+                            operands.push(operand_1.to_string());
+                        }
                     }
                     UnifiedInstruction::ToInt32 { operand_0, operand_1 } => {
                         operands.push(format!("r{}", operand_0));
@@ -1431,7 +1435,11 @@ macro_rules! define_instructions {
                     }
                     UnifiedInstruction::CallBuiltinLong { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
+                        if let Some(name) = crate::generated::lookup_builtin_name(hbc_file.header.version(), *operand_1) {
+                            operands.push(format!("\"{}\"", name));
+                        } else {
+                            operands.push(operand_1.to_string());
+                        }
                         operands.push(operand_2.to_string());
                     }
                     UnifiedInstruction::DeclareGlobalVar { operand_0 } => {
@@ -1750,7 +1758,11 @@ macro_rules! define_instructions {
                     }
                     UnifiedInstruction::CallBuiltin { operand_0, operand_1, operand_2 } => {
                         operands.push(format!("r{}", operand_0));
-                        operands.push(operand_1.to_string());
+                        if let Some(name) = crate::generated::lookup_builtin_name(hbc_file.header.version(), *operand_1) {
+                            operands.push(format!("\"{}\"", name));
+                        } else {
+                            operands.push(operand_1.to_string());
+                        }
                         operands.push(operand_2.to_string());
                     }
                     UnifiedInstruction::ProfilePoint { operand_0 } => {

@@ -198,7 +198,7 @@ L1:
 NCFunction<spreadSum>3(2 params, 14 registers, 0 symbols):
     LoadConstZero     r4
     LoadConstZero     r6
-    CallBuiltin       r3, "HermesBuiltin.copyRestArgs", 2
+    CallBuiltin       r3, "HermesBuiltin.ensureObject", 2
     GetByIdShort      r2, r3, 1, "reduce"
     CreateEnvironment r0
     CreateClosure     r1, r0, NCFunction<>4
