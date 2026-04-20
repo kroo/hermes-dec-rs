@@ -69,17 +69,17 @@ impl RegisterManager {
     pub fn current_pc(&self) -> Option<InstructionIndex> {
         self.current_pc
     }
-
+    
     /// Set the current block
     pub fn set_current_block(&mut self, block: petgraph::graph::NodeIndex) {
         self.current_block = Some(block);
     }
-
+    
     /// Get the current block
     pub fn current_block(&self) -> Option<petgraph::graph::NodeIndex> {
         self.current_block
     }
-
+    
     /// Get the current SSA value for a register (for source operands)
     pub fn get_current_ssa_for_register(&self, register: u8) -> Option<SSAValue> {
         if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {

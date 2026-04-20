@@ -290,6 +290,8 @@ pub enum ControlFlowKind {
     Loop {
         loop_type: LoopType,
         header_block: NodeIndex,
+        /// Full condition expression used to control loop entry
+        condition_expr: Option<ComparisonExpression>,
         condition: Option<SSAValue>,
         condition_use: Option<RegisterUse>, // The specific use of the condition value
         body: StructureId,
