@@ -52,7 +52,9 @@ fn encoded_size(instruction: &UnifiedInstruction, version: u32) -> u32 {
     }
 }
 
-fn operands(instruction: &UnifiedInstruction) -> DecompilerResult<smallvec::SmallVec<[i64; 6]>> {
+pub(crate) fn operands(
+    instruction: &UnifiedInstruction,
+) -> DecompilerResult<smallvec::SmallVec<[i64; 6]>> {
     // Avoid a JSON tree and heap allocation for the dominant opcode families.
     macro_rules! one {
         ($($name:ident),*) => { match instruction {
@@ -621,6 +623,16 @@ fn lower_function(
     allocator: &oxc_allocator::Allocator,
     strings: &[String],
 ) -> DecompilerResult<String> {
+    lower_function_with_pcs(hbc, index, allocator, strings, false)
+}
+
+fn lower_function_with_pcs(
+    hbc: &HbcFile<'_>,
+    index: u32,
+    allocator: &oxc_allocator::Allocator,
+    strings: &[String],
+    annotate_pc: bool,
+) -> DecompilerResult<String> {
     let start = std::time::Instant::now();
     let mut output = String::new();
     let mut failures = BTreeMap::<String, String>::new();
@@ -733,6 +745,9 @@ fn lower_function(
                         writeln!(output, "case {pc}: {{").unwrap();
                         case_open = true;
                     }
+                    if annotate_pc {
+                        writeln!(output, "// HBC function {index}, PC {pc}").unwrap();
+                    }
                     if !header.exc_handlers.is_empty() {
                         writeln!(output, "pc = {pc};").unwrap();
                     }
@@ -784,6 +799,40 @@ fn lower_function(
         );
     }
     Ok(output)
+}
+
+/// Export selected complete function bodies for inspection, not standalone execution.
+/// References to the bundle runtime and other functions remain explicit.
+pub fn export_functions(hbc: &HbcFile<'_>, indices: &[u32]) -> DecompilerResult<String> {
+    let mut output = String::from("// Decompiled JS fragments, not a standalone bundle.\n// F = function bodies; M = function metadata; r = physical registers.\n// env = captured lexical environment; self = this; args = arguments.\n// Runtime helpers and referenced F entries are defined by export-bundle.\n");
+    for (_, code) in export_function_fragments(hbc, indices)? {
+        output.push_str(&code);
+    }
+    Ok(output)
+}
+
+/// Batch lowering with shared string conversion and bounded worker allocators.
+pub fn export_function_fragments(
+    hbc: &HbcFile<'_>,
+    indices: &[u32],
+) -> DecompilerResult<Vec<(u32, String)>> {
+    for &index in indices {
+        if index >= hbc.functions.count() {
+            return Err(error(format!("Unknown function {index}")));
+        }
+    }
+    let strings: Vec<String> = (0..hbc.strings.string_count)
+        .map(|index| javascript_string(hbc, index))
+        .collect::<DecompilerResult<_>>()?;
+    indices
+        .par_iter()
+        .map_init(oxc_allocator::Allocator::default, |allocator, &index| {
+            let result = lower_function_with_pcs(hbc, index, allocator, &strings, true)
+                .map(|code| (index, code));
+            allocator.reset();
+            result
+        })
+        .collect()
 }
 
 fn validate_javascript(code: &str) -> DecompilerResult<()> {

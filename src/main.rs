@@ -7,6 +7,9 @@ use hermes_dec_rs::cli;
 #[derive(Parser)]
 #[command(name = "hermes-dec-rs")]
 #[command(about = "Rust-based high-level decompiler for Hermes bytecode")]
+#[command(
+    after_help = "Agent workflow: inputs . finds header candidates including hidden/Git-ignored files, largest first.\nThen inspect INPUT, search INPUT QUERY --json, and show INPUT FUNCTION_IDS for complete JS.\nSearch is OR by default; add --all for conjunctive queries and --word to avoid short substring noise.\nUse refs for static closures/calls, and show --around-pc PC --context 250 for bounded JS excerpts.\nFor huge initializers, sites INPUT FUNCTION --kind constructor --depth 3 catalogs ordered arguments and local definitions without custom scanning scripts.\nFor opaque captured r[E].slots[N], slots INPUT FUNCTION N gives candidate ancestor stores.\nUse sites INPUT ANCESTOR --kind slot-write --slot N --depth 8 to batch-read store provenance, or trace INPUT ANCESTOR STORE_PC for one site.\nThese are navigation aids, not evaluated values or runtime lexical bindings. Follow serializers and callers to verify units/indexing, not just schema declarations.\nworkspace exports JS files plus assignment-name/literal index for shell searches.\nexport-bundle produces runnable full-project JS. Legacy decompile --function uses slower structured CFG/SSA analysis."
+)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -15,6 +18,131 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Discover header candidates, including ignored files; no full program validation
+    Inputs {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+    },
+    /// Catalog JS call/constructor arguments, writes and slot accesses with local provenance
+    Sites {
+        input: PathBuf,
+        /// Explicit function IDs, comma-separated or batched (no automatic whole-project scan)
+        #[arg(required = true, num_args = 1.., value_delimiter = ',')]
+        functions: Vec<u32>,
+        #[arg(long, default_value = "all", value_parser = ["all", "constructor", "call", "slot-write", "slot-read", "property-write"])]
+        kind: String,
+        /// Filter slot indices; excludes non-slot sites, including with --kind all
+        #[arg(long, value_delimiter = ',')]
+        slot: Vec<u32>,
+        /// Local definition depth (0..8); candidates, not evaluated values
+        #[arg(long, default_value_t = 3)]
+        depth: usize,
+        /// Bounded page size (1..1000); small default keeps provenance within byte budget
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        /// JSON byte budget; errors before stdout, no partial document
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+        /// Deduplicate provenance definitions into a shared table (same syntactic evidence)
+        #[arg(long)]
+        compact: bool,
+    },
+    /// Trace bounded syntactic JS register definitions at an exact byte PC (not values)
+    Trace {
+        input: PathBuf,
+        function: u32,
+        pc: u32,
+        /// Dependency edge depth (0..64); no cross-block or runtime evaluation
+        #[arg(long, default_value_t = 8)]
+        depth: usize,
+        /// Maximum provenance nodes (1..4096); errors instead of silent omission
+        #[arg(long, default_value_t = 64)]
+        limit: usize,
+        /// JSON output byte budget (1..16777216)
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+    },
+    /// Find candidate captured-slot writes in closure ancestors, with bounded JS excerpts
+    Slots {
+        input: PathBuf,
+        function: u32,
+        slot: u32,
+        #[arg(long, default_value_t = 3)]
+        depth: usize,
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+    },
+    /// Generate a new directory of complete JS function files and a searchable index
+    Workspace {
+        input: PathBuf,
+        /// New output directory (must not already exist)
+        #[arg(short, long)]
+        output: PathBuf,
+    },
+    /// Find names/literals with function IDs and byte PCs; bounded results, no huge dumps
+    Search {
+        input: PathBuf,
+        #[arg(required = true, num_args = 1..)]
+        query: Vec<String>,
+        /// Treat queries as regular expressions (otherwise OR substrings)
+        #[arg(long)]
+        regex: bool,
+        #[arg(long)]
+        case_sensitive: bool,
+        /// Match whole alphanumeric components (underscore/punctuation are boundaries)
+        #[arg(long)]
+        word: bool,
+        /// Require every query to match within each function (default: any query)
+        #[arg(long)]
+        all: bool,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        /// Compact machine-readable JSON (default: pretty JSON)
+        #[arg(long)]
+        json: bool,
+    },
+    /// Read complete decompiled JS for multiple function IDs in one parse (not standalone)
+    Show {
+        input: PathBuf,
+        #[arg(required = true, num_args = 1.., value_delimiter = ',')]
+        functions: Vec<u32>,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Include metadata and JS in machine-readable JSON
+        #[arg(long)]
+        json: bool,
+        /// Output budget; errors instead of silently truncating JavaScript
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+        /// Return a bounded JSON excerpt around an exact byte PC (one function only)
+        #[arg(long)]
+        around_pc: Option<u32>,
+        /// Number of surrounding HBC instructions for --around-pc (0..1000)
+        #[arg(long, default_value_t = 8)]
+        context: usize,
+    },
+    /// Follow static closure creators/children and direct calls (not dynamic call graph)
+    Refs {
+        input: PathBuf,
+        #[arg(required = true, num_args = 1.., value_delimiter = ',')]
+        functions: Vec<u32>,
+        #[arg(long, default_value = "both", value_parser = ["in", "out", "both"])]
+        direction: String,
+        #[arg(long, default_value_t = 1)]
+        depth: usize,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
     /// Export every HBC function as executable JavaScript with opaque names
     ExportBundle {
         input: PathBuf,
@@ -31,8 +159,8 @@ enum Commands {
         /// Input HBC file
         input: PathBuf,
 
-        /// Output format (json, text)
-        #[arg(short, long, default_value = "json", value_parser = ["json", "text"])]
+        /// Output format (summary is bounded JSON; json dumps all tables)
+        #[arg(short, long, default_value = "summary", value_parser = ["summary", "json", "text"])]
         format: String,
     },
 
@@ -243,6 +371,107 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Inputs {
+            root,
+            limit,
+            offset,
+            max_bytes,
+        } => cli::inputs::run(&root, limit, offset, max_bytes).map_err(|e| miette!("{e}")),
+        Commands::Sites {
+            input,
+            functions,
+            kind,
+            slot,
+            depth,
+            limit,
+            offset,
+            max_bytes,
+            compact,
+        } => {
+            let run = if compact {
+                cli::sites::run_compact
+            } else {
+                cli::sites::run
+            };
+            run(
+                &input, &functions, &kind, &slot, depth, limit, offset, max_bytes,
+            )
+            .map_err(|e| miette!("{e}"))
+        }
+        Commands::Trace {
+            input,
+            function,
+            pc,
+            depth,
+            limit,
+            max_bytes,
+        } => cli::trace::run(&input, function, pc, depth, limit, max_bytes)
+            .map_err(|e| miette!("{e}")),
+        Commands::Slots {
+            input,
+            function,
+            slot,
+            depth,
+            limit,
+        } => cli::slots::run(&input, function, slot, depth, limit).map_err(|e| miette!("{e}")),
+        Commands::Workspace { input, output } => {
+            cli::workspace::workspace(&input, &output).map_err(|e| miette!("{e}"))?;
+            println!(
+                "{}",
+                serde_json::json!({"schema_version":1,"workspace":output,"manifest":"manifest.json","index":"index.jsonl"})
+            );
+            Ok(())
+        }
+        Commands::Search {
+            input,
+            query,
+            regex,
+            case_sensitive,
+            word,
+            all,
+            limit,
+            offset,
+            json,
+        } => cli::explore::search(
+            &input,
+            &query,
+            &cli::explore::SearchOptions {
+                regex,
+                case_sensitive,
+                word,
+                all,
+                limit,
+                offset,
+                json,
+            },
+        )
+        .map_err(|e| miette!("{e}")),
+        Commands::Show {
+            input,
+            functions,
+            output,
+            json,
+            max_bytes,
+            around_pc,
+            context,
+        } => cli::explore::show(
+            &input,
+            &functions,
+            output.as_deref(),
+            json,
+            max_bytes,
+            around_pc,
+            context,
+        )
+        .map_err(|e| miette!("{e}")),
+        Commands::Refs {
+            input,
+            functions,
+            direction,
+            depth,
+            limit,
+        } => cli::explore::refs(&input, &functions, &direction, depth, limit)
+            .map_err(|e| miette!("{e}")),
         Commands::ExportBundle {
             input,
             output,
@@ -383,9 +612,9 @@ fn main() -> Result<()> {
         } => cli::cfg::cfg(
             &input,
             function,
-            dot.as_ref().map(|v| &**v),
-            loops.as_ref().map(|v| &**v),
-            analysis.as_ref().map(|v| &**v),
+            dot.as_deref(),
+            loops.as_deref(),
+            analysis.as_deref(),
         )
         .map_err(|e| miette!("{}", e)),
         Commands::AnalyzeCfg {

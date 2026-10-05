@@ -6,13 +6,20 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 pub mod analyze_cfg;
+pub mod bindings;
 pub mod bundle;
 pub mod cfg;
 pub mod decompile;
 pub mod disasm;
+pub mod explore;
 pub mod generate;
+pub mod inputs;
 pub mod inspect;
 pub mod package;
+pub mod sites;
+pub mod slots;
+pub mod trace;
+pub mod workspace;
 
 #[derive(Parser)]
 #[command(name = "hermes-dec-rs")]
