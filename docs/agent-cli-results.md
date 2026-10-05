@@ -584,3 +584,52 @@ Workspace costs are separate from the sub-second executable bundle target.
 Warm cache, ordering and filesystem effects prevent a causal latency conclusion
 from this single pair. Feature adoption and research correctness still require
 new cold trials; no efficiency win or smaller-model qualification is claimed.
+
+### V13 Censored Adoption Probe
+
+Two fresh low-reasoning Sol agents used the same cold full-protocol prompt on
+frozen v12 and v13, with 1,800-second hard caps. Before dispatch, the parent
+recorded a policy allowing an early stop after at least eight minutes when
+interface-discovery evidence sufficed. Research was interrupted at 514.599 and
+514.594 seconds; finalization was requested without further source research.
+These are censored adoption probes, not completed protocol-latency comparisons.
+The temporary AC assertion was verified and removed; power logs contain no
+sleep/wake events in the interval. No sleep correction is credited.
+
+| Trial | Session span through interruption/finalization (s) | Input tokens | Cached input | Uncached input | Output tokens | Recorded total | Tools |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A: v12 low | 631.208 | 5,607,026 | 5,384,320 | 222,706 | 14,149 | 5,621,175 | 43 |
+| B: v13 low | 615.788 | 4,894,883 | 4,595,072 | 299,811 | 22,097 | 4,916,980 | 46 |
+
+A did not finalize within the requested window and was closed while running at
+631.430 seconds. Its saved answer and in-progress measurements remain unchanged;
+the parent closure record establishes censorship, not agent completion. B saved
+explicitly incomplete/censored artifacts at its reported 604.045-second checkpoint
+and finalized; the parent first observed completion at 616.042 seconds and closed
+it at 631.287 seconds. The checkpoint is not substituted for completed task time.
+Both sessions contain an explicit research interruption; A's finalization turn
+was also interrupted, while B's completed. Actual tool-output UTF-8 volume is
+527,755 / 651,399 bytes. Reasoning (2,126 / 1,482) is included in output and cached
+input is included in input/total; these are actual cumulative session counters,
+not billing, unique source volume or estimates. Counter snapshots are not summed.
+
+A's twelve explicit literal CLI invocations include six help/six research calls,
+including an actual compact slot-write site query. Because A's measurements
+never finalized, this inventory comes from tool-call command literals, not a
+completed self-report; dynamic wrappers are not comprehensively audited. B
+declares seven calls (five help/two research): input discovery and workspace
+export were used; search/captures/sites were help-only. Neither an origins nor
+typed-expression query is established. Complete workspace JS remains the main
+enabler; custom static text scripts handle initializer symbols, slots and schema
+navigation. No app/device execution or disassembly is established by the recorded
+conduct. The new guidance has not established adoption or reduced that work.
+
+No full-protocol grading, efficiency win or model-promotion claim is made from
+these early-stopped reports. They are not substituted for the earlier complete
+but failed correctness trials. A more useful next prototype should address
+bounded generic symbol/dependency extraction itself, not add more navigation
+strings or supply private protocol hints. The full goal remains active.
+
+At code commit `9402d42`, hosted build, formatting, Clippy and tests pass in run
+`37378535016`. The separate review bot fails with an explicit expired OAuth/401
+error (`37378535017`); it needs reauthentication, not a Rust code workaround.
