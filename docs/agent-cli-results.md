@@ -265,3 +265,34 @@ in 616 ms / 39,272 bytes; a capture batch returned four reads in 108 ms / 17,242
 bytes. These are single-sample navigation measurements, not general latency
 guarantees or cold-agent protocol improvements. Framework data normalization
 and complete protocol reconstruction remain unverified by this interface work.
+
+The fresh v9 medium/low Sol pair used identical frozen binaries and cold prompts
+with dispatch-inclusive 1,200-second deadlines. Medium finalized before its cap:
+1,169.017 seconds self-reported through artifact writing, 1,183.320 seconds
+observed session span, 1,183.496 seconds at parent final observation. Low saved a
+partial answer and measurements but was still running when closed 36 ms after
+its deadline; its session span is 1,199.853 seconds. Its self-reported 1,170-second
+artifact duration is not silently substituted for completed-task latency.
+
+| V9 trial | Input tokens | Cached input | Uncached input | Output tokens | Recorded total | Tools |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Sol medium | 6,303,207 | 6,029,440 | 273,767 | 28,911 | 6,332,118 | 51 |
+| Sol low, censored | 5,704,284 | 5,395,712 | 308,572 | 29,311 | 5,733,595 | 48 |
+
+Cached input is included in input/total, not unique source volume. Reasoning is
+included in output (2,628 medium; 1,517 low). Snapshot counters are not summed.
+Medium reports 11 CLI invocations and low eight; tool counts include other work.
+Both used workspace JS and an actual compact slot-write catalog query. Neither
+reports using captures, conjunctive search or source/range filters. A separate
+literal-command audit establishes no new-feature query, disassembly or Rust/docs
+reads among those command literals, but is not a comprehensive dynamic-command
+audit. Help inspection alone is not feature adoption.
+
+Independent grading against the unchanged reference/rubric gives medium 84.5
+(86.5 coverage minus two material-error points) and low 78 (88 coverage minus
+ten material-error points). Medium misinterprets an advertisement flag; low
+misstates the provisioning characteristic and a protobuf control-field name.
+Both fail the full gate, retaining recoverable synchronization, correlation,
+version-boundary and scheduling gaps. More complete raw coverage in a censored
+partial is not successful completion. No reliable improvement, causal feature
+benefit or smaller-model promotion is established. The goal remains active.
