@@ -655,6 +655,46 @@ struct Site {
     source_matches: Option<SourceMatches>,
 }
 
+#[derive(Serialize)]
+struct FollowUpQuery {
+    command: &'static str,
+    function: u32,
+    pc: u32,
+    flags: [&'static str; 1],
+    input_scope: &'static str,
+    reason: &'static str,
+    limits: &'static str,
+}
+
+fn follow_up_queries(sites: &[Site]) -> Vec<FollowUpQuery> {
+    // Inspect only included provenance, before compacting away the typed edges.
+    let targets: BTreeSet<_> = sites
+        .iter()
+        .filter(|site| {
+            site.operands.iter().any(|operand| {
+                operand
+                    .edges
+                    .iter()
+                    .chain(operand.nodes.iter().flat_map(|node| &node.edges))
+                    .any(|edge| edge.status == "unresolved_block_entry_or_external")
+            })
+        })
+        .map(|site| (site.function_id, site.pc))
+        .collect();
+    targets
+        .into_iter()
+        .map(|(function, pc)| FollowUpQuery {
+            command: "origins",
+            function,
+            pc,
+            flags: ["--expressions"],
+            input_scope: "same_input_hbc",
+            reason: "unresolved_block_entry_or_external",
+            limits: "Evidence is an included direct operand or bounded prior-definition dependency read. Candidate navigation over bounded normal dispatcher paths only, not runtime values or capture resolution; unknown registers are not evidence of captures. Omitted dependencies are not proof of absence.",
+        })
+        .collect()
+}
+
 #[derive(Default)]
 pub struct SiteFilter {
     pub matches: Vec<String>,
@@ -1119,6 +1159,7 @@ fn catalog_sources_format(
     }
     let next_offset = offset.checked_add(sites.len()).filter(|&next| next < total);
     let call_scope = kind == "call" || sites.iter().any(|site| site.kind == "call");
+    let follow_up_queries = follow_up_queries(&sites);
     let (sites, definitions) = if compact {
         compact_sites(sites)?
     } else {
@@ -1136,7 +1177,8 @@ fn catalog_sources_format(
         "slot_filter_policy": "A nonempty slot filter excludes all non-slot records, including with kind=all.",
         "kind": kind, "slots": slots, "depth": depth, "limit": limit, "offset": offset, "max_bytes": max_bytes,
         "snippet_byte_limit": PREVIEW, "node_cap_per_operand": NODE_CAP, "edge_cap_per_field": NODE_CAP, "operand_cap_per_record": OPERAND_CAP,
-        "total": total, "next_offset": next_offset, "sites": sites
+        "total": total, "next_offset": next_offset, "sites": sites,
+        "follow_up_queries": follow_up_queries
     });
     if call_scope {
         report["call_scope"] = serde_json::json!(

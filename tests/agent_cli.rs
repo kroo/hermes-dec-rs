@@ -492,3 +492,29 @@ fn origins_cli_is_deterministic_bounded_and_read_only() {
     assert!(unknown.stdout.is_empty());
     assert_eq!(before, std::fs::read(path).unwrap());
 }
+
+#[test]
+fn site_follow_up_queries_are_wired_and_budget_errors_emit_no_stdout() {
+    let path = fixture();
+    let input = path.to_str().unwrap();
+    let before = std::fs::read(&path).unwrap();
+    let report = json(&["sites", input, "0", "--compact", "--depth", "8"]);
+    assert_eq!(
+        report,
+        json(&["sites", input, "0", "--compact", "--depth", "8"])
+    );
+    let queries = report["follow_up_queries"].as_array().unwrap();
+    for q in queries {
+        assert_eq!(q["command"], "origins");
+        assert_eq!(q["input_scope"], "same_input_hbc");
+        assert!(report["sites"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["function_id"] == q["function"] && s["pc"] == q["pc"]));
+    }
+    let failed = cli(&["sites", input, "0", "--compact", "--max-bytes", "1"]);
+    assert!(!failed.status.success());
+    assert!(failed.stdout.is_empty());
+    assert_eq!(before, std::fs::read(path).unwrap());
+}

@@ -130,6 +130,12 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
   remains expanded for compatibility. `--kind call` catalogs exporter `apply`
   invocations with a separate callee, receiver and ordered user arguments; it does
   not catalog every helper, builtin or direct call, or infer API parameter names.
+  `follow_up_queries` gives unique, ordered `origins` function/PC targets with
+  `--expressions` when included operand or prior-definition edges reach an
+  unresolved block-entry/external register read. Use the same input HBC and
+  the stated flags. Suggestions cover only the returned page, not omitted
+  dependencies, same-PC ambiguity alone or inferred captures. They are candidate
+  navigation, not resolved values; an empty list is not proof of absence.
   Repeatable `--match TEXT` filters OR case-insensitive literal substrings over
   complete site-expression source and bounded same-block prior definition spans.
   It searches beyond display previews, not decoded string values or runtime

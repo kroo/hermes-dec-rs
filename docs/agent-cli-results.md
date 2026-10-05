@@ -418,3 +418,80 @@ Modern Animal 245.4/255.6 ms. Corrected output hashes remain unchanged, and
 external Node syntax checks pass outside the export timer. Process RSS sampling
 was unavailable in the sandbox and is not reported as zero. No cold-agent
 benefit or smaller-model promotion is inferred before a fresh qualifying trial.
+
+A fresh awake medium-Sol pair compared frozen v10 against v11 with the same
+cold prompt and 1,800-second dispatch caps. Both finalized before their caps;
+the temporary AC assertion was verified and removed, and power logs show no
+sleep/wake events in the interval. No sleep-adjusted time is credited.
+
+| Trial | Parent final observation (s) | Input tokens | Cached input | Uncached input | Output tokens | Recorded total | Tools |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A: v10 | 1,627.114 | 11,667,455 | 11,068,928 | 598,527 | 55,453 | 11,722,908 | 86 |
+| B: v11 | 1,674.907 | 11,252,740 | 10,726,656 | 526,084 | 59,512 | 11,312,252 | 84 |
+
+Observed session spans are 1,626.945 and 1,674.689 seconds. Self-reported artifact
+checkpoints are 1,621.657 and 1,668.526 seconds, not substituted for completed
+task latency. Tool-output UTF-8 volume is 1,366,904 and 1,304,509 bytes. Reasoning
+is included in output (6,718 and 8,426); cached input is included in input/total,
+not unique source volume or billing. Snapshot counters are not summed.
+
+A reports 12 CLI invocations (seven help/five research), including actual
+captures and property-site source filtering. B reports nine (five help/four
+research), including a compact slot-write query. Both primarily used complete
+workspace JS and custom static extraction. Neither issued an origins query;
+**B did not use `--expressions`**. Declared commands and a literal-command session
+audit agree, but the latter is not a comprehensive dynamic-command audit.
+No disassembly is established in those command literals or self-reports.
+
+B takes about 48 seconds longer, with fewer uncached input but more output
+tokens. This is an interface-availability trial, not a test of expression-graph
+effectiveness or a causal efficiency result. Independent frozen-rubric grading
+gives A **92.5** and B **94.5**, with no independently confirmed material-error
+deductions. Both **fail the full gate**, chiefly incomplete product/version/type
+distinctions. Both substantially support bounded basic controls/status in both
+families, but complete caller, normalization, sync/correlation and recovery
+contracts remain incomplete. Novel exact request bytes and normalizer/lifecycle
+claims outside the frozen audit are unadjudicated, not certified. Native/firmware
+unknowns do not excuse recoverable client-evidence gaps. No model promotion is
+claimed. The grader's conduct summary incorrectly says neither trial used site
+source filtering: A's explicit `--match` invocation is established by its declared
+commands and the parent's literal-command audit. This conduct correction does
+not change protocol scores, gates or the frozen reference/rubric.
+The adoption failure motivates concrete, source-derived next-query navigation
+rather than another generic feature-description string or protocol-specific
+hints. The full goal remains active.
+
+For commit `45953d2`, hosted build and formatting checks pass. Test and Clippy
+jobs, and the separate review bot, were cancelled without running steps;
+GitHub annotations state that a hosted runner was not acquired after repeated
+attempts. This is not an observed Rust/compiler failure. The failed Rust jobs
+were retried, without changing workflow timeouts or code to mask provisioning
+failure. Local verification above remains separate from pending hosted results.
+
+V12 freezes concrete site follow-up navigation separately as
+`9826d7a100e7f9594f9aad479c85441a7dda3e0fa2b09a4c1087814e33cb3fb0`.
+`follow_up_queries` derives unique function/PC origins targets from included
+typed provenance with block-entry/external register reads. It covers returned
+sites only and survives compacting without mining serialized text. Fully local
+reads, same-PC ambiguity alone and omitted dependencies do not manufacture
+suggestions. Queries use the same input and `--expressions`; they are not shell
+strings, values, capture identities or proof that normal paths execute.
+
+One isolated real-initializer site query returned one site and one follow-up in
+1,047.5 ms / 3,173 bytes. Executing its suggested query unchanged succeeded with
+default budgets in 679.9 ms / 60,233 bytes, returning 18 candidate definitions
+and one expression view without expression truncation. This is an unscored
+navigation microcheck, not proof of protocol completeness, feature adoption or
+a general sub-second query guarantee.
+
+All 469 local Rust tests pass, including new page/dedup/compact/parity/omission
+and wired CLI budget tests. Formatting passes; Clippy has no changed-source/test
+diagnostics, with existing unrelated warnings retained. Telemetry tests pass
+(20, one optional real-session test skipped). Ten warmed full-JS export runs per
+project, with no Cargo overlap, give Orbit median/worst 418.4/437.3 ms and Modern
+Animal 262.5/269.2 ms. Corrected JS hashes remain unchanged; external Node syntax
+checks pass outside the timer. Latency remains below the one-second target on
+these runs; small cross-round timing changes are not attributed causally to the
+new navigation field. A fresh qualifying cold trial is still required before
+claiming adoption, efficiency or smaller-model readiness. The full goal remains
+active.

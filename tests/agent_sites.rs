@@ -34,6 +34,208 @@ fn analyze(body: &str, kind: &str, slots: &[u32], depth: usize) -> Value {
 const CONSTRUCTOR: &str = "// HBC function 0, PC 0\nr[1] = getCtor();\n// HBC function 0, PC 2\nr[2] = {};\n// HBC function 0, PC 4\nr[3] = 17;\n// HBC function 0, PC 6\nr[4] = 'opaque';\n// HBC function 0, PC 8\nr[5] = construct(r[1], r[2], [r[4],r[3],false]);\n// HBC function 0, PC 10\nr[6].slots[9] = r[5];";
 
 #[test]
+fn follow_up_direct_block_entry_and_included_ancestor_have_compact_parity() {
+    let body = "// HBC function 0, PC 0\nr[0] = 1;\n} case 2: {\n// HBC function 0, PC 2\napply(r[0], null, []);\n// HBC function 0, PC 4\nr[1] = r[9];\n// HBC function 0, PC 6\nr[2] = r[1];\n// HBC function 0, PC 8\napply(r[2], null, []);";
+    let sources = [(0, source(body), BTreeSet::new())];
+    let (_, _, result) = compare_formats(&sources, 2, 10, 0);
+    assert_eq!(result["follow_up_queries"].as_array().unwrap().len(), 2);
+    for (query, pc) in result["follow_up_queries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip([2, 8])
+    {
+        assert_eq!(query["command"], "origins");
+        assert_eq!(query["function"], 0);
+        assert_eq!(query["pc"], pc);
+        assert_eq!(query["flags"], json!(["--expressions"]));
+        assert_eq!(query["input_scope"], "same_input_hbc");
+        assert_eq!(query["reason"], "unresolved_block_entry_or_external");
+        let limits = query["limits"].as_str().unwrap();
+        assert!(limits.contains("Candidate navigation"));
+        assert!(limits.contains("not runtime values or capture resolution"));
+        assert!(query.get("shell_command").is_none());
+    }
+    // The unresolved ancestor at PC 4 is outside the included depth-one nodes.
+    for depth in [0, 1] {
+        let (_, _, shallow) = compare_formats(&sources, depth, 10, 0);
+        assert_eq!(shallow["follow_up_queries"].as_array().unwrap().len(), 1);
+        assert_eq!(shallow["follow_up_queries"][0]["pc"], 2);
+    }
+    let exception = [(
+        0,
+        source(
+            "// HBC function 0, PC 0\nr[0] = 1;\n// HBC function 0, PC 2\napply(r[0], null, []);",
+        ),
+        BTreeSet::from([2]),
+    )];
+    let (_, _, result) = compare_formats(&exception, 1, 10, 0);
+    assert_eq!(result["follow_up_queries"][0]["pc"], 2);
+}
+
+#[test]
+fn follow_up_absent_for_local_intra_pc_and_text_only_statuses() {
+    for body in [
+        "// HBC function 0, PC 0\nr[0] = 1;\n// HBC function 0, PC 2\napply(r[0], null, []);",
+        "// HBC function 0, PC 0\nr[0] = 1; apply(r[0], null, []);",
+        "// HBC function 0, PC 0\nr[0] = 1; r[1] = r[0];\n// HBC function 0, PC 2\napply(r[1], null, []);",
+        "// HBC function 0, PC 0\napply('unresolved_block_entry_or_external', null, []);",
+    ] {
+        for depth in [0, 2] {
+            let (_, _, result) = compare_formats(&[(0, source(body), BTreeSet::new())], depth, 10, 0);
+            assert_eq!(result["follow_up_queries"], json!([]), "{body}");
+        }
+    }
+}
+
+#[test]
+fn follow_up_does_not_infer_unresolved_reads_from_size_omissions() {
+    use std::fmt::Write;
+    let mut body = String::new();
+    for pc in 0..32 {
+        writeln!(body, "// HBC function 0, PC {pc}\nr[{pc}] = {pc};").unwrap();
+    }
+    let local = (0..32)
+        .map(|r| format!("r[{r}]"))
+        .collect::<Vec<_>>()
+        .join(",");
+    writeln!(
+        body,
+        "// HBC function 0, PC 32\napply([{local}, r[99]], null, []);"
+    )
+    .unwrap();
+    writeln!(body, "// HBC function 0, PC 33\nr[40] = [{local}, r[99]];\n// HBC function 0, PC 34\napply(r[40], null, []);").unwrap();
+    let args = std::iter::repeat_n("0", 126).collect::<Vec<_>>().join(",");
+    writeln!(
+        body,
+        "// HBC function 0, PC 35\napply(null, null, [{args}, r[99]]);"
+    )
+    .unwrap();
+    for depth in [0, 1, 8] {
+        let (_, _, result) = compare_formats(&[(0, source(&body), BTreeSet::new())], depth, 10, 0);
+        assert_eq!(result["follow_up_queries"], json!([]));
+        assert_eq!(result["sites"][0]["operands"][0]["edges_truncated"], true);
+        assert_eq!(result["sites"][2]["operands_truncated"], true);
+    }
+}
+
+#[test]
+fn follow_up_queries_are_returned_page_scoped_sorted_and_deduplicated() {
+    let body = "// HBC function 0, PC 0\napply(r[9], null, []); apply(r[8], null, []);\n// HBC function 0, PC 2\napply(r[7], null, ['keep']);\n// HBC function 0, PC 4\nr[6].slots[3] = 1;";
+    let sources = [
+        (
+            2,
+            source(body).replace("function 0,", "function 2,"),
+            BTreeSet::new(),
+        ),
+        (0, source(body), BTreeSet::new()),
+    ];
+    let (_, _, full) = compare_formats(&sources, 1, 10, 0);
+    let targets: Vec<_> = full["follow_up_queries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|q| (q["function"].as_u64().unwrap(), q["pc"].as_u64().unwrap()))
+        .collect();
+    assert_eq!(targets, [(0, 0), (0, 2), (0, 4), (2, 0), (2, 2), (2, 4)]);
+    let (_, _, first) = compare_formats(&sources, 1, 2, 0);
+    assert_eq!(first["sites"].as_array().unwrap().len(), 2);
+    assert_eq!(first["follow_up_queries"].as_array().unwrap().len(), 1);
+    for offset in 0..8 {
+        let (_, _, page) = compare_formats(&sources, 1, 1, offset);
+        assert_eq!(page["follow_up_queries"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            page["follow_up_queries"][0]["function"],
+            page["sites"][0]["function_id"]
+        );
+        assert_eq!(page["follow_up_queries"][0]["pc"], page["sites"][0]["pc"]);
+    }
+    let (_, _, empty) = compare_formats(&sources, 1, 1, usize::MAX);
+    assert_eq!(empty["follow_up_queries"], json!([]));
+    let filter = sites::SiteFilter {
+        matches: vec!["keep".into()],
+        from_pc: Some(2),
+        to_pc: Some(2),
+    };
+    for compact in [false, true] {
+        let bytes = sites::catalog_sources_filtered(
+            &sources,
+            "call",
+            &[],
+            1,
+            1,
+            1,
+            100000,
+            compact,
+            &filter,
+        )
+        .unwrap();
+        let page: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(page["total"], 2);
+        assert_eq!(page["follow_up_queries"].as_array().unwrap().len(), 1);
+        assert_eq!(page["follow_up_queries"][0]["function"], 2);
+        assert_eq!(page["follow_up_queries"][0]["pc"], 2);
+        assert!(page["filter"]["negative_result_policy"]
+            .as_str()
+            .unwrap()
+            .contains("not proof of absence"));
+        let bytes = sites::catalog_sources_filtered(
+            &sources,
+            "all",
+            &[3],
+            1,
+            10,
+            0,
+            100000,
+            compact,
+            &Default::default(),
+        )
+        .unwrap();
+        let slots: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(slots["follow_up_queries"].as_array().unwrap().len(), 2);
+        assert!(slots["follow_up_queries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|q| q["pc"] == 4));
+    }
+}
+
+#[test]
+fn follow_up_queries_are_included_in_atomic_byte_budget() {
+    let sources = [(
+        0,
+        source("// HBC function 0, PC 0\napply(r[9], null, []);"),
+        BTreeSet::new(),
+    )];
+    for catalog in [sites::catalog_sources, sites::catalog_sources_compact] {
+        let bytes = catalog(&sources, "call", &[], 1, 10, 0, 100000).unwrap();
+        let mut old_report: Value = serde_json::from_slice(&bytes).unwrap();
+        old_report
+            .as_object_mut()
+            .unwrap()
+            .remove("follow_up_queries");
+        let old_budget = serde_json::to_vec(&old_report).unwrap().len() + 1;
+        assert!(catalog(&sources, "call", &[], 1, 10, 0, old_budget)
+            .unwrap_err()
+            .to_string()
+            .contains("before stdout"));
+        // Account for the max_bytes field itself when checking the exact boundary.
+        let budget = bytes.len();
+        let exact = catalog(&sources, "call", &[], 1, 10, 0, budget)
+            .unwrap()
+            .len();
+        assert_eq!(
+            catalog(&sources, "call", &[], 1, 10, 0, exact)
+                .unwrap()
+                .len(),
+            exact
+        );
+        assert!(catalog(&sources, "call", &[], 1, 10, 0, exact - 1).is_err());
+    }
+}
+
+#[test]
 fn ordered_constructor_args_receiver_and_literal_definitions() {
     let result = analyze(CONSTRUCTOR, "constructor", &[], 3);
     let site = &result["sites"][0];
