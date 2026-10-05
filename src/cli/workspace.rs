@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 const MAX_SNIPPETS: usize = 32;
 const MAX_SNIPPET_CHARS: usize = 160;
 const FRAGMENT_HEADER: &str = "// Complete JS inspection fragment, not a standalone program.\n// F = function bodies; M = metadata; r = registers; env = captured environment.\n// self = this; args = arguments. Runtime helpers and referenced F entries\n// are defined by export-bundle, not by this individual file.\n";
+const GUIDE: &str = include_str!("workspace_guide.md");
 const RUNTIME_HEADER: &str = "// Inspection-only runtime helper source, not a runnable app.\n// This file documents the helpers referenced by f<ID>.js fragments.\n// Function and metadata tables and bundle assembly are not included.\n";
 const RUNTIME_SOURCE: &str = include_str!("../bundle/runtime.js");
 static STAGING_ID: AtomicU64 = AtomicU64::new(0);
@@ -22,6 +23,45 @@ struct FunctionEntry {
     name: String,
     path: String,
     js_bytes: usize,
+    fragment_prefix_bytes: usize,
+}
+
+#[derive(Serialize)]
+struct Navigation {
+    command: &'static str,
+    subcommand: &'static str,
+    input: &'static str,
+    function: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pc: Option<&'static str>,
+    flags: Vec<&'static str>,
+}
+
+fn navigation() -> Vec<Navigation> {
+    [
+        ("origins", Some("PC"), vec!["--expressions"]),
+        ("sites", None, vec!["--compact"]),
+        (
+            "sites",
+            None,
+            vec!["--compact", "--kind", "slot-write", "--slot", "SLOT"],
+        ),
+        ("captures", None, vec![]),
+    ]
+    .into_iter()
+    .map(|(subcommand, pc, flags)| Navigation {
+        command: "hermes-dec-rs",
+        subcommand,
+        input: "INPUT",
+        function: "FUNCTION",
+        pc,
+        flags,
+    })
+    .collect()
+}
+
+fn fragment_header(id: u32) -> String {
+    format!("{FRAGMENT_HEADER}// Navigation (placeholders; see GUIDE.md):\n// Definitions/call roles: hermes-dec-rs origins INPUT {id} PC --expressions\n// Filter/page sites: hermes-dec-rs sites INPUT {id} --compact\n// Numeric env slots: hermes-dec-rs captures INPUT {id}\n// Slot stores: hermes-dec-rs sites INPUT {id} --kind slot-write --slot SLOT --compact\n")
 }
 
 #[derive(Serialize)]
@@ -30,6 +70,7 @@ struct IndexEntry<'a> {
     id: u32,
     name: &'a str,
     path: &'a str,
+    fragment_prefix_bytes: usize,
     snippets: Vec<String>,
     snippets_truncated: bool,
     static_assignments: Vec<serde_json::Value>,
@@ -45,12 +86,15 @@ struct Manifest {
     string_count: u32,
     input_bytes: usize,
     js_bytes: usize,
+    js_bytes_description: &'static str,
     runtime_bytes: usize,
     standalone: bool,
     power_loss_durable: bool,
     runtime_path: &'static str,
     runtime_helpers: &'static str,
     index_path: &'static str,
+    guide_path: &'static str,
+    navigation: Vec<Navigation>,
     index_description: &'static str,
     max_snippets_per_function: usize,
     max_snippet_chars: usize,
@@ -258,16 +302,19 @@ pub fn workspace(input: &Path, output: &Path) -> DecompilerResult<()> {
         schema_version: 1,
         hbc_version: hbc.header.version(),
         function_count: hbc.functions.count(),
-        file_count: u64::from(hbc.functions.count()) + 3,
+        file_count: u64::from(hbc.functions.count()) + 4,
         string_count: hbc.strings.string_count,
         input_bytes: data.len(),
         js_bytes: 0,
+        js_bytes_description: "Function JS including inspection headers plus runtime.js; excludes GUIDE.md, manifest.json and index.jsonl.",
         runtime_bytes: RUNTIME_HEADER.len() + RUNTIME_SOURCE.len(),
         standalone: false,
         power_loss_durable: false,
         runtime_path: "runtime.js",
         runtime_helpers: "JS files are complete inspection fragments, not standalone programs. F entries reference other functions; M, env, r, self, args and runtime helpers are supplied by export-bundle. See each file's header.",
         index_path: "index.jsonl",
+        guide_path: "GUIDE.md",
+        navigation: navigation(),
         index_description: "One row per function in ID order. Snippets are decoded JS string literals and static property names, including generated helper strings. Static assignments are bounded local closure-to-property navigation evidence, not runtime exports. Search f<ID>.js for complete contents; index omission is not evidence of absence.",
         max_snippets_per_function: MAX_SNIPPETS,
         max_snippet_chars: MAX_SNIPPET_CHARS,
@@ -281,7 +328,8 @@ pub fn workspace(input: &Path, output: &Path) -> DecompilerResult<()> {
                 "Workspace exporter returned out-of-order function IDs",
             ));
         }
-        let code = format!("{FRAGMENT_HEADER}{code}");
+        let header = fragment_header(id);
+        let code = format!("{header}{code}");
         let snippet = snippets(&code)?;
         let entry = FunctionEntry {
             id,
@@ -293,6 +341,7 @@ pub fn workspace(input: &Path, output: &Path) -> DecompilerResult<()> {
                 })?,
             path: format!("f{id}.js"),
             js_bytes: code.len(),
+            fragment_prefix_bytes: header.len(),
         };
         let mut file = File::create(staging.path.join(&entry.path))?;
         file.write_all(code.as_bytes())?;
@@ -305,6 +354,7 @@ pub fn workspace(input: &Path, output: &Path) -> DecompilerResult<()> {
                 id,
                 name: &entry.name,
                 path: &entry.path,
+                fragment_prefix_bytes: entry.fragment_prefix_bytes,
                 snippets: snippet.values,
                 snippets_truncated: snippet.truncated,
                 static_assignments: sites.into_iter().take(12).collect(),
@@ -322,6 +372,7 @@ pub fn workspace(input: &Path, output: &Path) -> DecompilerResult<()> {
     runtime.write_all(RUNTIME_SOURCE.as_bytes())?;
     drop(runtime);
     manifest.js_bytes += manifest.runtime_bytes;
+    fs::write(staging.path.join("GUIDE.md"), GUIDE)?;
     let mut file = BufWriter::new(File::create(staging.path.join("manifest.json"))?);
     json(&mut file, &manifest)?;
     file.write_all(b"\n")?;
@@ -336,6 +387,17 @@ pub fn workspace(input: &Path, output: &Path) -> DecompilerResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prefix_offsets_account_for_variable_function_id_width() {
+        let raw = "F[10] = function () { return '\u{00e9}'; };\n";
+        for id in [9, 10, u32::MAX] {
+            let header = fragment_header(id);
+            let code = format!("{header}{raw}");
+            assert_eq!(&code.as_bytes()[header.len()..], raw.as_bytes());
+        }
+        assert_ne!(fragment_header(9).len(), fragment_header(10).len());
+    }
 
     #[test]
     fn snippets_decode_strings_and_bound_only_the_index() {

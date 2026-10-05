@@ -24,6 +24,55 @@ fn json(args: &[&str]) -> Value {
 }
 
 #[test]
+fn workspace_summary_points_to_generated_navigation_without_running_js() {
+    let temp = tempfile::tempdir().unwrap();
+    let input = temp.path().join("input 'quoted' $name.hbc");
+    std::fs::copy(fixture(), &input).unwrap();
+    let output = temp.path().join("output 'quoted' $name");
+    let summary = json(&[
+        "workspace",
+        input.to_str().unwrap(),
+        "-o",
+        output.to_str().unwrap(),
+    ]);
+    assert_eq!(summary["workspace"], output.to_str().unwrap());
+    assert_eq!(summary["guide"], "GUIDE.md");
+    assert!(output.join(summary["guide"].as_str().unwrap()).is_file());
+    assert!(output.join(summary["manifest"].as_str().unwrap()).is_file());
+    let guide = std::fs::read_to_string(output.join("GUIDE.md")).unwrap();
+    assert!(!guide.contains("input 'quoted' $name"));
+    assert!(!guide.contains("output 'quoted' $name"));
+    assert!(guide.contains("--expressions"));
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(output.join("manifest.json")).unwrap()).unwrap();
+    let fragment = std::fs::read(output.join("f0.js")).unwrap();
+    let prefix = manifest["functions"][0]["fragment_prefix_bytes"]
+        .as_u64()
+        .unwrap() as usize;
+    let origins = json(&[
+        "origins",
+        input.to_str().unwrap(),
+        "0",
+        "0",
+        "--expressions",
+    ]);
+    let raw_prefix = origins["expression_source"]["raw_fragment_prefix"]
+        .as_str()
+        .unwrap();
+    assert!(fragment[prefix..].starts_with(raw_prefix.as_bytes()));
+    for expression in origins["instruction_expressions"].as_array().unwrap() {
+        for node in expression["nodes"].as_array().unwrap() {
+            let start = node["source"]["start"].as_u64().unwrap() as usize;
+            let end = node["source"]["end"].as_u64().unwrap() as usize;
+            let raw = &fragment[prefix + start..prefix + end];
+            assert!(std::str::from_utf8(raw).is_ok());
+            assert!(raw.starts_with(node["source"]["preview"].as_str().unwrap().as_bytes()));
+            assert_eq!(node["source"]["original_bytes"], raw.len());
+        }
+    }
+}
+
+#[test]
 fn search_literal_buffers_names_and_property_references() {
     let input = fixture();
     let input = input.to_str().unwrap();

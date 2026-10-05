@@ -495,3 +495,92 @@ these runs; small cross-round timing changes are not attributed causally to the
 new navigation field. A fresh qualifying cold trial is still required before
 claiming adoption, efficiency or smaller-model readiness. The full goal remains
 active.
+
+### V12 Awake Three-Agent Trial
+
+Frozen v11 and v12 were compared with the same cold prompt and 1,800-second
+dispatch caps: medium Sol on both binaries, plus an exploratory low-Sol v12 run.
+All three finalized before their caps and were closed. The temporary AC-only
+sleep assertion was verified, removed after completion, and power logs contain
+no sleep/wake events in the trial interval. No sleep correction is credited.
+
+| Trial | Parent final observation (s) | Input tokens | Cached input | Uncached input | Output tokens | Recorded total | Tools |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A: v11 medium | 1,584.947 | 13,139,009 | 12,622,080 | 516,929 | 55,732 | 13,194,741 | 99 |
+| B: v12 medium | 1,563.444 | 12,240,708 | 11,487,744 | 752,964 | 56,043 | 12,296,751 | 91 |
+| C: v12 low | 1,646.250 | 14,236,739 | 13,623,552 | 613,187 | 57,877 | 14,294,616 | 108 |
+
+Observed session spans are 1,584.749, 1,563.074 and 1,645.843 seconds. Local
+artifact checkpoints (1,549.450, 1,558.278 and 1,642.016 seconds) are not
+substituted for finalized task latency. Actual tool-output UTF-8 volume is
+1,075,541 / 1,603,288 / 1,187,036 bytes. Reasoning tokens are included in output
+(5,138 / 4,597 / 6,724); cached input is included in input/total. These cumulative
+session counters are not unique source volume or billing, and snapshots are not
+summed. Three simultaneous agents and periodic read-only artifact monitoring
+are not isolated CLI performance conditions.
+
+A declares nine CLI calls (five help/four research), including property-site
+`--match`. B declares seven (four help/three research), but no sites query.
+C declares eight (five help/three research), including a compact slot-write
+query. C's actual returned JSON contains one concrete origins follow-up, which
+was not followed. None used origins or typed expressions; captures/trace use
+is also not established. Declared commands and periodic literal-command counts
+are partial conduct evidence, not a comprehensive dynamic-command audit.
+All three primarily used complete workspace JS and custom static extraction;
+no disassembly use is established by those reports or command literals.
+
+Independent grading against the unchanged frozen reference/rubric gives
+**95 / 90 / 92.5**, and **all fail the full gate**. A has no independently
+confirmed material-error deduction. B has two source-confirmed wire-layout/tag
+errors in prose despite correct declared appendices; C applies a normalization
+not supported on the cited path. Complete product/hardware/schema distinctions
+and closed-loop client coverage remain incomplete. Novel precision beyond the
+frozen audit is unadjudicated, not certified; native/firmware unknowns remain
+distinct from recoverable client omissions.
+
+B is about 21.5 seconds (1.4%) faster than A, but uses about 45.7% more uncached
+input tokens and did not exercise the new navigation field. C is slower than
+both medium trials. No causal interface win, reliable speedup, correctness
+completion or Luna promotion is established. The next interface prototype
+places generic navigation beside workspace JS, where agents actually work,
+rather than supplying protocol-specific hints. The full goal remains active.
+
+The hosted Rust retry for commit `64b42ff` now passes build, formatting, Clippy
+and tests (including telemetry tests), run `37371706042`. Earlier no-step
+cancellations were hosted-runner acquisition failures, not observed code
+failures. This green retry does not retroactively validate unrun jobs or any
+future commit.
+
+### V13 Workspace-Adjacent Navigation
+
+V13 is frozen separately as
+`ad1932f146de7918c122cfb4a74eb433e7bba44b85c1974304ce7d8cec801b8b`.
+Generated `GUIDE.md`, function-specific header examples and the workspace JSON
+summary make provenance navigation discoverable beside complete JavaScript.
+Shared structured manifest templates avoid repeating query objects in every
+function entry. Each manifest/index row records `fragment_prefix_bytes` for
+exact raw-fragment expression-span joins. Templates use placeholders and the
+chosen executable, not interpolated input paths/function names or shell code.
+Candidate uncertainty, omissions, call roles and PC-versus-UTF-8 units remain
+explicit. No framework evaluation, protocol hints or source-body rewriting is
+introduced.
+
+All 473 local Rust tests pass, including hostile path/name isolation, variable
+ID-width prefix accounting, exact span joins and the wired CLI summary. Formatting
+passes; Clippy has no changed-code/test diagnostics, with unrelated existing
+warnings retained. Telemetry tests pass (20, one optional real-session test
+skipped). Ten warmed full-JS exports per project, without Cargo overlap, give
+Orbit median/worst 403.2/440.5 ms and Modern Animal 253.4/325.8 ms. Corrected
+output hashes are unchanged; external Node syntax checks remain outside the
+timer. RSS sampling remains unavailable, not zero. An earlier Modern Animal
+series overlapped a small-fixture workspace smoke check during setup and is not
+used for the isolated summary above.
+
+One sequential Orbit workspace sample per binary took v12 4,396.3 ms and v13
+4,434.2 ms. Every one of 40,251 raw function bodies compares byte-identically
+after its recorded inspection prefix. Header guidance adds 13,278,641 JS bytes;
+manifest/index sizes rise from 2,504,333/14,774,949 to 3,637,873/15,901,977 bytes.
+Workspace costs are separate from the sub-second executable bundle target.
+Warm cache, ordering and filesystem effects prevent a causal latency conclusion
+from this single pair. Feature adoption and research correctness still require
+new cold trials; no efficiency win or smaller-model qualification is claimed.

@@ -20,7 +20,7 @@ use hermes_dec_rs::cli;
         "Use show --around-pc PC --context 250 for bounded JS, refs for static closures/calls, trace for one definition DAG.\n",
         "All matches/captures are syntactic navigation, not evaluated values or authoritative runtime bindings.\n",
         "Follow serializers and callers to verify units/indexing; a schema inventory is not a protocol description.\n",
-        "workspace exports complete JS fragments and a bounded index for shell inspection.\n",
+        "workspace exports complete JS fragments, a bounded index and GUIDE.md for source-adjacent navigation.\n",
         "export-bundle emits runnable full-project JS; legacy decompile --function uses slower CFG/SSA analysis."
     )
 )]
@@ -134,7 +134,7 @@ enum Commands {
         #[arg(long, default_value_t = 10)]
         limit: usize,
     },
-    /// Generate a new directory of complete JS function files and a searchable index
+    /// Generate complete JS function files, a searchable index and a navigation guide
     Workspace {
         input: PathBuf,
         /// New output directory (must not already exist)
@@ -510,7 +510,7 @@ fn main() -> Result<()> {
             cli::workspace::workspace(&input, &output).map_err(|e| miette!("{e}"))?;
             println!(
                 "{}",
-                serde_json::json!({"schema_version":1,"workspace":output,"manifest":"manifest.json","index":"index.jsonl"})
+                serde_json::json!({"schema_version":1,"workspace":output,"manifest":"manifest.json","index":"index.jsonl","guide":"GUIDE.md"})
             );
             Ok(())
         }
