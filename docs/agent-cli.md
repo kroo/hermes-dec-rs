@@ -18,6 +18,9 @@ hermes-dec-rs slots INPUT.hbc 1 0 --depth 3 --limit 10
 hermes-dec-rs trace INPUT.hbc 0 0 --depth 32 --limit 128
 hermes-dec-rs origins INPUT.hbc 0 0 --depth 8 --limit 64
 hermes-dec-rs origins INPUT.hbc 0 0 --expressions --max-bytes 1000000
+hermes-dec-rs origins INPUT.hbc 0 0 --text
+hermes-dec-rs symbols INPUT.hbc 0 --match RAW_TOKEN --limit 8
+hermes-dec-rs symbols INPUT.hbc 0 --slot 1,2 --literal-limit 16
 hermes-dec-rs sites INPUT.hbc 0 --kind constructor --depth 3
 hermes-dec-rs sites INPUT.hbc 0 --kind slot-write --slot 0 --depth 8
 hermes-dec-rs sites INPUT.hbc 0 --match FIELD_NAME --depth 8 --compact
@@ -155,6 +158,28 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
   and budget-checked before stdout. Follow candidates with `sites`/`show` to inspect
   their initializer source; this command does not normalize framework data or
   infer callable/field names from runtime environments.
+- `symbols INPUT FUNCTION` extracts raw string-literal mentions in bounded
+  candidate slot-write RHS dependencies. It reuses one complete parsed normal-
+  dispatcher index across the page and follows cross-block register candidates.
+  This is a navigation index, not evaluated slot values, constructor results,
+  decoded strings or lexical-frame identities. The environment expression is
+  recorded separately, not searched as a value dependency. Shared source-span
+  definition IDs and dependency links retain alternatives, cycles, same-PC
+  ambiguity and unknowns. `--match` is OR case-insensitive raw-token substring
+  filtering; escaped syntax is not decoded. Matching tokens are retained ahead
+  of other mentions within the display cap. `--slot` narrows numeric syntax only.
+  `--offset`/`next_offset` are raw store-ordinal cursors, not matched-row indexes.
+  `scan_complete` covers store scanning only: dependency/literal truncation and
+  unknowns are separately explicit, including for excluded rows. Query work,
+  literal projection work/bytes, source size and fully serialized stdout have
+  bounds. No match in this bounded scope is not runtime absence.
+- `origins --text` emits escaped, stable line-oriented candidate records with
+  complete returned definition/read links and status flags. It does not evaluate
+  or substitute source. With `--expressions`, typed graph nodes are explicitly
+  omitted by the renderer; summaries retain counts, spans and omissions, and
+  local graph IDs cannot be resolved from text. Use JSON for full syntax graphs.
+  Text is bounded by requested `--max-bytes`; the intermediate JSON has its own
+  16 MiB ceiling. Either error occurs before any stdout, not midway through lines.
 - `workspace` exports every complete function into `f<ID>.js`, plus a manifest,
   bounded `index.jsonl`, a short `GUIDE.md` and inspection-only `runtime.js`.
   The guide and function headers point to source-derived capture, site and

@@ -633,3 +633,64 @@ strings or supply private protocol hints. The full goal remains active.
 At code commit `9402d42`, hosted build, formatting, Clippy and tests pass in run
 `37378535016`. The separate review bot fails with an explicit expired OAuth/401
 error (`37378535017`); it needs reauthentication, not a Rust code workaround.
+
+### V14 Source-Symbol And Text Prototypes
+
+V14 is frozen separately as
+`d60d1e6ccdb2888302a2dbd77976867931cfe378dc100cbee68aa6527c4e29ce`.
+`symbols` projects raw string mentions from bounded candidate slot-write RHS
+dependencies across normal dispatcher blocks. A single parsed/indexed source
+is reused across the page. This addresses extraction rather than another query
+hint: results include shared source-span definition IDs, read/candidate links,
+raw mentions and uncertainty. There is no decoded-value, keyword-constructor,
+framework, lexical-frame or heap resolution. Environment expressions are
+recorded separately from the searched RHS. Slot syntax is not binding identity.
+Store-ordinal cursors, candidate/mention limits, unknowns and negative-result
+scope are explicit. Aggregate query work is capped at 1,048,576 charged steps,
+literal projection at 262,144 records / 128 MiB raw bytes, and literal inspection
+at 512 records per row; omitted searches are not absence. Matching mentions are
+retained ahead of other tokens inside the display cap.
+
+A parallel prototype, `origins --text`, emits escaped line-oriented candidate
+records. All returned definition/read identity links and status flags remain;
+typed graph nodes are explicitly omitted by the renderer, not flattened into
+values. Source/count/omission summaries remain, with an explicit warning that
+local syntax graph IDs cannot be resolved in text. Use JSON for full graphs.
+The requested text budget and intermediate 16 MiB JSON ceiling are distinct;
+errors occur before any stdout. Ordinary origins JSON remains the original
+interface. Symbol indexing is opt-in, not an added AST walk for ordinary queries.
+
+All 488 local Rust tests pass, including cross-block alternatives, raw source
+joins, raw-store cursors, environment exclusion, non-decoding of escaped string
+tokens, matching-token retention beyond the display cap, explicit literal-search
+omissions, wrapper preflight and both wired atomic CLI modes. Formatting passes;
+Clippy has no changed-code/test diagnostics, with unrelated warnings retained.
+Telemetry tests pass (20, one optional real-session test skipped).
+
+Sequential large-initializer microchecks compare ordinary and expression-enabled
+origins JSON byte-identically with frozen v13 (13,184 and 60,233 bytes). The first
+v14 plain query took 1,126.0 ms versus v13 579.1 ms; three alternating repeats give
+v13 585.9/574.1/577.8 ms and v14 595.1/591.7/588.0 ms. This initial outlier is
+preserved, not discarded from a generic latency claim. There is no general
+sub-second exploration guarantee, and the small repeated timing difference is
+not causally attributed from this sample. Expression JSON queries took
+683.3/709.5 ms for v13/v14. Text with expression summaries took 675.6 ms and
+28,851 bytes versus 60,233 JSON bytes; the smaller output intentionally omits
+syntax graph nodes and is not a lossless graph compression claim.
+
+Two symbolic slot queries took 635.5/609.7 ms, returning 11,340/12,366 bytes,
+one row each, four/six raw mentions and 18/20 candidate definitions. All 52
+inspected spans join their original raw-fragment extents and previews exactly.
+A raw token selected from that source evidence, without supplying its slot,
+finds the target in two bounded pages (728.6 + 652.8 ms). The first page returns
+no rows, scans 2,485 stores and explicitly exhausts its work budget with a next
+cursor; the second scans 563 stores and returns two candidates. That first empty
+page is not absence. These are source-navigation microchecks, not protocol
+grading, agent adoption or efficiency evidence.
+
+Ten warmed full-JS exports per project, without Cargo/query overlap, give Orbit
+median/worst 429.6/440.9 ms and Modern Animal 273.0/290.4 ms. Corrected hashes
+are unchanged and external Node syntax checks pass outside the timer. RSS
+sampling remains unavailable, not zero. Small cross-round timing shifts are not
+attributed to this CLI-only prototype. Fresh qualifying cold trials are still
+required; the full goal remains active and Luna promotion is not established.

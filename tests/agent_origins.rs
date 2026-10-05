@@ -33,6 +33,128 @@ fn pcs(v: &Value) -> Vec<u64> {
     pcs
 }
 
+fn symbol_options() -> origins::SymbolOptions {
+    origins::SymbolOptions {
+        function: 0,
+        depth: 8,
+        definition_limit: 64,
+        literal_limit: 32,
+        limit: 32,
+        offset: 0,
+        max_bytes: 1_000_000,
+        slots: vec![],
+        matches: vec![],
+    }
+}
+
+#[test]
+fn symbols_follow_cross_block_alternatives_without_claiming_slot_values() {
+    let s = source("case 0: {\n// HBC function 0, PC 0\npc = r[0] ? 2 : 4; continue; } case 2: {\n// HBC function 0, PC 2\nr[1] = 'first';\n// HBC function 0, PC 3\npc = 6; continue; } case 4: {\n// HBC function 0, PC 4\nr[1] = 'other';\n// HBC function 0, PC 5\npc = 6; continue; } case 6: {\n// HBC function 0, PC 6\nr[7].slots[9] = r[1]; return; }");
+    let bytes = origins::analyze_symbols_source(&s, &symbol_options(), &[]).unwrap();
+    let v: Value = serde_json::from_slice(&bytes).unwrap();
+    let row = &v["rows"][0];
+    assert_eq!(row["slot"], 9);
+    assert_eq!(row["literal_mentions_total"], 2);
+    assert_eq!(row["literal_search_complete"], true);
+    assert_eq!(row["definition_count"], 2);
+    assert_eq!(row["unresolved"], false);
+    assert_eq!(
+        row["dependencies"][0]["candidates"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert!(row.get("value_name").is_none());
+    assert!(v["semantics"].as_str().unwrap().contains("not slot values"));
+    for mention in row["literal_mentions"].as_array().unwrap() {
+        let text = mention["source"]["javascript"].as_str().unwrap();
+        assert!(["'first'", "'other'"].contains(&text));
+        assert!(v["definitions"]
+            .get(mention["definition_id"].as_str().unwrap())
+            .is_some());
+    }
+}
+
+#[test]
+fn symbols_cursors_are_raw_store_ordinals_and_filtering_does_not_change_identity() {
+    let s = source("case 0: {\n// HBC function 0, PC 0\nr[7].slots[1] = 'a';\n// HBC function 0, PC 2\nr[7].slots[2] = 'b';\n// HBC function 0, PC 4\nr[7].slots[3] = 'a'; return; }");
+    let o = origins::SymbolOptions {
+        limit: 1,
+        matches: vec!["a".into()],
+        ..symbol_options()
+    };
+    let first: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    assert_eq!(first["next_offset"], 1);
+    assert_eq!(first["scan_complete"], false);
+    let o = origins::SymbolOptions { offset: 1, ..o };
+    let second: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    assert_eq!(second["rows"][0]["store_ordinal"], 2);
+    assert_eq!(second["rows"][0]["slot"], 3);
+    assert_eq!(second["scanned"], 2);
+    assert_eq!(second["scan_complete"], true);
+    assert!(second["next_offset"].is_null());
+}
+
+#[test]
+fn symbols_do_not_search_environment_labels_or_decode_raw_js_strings() {
+    let s = source("case 0: {\n// HBC function 0, PC 0\nr[7] = 'environment-label';\n// HBC function 0, PC 2\nr[1] = '\\u0061bc';\n// HBC function 0, PC 4\nr[7].slots[1] = r[1]; return; }");
+    for term in ["environment-label", "abc"] {
+        let o = origins::SymbolOptions {
+            matches: vec![term.into()],
+            ..symbol_options()
+        };
+        let v: Value =
+            serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+        assert!(v["rows"].as_array().unwrap().is_empty(), "{term}");
+    }
+    let o = origins::SymbolOptions {
+        matches: vec!["\\u0061".into()],
+        ..symbol_options()
+    };
+    let v: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    assert_eq!(
+        v["rows"][0]["literal_mentions"][0]["source"]["javascript"],
+        "'\\u0061bc'"
+    );
+}
+
+#[test]
+fn symbols_filter_retains_matching_mentions_beyond_the_display_cap_and_marks_search_caps() {
+    let literals = (0..600)
+        .map(|i| format!("'label{i}'"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let s = source(&format!("case 0: {{\n// HBC function 0, PC 0\nr[1] = [{literals}];\n// HBC function 0, PC 2\nr[7].slots[1] = r[1]; return; }}"));
+    let o = origins::SymbolOptions {
+        literal_limit: 1,
+        matches: vec!["label300".into()],
+        ..symbol_options()
+    };
+    let v: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    let row = &v["rows"][0];
+    assert_eq!(row["literal_mentions_total"], 600);
+    assert_eq!(
+        row["literal_mentions"][0]["source"]["javascript"],
+        "'label300'"
+    );
+    assert_eq!(row["literal_mentions_truncated"], true);
+    assert_eq!(row["literal_search_complete"], false);
+    assert_eq!(v["literal_search_truncated_rows"], 1);
+    let o = origins::SymbolOptions {
+        matches: vec!["label599".into()],
+        ..o
+    };
+    let v: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    assert!(v["rows"].as_array().unwrap().is_empty());
+    assert_eq!(v["literal_search_truncated_rows"], 1);
+}
+
 #[test]
 fn expression_graphs_are_opt_in_and_join_exact_definition_spans() {
     let s = source("case 0: {\n// HBC function 0, PC 0\nr[1] = 'raw';\n// HBC function 0, PC 2\nr[1] = r[1].property;\n// HBC function 0, PC 4\nr[7].slots[0] = r[1]; return;\n}");

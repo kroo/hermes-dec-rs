@@ -73,6 +73,53 @@ fn workspace_summary_points_to_generated_navigation_without_running_js() {
 }
 
 #[test]
+fn source_symbols_and_text_provenance_are_wired_with_atomic_budgets() {
+    let input = fixture();
+    let path = input.to_str().unwrap();
+    let symbols = json(&["symbols", path, "0", "--limit", "2"]);
+    assert_eq!(symbols["schema"], "symbols-v1");
+    assert_eq!(symbols, json(&["symbols", path, "0", "--limit", "2"]));
+    assert_eq!(symbols["expression_source"]["offset_unit"], "utf8_bytes");
+    for command in ["symbols", "origins"] {
+        let args = if command == "symbols" {
+            vec![command, path, "0", "--max-bytes", "1"]
+        } else {
+            vec![command, path, "0", "0", "--text", "--max-bytes", "1"]
+        };
+        let output = cli(&args);
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+    }
+    for expressions in [false, true] {
+        let mut args = vec!["origins", path, "0", "0", "--text"];
+        if expressions {
+            args.push("--expressions");
+        }
+        let output = cli(&args);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let text = String::from_utf8(output.stdout).unwrap();
+        let mut first = None;
+        for line in text.lines() {
+            let (kind, payload) = line.split_once(' ').unwrap();
+            let value: Value = serde_json::from_str(payload).unwrap();
+            if kind == "origins" {
+                first = Some(value);
+            }
+        }
+        let first = first.unwrap();
+        assert_eq!(first["source_schema"], "origins-v1");
+        assert!(first["expression_policy"]
+            .as_str()
+            .unwrap()
+            .contains("omitted"));
+    }
+}
+
+#[test]
 fn search_literal_buffers_names_and_property_references() {
     let input = fixture();
     let input = input.to_str().unwrap();

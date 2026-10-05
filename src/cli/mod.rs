@@ -18,9 +18,11 @@ pub mod generate;
 pub mod inputs;
 pub mod inspect;
 pub mod origins;
+pub mod origins_text;
 pub mod package;
 pub mod sites;
 pub mod slots;
+pub mod symbols;
 pub mod trace;
 pub mod workspace;
 

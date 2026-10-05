@@ -16,6 +16,8 @@ use hermes_dec_rs::cli;
         "--from-pc/--to-pc narrow inclusive byte-PC ranges; --kind call separates callee/receiver/user arguments.\n",
         "Opaque captured slots: captures INPUT FUNCTION_IDS batches reads and candidate ancestor stores.\n",
         "Cross-block registers: origins INPUT FUNCTION PC reports candidate definitions on normal JS paths; --expressions adds typed syntax.\n",
+        "Opaque initializer stores: symbols INPUT FUNCTION --match NAME extracts raw literal mentions from bounded cross-block RHS candidates.\n",
+        "Use symbols --slot N for a stored-slot candidate view; origins --text reduces JSON overhead without evaluating JS.\n",
         "Inspect a candidate: sites INPUT ANCESTOR --kind slot-write --slot N --depth 8 --compact.\n",
         "Use show --around-pc PC --context 250 for bounded JS, refs for static closures/calls, trace for one definition DAG.\n",
         "All matches/captures are syntactic navigation, not evaluated values or authoritative runtime bindings.\n",
@@ -46,7 +48,33 @@ enum Commands {
         /// Add bounded typed expression graphs; syntax only, not evaluated values
         #[arg(long)]
         expressions: bool,
-        /// JSON byte budget; errors before stdout rather than partial documents
+        /// Compact line-oriented candidates; typed graphs are explicitly summarized, not evaluated
+        #[arg(long)]
+        text: bool,
+        /// Output byte budget; errors before stdout rather than partial documents
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+    },
+    /// Extract raw string mentions in bounded candidate slot-write RHS dependencies
+    Symbols {
+        input: PathBuf,
+        function: u32,
+        /// OR case-insensitive substrings in raw JS literal syntax, not decoded values
+        #[arg(long = "match")]
+        matches: Vec<String>,
+        #[arg(long = "slot", value_delimiter = ',')]
+        slots: Vec<u32>,
+        #[arg(long, default_value_t = 8)]
+        depth: usize,
+        #[arg(long, default_value_t = 64)]
+        definition_limit: usize,
+        #[arg(long, default_value_t = 32)]
+        literal_limit: usize,
+        #[arg(long, default_value_t = 32)]
+        limit: usize,
+        /// Raw store ordinal cursor; not an index into matched rows
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
         #[arg(long, default_value_t = 100_000)]
         max_bytes: usize,
     },
@@ -433,15 +461,59 @@ fn main() -> Result<()> {
             limit,
             max_bytes,
             expressions,
-        } => cli::origins::run(
-            &input,
-            cli::origins::Query {
+            text,
+        } => {
+            let query = cli::origins::Query {
                 function,
                 pc,
                 depth,
                 limit,
                 max_bytes,
                 expressions,
+            };
+            if text {
+                if !(1..=16 * 1024 * 1024).contains(&max_bytes) {
+                    return Err(miette!("origins text byte budget must be 1..16777216"));
+                }
+                let mut json_query = query;
+                json_query.max_bytes = 16 * 1024 * 1024;
+                let bytes = cli::origins::report(&input, json_query).map_err(|e| miette!("{e}"))?;
+                let report = serde_json::from_slice(&bytes).map_err(|e| miette!("{e}"))?;
+                let rendered =
+                    cli::origins_text::render(&report, max_bytes).map_err(|e| miette!("{e}"))?;
+                use std::io::Write;
+                std::io::stdout()
+                    .lock()
+                    .write_all(&rendered)
+                    .map_err(|e| miette!("{e}"))?;
+                Ok(())
+            } else {
+                cli::origins::run(&input, query).map_err(|e| miette!("{e}"))
+            }
+        }
+        Commands::Symbols {
+            input,
+            function,
+            matches,
+            slots,
+            depth,
+            definition_limit,
+            literal_limit,
+            limit,
+            offset,
+            max_bytes,
+        } => cli::symbols::run(
+            &input,
+            function,
+            &cli::symbols::Options {
+                matches,
+                slots,
+                depth,
+                definition_limit,
+                literal_limit,
+                limit,
+                offset,
+                max_bytes,
             },
         )
         .map_err(|e| miette!("{e}")),

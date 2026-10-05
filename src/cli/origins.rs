@@ -117,8 +117,16 @@ struct Syntax {
     unsupported: bool,
     pc_writes: Vec<Span>,
     work: usize,
+    literals: Vec<Span>,
+    slot_writes: Vec<SlotWrite>,
+    capture_symbols: bool,
 }
 impl<'a> Visit<'a> for Syntax {
+    fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
+        if self.capture_symbols {
+            self.literals.push(it.span);
+        }
+    }
     fn visit_expression(&mut self, it: &Expression<'a>) {
         self.work += 1;
         if self.work <= SYNTAX_WORK_CAP {
@@ -140,6 +148,21 @@ impl<'a> Visit<'a> for Syntax {
         walk::walk_computed_member_expression(self, it);
     }
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if self.capture_symbols {
+            if let AssignmentTarget::ComputedMemberExpression(m) = &it.left {
+                if let Expression::StaticMemberExpression(slots) = &m.object {
+                    if slots.property.name == "slots" && it.operator.is_assign() {
+                        if let Some(slot) = numeric(&m.expression) {
+                            self.slot_writes.push(SlotWrite {
+                                slot,
+                                environment: slots.object.span(),
+                                value: it.right.span(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
         if matches!(&it.left, AssignmentTarget::AssignmentTargetIdentifier(i) if i.name == "pc") {
             self.pc_writes.push(it.span);
         }
@@ -211,6 +234,13 @@ struct Instruction {
     writes: Vec<(u32, Span)>,
     expressions: Vec<Span>,
     expressions_total: usize,
+    literals: Vec<Span>,
+    slot_writes: Vec<SlotWrite>,
+}
+struct SlotWrite {
+    slot: u32,
+    environment: Span,
+    value: Span,
 }
 struct Block {
     pc: u32,
@@ -218,6 +248,22 @@ struct Block {
     predecessors: Vec<usize>,
     unknown: bool,
     writes: BTreeMap<u32, Vec<usize>>,
+}
+
+struct SourceIndex {
+    instructions: Vec<Instruction>,
+    blocks: Vec<Block>,
+    pc_index: BTreeMap<u32, usize>,
+    edges: BTreeSet<(u32, u32)>,
+    unknown: Vec<&'static str>,
+    stopped: bool,
+    control_work: usize,
+}
+
+#[derive(Default)]
+struct IndexFeatures {
+    expressions: bool,
+    symbols: bool,
 }
 
 #[derive(Serialize)]
@@ -334,15 +380,7 @@ pub fn analyze_query(
     query: Query,
     exceptions: &[(u32, u32, u32)],
 ) -> DecompilerResult<Vec<u8>> {
-    let Query {
-        function,
-        pc,
-        depth,
-        limit,
-        max_bytes,
-        expressions,
-    } = query;
-    bounds(depth, limit, max_bytes)?;
+    bounds(query.depth, query.limit, query.max_bytes)?;
     if source.len() > SOURCE_CAP {
         return Err(error("origins source byte cap exceeded"));
     }
@@ -352,8 +390,70 @@ pub fn analyze_query(
     if !parsed.errors.is_empty() {
         return Err(error("origins requires valid complete exporter JS"));
     }
+    let index = index_program(
+        source,
+        query.function,
+        &parsed.program,
+        exceptions,
+        IndexFeatures {
+            expressions: query.expressions,
+            symbols: false,
+        },
+    )?;
+    let (mut result, _) = query_index(source, &index, query, None, None)?;
+    if query.expressions {
+        let root = index.pc_index[&query.pc];
+        let root_spans = &index.instructions[root].expressions;
+        let mut spans = root_spans.clone();
+        spans.extend(
+            result
+                .definitions
+                .iter()
+                .map(|d| Span::new(d.source.start, d.source.end)),
+        );
+        let views = super::expression_view::views(source, &parsed.program, &spans)?;
+        let truncated = views.iter().any(|v| v["truncated"] == true)
+            || index.instructions[root].expressions_total > INSTRUCTION_EXPRESSION_CAP;
+        let mut projected = views.into_iter();
+        result.instruction_expressions = Some(projected.by_ref().take(root_spans.len()).collect());
+        for definition in &mut result.definitions {
+            definition.expression = projected.next();
+        }
+        result.expressions_truncated = Some(truncated);
+        result.truncated |= truncated;
+        result.expression_source = Some(expression_source(source));
+    }
+    let mut bytes = serde_json::to_vec(&result).map_err(|e| error(e.to_string()))?;
+    bytes.push(b'\n');
+    if bytes.len() > query.max_bytes {
+        return Err(error("origins output byte budget exceeded"));
+    }
+    Ok(bytes)
+}
+
+fn expression_source(source: &str) -> serde_json::Value {
+    let mut end = source.len().min(128);
+    while !source.is_char_boundary(end) {
+        end -= 1;
+    }
+    serde_json::json!({
+        "offset_unit": "utf8_bytes",
+        "offset_origin": "complete_raw_exporter_fragment_without_inspection_header",
+        "source_bytes": source.len(), "raw_fragment_prefix": &source[..end],
+        "prefix_truncated": end < source.len(),
+        "workspace_join": "find raw_fragment_prefix bytes after the inspection header; add that offset to source spans"
+    })
+}
+
+fn index_program(
+    source: &str,
+    function: u32,
+    program: &Program<'_>,
+    exceptions: &[(u32, u32, u32)],
+    features: IndexFeatures,
+) -> DecompilerResult<SourceIndex> {
     let mut functions = Vec::new();
-    for s in &parsed.program.body {
+    for s in &program.body {
         if let Statement::ExpressionStatement(s) = s {
             if let Expression::AssignmentExpression(a) = &s.expression {
                 if let AssignmentTarget::ComputedMemberExpression(m) = &a.left {
@@ -434,7 +534,7 @@ pub fn analyze_query(
     let stopped = generator || exceptional;
     let prefix = format!(" HBC function {function}, PC ");
     let mut markers = Vec::new();
-    for c in &parsed.program.comments {
+    for c in &program.comments {
         if !c.is_line() {
             continue;
         }
@@ -450,6 +550,8 @@ pub fn analyze_query(
     let mut pc_index = BTreeMap::new();
     let mut total_reads = 0;
     let mut total_writes = 0;
+    let mut total_literals = 0;
+    let mut total_slot_writes = 0;
     let mut control_work = 0;
     let mut syntax_work = 0;
     for (case_position, case) in dispatch.cases.iter().enumerate() {
@@ -504,12 +606,14 @@ pub fn analyze_query(
                     writes: Vec::new(),
                     expressions: Vec::new(),
                     expressions_total: 0,
+                    literals: Vec::new(),
+                    slot_writes: Vec::new(),
                 });
             }
             let id = current.ok_or_else(|| error("Missing exact PC annotation"))?;
             let ins = &mut instructions[id];
             ins.span.end = span.end;
-            if expressions {
+            if features.expressions {
                 if let Statement::ExpressionStatement(e) = s {
                     ins.expressions_total += 1;
                     if ins.expressions.len() < INSTRUCTION_EXPRESSION_CAP {
@@ -517,7 +621,10 @@ pub fn analyze_query(
                     }
                 }
             }
-            let mut syntax = Syntax::default();
+            let mut syntax = Syntax {
+                capture_symbols: features.symbols,
+                ..Syntax::default()
+            };
             syntax.visit_statement(s);
             syntax_work += syntax.work;
             if syntax_work > SYNTAX_WORK_CAP {
@@ -536,11 +643,19 @@ pub fn analyze_query(
             }
             total_reads += syntax.reads.len();
             total_writes += syntax.writes.len();
-            if total_reads > READ_CAP || total_writes > DEFINITION_CAP {
+            total_literals += syntax.literals.len();
+            total_slot_writes += syntax.slot_writes.len();
+            if total_reads > READ_CAP
+                || total_writes > DEFINITION_CAP
+                || total_literals > DEFINITION_CAP
+                || total_slot_writes > DEFINITION_CAP
+            {
                 return Err(error("origins syntax cap exceeded"));
             }
             ins.reads.extend(syntax.reads);
             ins.writes.extend(syntax.writes);
+            ins.literals.extend(syntax.literals);
+            ins.slot_writes.extend(syntax.slot_writes);
             block.unknown |= syntax.unsupported;
         }
         if block.instructions.first().map(|&i| instructions[i].pc) != Some(block_pc) {
@@ -627,9 +742,6 @@ pub fn analyze_query(
         targets.push(outgoing);
         blocks.push(block);
     }
-    let root = *pc_index
-        .get(&pc)
-        .ok_or_else(|| error(format!("Unknown exact PC {pc}")))?;
     let mut block_index = BTreeMap::new();
     for (i, b) in blocks.iter().enumerate() {
         if block_index.insert(b.pc, i).is_some() {
@@ -663,15 +775,59 @@ pub fn analyze_query(
     if blocks.iter().any(|b| b.unknown) {
         unknown.push("unsupported_control_or_write");
     }
+    for instruction in &mut instructions {
+        instruction.literals.sort_by_key(|s| (s.start, s.end));
+    }
+    Ok(SourceIndex {
+        instructions,
+        blocks,
+        pc_index,
+        edges,
+        unknown,
+        stopped,
+        control_work,
+    })
+}
+
+fn query_index(
+    source: &str,
+    index: &SourceIndex,
+    query: Query,
+    scope: Option<Span>,
+    remaining_work: Option<usize>,
+) -> DecompilerResult<(Report, usize)> {
+    let Query {
+        function,
+        pc,
+        depth,
+        limit,
+        max_bytes,
+        expressions,
+    } = query;
+    let SourceIndex {
+        instructions,
+        blocks,
+        pc_index,
+        edges,
+        unknown,
+        stopped,
+        control_work,
+    } = index;
+    let root = *pc_index
+        .get(&pc)
+        .ok_or_else(|| error(format!("Unknown exact PC {pc}")))?;
     // Unknown destinations may reach any block: retain known candidates but
     // explicitly mark every demand incomplete, never certify a sole definition.
     let globally_unknown = !unknown.is_empty();
     let mut definitions = BTreeMap::new();
     let mut demands = Vec::new();
-    let mut queue = VecDeque::from([(root, instructions[root].span, None, 0usize)]);
+    let mut queue =
+        VecDeque::from([(root, scope.unwrap_or(instructions[root].span), None, 0usize)]);
     let mut expanded = BTreeSet::new();
     let mut truncated = false;
-    let work_cap = limit.saturating_mul(128);
+    let work_cap = remaining_work.map_or(limit.saturating_mul(128), |n| {
+        n.min(limit.saturating_mul(128))
+    });
     let mut work = 0;
     while let Some((instruction, scope, owner, level)) = queue.pop_front() {
         if !expanded.insert((instruction, scope.start, scope.end)) {
@@ -697,7 +853,7 @@ pub fn analyze_query(
                 cycle: false,
                 truncated: false,
             };
-            if stopped {
+            if *stopped {
                 demands.push(demand);
                 continue;
             }
@@ -839,45 +995,10 @@ pub fn analyze_query(
     let unresolved = demands.iter().any(|d| d.unresolved) || globally_unknown;
     let mut definitions: Vec<_> = definitions.into_values().collect();
     definitions.sort_by_key(|d| d.id);
-    let mut expressions_truncated = false;
-    let instruction_expressions = if expressions {
-        let root_spans = &instructions[root].expressions;
-        let mut spans = root_spans.clone();
-        spans.extend(
-            definitions
-                .iter()
-                .map(|d| Span::new(d.source.start, d.source.end)),
-        );
-        // Reuse the complete parsed AST and project all selected spans in one walk.
-        let views = super::expression_view::views(source, &parsed.program, &spans)?;
-        expressions_truncated = views.iter().any(|v| v["truncated"] == true)
-            || instructions[root].expressions_total > INSTRUCTION_EXPRESSION_CAP;
-        let mut projected = views.into_iter();
-        let root_views = projected.by_ref().take(root_spans.len()).collect();
-        for definition in &mut definitions {
-            definition.expression = projected.next();
-        }
-        Some(root_views)
-    } else {
-        None
-    };
     let normal_edges_total = edges.len();
     let normal_edges_truncated = normal_edges_total > DISPLAY_EDGE_CAP;
-    let normal_edges: Vec<_> = edges.into_iter().take(DISPLAY_EDGE_CAP).collect();
-    let expression_source = expressions.then(|| {
-        let mut end = source.len().min(128);
-        while !source.is_char_boundary(end) {
-            end -= 1;
-        }
-        serde_json::json!({
-            "offset_unit": "utf8_bytes",
-            "offset_origin": "complete_raw_exporter_fragment_without_inspection_header",
-            "source_bytes": source.len(),
-            "raw_fragment_prefix": &source[..end],
-            "prefix_truncated": end < source.len(),
-            "workspace_join": "find raw_fragment_prefix bytes after the inspection header; add that offset to source spans"
-        })
-    });
+    let normal_edges: Vec<_> = edges.iter().copied().take(DISPLAY_EDGE_CAP).collect();
+    let charged_work = work.saturating_add(demands.len()).max(1).min(work_cap);
     let result = Report {
         schema_version: 1,
         schema: "origins-v1",
@@ -885,15 +1006,15 @@ pub fn analyze_query(
             "candidate definitions only; no values, heap, captured slots, or constructor semantics",
         function,
         pc,
-        unknown,
-        truncated: truncated || normal_edges_truncated || expressions_truncated,
+        unknown: unknown.clone(),
+        truncated: truncated || normal_edges_truncated,
         unresolved,
         blocks: blocks.len(),
         normal_edges_total,
         normal_edges_returned: normal_edges.len(),
         normal_edges_truncated,
         normal_edges,
-        control_index_work: control_work,
+        control_index_work: *control_work,
         limits: serde_json::json!({
             "source_bytes": SOURCE_CAP,
             "output_bytes": max_bytes,
@@ -911,20 +1032,329 @@ pub fn analyze_query(
         }),
         definitions,
         demands,
-        instruction_expressions,
+        instruction_expressions: None,
         instruction_expressions_total: expressions.then_some(instructions[root].expressions_total),
         instruction_expressions_omitted: expressions.then_some(
             instructions[root]
                 .expressions_total
                 .saturating_sub(INSTRUCTION_EXPRESSION_CAP),
         ),
-        expressions_truncated: expressions.then_some(expressions_truncated),
-        expression_source,
+        expressions_truncated: expressions.then_some(false),
+        expression_source: None,
     };
-    let mut bytes = serde_json::to_vec(&result).map_err(|e| error(e.to_string()))?;
+    Ok((result, charged_work))
+}
+
+#[derive(Clone)]
+pub struct SymbolOptions {
+    pub function: u32,
+    pub depth: usize,
+    pub definition_limit: usize,
+    pub literal_limit: usize,
+    pub limit: usize,
+    pub offset: usize,
+    pub max_bytes: usize,
+    pub slots: Vec<u32>,
+    pub matches: Vec<String>,
+}
+
+const SYMBOL_QUERY_WORK_CAP: usize = 1_048_576;
+const SYMBOL_LITERAL_RECORD_CAP: usize = 262_144;
+const SYMBOL_LITERAL_BYTE_CAP: usize = 128 * 1024 * 1024;
+const SYMBOL_LITERAL_ROW_CAP: usize = 512;
+
+#[derive(Default)]
+struct LiteralWork {
+    records: usize,
+    bytes: usize,
+}
+
+#[derive(Serialize)]
+struct LiteralMention {
+    pc: u32,
+    definition_id: Option<String>,
+    register: Option<u32>,
+    source: Excerpt,
+    matches_filter: bool,
+}
+
+fn literal_mentions(
+    source: &str,
+    instruction: &Instruction,
+    span: Span,
+    definition: Option<(String, u32)>,
+    matches: &[String],
+    row_remaining: usize,
+    work: &mut LiteralWork,
+) -> (Vec<LiteralMention>, usize, bool) {
+    let start = instruction
+        .literals
+        .partition_point(|s| s.start < span.start);
+    let end = instruction
+        .literals
+        .partition_point(|s| s.end <= span.end)
+        .max(start);
+    let selected = &instruction.literals[start..end];
+    let total = selected.len();
+    let mut out = Vec::new();
+    for &literal in selected {
+        if out.len() == row_remaining || work.records == SYMBOL_LITERAL_RECORD_CAP {
+            break;
+        }
+        let raw = &source[literal.start as usize..literal.end as usize];
+        if raw.len() > SYMBOL_LITERAL_BYTE_CAP - work.bytes {
+            break;
+        }
+        work.records += 1;
+        work.bytes += raw.len();
+        let folded = (!matches.is_empty()).then(|| raw.to_lowercase());
+        out.push(LiteralMention {
+            pc: instruction.pc,
+            definition_id: definition.as_ref().map(|(id, _)| id.clone()),
+            register: definition.as_ref().map(|(_, r)| *r),
+            source: excerpt(source, literal),
+            matches_filter: folded
+                .as_ref()
+                .is_some_and(|raw| matches.iter().any(|m| raw.contains(m))),
+        });
+    }
+    let truncated = out.len() < total;
+    (out, total, truncated)
+}
+
+/// Project raw string mentions from candidate slot-write RHS dependencies.
+/// Slot/environment shape is navigation evidence, never lexical-frame identity.
+pub fn analyze_symbols_source(
+    source: &str,
+    options: &SymbolOptions,
+    exceptions: &[(u32, u32, u32)],
+) -> DecompilerResult<Vec<u8>> {
+    let o = options;
+    bounds(o.depth, o.definition_limit, o.max_bytes)?;
+    if !(1..=128).contains(&o.literal_limit)
+        || !(1..=1000).contains(&o.limit)
+        || o.matches.len() > 64
+        || o.matches.iter().any(|s| s.is_empty() || s.len() > 1024)
+        || o.slots.len() > 4096
+    {
+        return Err(error("symbols bounds: literals 1..128, limit 1..1000, at most 64 nonempty match terms of 1024 bytes and 4096 slots"));
+    }
+    if source.len() > SOURCE_CAP {
+        return Err(error("symbols source byte cap exceeded"));
+    }
+    let allocator = oxc_allocator::Allocator::default();
+    let parsed =
+        oxc_parser::Parser::new(&allocator, source, oxc_span::SourceType::default()).parse();
+    if !parsed.errors.is_empty() {
+        return Err(error("symbols requires valid complete exporter JS"));
+    }
+    let index = index_program(
+        source,
+        o.function,
+        &parsed.program,
+        exceptions,
+        IndexFeatures {
+            expressions: false,
+            symbols: true,
+        },
+    )?;
+    let stores_total: usize = index.instructions.iter().map(|i| i.slot_writes.len()).sum();
+    let matches: Vec<_> = o.matches.iter().map(|s| s.to_lowercase()).collect();
+    let wanted_slots: BTreeSet<_> = o.slots.iter().copied().collect();
+    let mut definitions = BTreeMap::<String, serde_json::Value>::new();
+    let mut rows = Vec::new();
+    let mut scanned = 0;
+    let mut work_used = 0;
+    let mut next_offset = None;
+    let mut query_work_truncated = false;
+    let mut literal_work = LiteralWork::default();
+    let mut literal_search_truncated_rows = 0usize;
+    let mut serialized_records_bytes = 0usize;
+    let mut ordinal = 0;
+    for instruction in &index.instructions {
+        for store in &instruction.slot_writes {
+            let cursor = ordinal;
+            ordinal += 1;
+            if cursor < o.offset {
+                continue;
+            }
+            if rows.len() >= o.limit
+                || work_used == SYMBOL_QUERY_WORK_CAP
+                || literal_work.records == SYMBOL_LITERAL_RECORD_CAP
+                || literal_work.bytes == SYMBOL_LITERAL_BYTE_CAP
+            {
+                next_offset = Some(cursor);
+                query_work_truncated = work_used == SYMBOL_QUERY_WORK_CAP;
+                break;
+            }
+            scanned += 1;
+            if !wanted_slots.is_empty() && !wanted_slots.contains(&store.slot) {
+                continue;
+            }
+            let (result, used) = query_index(
+                source,
+                &index,
+                Query {
+                    function: o.function,
+                    pc: instruction.pc,
+                    depth: o.depth,
+                    limit: o.definition_limit,
+                    max_bytes: o.max_bytes,
+                    expressions: false,
+                },
+                Some(store.value),
+                Some(SYMBOL_QUERY_WORK_CAP - work_used),
+            )?;
+            work_used += used;
+            let (mut literals, mut literal_mentions_total, mut literal_search_truncated) =
+                literal_mentions(
+                    source,
+                    instruction,
+                    store.value,
+                    None,
+                    &matches,
+                    SYMBOL_LITERAL_ROW_CAP,
+                    &mut literal_work,
+                );
+            let mut ids = Vec::new();
+            let mut local_definitions = BTreeMap::new();
+            for definition in &result.definitions {
+                let id = format!(
+                    "{}:{}:{}:{}",
+                    o.function, definition.register, definition.source.start, definition.source.end
+                );
+                let defined_at = index
+                    .pc_index
+                    .get(&definition.pc)
+                    .ok_or_else(|| error("Missing candidate definition PC"))?;
+                let (mentions, total, incomplete) = literal_mentions(
+                    source,
+                    &index.instructions[*defined_at],
+                    Span::new(definition.source.start, definition.source.end),
+                    Some((id.clone(), definition.register)),
+                    &matches,
+                    SYMBOL_LITERAL_ROW_CAP - literals.len(),
+                    &mut literal_work,
+                );
+                literal_mentions_total = literal_mentions_total
+                    .checked_add(total)
+                    .ok_or_else(|| error("symbols literal mention count overflow"))?;
+                literal_search_truncated |= incomplete;
+                literals.extend(mentions);
+                ids.push(id.clone());
+                local_definitions.insert(id, serde_json::json!({
+                    "pc": definition.pc, "register": definition.register, "source": definition.source
+                }));
+            }
+            literal_search_truncated_rows += usize::from(literal_search_truncated);
+            if !matches.is_empty() && !literals.iter().any(|s| s.matches_filter) {
+                continue;
+            }
+            // Match retention is independent of the display cap; retain matching
+            // tokens first rather than making a positive row hide all its evidence.
+            literals.sort_by_key(|m| {
+                (
+                    !m.matches_filter,
+                    m.pc,
+                    m.source.start,
+                    m.source.end,
+                    m.definition_id.clone(),
+                )
+            });
+            let dependencies: Vec<_> = result
+                .demands
+                .iter()
+                .map(|d| {
+                    let candidate_ids: Vec<_> = d
+                        .candidates
+                        .iter()
+                        .map(|&id| {
+                            ids.get(id)
+                                .cloned()
+                                .ok_or_else(|| error("Invalid candidate definition ID"))
+                        })
+                        .collect::<DecompilerResult<_>>()?;
+                    let owner = d
+                        .owner_definition
+                        .map(|id| {
+                            ids.get(id)
+                                .cloned()
+                                .ok_or_else(|| error("Invalid owner definition ID"))
+                        })
+                        .transpose()?;
+                    Ok(
+                        serde_json::json!({"owner_definition":owner,"pc":d.pc,"register":d.register,
+                    "read_span":[d.read.start,d.read.end],"candidates":candidate_ids,
+                    "unresolved":d.unresolved,"same_pc_ambiguity":d.same_pc_ambiguity,
+                    "cycle":d.cycle,"truncated":d.truncated}),
+                    )
+                })
+                .collect::<DecompilerResult<_>>()?;
+            let row = serde_json::json!({
+                "function":o.function,"pc":instruction.pc,"slot":store.slot,
+                "store_ordinal":cursor,"environment":excerpt(source,store.environment),
+                "value":excerpt(source,store.value),
+                "literal_mentions":literals.into_iter().take(o.literal_limit).collect::<Vec<_>>(),
+                "literal_mentions_total":literal_mentions_total,
+                "literal_mentions_truncated":literal_mentions_total > o.literal_limit,
+                "literal_search_complete":!literal_search_truncated,
+                "definition_count":ids.len(),"definition_ids":ids,"dependencies":dependencies,
+                "unresolved":result.unresolved,"truncated":result.truncated,
+                "unknown":result.unknown,
+            });
+            serialized_records_bytes = serialized_records_bytes.saturating_add(
+                serde_json::to_vec(&row)
+                    .map_err(|e| error(e.to_string()))?
+                    .len()
+                    + 1,
+            );
+            for (id, definition) in &local_definitions {
+                if !definitions.contains_key(id) {
+                    serialized_records_bytes = serialized_records_bytes.saturating_add(
+                        serde_json::to_vec(id)
+                            .map_err(|e| error(e.to_string()))?
+                            .len()
+                            + 2
+                            + serde_json::to_vec(definition)
+                                .map_err(|e| error(e.to_string()))?
+                                .len(),
+                    );
+                }
+            }
+            if serialized_records_bytes > o.max_bytes {
+                return Err(error("symbols output byte budget exceeded before stdout"));
+            }
+            rows.push(row);
+            definitions.extend(local_definitions);
+        }
+        if next_offset.is_some() {
+            break;
+        }
+    }
+    let report = serde_json::json!({
+        "schema_version":1,"schema":"symbols-v1","function":o.function,
+        "semantics":"Raw string mentions in candidate slot-write RHS dependencies, not slot values, symbol names, constructor results, runtime bindings or frame identities. No JS is evaluated.",
+        "source":"export_function_fragments","parsed_source_complete":true,
+        "expression_source":expression_source(source),"stores_total":stores_total,
+        "offset":o.offset,"scanned":scanned,"next_offset":next_offset,
+        "scan_complete":next_offset.is_none(),"query_work_truncated":query_work_truncated,
+        "query_work_used":work_used,"query_work_cap":SYMBOL_QUERY_WORK_CAP,
+        "literal_search_truncated_rows":literal_search_truncated_rows,
+        "literal_work_truncated": next_offset.is_some() && (literal_work.records == SYMBOL_LITERAL_RECORD_CAP || literal_work.bytes == SYMBOL_LITERAL_BYTE_CAP),
+        "literal_records_used":literal_work.records,"literal_records_cap":SYMBOL_LITERAL_RECORD_CAP,
+        "literal_bytes_used":literal_work.bytes,"literal_bytes_cap":SYMBOL_LITERAL_BYTE_CAP,
+        "literal_search_cap_per_row":SYMBOL_LITERAL_ROW_CAP,
+        "depth":o.depth,"definition_limit":o.definition_limit,"literal_limit":o.literal_limit,
+        "limit":o.limit,"matches":o.matches,"slots":o.slots,
+        "match_policy":"OR case-insensitive substrings in complete raw JS string-literal tokens discovered through bounded normal-flow candidate definitions, not decoded strings or runtime values. Other labels/properties and unresolved captures are not searched.",
+        "negative_result_policy":"Omitted or unresolved dependencies and unscanned stores are not evidence of runtime absence.",
+        "mention_order":"Matching tokens first, then PC/source span; this is source order, not evaluation or argument order.",
+        "definitions":definitions,"rows":rows,
+    });
+    let mut bytes = serde_json::to_vec(&report).map_err(|e| error(e.to_string()))?;
     bytes.push(b'\n');
-    if bytes.len() > max_bytes {
-        return Err(error("origins output byte budget exceeded"));
+    if bytes.len() > o.max_bytes {
+        return Err(error("symbols output byte budget exceeded before stdout"));
     }
     Ok(bytes)
 }
