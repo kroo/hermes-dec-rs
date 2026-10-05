@@ -11,6 +11,7 @@ pub mod decompile;
 pub mod disasm;
 pub mod generate;
 pub mod inspect;
+pub mod package;
 
 #[derive(Parser)]
 #[command(name = "hermes-dec-rs")]
