@@ -49,7 +49,7 @@ fn exports_every_complete_function_with_a_searchable_index() {
     assert_eq!(entries.len(), rows.len());
     let mut bytes = 0;
     let navigation = manifest["navigation"].as_array().unwrap();
-    assert_eq!(navigation.len(), 4);
+    assert_eq!(navigation.len(), 6);
     for query in navigation {
         assert_eq!(query["command"], "hermes-dec-rs");
         assert_eq!(query["function"], "FUNCTION");
@@ -59,6 +59,15 @@ fn exports_every_complete_function_with_a_searchable_index() {
     assert_eq!(navigation[0]["subcommand"], "origins");
     assert_eq!(navigation[0]["pc"], "PC");
     assert_eq!(navigation[0]["flags"], serde_json::json!(["--expressions"]));
+    assert_eq!(navigation[4]["subcommand"], "symbols");
+    assert!(navigation[4].get("pc").is_none());
+    assert_eq!(
+        navigation[4]["flags"],
+        serde_json::json!(["--slot", "SLOT"])
+    );
+    assert_eq!(navigation[5]["subcommand"], "origins");
+    assert_eq!(navigation[5]["pc"], "PC");
+    assert_eq!(navigation[5]["flags"], serde_json::json!(["--text"]));
     for id in 0..hbc.functions.count() {
         let entry = &entries[id as usize];
         let row = &rows[id as usize];
@@ -131,6 +140,11 @@ fn exports_every_complete_function_with_a_searchable_index() {
         "--from-pc PC",
         "captures INPUT ID",
         "candidates",
+        "symbols INPUT ID --slot SLOT",
+        "raw store-ordinal cursor",
+        "scan_complete",
+        "origins INPUT ID PC --text",
+        "omits typed graph nodes",
         "Do not execute",
     ] {
         assert!(guide.contains(topic), "missing guide topic: {topic}");

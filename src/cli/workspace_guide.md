@@ -36,5 +36,19 @@ same-function/ancestor stores, then inspect candidate function files and slot-wr
 sites there. Registers unresolved by origins are not automatically captures.
 Capture candidates do not establish runtime bindings, values or execution order.
 
+For raw strings behind slot-write dependencies, use symbols INPUT ID --slot SLOT
+or --match TEXT. It parses the complete function once per page and follows bounded
+normal-flow candidate register definitions. The resulting raw string mentions
+are not decoded strings, symbol names, slot values or lexical-frame identities.
+The environment expression is separate from the searched RHS. Unknowns and
+literal-search omissions matter even when a page has no rows. Follow next_offset
+with --offset; it is a raw store-ordinal cursor, not a filtered result count.
+scan_complete means the store scan ended, not that all dependencies are known.
+
+For less verbose provenance, use origins INPUT ID PC --text. Add --expressions
+for syntax summaries, but text explicitly omits typed graph nodes and cannot
+resolve their local IDs. Use ordinary JSON for complete returned syntax graphs.
+Text is escaped line-oriented evidence, not evaluated JS or shell commands.
+
 Templates are stored once in manifest.json. Replace FUNCTION with the numeric ID
 from a function entry or index row; INPUT remains the original HBC input argument.

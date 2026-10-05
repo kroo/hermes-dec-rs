@@ -183,8 +183,10 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
 - `workspace` exports every complete function into `f<ID>.js`, plus a manifest,
   bounded `index.jsonl`, a short `GUIDE.md` and inspection-only `runtime.js`.
   The guide and function headers point to source-derived capture, site and
-  typed-expression navigation, without supplying app-specific hints. Function
-  manifest entries record the inspection-prefix byte length for exact joins
+  typed-expression navigation, without supplying app-specific hints.
+  The guide and shared templates also offer raw RHS symbol mentions and escaped
+  text provenance, with cursor, omission and graph-node limitations explicit.
+  Function manifest entries record the inspection-prefix byte length for exact joins
   from raw-fragment UTF-8 expression spans to workspace files. Navigation
   records are shared manifest templates, not executable shell strings or
   resolved values; function IDs are supplied by the selected function entry.

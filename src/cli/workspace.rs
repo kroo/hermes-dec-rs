@@ -47,6 +47,8 @@ fn navigation() -> Vec<Navigation> {
             vec!["--compact", "--kind", "slot-write", "--slot", "SLOT"],
         ),
         ("captures", None, vec![]),
+        ("symbols", None, vec!["--slot", "SLOT"]),
+        ("origins", Some("PC"), vec!["--text"]),
     ]
     .into_iter()
     .map(|(subcommand, pc, flags)| Navigation {
