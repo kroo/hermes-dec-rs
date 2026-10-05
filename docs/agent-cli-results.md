@@ -243,3 +243,25 @@ symbol navigation burden, while preserving source/PC evidence and avoiding
 path-insensitive guesses presented as resolved values. More feature availability
 alone is not sufficient. The reliable full-protocol reconstruction goal remains
 unachieved; all protocol agents in these rounds have completed or been closed.
+
+V9 adds batched capture navigation and bounded site-source/range filtering,
+frozen as binary
+`f3b598019805b7393c2473de55bfd1dfb44304b8449bc4ea999e910b226c6e83`.
+Capture candidates are ranked by shortest static witness, not runtime likelihood;
+same-function stores both before and after a read remain candidates. Excerpts
+are serialized once, with per-instruction UTF-8 spans. Source filters search
+complete expressions and bounded prior definitions before pagination; negative
+results and dependency truncation are explicitly non-authoritative.
+
+All 428 local Rust tests pass, formatting passes, and Clippy reports no diagnostics
+in the new modules or regression files. Existing unrelated warnings remain.
+Ten warmed full-export runs per large project, with no Cargo overlap, measured
+Orbit median/worst 374.6/403.2 ms and Modern Animal 244.8/260.4 ms. Corrected
+output hashes remain unchanged. These times include startup through writing;
+external Node syntax checks run outside the timer, as before.
+
+A single isolated large-initializer constructor-source query returned five sites
+in 616 ms / 39,272 bytes; a capture batch returned four reads in 108 ms / 17,242
+bytes. These are single-sample navigation measurements, not general latency
+guarantees or cold-agent protocol improvements. Framework data normalization
+and complete protocol reconstruction remain unverified by this interface work.

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 pub mod analyze_cfg;
 pub mod bindings;
 pub mod bundle;
+pub mod captures;
 pub mod cfg;
 pub mod decompile;
 pub mod disasm;

@@ -7,6 +7,7 @@ use oxc_ast::ast::{
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_span::{GetSpan, Span};
+use regex::{Regex, RegexBuilder};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Write;
@@ -650,6 +651,195 @@ struct Site {
     operand_count: usize,
     operands_truncated: bool,
     slot: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_matches: Option<SourceMatches>,
+}
+
+#[derive(Default)]
+pub struct SiteFilter {
+    pub matches: Vec<String>,
+    pub from_pc: Option<u32>,
+    pub to_pc: Option<u32>,
+}
+
+impl SiteFilter {
+    fn matcher(&self) -> DecompilerResult<Option<Regex>> {
+        if self.from_pc.zip(self.to_pc).is_some_and(|(a, b)| a > b) {
+            return Err(error("--from-pc must not exceed --to-pc"));
+        }
+        if self.matches.len() > 16
+            || self
+                .matches
+                .iter()
+                .any(|query| query.is_empty() || query.len() > 1024)
+        {
+            return Err(error(
+                "--match accepts at most 16 nonempty queries of at most 1024 bytes",
+            ));
+        }
+        if self.matches.is_empty() {
+            return Ok(None);
+        }
+        RegexBuilder::new(
+            &self
+                .matches
+                .iter()
+                .map(|q| regex::escape(q))
+                .collect::<Vec<_>>()
+                .join("|"),
+        )
+        .case_insensitive(true)
+        .build()
+        .map(Some)
+        .map_err(|e| error(e.to_string()))
+    }
+
+    fn active(&self) -> bool {
+        !self.matches.is_empty() || self.from_pc.is_some() || self.to_pc.is_some()
+    }
+}
+
+#[derive(Serialize)]
+struct SourceMatch {
+    pc: u32,
+    source_span: [u32; 2],
+    matched_span: [u32; 2],
+    matched_source: Snippet,
+    kind: &'static str,
+}
+
+#[derive(Serialize)]
+struct SourceMatches {
+    evidence: Vec<SourceMatch>,
+    evidence_count: usize,
+    evidence_truncated: bool,
+    dependency_search_truncated: bool,
+    unresolved_dependency_reads: bool,
+}
+
+struct MatchCandidates {
+    direct: bool,
+    definitions: BTreeSet<usize>,
+    truncated: bool,
+    unresolved: bool,
+}
+
+fn matching_dependencies(
+    source: &str,
+    index: &Index,
+    site: &SiteSpan,
+    depth: usize,
+    matcher: &Regex,
+    definition_matches: &[bool],
+) -> MatchCandidates {
+    let mut result = MatchCandidates {
+        direct: matcher.is_match(&source[site.span.start as usize..site.span.end as usize]),
+        definitions: BTreeSet::new(),
+        truncated: site.operands.len() > OPERAND_CAP,
+        unresolved: false,
+    };
+    for operand in site.operands.iter().take(OPERAND_CAP) {
+        let reads = reads_in(&index.reads, operand.span);
+        result.truncated |= reads.len() > NODE_CAP;
+        let mut queue = VecDeque::new();
+        let mut visited = BTreeSet::new();
+        for read in reads.iter().take(NODE_CAP) {
+            if let Some(id) = read.definition {
+                queue.push_back((id, 1));
+            } else {
+                result.unresolved = true;
+            }
+        }
+        while let Some((id, level)) = queue.pop_front() {
+            if visited.contains(&id) {
+                continue;
+            }
+            if level > depth || visited.len() == NODE_CAP {
+                result.truncated = true;
+                continue;
+            }
+            visited.insert(id);
+            if definition_matches[id] {
+                result.definitions.insert(id);
+            }
+            let reads = reads_in(&index.reads, index.definitions[id].span);
+            result.truncated |= reads.len() > NODE_CAP;
+            for read in reads.iter().take(NODE_CAP) {
+                if let Some(next) = read.definition {
+                    queue.push_back((next, level + 1));
+                } else {
+                    result.unresolved = true;
+                }
+            }
+        }
+    }
+    result
+}
+
+fn match_evidence(
+    source: &str,
+    matcher: &Regex,
+    pc: u32,
+    span: Span,
+    kind: &'static str,
+) -> SourceMatch {
+    let found = matcher
+        .find(&source[span.start as usize..span.end as usize])
+        .unwrap();
+    let matched = Span::new(
+        span.start + found.start() as u32,
+        span.start + found.end() as u32,
+    );
+    SourceMatch {
+        pc,
+        source_span: [span.start, span.end],
+        matched_span: [matched.start, matched.end],
+        matched_source: snippet(source, matched),
+        kind,
+    }
+}
+
+fn source_matches(
+    source: &str,
+    index: &Index,
+    site: &SiteSpan,
+    pc: u32,
+    matcher: &Regex,
+    matches: &MatchCandidates,
+) -> SourceMatches {
+    const EVIDENCE_LIMIT: usize = 8;
+    let mut evidence = Vec::new();
+    if matches.direct {
+        evidence.push(match_evidence(
+            source,
+            matcher,
+            pc,
+            site.span,
+            "site_expression",
+        ));
+    }
+    for &id in matches
+        .definitions
+        .iter()
+        .take(EVIDENCE_LIMIT - evidence.len())
+    {
+        let definition = &index.definitions[id];
+        evidence.push(match_evidence(
+            source,
+            matcher,
+            definition.pc,
+            definition.span,
+            "local_definition",
+        ));
+    }
+    let evidence_count = usize::from(matches.direct) + matches.definitions.len();
+    SourceMatches {
+        evidence_truncated: evidence_count > evidence.len(),
+        evidence_count,
+        evidence,
+        dependency_search_truncated: matches.truncated,
+        unresolved_dependency_reads: matches.unresolved,
+    }
 }
 
 // Relationships and traversal limits remain operand-local. Only immutable definition
@@ -771,7 +961,17 @@ pub(crate) fn catalog_sources(
     offset: usize,
     max_bytes: usize,
 ) -> DecompilerResult<Vec<u8>> {
-    catalog_sources_format(sources, kind, slots, depth, limit, offset, max_bytes, false)
+    catalog_sources_format(
+        sources,
+        kind,
+        slots,
+        depth,
+        limit,
+        offset,
+        max_bytes,
+        false,
+        &SiteFilter::default(),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -784,7 +984,34 @@ pub(crate) fn catalog_sources_compact(
     offset: usize,
     max_bytes: usize,
 ) -> DecompilerResult<Vec<u8>> {
-    catalog_sources_format(sources, kind, slots, depth, limit, offset, max_bytes, true)
+    catalog_sources_format(
+        sources,
+        kind,
+        slots,
+        depth,
+        limit,
+        offset,
+        max_bytes,
+        true,
+        &SiteFilter::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn catalog_sources_filtered(
+    sources: &[(u32, String, BTreeSet<u32>)],
+    kind: &str,
+    slots: &[u32],
+    depth: usize,
+    limit: usize,
+    offset: usize,
+    max_bytes: usize,
+    compact: bool,
+    filter: &SiteFilter,
+) -> DecompilerResult<Vec<u8>> {
+    catalog_sources_format(
+        sources, kind, slots, depth, limit, offset, max_bytes, compact, filter,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -797,8 +1024,10 @@ fn catalog_sources_format(
     offset: usize,
     max_bytes: usize,
     compact: bool,
+    filter: &SiteFilter,
 ) -> DecompilerResult<Vec<u8>> {
     bounds(kind, slots, depth, limit, max_bytes)?;
+    let matcher = filter.matcher()?;
     if sources.is_empty() {
         return Err(error("sites requires explicit nonempty function selection"));
     }
@@ -808,9 +1037,21 @@ fn catalog_sources_format(
         return Err(error("Duplicate function source"));
     }
     let mut total = 0usize;
+    let mut unfiltered_total = 0usize;
+    let mut dependency_search_truncated_sites = 0usize;
+    let mut unresolved_dependency_sites = 0usize;
     let mut sites = Vec::new();
     for &(function, ref source, ref exceptions) in ordered {
         let index = index_source(source, function, exceptions)?;
+        let definition_matches: Vec<_> = index
+            .definitions
+            .iter()
+            .map(|d| {
+                matcher.as_ref().is_some_and(|m| {
+                    m.is_match(&source[d.span.start as usize..d.span.end as usize])
+                })
+            })
+            .collect();
         let mut ordinals = BTreeMap::new();
         for site in &index.syntax {
             let marker = index.markers.partition_point(|m| m.2 <= site.span.start);
@@ -834,6 +1075,22 @@ fn catalog_sources_format(
             if !slots.is_empty() && !site.slot.is_some_and(|slot| slots.contains(&slot)) {
                 continue;
             }
+            unfiltered_total += 1;
+            if filter.from_pc.is_some_and(|start| pc < start)
+                || filter.to_pc.is_some_and(|end| pc > end)
+            {
+                continue;
+            }
+            let matches = matcher.as_ref().map(|m| {
+                matching_dependencies(source, &index, site, depth, m, &definition_matches)
+            });
+            if let Some(matches) = &matches {
+                dependency_search_truncated_sites += usize::from(matches.truncated);
+                unresolved_dependency_sites += usize::from(matches.unresolved);
+                if !matches.direct && matches.definitions.is_empty() {
+                    continue;
+                }
+            }
             if total >= offset && sites.len() < limit {
                 sites.push(Site {
                     function_id: function,
@@ -852,6 +1109,9 @@ fn catalog_sources_format(
                     operand_count: site.operands.len(),
                     operands_truncated: site.operands.len() > OPERAND_CAP,
                     slot: site.slot,
+                    source_matches: matches.as_ref().map(|matches| {
+                        source_matches(source, &index, site, pc, matcher.as_ref().unwrap(), matches)
+                    }),
                 });
             }
             total += 1;
@@ -882,6 +1142,19 @@ fn catalog_sources_format(
             "Exporter apply-helper invocations only; intrinsic and unrelated helper calls are not counted. User argument indexes exclude callee and receiver; spreads and holes are unsupported."
         );
     }
+    if filter.active() {
+        report["filter"] = serde_json::json!({
+            "matches": filter.matches, "from_pc": filter.from_pc, "to_pc": filter.to_pc,
+            "range_policy": "inclusive function-local PCs, applied independently to each selected function",
+            "unfiltered_total": unfiltered_total,
+            "dependency_search_truncated_sites": dependency_search_truncated_sites,
+            "unresolved_dependency_sites": unresolved_dependency_sites,
+            "match_policy": "OR literal substrings, case-insensitive, over complete JS site expressions and bounded same-block prior definition spans. Not decoded string values, runtime identities, heap mutations, lexical bindings or cross-function values.",
+            "match_depth": depth, "node_cap_per_operand": NODE_CAP, "operand_cap_per_record": OPERAND_CAP,
+            "evidence_limit_per_site": 8, "runtime_match_complete": false,
+            "negative_result_policy": "No match in this bounded source scope is not proof of absence in runtime behavior or unresolved dependencies."
+        });
+    }
     if compact {
         report["format"] = serde_json::json!("compact");
         report["definitions"] =
@@ -907,7 +1180,16 @@ pub(crate) fn report(
     max_bytes: usize,
 ) -> DecompilerResult<Vec<u8>> {
     report_format(
-        input, functions, kind, slots, depth, limit, offset, max_bytes, false,
+        input,
+        functions,
+        kind,
+        slots,
+        depth,
+        limit,
+        offset,
+        max_bytes,
+        false,
+        &SiteFilter::default(),
     )
 }
 
@@ -923,7 +1205,16 @@ pub(crate) fn report_compact(
     max_bytes: usize,
 ) -> DecompilerResult<Vec<u8>> {
     report_format(
-        input, functions, kind, slots, depth, limit, offset, max_bytes, true,
+        input,
+        functions,
+        kind,
+        slots,
+        depth,
+        limit,
+        offset,
+        max_bytes,
+        true,
+        &SiteFilter::default(),
     )
 }
 
@@ -938,8 +1229,10 @@ fn report_format(
     offset: usize,
     max_bytes: usize,
     compact: bool,
+    filter: &SiteFilter,
 ) -> DecompilerResult<Vec<u8>> {
     bounds(kind, slots, depth, limit, max_bytes)?;
+    filter.matcher()?;
     if functions.is_empty() {
         return Err(error("sites requires explicit nonempty function selection"));
     }
@@ -966,11 +1259,35 @@ fn report_format(
         .into_iter()
         .map(|(id, source)| (id, source, boundaries.remove(&id).unwrap_or_default()))
         .collect::<Vec<_>>();
-    if compact {
+    if filter.active() {
+        catalog_sources_filtered(
+            &sources, kind, slots, depth, limit, offset, max_bytes, compact, filter,
+        )
+    } else if compact {
         catalog_sources_compact(&sources, kind, slots, depth, limit, offset, max_bytes)
     } else {
         catalog_sources(&sources, kind, slots, depth, limit, offset, max_bytes)
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_filtered(
+    input: &Path,
+    functions: &[u32],
+    kind: &str,
+    slots: &[u32],
+    depth: usize,
+    limit: usize,
+    offset: usize,
+    max_bytes: usize,
+    compact: bool,
+    filter: &SiteFilter,
+) -> DecompilerResult<()> {
+    let bytes = report_format(
+        input, functions, kind, slots, depth, limit, offset, max_bytes, compact, filter,
+    )?;
+    std::io::stdout().lock().write_all(&bytes)?;
+    Ok(())
 }
 
 /// Validate and serialize the entire page before writing any stdout bytes.

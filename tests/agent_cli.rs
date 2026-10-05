@@ -173,6 +173,64 @@ fn compact_call_catalog_is_wired_without_changing_argument_order() {
 }
 
 #[test]
+fn site_source_and_pc_filters_are_wired_and_atomic() {
+    let input = fixture();
+    let input = input.to_str().unwrap();
+    let result = json(&[
+        "sites",
+        input,
+        "0",
+        "--kind",
+        "call",
+        "--compact",
+        "--match",
+        "r[",
+        "--from-pc",
+        "0",
+        "--to-pc",
+        "4294967295",
+        "--limit",
+        "1",
+    ]);
+    assert_eq!(result["sites"].as_array().unwrap().len(), 1);
+    assert_eq!(result["filter"]["matches"], serde_json::json!(["r["]));
+    assert_eq!(result["filter"]["runtime_match_complete"], false);
+    assert!(!result["sites"][0]["source_matches"]["evidence"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    for args in [
+        vec!["sites", input, "0", "--match", ""],
+        vec!["sites", input, "0", "--from-pc", "2", "--to-pc", "1"],
+        vec!["sites", input, "0", "--match", "r[", "--max-bytes", "1"],
+    ] {
+        let rejected = cli(&args);
+        assert!(!rejected.status.success());
+        assert!(rejected.stdout.is_empty());
+    }
+}
+
+#[test]
+fn batch_capture_navigation_is_wired_with_explicit_uncertainty() {
+    let input = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/closure_capture_test.hbc");
+    let input = input.to_str().unwrap();
+    let search = json(&["search", input, "deeplyNested", "--json"]);
+    let id = search["functions"][0]["function_id"]
+        .as_u64()
+        .unwrap()
+        .to_string();
+    let result = json(&["captures", input, &id, "--depth", "3", "--limit", "1"]);
+    assert_eq!(result["authoritative_lexical_resolution"], false);
+    assert_eq!(result["returned"], 1);
+    assert_eq!(result["reads"][0]["unresolved"], true);
+    assert!(result["reads"][0]["candidate_total"].as_u64().unwrap() > 0);
+    assert!(result["reads"][0]["excerpt"]["javascript"].is_string());
+    let rejected = cli(&["captures", input, &id, "--max-bytes", "1"]);
+    assert!(!rejected.status.success());
+    assert!(rejected.stdout.is_empty());
+}
+
+#[test]
 fn errors_do_not_contaminate_stdout_or_overwrite_output() {
     let input = fixture();
     let input = input.to_str().unwrap();

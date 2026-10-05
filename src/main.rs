@@ -8,7 +8,20 @@ use hermes_dec_rs::cli;
 #[command(name = "hermes-dec-rs")]
 #[command(about = "Rust-based high-level decompiler for Hermes bytecode")]
 #[command(
-    after_help = "Agent workflow: inputs . finds header candidates including hidden/Git-ignored files, largest first.\nThen inspect INPUT, search INPUT QUERY --json, and show INPUT FUNCTION_IDS for complete JS.\nSearch is OR by default; add --all for conjunctive queries and --word to avoid short substring noise.\nUse refs for static closures/calls, and show --around-pc PC --context 250 for bounded JS excerpts.\nFor huge initializers, sites INPUT FUNCTION --kind constructor --depth 3 catalogs ordered arguments and local definitions without custom scanning scripts.\nFor opaque captured r[E].slots[N], slots INPUT FUNCTION N gives candidate ancestor stores.\nUse sites INPUT ANCESTOR --kind slot-write --slot N --depth 8 to batch-read store provenance, or trace INPUT ANCESTOR STORE_PC for one site.\nThese are navigation aids, not evaluated values or runtime lexical bindings. Follow serializers and callers to verify units/indexing, not just schema declarations.\nworkspace exports JS files plus assignment-name/literal index for shell searches.\nexport-bundle produces runnable full-project JS. Legacy decompile --function uses slower structured CFG/SSA analysis."
+    after_help = concat!(
+        "Agent workflow: inputs . finds hidden/Git-ignored header candidates, largest first.\n",
+        "Then inspect INPUT, search INPUT QUERY --json, and show INPUT FUNCTION_IDS for complete JS.\n",
+        "Search is OR by default; --all intersects queries and --word avoids substring noise.\n",
+        "Huge initializers: sites INPUT FUNCTION --match NAME --depth 8 --compact filters local source dependencies.\n",
+        "--from-pc/--to-pc narrow inclusive byte-PC ranges; --kind call separates callee/receiver/user arguments.\n",
+        "Opaque captured slots: captures INPUT FUNCTION_IDS batches reads and candidate ancestor stores.\n",
+        "Inspect a candidate: sites INPUT ANCESTOR --kind slot-write --slot N --depth 8 --compact.\n",
+        "Use show --around-pc PC --context 250 for bounded JS, refs for static closures/calls, trace for one definition DAG.\n",
+        "All matches/captures are syntactic navigation, not evaluated values or authoritative runtime bindings.\n",
+        "Follow serializers and callers to verify units/indexing; a schema inventory is not a protocol description.\n",
+        "workspace exports complete JS fragments and a bounded index for shell inspection.\n",
+        "export-bundle emits runnable full-project JS; legacy decompile --function uses slower CFG/SSA analysis."
+    )
 )]
 #[command(version)]
 struct Cli {
@@ -18,6 +31,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Batch captured-slot reads and same-function/ancestor store candidates with JS evidence
+    Captures {
+        input: PathBuf,
+        #[arg(required = true, num_args = 1.., value_delimiter = ',')]
+        functions: Vec<u32>,
+        #[arg(long, default_value_t = 3)]
+        depth: usize,
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+    },
     /// Discover header candidates, including ignored files; no full program validation
     Inputs {
         #[arg(default_value = ".")]
@@ -54,6 +81,14 @@ enum Commands {
         /// Deduplicate provenance definitions into a shared table (same syntactic evidence)
         #[arg(long)]
         compact: bool,
+        /// OR source substrings in site expressions/local prior definitions (repeatable)
+        #[arg(long = "match")]
+        matches: Vec<String>,
+        /// Inclusive function-local PC range, applied separately to each selected function
+        #[arg(long)]
+        from_pc: Option<u32>,
+        #[arg(long)]
+        to_pc: Option<u32>,
     },
     /// Trace bounded syntactic JS register definitions at an exact byte PC (not values)
     Trace {
@@ -371,6 +406,15 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Captures {
+            input,
+            functions,
+            depth,
+            limit,
+            offset,
+            max_bytes,
+        } => cli::captures::run(&input, &functions, depth, limit, offset, max_bytes)
+            .map_err(|e| miette!("{e}")),
         Commands::Inputs {
             root,
             limit,
@@ -387,17 +431,26 @@ fn main() -> Result<()> {
             offset,
             max_bytes,
             compact,
-        } => {
-            let run = if compact {
-                cli::sites::run_compact
-            } else {
-                cli::sites::run
-            };
-            run(
-                &input, &functions, &kind, &slot, depth, limit, offset, max_bytes,
-            )
-            .map_err(|e| miette!("{e}"))
-        }
+            matches,
+            from_pc,
+            to_pc,
+        } => cli::sites::run_filtered(
+            &input,
+            &functions,
+            &kind,
+            &slot,
+            depth,
+            limit,
+            offset,
+            max_bytes,
+            compact,
+            &cli::sites::SiteFilter {
+                matches,
+                from_pc,
+                to_pc,
+            },
+        )
+        .map_err(|e| miette!("{e}")),
         Commands::Trace {
             input,
             function,

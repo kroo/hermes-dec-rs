@@ -106,12 +106,17 @@ Search is OR by default; `--all` intersects queries within each function and
 `--word` avoids short-substring noise.
 `show --around-pc PC` gives a bounded JSON excerpt; `refs` follows static
 closure/direct-call links; `slots` shows candidate captured-slot writes.
+`captures input.hbc FUNCTION...` batches captured reads and candidate stores,
+ranked by shortest static closure witness, with unresolved scope clearly marked.
 `trace input.hbc FUNCTION PC` follows bounded local JS register-definition
 provenance, not evaluated values or resolved runtime environments.
 `sites input.hbc FUNCTION...` batch-catalogs constructor arguments, slot accesses
 and property writes with bounded local provenance for large initializer scans.
 `--kind call` exposes ordered user arguments separately from callee/receiver;
 `--compact` deduplicates definition sources without evaluating values.
+`--match TEXT` filters by literal source substrings in the site and bounded
+prior definitions; `--from-pc`/`--to-pc` restrict inclusive function-local ranges.
+These filters do not resolve runtime values or prove absence of behavior.
 `workspace input.hbc -o NEW_DIR` generates individual JS files and a searchable
 index for repeated offline reads. Unlike `export-bundle`, these function files
 are inspection fragments, not standalone programs. See

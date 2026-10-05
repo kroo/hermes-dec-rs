@@ -18,6 +18,9 @@ hermes-dec-rs slots INPUT.hbc 1 0 --depth 3 --limit 10
 hermes-dec-rs trace INPUT.hbc 0 0 --depth 32 --limit 128
 hermes-dec-rs sites INPUT.hbc 0 --kind constructor --depth 3
 hermes-dec-rs sites INPUT.hbc 0 --kind slot-write --slot 0 --depth 8
+hermes-dec-rs sites INPUT.hbc 0 --match FIELD_NAME --depth 8 --compact
+hermes-dec-rs sites INPUT.hbc 0 --from-pc 0 --to-pc 100 --kind call --compact
+hermes-dec-rs captures INPUT.hbc 1,2 --depth 3 --limit 5
 hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
 ```
 
@@ -88,6 +91,25 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
   remains expanded for compatibility. `--kind call` catalogs exporter `apply`
   invocations with a separate callee, receiver and ordered user arguments; it does
   not catalog every helper, builtin or direct call, or infer API parameter names.
+  Repeatable `--match TEXT` filters OR case-insensitive literal substrings over
+  complete site-expression source and bounded same-block prior definition spans.
+  It searches beyond display previews, not decoded string values or runtime
+  identities. Exact source/PC match witnesses accompany results. Dependency depth,
+  nodes, operands and witness counts remain bounded and their omissions explicit;
+  a missing match is not evidence of absence in unresolved/cross-block/captured
+  values. `--from-pc`/`--to-pc` apply inclusive function-local PC ranges independently
+  to each selected function. Page offsets count sites after filtering.
+- `captures INPUT FUNCTION_IDS` batches captured-slot reads and matching-slot store
+  candidates from the same function and static closure ancestors, with bounded
+  JS evidence. This avoids manually extracting each slot number before lookup.
+  It includes generator wrapper/body edges, not direct-call ancestry. Equal slot
+  indices or environment-register names do not prove runtime scope identity.
+  Same-function stores before and after the read are candidates; relative PC is
+  not execution order. Reads are stably paginated; depth/candidate/edge/snippet
+  limits and missing/unresolved states are explicit. Reports are fully serialized
+  and budget-checked before stdout. Follow candidates with `sites`/`show` to inspect
+  their initializer source; this command does not normalize framework data or
+  infer callable/field names from runtime environments.
 - `workspace` exports every complete function into `f<ID>.js`, plus a manifest,
   bounded `index.jsonl` and inspection-only `runtime.js`. The new directory is
   published atomically without replacing an existing file/directory/symlink.

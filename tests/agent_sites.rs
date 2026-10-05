@@ -450,6 +450,26 @@ fn sites_stdout_child() {
     if mode == "compact-bounds" {
         assert!(sites::run_compact(fixture(), &[0], "all", &[], 9, 1, 0, 100000).is_err());
     }
+    if mode == "filter-bounds" {
+        let filter = sites::SiteFilter {
+            from_pc: Some(2),
+            to_pc: Some(1),
+            ..Default::default()
+        };
+        assert!(
+            sites::run_filtered(fixture(), &[0], "all", &[], 1, 1, 0, 100000, true, &filter)
+                .is_err()
+        );
+    }
+    if mode == "filter-budget" {
+        let filter = sites::SiteFilter {
+            matches: vec!["r[".into()],
+            ..Default::default()
+        };
+        assert!(
+            sites::run_filtered(fixture(), &[0], "all", &[], 1, 1, 0, 1, true, &filter).is_err()
+        );
+    }
     std::process::exit(0);
 }
 
@@ -470,6 +490,8 @@ fn errors_write_no_stdout_before_parent_cli_wiring() {
         "bounds",
         "compact-budget",
         "compact-bounds",
+        "filter-bounds",
+        "filter-budget",
     ] {
         let output = run(mode);
         assert!(output.status.success());
@@ -737,4 +759,187 @@ fn malformed_apply_shapes_spreads_and_holes_fail_both_formats() {
             );
         }
     }
+}
+
+fn filtered(body: &str, queries: &[&str], depth: usize, compact: bool) -> Value {
+    serde_json::from_slice(
+        &sites::catalog_sources_filtered(
+            &[(0, source(body), BTreeSet::new())],
+            "all",
+            &[],
+            depth,
+            1000,
+            0,
+            16_777_216,
+            compact,
+            &sites::SiteFilter {
+                matches: queries.iter().map(|q| (*q).to_owned()).collect(),
+                ..Default::default()
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn source_filter_finds_prior_definitions_not_just_opaque_call_expressions() {
+    let result = filtered(CONSTRUCTOR, &["OPAQUE"], 3, false);
+    assert_eq!(result["total"], 2);
+    for site in result["sites"].as_array().unwrap() {
+        let evidence = &site["source_matches"]["evidence"][0];
+        assert_eq!(evidence["pc"], 6);
+        assert_eq!(evidence["kind"], "local_definition");
+        assert_eq!(evidence["matched_source"]["javascript"], "opaque");
+        assert_eq!(site["source_matches"]["dependency_search_truncated"], false);
+    }
+    assert_eq!(result["filter"]["unfiltered_total"], 2);
+    assert_eq!(result["filter"]["runtime_match_complete"], false);
+    assert_eq!(
+        expand_compact(filtered(CONSTRUCTOR, &["OPAQUE"], 3, true)),
+        result
+    );
+    assert_eq!(
+        filtered(CONSTRUCTOR, &["absent", "opaque"], 3, false)["total"],
+        2
+    );
+    let shallow = filtered(CONSTRUCTOR, &["opaque"], 0, false);
+    assert_eq!(shallow["total"], 0);
+    assert!(
+        shallow["filter"]["dependency_search_truncated_sites"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+}
+
+#[test]
+fn source_filter_respects_overwrites_branches_and_literal_substrings() {
+    let body = "// HBC function 0, PC 0\nr[0] = 'obsolete';\n// HBC function 0, PC 1\nr[0] = '[literal]';\n// HBC function 0, PC 2\napply(r[1], r[2], [r[0]]);\n} case 3: {\n// HBC function 0, PC 3\napply(r[1], r[2], [r[0]]);";
+    assert_eq!(filtered(body, &["obsolete"], 8, false)["total"], 0);
+    let found = filtered(body, &["[literal]"], 8, false);
+    assert_eq!(found["total"], 1);
+    assert_eq!(found["sites"][0]["pc"], 2);
+    assert!(
+        found["filter"]["unresolved_dependency_sites"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(filtered(body, &["literal.*"], 8, false)["total"], 0);
+}
+
+#[test]
+fn source_filter_uses_full_spans_beyond_preview_and_preserves_match_byte_offsets() {
+    let text = format!("{}TAIL", "é".repeat(1100));
+    let body = format!(
+        "// HBC function 0, PC 0\nr[0] = {};\n// HBC function 0, PC 1\napply(r[1], r[2], [r[0]]);",
+        serde_json::to_string(&text).unwrap()
+    );
+    let code = source(&body);
+    let found = filtered(&body, &["tail"], 1, false);
+    assert_eq!(found["total"], 1);
+    let evidence = &found["sites"][0]["source_matches"]["evidence"][0];
+    let span = evidence["matched_span"].as_array().unwrap();
+    assert_eq!(
+        &code[span[0].as_u64().unwrap() as usize..span[1].as_u64().unwrap() as usize],
+        "TAIL"
+    );
+    assert_eq!(evidence["matched_source"]["javascript"], "TAIL");
+    assert_eq!(
+        found["sites"][0]["operands"][2]["nodes"][0]["source"]["truncated"],
+        true
+    );
+}
+
+#[test]
+fn source_filter_pc_range_paging_bounds_and_evidence_caps_are_explicit() {
+    let sources = [(0, source(CONSTRUCTOR), BTreeSet::new())];
+    let filter = sites::SiteFilter {
+        matches: vec!["r[".into()],
+        from_pc: Some(8),
+        to_pc: Some(10),
+    };
+    let first =
+        sites::catalog_sources_filtered(&sources, "all", &[], 3, 1, 0, 100000, false, &filter)
+            .unwrap();
+    assert_eq!(
+        first,
+        sites::catalog_sources_filtered(&sources, "all", &[], 3, 1, 0, 100000, false, &filter)
+            .unwrap()
+    );
+    let first: Value = serde_json::from_slice(&first).unwrap();
+    assert_eq!(first["total"], 2);
+    assert_eq!(first["next_offset"], 1);
+    let second: Value = serde_json::from_slice(
+        &sites::catalog_sources_filtered(&sources, "all", &[], 3, 1, 1, 100000, false, &filter)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(first["sites"][0]["pc"], 8);
+    assert_eq!(second["sites"][0]["pc"], 10);
+    for filter in [
+        sites::SiteFilter {
+            from_pc: Some(3),
+            to_pc: Some(2),
+            ..Default::default()
+        },
+        sites::SiteFilter {
+            matches: vec![String::new()],
+            ..Default::default()
+        },
+        sites::SiteFilter {
+            matches: vec!["x".repeat(1025)],
+            ..Default::default()
+        },
+        sites::SiteFilter {
+            matches: vec!["x".into(); 17],
+            ..Default::default()
+        },
+    ] {
+        assert!(sites::catalog_sources_filtered(
+            &sources,
+            "all",
+            &[],
+            3,
+            1,
+            0,
+            100000,
+            false,
+            &filter
+        )
+        .is_err());
+    }
+    assert!(sites::catalog_sources_filtered(
+        &sources,
+        "all",
+        &[],
+        3,
+        1,
+        0,
+        1,
+        false,
+        &sites::SiteFilter::default()
+    )
+    .is_err());
+    let mut many = String::new();
+    for pc in 0..10 {
+        many.push_str(&format!("// HBC function 0, PC {pc}\nr[{pc}] = 'hit';\n"));
+    }
+    many.push_str(
+        "// HBC function 0, PC 10\napply(r[9], r[8], [r[0],r[1],r[2],r[3],r[4],r[5],r[6],r[7]]);",
+    );
+    let many = filtered(&many, &["hit"], 1, false);
+    assert_eq!(many["sites"][0]["source_matches"]["evidence_count"], 10);
+    assert_eq!(
+        many["sites"][0]["source_matches"]["evidence_truncated"],
+        true
+    );
+    assert_eq!(
+        many["sites"][0]["source_matches"]["evidence"]
+            .as_array()
+            .unwrap()
+            .len(),
+        8
+    );
 }
