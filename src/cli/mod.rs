@@ -13,6 +13,7 @@ pub mod cfg;
 pub mod decompile;
 pub mod disasm;
 pub mod explore;
+pub(crate) mod expression_view;
 pub mod generate;
 pub mod inputs;
 pub mod inspect;

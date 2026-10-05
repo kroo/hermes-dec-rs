@@ -458,6 +458,24 @@ fn origins_cli_is_deterministic_bounded_and_read_only() {
     assert!(report["semantics"].as_str().unwrap().contains("candidate"));
     assert_eq!(report["function"], 0);
     assert_eq!(report["pc"], 0);
+    let expression_report = json(&["origins", input, "0", "0", "--expressions"]);
+    assert_eq!(
+        expression_report,
+        json(&["origins", input, "0", "0", "--expressions"])
+    );
+    assert!(expression_report["instruction_expressions"].is_array());
+    assert_eq!(expression_report["demands"], report["demands"]);
+    let expression_overflow = cli(&[
+        "origins",
+        input,
+        "0",
+        "0",
+        "--expressions",
+        "--max-bytes",
+        "1",
+    ]);
+    assert!(!expression_overflow.status.success());
+    assert!(expression_overflow.stdout.is_empty());
     for extra in [
         vec!["--depth", "65"],
         vec!["--limit", "0"],

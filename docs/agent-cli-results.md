@@ -307,7 +307,7 @@ omissions remain explicit. Enclosing assignment destinations cannot reach their
 own RHS reads. The existing local tools retain their conservative contracts;
 sites now points to origins for unresolved block-entry reads.
 
-The first prototype rejected the real 26,241,984-byte initializer at its 16 MiB
+The first prototype rejected the real 26,241,704-byte raw initializer at its 16 MiB
 source cap. After raising bounded indexing caps, its original 1,024-work default
 query still exhausted the budget on the first register before inspecting the
 second. The final default permits 8,192 work units, with a synthetic two-register
@@ -327,3 +327,94 @@ All 443 local Rust tests pass, including 14 origins tests and the wired CLI
 regression. Formatting passes; Clippy has no diagnostics in the new source or
 tests, while existing unrelated repository warnings remain. Telemetry tests
 still pass (20, with one optional real-session test skipped).
+
+The first paired v9/v10 medium-Sol trial is invalid as a clean 1,800-second
+comparison: both agents were still running when closed roughly 261 seconds late.
+macOS power logs establish repeated maintenance sleep/dark-wake intervals,
+matching simultaneous long session gaps. Both left only short scaffolds; frozen
+grading gives 4 and 5.5, with both gates failing. Their recorded totals were
+677,954 and 904,823 tokens respectively. These low counts are not efficiency
+gains, and neither guessed active-time subtraction nor a 30-minute completion
+claim is appropriate. The attempt and telemetry remain preserved privately.
+
+A fresh cold medium-Sol retry used the same separately frozen binaries and
+identical prompts, with a temporary verified AC sleep assertion. The assertion
+was removed after completion; permanent power settings and unrelated assertions
+were unchanged. No sleep/wake events were recorded during the retry interval.
+Ordinary wall time, not sleep-adjusted time, is reported below. Both agents
+completed before their 1,800-second dispatch deadlines.
+
+| Awake trial | Parent final observation (s) | Input tokens | Cached input | Uncached input | Output tokens | Recorded total | Tools |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A: v9 | 1,694.675 | 12,783,950 | 12,235,904 | 548,046 | 55,292 | 12,839,242 | 94 |
+| B: v10 | 1,617.551 | 11,768,619 | 11,180,672 | 587,947 | 56,191 | 11,824,810 | 87 |
+
+Session spans are 1,694.513 and 1,617.395 seconds. A's artifact checkpoint is
+1,689.442 seconds; B saved its report at 1,582.302 and finished validation at
+1,612.302 seconds. Checkpoints are not substituted for parent-observed completion.
+Cached input is included in input and total, not unique source volume or billing;
+reasoning is included in output (7,623 and 5,459). Actual tool-output UTF-8 volume
+was 1,197,349 and 1,128,587 bytes. CLI invocations were 11 and 12 respectively,
+including help. Snapshot counters are not summed.
+
+Both used complete workspace JS and compact slot-write sites. B also issued two
+actual origins queries: one remained unresolved/truncated, while the other
+provided source-backed hoisted numeric-bound candidates. Help inspection alone
+does not establish captures adoption; neither reports an actual captures query
+or distinct site-source filter query. Both still wrote custom initializer and
+register-role parsers. Literal-command auditing is not a comprehensive dynamic
+command audit, and self-assessed utility is not causal effectiveness evidence.
+
+Independent grading against the unchanged reference/rubric gives both **93**
+and both **fail the full gate**. A has raw coverage 93 with no independently
+confirmed material error; B has raw 95 minus two points for treating a randomized
+default as fixed. Both substantially cover controls/status for both codecs, but
+recoverable read-body encoding, synchronization/correlation, version-boundary,
+normalization and lifecycle coverage remains incomplete. Novel details beyond
+the frozen reference are unadjudicated, not certified; firmware/native unknowns
+are distinct from recoverable omissions.
+
+B is about 77 seconds (4.5%) faster in this single pair, but uses about 7.3% more
+uncached input and 1.6% more output tokens. Lower recorded total is mainly cached
+input. Equal scores, n=1, a longer cap than earlier rounds, and different awake
+conditions do not establish a reliable speedup or justify smaller-model
+promotion. The full goal remains active. The next prototype targets typed
+source-expression structure rather than inferred values or domain-specific
+protocol hints.
+
+V11 adds opt-in `origins --expressions`, frozen separately as
+`5527cf148eb3b1c219c432a9ad1c98acd515df0e68834e740cd8894b6cf8de28`.
+The complete already-parsed exporter AST supplies bounded typed expression
+graphs, not evaluated values or framework normalization. Exact source spans
+join register-definition candidates and selected direct expression statements.
+Literal raw syntax, symbolic register reads, call roles/order, array holes/spread,
+operators and both conditional branches remain explicit. Unsupported syntax is
+opaque. Helper-shaped roles are not helper-identity or API-name claims. Original
+compact origins output remains unchanged without the flag.
+
+The initial expression visitor's eight-million-frame cap rejected the large
+initializer query after 1,125.4 ms with empty stdout. A 32-million-frame bounded
+cap accommodates its measured 15,170,544 frames, including enum/collection
+wrappers. The final query took 1,191.5, 678.4 and 702.9 ms in three isolated runs,
+returning 51,601 bytes / 17 definitions / one root view / 144 projected nodes.
+All node previews, original byte extents and UTF-8 spans match complete source;
+no expression omissions occurred. These are microqueries, not a general query
+latency guarantee or protocol-success evidence.
+
+The first external span audit mistakenly joined raw-fragment coordinates to a
+workspace file including its 280-byte inspection header. The corrected audit
+uses the new explicit `expression_source` coordinate origin and raw-prefix
+locator. The raw initializer is 26,241,704 bytes; the workspace file is
+26,241,984 bytes. This is a coordinate-layout distinction, not a JS content
+change. Future consumers need the same documented offset when joining spans.
+
+All 463 local Rust tests pass after final integration, including syntax graphs,
+caps, source-coordinate joins, ordinary-report compatibility and CLI atomic
+budget errors. Formatting passes; Clippy has no diagnostics in changed source
+or tests, with existing unrelated warnings retained. Telemetry tests pass
+(20, one optional real-session test skipped). Ten warmed full-JS exports per
+large project, without Cargo overlap, give Orbit median/worst 401.4/445.8 ms and
+Modern Animal 245.4/255.6 ms. Corrected output hashes remain unchanged, and
+external Node syntax checks pass outside the export timer. Process RSS sampling
+was unavailable in the sandbox and is not reported as zero. No cold-agent
+benefit or smaller-model promotion is inferred before a fresh qualifying trial.

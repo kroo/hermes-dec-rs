@@ -19,6 +19,7 @@ const PREVIEW_CAP: usize = 1024;
 const DISPLAY_EDGE_CAP: usize = 256;
 const CONTROL_WORK_CAP: usize = 2097152;
 const SYNTAX_WORK_CAP: usize = 8388608;
+const INSTRUCTION_EXPRESSION_CAP: usize = 32;
 
 fn error(s: impl Into<String>) -> DecompilerError {
     DecompilerError::internal(s.into())
@@ -208,6 +209,8 @@ struct Instruction {
     span: Span,
     reads: Vec<(u32, Span)>,
     writes: Vec<(u32, Span)>,
+    expressions: Vec<Span>,
+    expressions_total: usize,
 }
 struct Block {
     pc: u32,
@@ -244,6 +247,8 @@ struct Definition {
     block_pc: u32,
     register: u32,
     source: Excerpt,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expression: Option<serde_json::Value>,
 }
 #[derive(Serialize)]
 struct Demand {
@@ -276,6 +281,26 @@ struct Report {
     limits: serde_json::Value,
     definitions: Vec<Definition>,
     demands: Vec<Demand>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instruction_expressions: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instruction_expressions_total: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instruction_expressions_omitted: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expressions_truncated: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expression_source: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Copy)]
+pub struct Query {
+    pub function: u32,
+    pub pc: u32,
+    pub depth: usize,
+    pub limit: usize,
+    pub max_bytes: usize,
+    pub expressions: bool,
 }
 
 /// Analyze one complete annotated F[function] fragment. Exception tuples are
@@ -290,6 +315,33 @@ pub fn analyze_source(
     max_bytes: usize,
     exceptions: &[(u32, u32, u32)],
 ) -> DecompilerResult<Vec<u8>> {
+    analyze_query(
+        source,
+        Query {
+            function,
+            pc,
+            depth,
+            limit,
+            max_bytes,
+            expressions: false,
+        },
+        exceptions,
+    )
+}
+
+pub fn analyze_query(
+    source: &str,
+    query: Query,
+    exceptions: &[(u32, u32, u32)],
+) -> DecompilerResult<Vec<u8>> {
+    let Query {
+        function,
+        pc,
+        depth,
+        limit,
+        max_bytes,
+        expressions,
+    } = query;
     bounds(depth, limit, max_bytes)?;
     if source.len() > SOURCE_CAP {
         return Err(error("origins source byte cap exceeded"));
@@ -450,11 +502,21 @@ pub fn analyze_source(
                     span,
                     reads: Vec::new(),
                     writes: Vec::new(),
+                    expressions: Vec::new(),
+                    expressions_total: 0,
                 });
             }
             let id = current.ok_or_else(|| error("Missing exact PC annotation"))?;
             let ins = &mut instructions[id];
             ins.span.end = span.end;
+            if expressions {
+                if let Statement::ExpressionStatement(e) = s {
+                    ins.expressions_total += 1;
+                    if ins.expressions.len() < INSTRUCTION_EXPRESSION_CAP {
+                        ins.expressions.push(e.expression.span());
+                    }
+                }
+            }
             let mut syntax = Syntax::default();
             syntax.visit_statement(s);
             syntax_work += syntax.work;
@@ -726,6 +788,7 @@ pub fn analyze_source(
                                     block_pc: b.pc,
                                     register: reg,
                                     source: excerpt(source, span),
+                                    expression: None,
                                 },
                             );
                             id
@@ -776,9 +839,45 @@ pub fn analyze_source(
     let unresolved = demands.iter().any(|d| d.unresolved) || globally_unknown;
     let mut definitions: Vec<_> = definitions.into_values().collect();
     definitions.sort_by_key(|d| d.id);
+    let mut expressions_truncated = false;
+    let instruction_expressions = if expressions {
+        let root_spans = &instructions[root].expressions;
+        let mut spans = root_spans.clone();
+        spans.extend(
+            definitions
+                .iter()
+                .map(|d| Span::new(d.source.start, d.source.end)),
+        );
+        // Reuse the complete parsed AST and project all selected spans in one walk.
+        let views = super::expression_view::views(source, &parsed.program, &spans)?;
+        expressions_truncated = views.iter().any(|v| v["truncated"] == true)
+            || instructions[root].expressions_total > INSTRUCTION_EXPRESSION_CAP;
+        let mut projected = views.into_iter();
+        let root_views = projected.by_ref().take(root_spans.len()).collect();
+        for definition in &mut definitions {
+            definition.expression = projected.next();
+        }
+        Some(root_views)
+    } else {
+        None
+    };
     let normal_edges_total = edges.len();
     let normal_edges_truncated = normal_edges_total > DISPLAY_EDGE_CAP;
     let normal_edges: Vec<_> = edges.into_iter().take(DISPLAY_EDGE_CAP).collect();
+    let expression_source = expressions.then(|| {
+        let mut end = source.len().min(128);
+        while !source.is_char_boundary(end) {
+            end -= 1;
+        }
+        serde_json::json!({
+            "offset_unit": "utf8_bytes",
+            "offset_origin": "complete_raw_exporter_fragment_without_inspection_header",
+            "source_bytes": source.len(),
+            "raw_fragment_prefix": &source[..end],
+            "prefix_truncated": end < source.len(),
+            "workspace_join": "find raw_fragment_prefix bytes after the inspection header; add that offset to source spans"
+        })
+    });
     let result = Report {
         schema_version: 1,
         schema: "origins-v1",
@@ -787,7 +886,7 @@ pub fn analyze_source(
         function,
         pc,
         unknown,
-        truncated: truncated || normal_edges_truncated,
+        truncated: truncated || normal_edges_truncated || expressions_truncated,
         unresolved,
         blocks: blocks.len(),
         normal_edges_total,
@@ -812,6 +911,15 @@ pub fn analyze_source(
         }),
         definitions,
         demands,
+        instruction_expressions,
+        instruction_expressions_total: expressions.then_some(instructions[root].expressions_total),
+        instruction_expressions_omitted: expressions.then_some(
+            instructions[root]
+                .expressions_total
+                .saturating_sub(INSTRUCTION_EXPRESSION_CAP),
+        ),
+        expressions_truncated: expressions.then_some(expressions_truncated),
+        expression_source,
     };
     let mut bytes = serde_json::to_vec(&result).map_err(|e| error(e.to_string()))?;
     bytes.push(b'\n');
@@ -822,14 +930,14 @@ pub fn analyze_source(
 }
 
 /// Build and validate the entire report before emitting anything to stdout.
-pub fn report(
-    input: &Path,
-    function: u32,
-    pc: u32,
-    depth: usize,
-    limit: usize,
-    max_bytes: usize,
-) -> DecompilerResult<Vec<u8>> {
+pub fn report(input: &Path, query: Query) -> DecompilerResult<Vec<u8>> {
+    let Query {
+        function,
+        depth,
+        limit,
+        max_bytes,
+        ..
+    } = query;
     bounds(depth, limit, max_bytes)?;
     let data = std::fs::read(input)?;
     let hbc = HbcFile::parse_for_bundle(&data).map_err(error)?;
@@ -843,17 +951,22 @@ pub fn report(
         .map(|h| (h.start, h.end, h.target))
         .collect();
     let source = export_function_fragments(&hbc, &[function])?.remove(0).1;
-    analyze_source(&source, function, pc, depth, limit, max_bytes, &exceptions)
+    if query.expressions {
+        analyze_query(&source, query, &exceptions)
+    } else {
+        analyze_source(
+            &source,
+            function,
+            query.pc,
+            depth,
+            limit,
+            max_bytes,
+            &exceptions,
+        )
+    }
 }
-pub fn run(
-    input: &Path,
-    function: u32,
-    pc: u32,
-    depth: usize,
-    limit: usize,
-    max_bytes: usize,
-) -> DecompilerResult<()> {
-    let bytes = report(input, function, pc, depth, limit, max_bytes)?;
+pub fn run(input: &Path, query: Query) -> DecompilerResult<()> {
+    let bytes = report(input, query)?;
     std::io::stdout().lock().write_all(&bytes)?;
     Ok(())
 }

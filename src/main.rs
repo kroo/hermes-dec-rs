@@ -15,7 +15,7 @@ use hermes_dec_rs::cli;
         "Huge initializers: sites INPUT FUNCTION --match NAME --depth 8 --compact filters local source dependencies.\n",
         "--from-pc/--to-pc narrow inclusive byte-PC ranges; --kind call separates callee/receiver/user arguments.\n",
         "Opaque captured slots: captures INPUT FUNCTION_IDS batches reads and candidate ancestor stores.\n",
-        "Cross-block registers: origins INPUT FUNCTION PC reports candidate definitions on normal JS paths.\n",
+        "Cross-block registers: origins INPUT FUNCTION PC reports candidate definitions on normal JS paths; --expressions adds typed syntax.\n",
         "Inspect a candidate: sites INPUT ANCESTOR --kind slot-write --slot N --depth 8 --compact.\n",
         "Use show --around-pc PC --context 250 for bounded JS, refs for static closures/calls, trace for one definition DAG.\n",
         "All matches/captures are syntactic navigation, not evaluated values or authoritative runtime bindings.\n",
@@ -43,6 +43,9 @@ enum Commands {
         /// Maximum definition nodes (1..4096)
         #[arg(long, default_value_t = 64)]
         limit: usize,
+        /// Add bounded typed expression graphs; syntax only, not evaluated values
+        #[arg(long)]
+        expressions: bool,
         /// JSON byte budget; errors before stdout rather than partial documents
         #[arg(long, default_value_t = 100_000)]
         max_bytes: usize,
@@ -429,8 +432,19 @@ fn main() -> Result<()> {
             depth,
             limit,
             max_bytes,
-        } => cli::origins::run(&input, function, pc, depth, limit, max_bytes)
-            .map_err(|e| miette!("{e}")),
+            expressions,
+        } => cli::origins::run(
+            &input,
+            cli::origins::Query {
+                function,
+                pc,
+                depth,
+                limit,
+                max_bytes,
+                expressions,
+            },
+        )
+        .map_err(|e| miette!("{e}")),
         Commands::Captures {
             input,
             functions,

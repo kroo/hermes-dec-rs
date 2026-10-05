@@ -17,6 +17,7 @@ hermes-dec-rs show INPUT.hbc 0 --around-pc 0 --context 8
 hermes-dec-rs slots INPUT.hbc 1 0 --depth 3 --limit 10
 hermes-dec-rs trace INPUT.hbc 0 0 --depth 32 --limit 128
 hermes-dec-rs origins INPUT.hbc 0 0 --depth 8 --limit 64
+hermes-dec-rs origins INPUT.hbc 0 0 --expressions --max-bytes 1000000
 hermes-dec-rs sites INPUT.hbc 0 --kind constructor --depth 3
 hermes-dec-rs sites INPUT.hbc 0 --kind slot-write --slot 0 --depth 8
 hermes-dec-rs sites INPUT.hbc 0 --match FIELD_NAME --depth 8 --compact
@@ -90,6 +91,25 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
   return explicit unknowns without candidate traversal, not guessed normal flow.
   `unresolved: false` describes syntactic definition links only, never runtime
   values, captured identities, predicate feasibility or constructor behavior.
+  Add `--expressions` for bounded typed syntax graphs on selected definitions
+  and direct expression statements at the requested PC. View-local node IDs
+  describe register reads, literal kinds/raw JS, member keys, ordered arguments,
+  arrays, operators and both conditional branches; exact UTF-8 source spans
+  join them to complete JS. `expression_source` states the coordinate origin:
+  the raw exporter fragment, without the inspection header added by workspace
+  files. Locate its bounded `raw_fragment_prefix` in the workspace file and add
+  that byte offset when joining spans. They do not normalize framework data or resolve
+  aliases into values. Exporter-shaped call roles are syntactic labels, not
+  proof of helper identity or API parameter names. Unsupported nodes and
+  omitted depth/nodes/items remain explicit. Raise `--max-bytes` for larger
+  graphs; byte overflow still emits no partial JSON. The original compact
+  candidate report is unchanged without this flag. Direct expression statements
+  at one PC are capped at 32, with total/omitted counts. Per-view graphs retain
+  at most 128 nodes, depth 16 and 32 collection items, with a shared 4,096-node
+  projection budget. These syntax caps do not change candidate reachability;
+  `expressions_truncated` reports projection omissions separately. Expression
+  indexing is bounded at 32 million visitor frames (including enum/collection
+  wrappers) and depth 256; exceeding either fails before emitting JSON.
 - `sites` catalogs constructor invocations with ordered explicit arguments,
   property writes and environment-slot accesses in explicitly selected functions.
   It parses complete generated JS once per function and includes bounded local
@@ -155,6 +175,15 @@ protocol hints. Freeze each tested binary; concurrent CLI designs may differ.
 Record model and reasoning effort and do not attribute cross-model, cross-budget
 differences solely to the CLI. Generated JS is the primary protocol evidence;
 metadata and references are navigation aids. Do not run the app or access devices.
+
+Record host sleep/suspension separately from CLI latency. A suspended local host
+can also delay deadline enforcement; do not relabel an overrun or subtract guessed
+sleep time to manufacture a completed bounded trial. On macOS, a temporary
+`caffeinate -i -s -t 2400` assertion can cover a 30-minute trial; `-s` requires AC
+power. Verify the actual assertion with `pmset -g assertions` and the power source
+with `pmset -g batt`, then stop only the assertion process created for the trial.
+This does not change permanent power settings or guarantee protection from
+explicit forced sleep. Preserve actual wall times, completion status and logs.
 
 Keep trial answers outside the repository and grade against an independently
 derived, frozen reference. Report incompleteness and factual errors separately

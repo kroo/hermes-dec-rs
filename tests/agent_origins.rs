@@ -6,6 +6,8 @@ impl HbcFile {
         hermes_dec_rs::HbcFile::parse(data)
     }
 }
+#[path = "../src/cli/expression_view.rs"]
+mod expression_view;
 #[path = "../src/cli/origins.rs"]
 mod origins;
 use serde_json::Value;
@@ -29,6 +31,72 @@ fn pcs(v: &Value) -> Vec<u64> {
     pcs.sort_unstable();
     pcs.dedup();
     pcs
+}
+
+#[test]
+fn expression_graphs_are_opt_in_and_join_exact_definition_spans() {
+    let s = source("case 0: {\n// HBC function 0, PC 0\nr[1] = 'raw';\n// HBC function 0, PC 2\nr[1] = r[1].property;\n// HBC function 0, PC 4\nr[7].slots[0] = r[1]; return;\n}");
+    let query = origins::Query {
+        function: 0,
+        pc: 4,
+        depth: 8,
+        limit: 64,
+        max_bytes: 100_000,
+        expressions: true,
+    };
+    let bytes = origins::analyze_query(&s, query, &[]).unwrap();
+    assert_eq!(bytes, origins::analyze_query(&s, query, &[]).unwrap());
+    let v: Value = serde_json::from_slice(&bytes).unwrap();
+    let plain: Value =
+        serde_json::from_slice(&origins::analyze_source(&s, 0, 4, 8, 64, 100_000, &[]).unwrap())
+            .unwrap();
+    assert!(plain.get("instruction_expressions").is_none());
+    assert_eq!(v["demands"], plain["demands"]);
+    let root = &v["instruction_expressions"][0];
+    assert_eq!(root["semantics"], "syntax_only");
+    assert_eq!(v["expression_source"]["offset_unit"], "utf8_bytes");
+    assert_eq!(v["expression_source"]["source_bytes"], s.len());
+    assert!(s.starts_with(
+        v["expression_source"]["raw_fragment_prefix"]
+            .as_str()
+            .unwrap()
+    ));
+    assert!(plain.get("expression_source").is_none());
+    for d in v["definitions"].as_array().unwrap() {
+        let view = &d["expression"];
+        assert_eq!(view["source"]["start"], d["source"]["start"]);
+        assert_eq!(view["source"]["end"], d["source"]["end"]);
+        assert_eq!(view["semantics"], "syntax_only");
+        assert!(!view["nodes"].as_array().unwrap().is_empty());
+    }
+    let small = origins::Query {
+        max_bytes: 128,
+        ..query
+    };
+    assert!(origins::analyze_query(&s, small, &[]).is_err());
+}
+
+#[test]
+fn selected_instruction_expression_count_is_bounded_and_explicit() {
+    let statements = std::iter::repeat_n("r[7].slots[0] = 'raw';", 40).collect::<String>();
+    let s = source(&format!(
+        "case 0: {{\n// HBC function 0, PC 0\n{statements} return;\n}}"
+    ));
+    let query = origins::Query {
+        function: 0,
+        pc: 0,
+        depth: 0,
+        limit: 64,
+        max_bytes: 1_000_000,
+        expressions: true,
+    };
+    let v: Value =
+        serde_json::from_slice(&origins::analyze_query(&s, query, &[]).unwrap()).unwrap();
+    assert_eq!(v["instruction_expressions"].as_array().unwrap().len(), 32);
+    assert_eq!(v["instruction_expressions_total"], 40);
+    assert_eq!(v["instruction_expressions_omitted"], 8);
+    assert_eq!(v["expressions_truncated"], true);
+    assert_eq!(v["truncated"], true);
 }
 const DIAMOND: &str = "case 0: {\n// HBC function 0, PC 0\nr[1] = 'early';\n// HBC function 0, PC 2\npc = (r[9]) ? 10 : 20; continue;\n} case 10: {\n// HBC function 0, PC 10\nr[2] = r[1];\n// HBC function 0, PC 12\npc = 30; continue;\n} case 20: {\n// HBC function 0, PC 20\nr[2] = 'other'; pc = 30; continue;\n} case 30: {\n// HBC function 0, PC 30\nreturn r[2];\n}";
 
@@ -184,20 +252,26 @@ fn budgets_depth_and_errors() {
     );
     assert!(origins::report(
         std::path::Path::new("/nonexistent-origins-input"),
-        0,
-        0,
-        1,
-        10,
-        10000
+        origins::Query {
+            function: 0,
+            pc: 0,
+            depth: 1,
+            limit: 10,
+            max_bytes: 10000,
+            expressions: false
+        }
     )
     .is_err());
     assert!(origins::run(
         std::path::Path::new("/nonexistent-origins-input"),
-        0,
-        0,
-        65,
-        10,
-        10000
+        origins::Query {
+            function: 0,
+            pc: 0,
+            depth: 65,
+            limit: 10,
+            max_bytes: 10000,
+            expressions: false
+        }
     )
     .is_err());
 }
@@ -248,8 +322,21 @@ fn unsupported_prelude_and_shadowing_fail_closed() {
 #[test]
 fn public_fixture_export_and_report_are_compatible() {
     let input = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("data/simple_arithmetic.hbc");
-    let v: Value =
-        serde_json::from_slice(&origins::report(&input, 0, 0, 2, 128, 32768).unwrap()).unwrap();
+    let v: Value = serde_json::from_slice(
+        &origins::report(
+            &input,
+            origins::Query {
+                function: 0,
+                pc: 0,
+                depth: 2,
+                limit: 128,
+                max_bytes: 32768,
+                expressions: false,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
     assert_eq!(v["schema_version"], 1);
     assert_eq!(v["function"], 0);
     assert_eq!(v["pc"], 0);
