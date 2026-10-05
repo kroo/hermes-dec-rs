@@ -15,6 +15,7 @@ const fixtures = [
   {name:'bundle_eval', probe:'evalResults'},
   {name:'bundle_hermes_semantics', selfPrinting:true},
   {name:'bundle_intrinsics', probe:'intrinsicResults', sourceEquivalent:true},
+  {name:'bundle_private_state', selfPrinting:true, sourceEquivalent:true},
   {name:'massive_literals', probe:'hermesHostLogs', sourceEquivalent:true}
 ];
 fs.mkdirSync(outDir, {recursive:true});

@@ -478,7 +478,7 @@ impl Lowerer<'_, '_> {
             "ToInt32" => assign(format!("{} | 0", r(1))),
             "AddEmptyString" => assign(format!("\"\" + {}", r(1))),
             "GetGlobalObject" => assign("G".into()),
-            "LoadParam" | "LoadParamLong" => assign(if o[1] == 0 { "self".into() } else { format!("args[{}]", o[1] - 1) }),
+            "LoadParam" | "LoadParamLong" => assign(if o[1] == 0 { "self".into() } else { format!("(args.length > {} ? args[{}] : void 0)", o[1] - 1, o[1] - 1) }),
             "LoadThisNS" => assign("coerceThis(self)".into()),
             "CoerceThisNS" => assign(format!("coerceThis({})", r(1))),
             "GetNewTarget" => assign("newTarget".into()),
@@ -717,7 +717,7 @@ fn lower_function(
         if generator {
             output.push_str("const r = state.r; let pc = state.pc, caught = state.caught;\n");
         } else {
-            output.push_str("const r = []; let pc = 0, caught;\n");
+            output.push_str("const r = objectCreate(null); let pc = 0, caught;\n");
         }
         output.push_str("for (;;) { try { switch (pc) {\n");
         let mut case_open = false;

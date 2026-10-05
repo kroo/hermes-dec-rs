@@ -68,7 +68,13 @@ function closure(id, env, kind = 0) {
   apply(weakSet, metadata, [fn, {id, env}]);
   return fn;
 }
-function environment(parent, size) { return {parent, slots: new ArrayCtor(size)}; }
+// VM storage must not inherit application-defined numeric accessors.
+function privateList() {
+  const list = objectCreate(null);
+  list.length = 0;
+  return list;
+}
+function environment(parent, size) { return {parent, slots: objectCreate(null)}; }
 function parentEnvironment(env, levels) {
   while (levels--) env = env.parent;
   return env;
@@ -172,8 +178,8 @@ function argumentsObject(args, callee, strict) {
 }
 function propertyNames(object) {
   if (object == null) return void 0;
-  const names = [];
-  for (const name in ObjectCtor(object)) names.push(name);
+  const names = privateList();
+  for (const name in ObjectCtor(object)) names[names.length++] = name;
   return names;
 }
 function genericIteratorBegin(source) {
@@ -205,7 +211,7 @@ function iteratorClose(iterator, ignoreErrors) {
   } catch (error) { if (!ignoreErrors) throw error; }
 }
 function generator(id, env, self, args, callee) {
-  const state = {r: [], pc: 0, resume: 0, caught: void 0, done: false, running: false, started: false};
+  const state = {r: objectCreate(null), pc: 0, resume: 0, caught: void 0, done: false, running: false, started: false};
   function resume(action, value) {
     if (state.running) throw new TypeErrorCtor('Generator already executing');
     if (!state.started && action !== 'next') state.done = true;
@@ -234,17 +240,18 @@ const publicBuiltins = [Array.isArray, Date.UTC, Date.parse, JSON.parse, JSON.st
   Object.getOwnPropertyDescriptor, Object.getOwnPropertyNames, Object.getPrototypeOf,
   Object.isExtensible, Object.isFrozen, Object.keys, Object.seal, String.fromCharCode];
 const freeze = Object.freeze, ownKeys = Reflect.ownKeys, setPrototype = Object.setPrototypeOf;
-const slice = Array.prototype.slice, templates = new Map();
+const slice = Array.prototype.slice, join = Array.prototype.join, templates = new Map();
 const cjsFunctions = objectCreate(null), cjsCache = objectCreate(null);
 function requireModule(id, parent) {
   if (typeof id === 'string' && id.startsWith('.')) {
     const segments = (parent ? parent.split('/').slice(0, -1) : []).concat(id.split('/'));
-    const normalized = [];
+    const normalized = privateList();
     for (const part of segments) {
-      if (part === '..') normalized.pop();
-      else if (part !== '.' && part !== '') normalized.push(part);
+      if (part === '..') {
+        if (normalized.length) delete normalized[--normalized.length];
+      } else if (part !== '.' && part !== '') normalized[normalized.length++] = part;
     }
-    id = normalized.join('/');
+    id = apply(join, normalized, ['/']);
   }
   if (cjsFunctions[id] === void 0 && cjsFunctions[id + '.js'] !== void 0) id += '.js';
   if (cjsCache[id]) return cjsCache[id].exports;
