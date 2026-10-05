@@ -3,7 +3,7 @@ name: Fast PR Checks
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'codex/**']
 
 env:
   CARGO_TERM_COLOR: always
@@ -54,3 +54,7 @@ jobs:
       - name: Run tests
         if: matrix.check == 'test'
         run: cargo test --all-features
+
+      - name: Run agent telemetry tests
+        if: matrix.check == 'test'
+        run: node --test scripts/tests/measure_cli_agents.test.mjs
