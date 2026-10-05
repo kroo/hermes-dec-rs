@@ -63,9 +63,23 @@ Follow-up landed here: refresh per-case processed-block tracking after nested st
 
 ### [x] Step: Fix loop classification and exception-region loop reconstruction
 <!-- chat-id: bc95ffb7-f84a-4230-9daf-92eef7122978 -->
-Tighten loop-shape detection so real `while` loops stop degrading into `do-while`, then route loop-containing exception regions through the same loop-aware reconstruction path instead of flattening them. This step also decides and documents the expected fallback for `for-in` and `for-of` when full AST lowering is still not possible.
+Tighten loop-shape detection so real `while` loops stop degrading into `do-while`, then route loop-containing exception regions through the same loop-aware reconstruction path instead of flattening them. This step establishes the loop-shape and exception-handling foundation needed before first-class iterator lowering is complete.
 
-Current follow-up landed on this step: preserve `GetPNameList` / `IteratorBegin` setup blocks in the control-flow plan and route iterator loops through an explicit `while (true) { ... if (exit) break; ... }` fallback instead of a broken plain `while (cond)`. `ForOf` fallback now derives its break test from the `IteratorNext` result rather than the generic loop-header comparison, keeps the synthetic iterator-close region as a lowered `try { while (true) { ... } } finally { iterator.return && iterator.return(); }` cleanup wrapper, and is covered by a concrete regression on `data/ast-04-tests/test_rest_params.hbc`. `ForIn` no longer emits the broken non-advancing pseudo-loop; it now bails out explicitly with `throw new Error("Unsupported for-in loop fallback")`, and sequential conversion treats that bailout as terminal so later loop structures are not emitted as dead code. The loop-aware exception fast-path is gated on actual loop intersection instead of every single-region handler, and the exception-root reconstruction now skips regions already consumed by nested loop-aware expansion so `data/try_catch_test.hbc` function `4` no longer appends a duplicated trailing top-level `try/catch`. Loop classification also now distinguishes header-local conditionals from real loop exits: when the header branches only within the loop and the back-edge block owns the exit test, reconstruction emits a bottom-tested loop, so `tryInLoop` now decompiles as `do { ... } while (var6 < var5);` instead of the bogus `while (var0 === var1)`. Constant initialization in that path now respects prior declarations, reducing the old `let var6; let var6 = 0;` corruption to `let var6;` followed by `var6 = 0;`. Single-block loop headers now stay classified as `While` instead of degrading into `DoWhile`, and `tests/loop_integration.rs` now contains non-optional fixture assertions for the concrete `loop_types.hbc` loop mix, the documented `for-in` bailout, the `for-of` cleanup/exit shape, and the absence of duplicated `tryInLoop` declarations and trailing handler output. Verified with `cargo fmt --all --check`, `cargo test --test loop_integration -- --nocapture`, `cargo run --quiet -- decompile data/while_loop.hbc --function 1`, `cargo run --quiet -- decompile data/try_catch_test.hbc --function 4`, `cargo run --quiet -- decompile data/simple_loops.hbc --function 1`, `cargo run --quiet -- decompile data/loop_types.hbc --function 1`, and `cargo run --quiet -- decompile data/complex_control_flow.hbc --function 7`.
+Current follow-up landed on this step: preserve `GetPNameList` / `IteratorBegin` setup blocks in the control-flow plan and route iterator loops through an explicit `while (true) { ... if (exit) break; ... }` fallback instead of a broken plain `while (cond)`. `ForOf` fallback now derives its break test from the `IteratorNext` result rather than the generic loop-header comparison, keeps the synthetic iterator-close region as a lowered `try { while (true) { ... } } finally { iterator.return && iterator.return(); }` cleanup wrapper, and is covered by a concrete regression on `data/ast-04-tests/test_rest_params.hbc`. The loop-aware exception fast-path is gated on actual loop intersection instead of every single-region handler, and the exception-root reconstruction now skips regions already consumed by nested loop-aware expansion so `data/try_catch_test.hbc` function `4` no longer appends a duplicated trailing top-level `try/catch`. Loop classification also now distinguishes header-local conditionals from real loop exits: when the header branches only within the loop and the back-edge block owns the exit test, reconstruction emits a bottom-tested loop, so `tryInLoop` now decompiles as `do { ... } while (var6 < var5);` instead of the bogus `while (var0 === var1)`. Constant initialization in that path now respects prior declarations, reducing the old `let var6; let var6 = 0;` corruption to `let var6;` followed by `var6 = 0;`. Single-block loop headers now stay classified as `While` instead of degrading into `DoWhile`. For the still-unsupported exception-heavy loop shape in `data/complex_control_flow.hbc` function `7`, reconstruction now bails out explicitly with `throw new Error("Unsupported exception-region loop reconstruction")` instead of stack-overflowing or emitting silently wrong code. `tests/loop_integration.rs` covers the concrete `loop_types.hbc` loop mix, the `for-of` cleanup/exit shape, the absence of duplicated `tryInLoop` declarations and trailing handler output, and the explicit function `7` bailout.
+
+### [x] Step: Lower `for-in` loops from Hermes property-iteration bytecode
+<!-- chat-id: f492883f-a204-448d-bbe9-8b533139ae84 -->
+Replace the temporary `throw new Error("Unsupported for-in loop fallback")` path with real structured reconstruction for the `GetPNameList` / `GetNextPName` object-enumeration pattern used by Hermes bytecode. This remains part of `#64`, not a follow-up issue, because the current milestone scope now requires faithful `for-in` reconstruction rather than a documented bailout.
+
+Work here landed as a focused lowering in the control-flow plan converter: when a sequential `GetPNameList` setup block is immediately followed by a `ForIn` loop structure, conversion now preserves setup instructions that precede the enumeration opcode, lowers the supported `GetPNameList` / `GetNextPName` shape to a real `for (const key in obj)` AST node, and keeps the rest of the surrounding sequence intact instead of stopping at the temporary fallback throw. `tests/loop_integration.rs` now asserts the lowered `for-in` structure on `data/loop_types.hbc`, rejects the old bailout, and ensures the decompiled object-enumeration section no longer routes through `Object.keys(...)` or iterator syntax.
+
+Verified with:
+
+- `cargo fmt --all`
+- `cargo test --test loop_integration -- --nocapture`
+- `cargo run --quiet -- decompile data/loop_types.hbc --function 1`
+- `node --check` on the decompiled `loop_types` output
+- a focused runtime probe of the decompiled `loop_types` prefix through the `for-in` section, confirming the observable logs match the original fixture sequence `1,2,3,4,5,5,6,8,a,b`
 
 ### [x] Step: Replace sparse-switch depth guards with structural traversal
 <!-- chat-id: 0c97ad42-fdff-49bf-a5ea-92934bb3b519 -->
@@ -73,5 +87,40 @@ Remove the ad hoc recursion-depth bailout behavior in sparse-switch analysis and
 
 Current follow-up landed on this step: move the structural bound into sparse-switch detection itself so comparison-chain discovery now tracks visited comparison blocks, bails out explicitly on overlap/cycles instead of truncating the chain, and is no longer dependent on planner-side depth caps. Coverage now includes a real decompilation regression for `data/dense_switch_test.hbc` function `2` plus detector-level regressions for a 12-comparison sparse-switch chain and a cyclic unsupported shape. Verified with `cargo fmt --all`, `cargo test test_large_sparse_switch_fixture_decompiles_as_switch -- --nocapture`, and `cargo test sparse_switch_detector -- --nocapture`.
 
-### [ ] Step: Convert fixtures into regression tests and run targeted verification
+### [x] Step: Convert fixtures into regression tests and run targeted verification
+<!-- chat-id: f492883f-a204-448d-bbe9-8b533139ae84 -->
 Promote the current loop and nested-control-flow fixtures from optional or placeholder coverage into meaningful assertions in `tests/loop_integration.rs`, dense-switch coverage, and any sparse-switch regression tests needed for the new traversal. Finish with the targeted commands from the milestone issue so the branch has a clear pass/fail definition.
+
+This step is now fully landed: the loop regressions assert the corrected `while_loop` shape, the lowered `for-in` output, the `for-of` cleanup/exit behavior, the preserved `tryInLoop` loop shape, and the explicit `throw new Error("Unsupported exception-region loop reconstruction")` bailout for `data/complex_control_flow.hbc` function `7`. Dense-switch coverage pins the nested-switch/join behavior and `switchWithTryCatch`, while `tests/sparse_switch_converter.rs` exercises both the library and CLI sparse-switch paths on the real fixture. The `tests/dense_switch.rs` disassembly race is also eliminated by per-test temporary fixture copies.
+
+Verified with:
+
+- `cargo fmt --all`
+- `cargo test --test loop_integration -- --nocapture`
+- `cargo test --test dense_switch -- --nocapture`
+- `cargo test --test sparse_switch_converter -- --nocapture`
+- `cargo test dense_switch -- --nocapture`
+- `cargo run --quiet -- decompile data/dense_switch_test.hbc --function 8`
+- `cargo run --quiet -- decompile data/while_loop.hbc --function 1`
+- `cargo run --quiet -- decompile data/complex_control_flow.hbc --function 7`
+- `node --check` on the decompiled `data/complex_control_flow.hbc` function `7` output
+
+### [x] Follow-up: Verify remote state and complete stabilization
+
+Remote branches checked on 2026-10-05: `origin/pr59-rebased` is still `4c244b5`.
+Merged `origin/main` at `de1cfdc`, which adds CommonJS/Metro package analysis,
+while preserving the existing control-flow worktree changes.
+
+Separated corpus CFG topology checks from a representative exact DOT renderer
+snapshot, stopped tests from creating DOT files, and repaired disassembly snapshot
+coverage to use committed CLI output in temporary directories. The old
+`.hasm.expected` references contain Hermes output in a different format and remain
+unchanged. Updated README CLI examples, package metadata, historical document
+labels, and `docs/roadmap.md`.
+
+The earlier function 7 bailout is superseded by an instruction-dispatch fallback
+with physical registers and original exception table priority. Node regression
+tests compare source and emitted output for success, nested handlers, rethrows,
+critical breaks, cleanup, NaN comparisons, and uncaught errors; the CLI safe
+optimization preset preserves this output. Raising this fallback into readable
+high-level try/catch/finally remains a future milestone.

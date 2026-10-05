@@ -234,34 +234,7 @@ impl Decompiler {
 
     /// Decompile an HBC file to JavaScript
     pub fn decompile(&mut self, hbc_file: &HbcFile) -> DecompilerResult<String> {
-        // Run global analysis if not already cached
-        if self.global_analysis.is_none() {
-            let global_result = match GlobalSSAAnalyzer::analyze(hbc_file) {
-                Ok(result) => result,
-                Err(e) => {
-                    return Err(DecompilerError::Internal {
-                        message: format!("Global analysis failed: {}", e),
-                    });
-                }
-            };
-            self.global_analysis = Some(Arc::new(global_result));
-        }
-
-        // Process functions sequentially (for now)
-        let mut modules = Vec::new();
-        for i in 0..hbc_file.functions.count() {
-            modules.push(self.decompile_function(hbc_file, i)?);
-        }
-        // Combine modules (for now, just take the first one)
-        let module = modules
-            .into_iter()
-            .next()
-            .ok_or_else(|| DecompilerError::Internal {
-                message: "No functions found in HBC file".to_string(),
-            })?;
-
-        // For now, just return the first module
-        Ok(module)
+        crate::bundle::export_bundle(hbc_file, &crate::bundle::BundleOptions::default())
     }
 
     /// Decompile a single function
@@ -530,6 +503,11 @@ impl<'a> FunctionDecompiler<'a> {
             );
         analyzer.analyze();
 
+        let needs_exception_fallback = plan.structures.values().any(|structure| {
+            matches!(&structure.kind, crate::analysis::control_flow_plan::ControlFlowKind::Unsupported { message }
+                if message == "Unsupported exception-region loop reconstruction")
+        });
+
         // Convert the plan to AST
         let mut converter = crate::ast::ControlFlowPlanConverter::new(
             ast_builder,
@@ -546,7 +524,17 @@ impl<'a> FunctionDecompiler<'a> {
         // Set whether to decompile nested functions
         converter.set_decompile_nested(self.options.decompile_nested);
 
-        let all_statements = converter.convert_to_ast();
+        let all_statements = if needs_exception_fallback {
+            crate::ast::exception_fallback::convert_exception_fallback(
+                ast_builder,
+                self.hbc_file,
+                hbc_analysis,
+                function_analysis,
+                self.function_index,
+            )?
+        } else {
+            converter.convert_to_ast()
+        };
 
         // Take the comment manager back from the converter
         let comment_manager = converter.take_comment_manager();

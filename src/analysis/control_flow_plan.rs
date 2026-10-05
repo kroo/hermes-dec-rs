@@ -314,6 +314,9 @@ pub enum ControlFlowKind {
         is_synthetic: bool, // Created by analysis vs original CFG block
     },
 
+    /// Explicit fallback for unsupported reconstruction shapes
+    Unsupported { message: String },
+
     /// Empty structure (for missing else branches, etc.)
     Empty,
 }
@@ -414,6 +417,7 @@ pub enum LoopType {
     For,
     ForIn,
     ForOf,
+    UnsupportedExceptionFallback,
 }
 
 /// Variable scope information
@@ -630,6 +634,7 @@ impl ControlFlowPlan {
                     None
                 }
             }
+            ControlFlowKind::Unsupported { .. } => Some(TerminationReason::Throw),
             _ => None,
         }
     }
@@ -876,6 +881,7 @@ impl ControlFlowStructure {
             ControlFlowKind::BasicBlock { block, .. } => {
                 blocks.push(*block);
             }
+            ControlFlowKind::Unsupported { .. } => {}
             ControlFlowKind::Empty => {}
         }
     }
@@ -1179,6 +1185,9 @@ impl ControlFlowPlan {
                 } else {
                     writeln!(f, " ({} instructions)", instruction_count)?;
                 }
+            }
+            ControlFlowKind::Unsupported { message } => {
+                writeln!(f, "Unsupported ({message})")?;
             }
             ControlFlowKind::Empty => {
                 writeln!(f, "Empty")?;

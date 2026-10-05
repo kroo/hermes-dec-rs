@@ -616,6 +616,15 @@ impl<'a> SSAUsageTracker<'a> {
                             dominator_block,
                             kind,
                         };
+                    } else if self.needs_function_scope_declaration(coalesced_rep) {
+                        return DeclarationStrategy::DeclareAtDominator {
+                            dominator_block: self
+                                .function_analysis
+                                .cfg
+                                .entry_node()
+                                .unwrap_or(coalesced_rep.def_site.block_id),
+                            kind: VariableKind::Let,
+                        };
                     } else {
                         let kind = self.determine_variable_kind(coalesced_rep);
                         return DeclarationStrategy::DeclareAndInitialize { kind };
@@ -655,7 +664,19 @@ impl<'a> SSAUsageTracker<'a> {
             );
         }
 
-        // 3. Single SSA value - declare at definition
+        // 3. Single SSA value - declare at definition unless it needs
+        // a wider function-level declaration to remain in scope.
+        if self.needs_function_scope_declaration(ssa_value) {
+            return DeclarationStrategy::DeclareAtDominator {
+                dominator_block: self
+                    .function_analysis
+                    .cfg
+                    .entry_node()
+                    .unwrap_or(ssa_value.def_site.block_id),
+                kind: VariableKind::Let,
+            };
+        }
+
         let kind = self.determine_variable_kind(ssa_value);
         DeclarationStrategy::DeclareAndInitialize { kind }
     }
@@ -803,6 +824,39 @@ impl<'a> SSAUsageTracker<'a> {
         }
 
         false
+    }
+
+    fn needs_function_scope_declaration(&self, ssa_value: &SSAValue) -> bool {
+        let Some(var_analysis) = &self.function_analysis.ssa.variable_analysis else {
+            return false;
+        };
+
+        let representative = var_analysis
+            .coalesced_values
+            .get(ssa_value)
+            .unwrap_or(ssa_value);
+
+        if !matches!(
+            var_analysis.variable_scopes.get(representative),
+            Some(crate::cfg::ssa::variable_analysis::VariableScope::Function)
+        ) {
+            return false;
+        }
+
+        if var_analysis
+            .variable_usage
+            .get(representative)
+            .map(|usage| usage.is_parameter)
+            .unwrap_or(false)
+        {
+            return false;
+        }
+
+        self.function_analysis
+            .cfg
+            .entry_node()
+            .map(|entry| entry != ssa_value.def_site.block_id)
+            .unwrap_or(false)
     }
 
     /// Find the dominator block for a coalesced value

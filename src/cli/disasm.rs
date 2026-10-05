@@ -6,6 +6,14 @@ use std::io::{BufWriter, Write};
 
 /// Run the disasm subcommand
 pub fn disasm(input_path: &std::path::Path) -> DecompilerResult<()> {
+    disasm_with_options(input_path, None, false)
+}
+
+pub fn disasm_with_options(
+    input_path: &std::path::Path,
+    output: Option<&std::path::Path>,
+    annotate_pc: bool,
+) -> DecompilerResult<()> {
     // Read the input file
     let data = match fs::read(input_path) {
         Ok(data) => data,
@@ -33,13 +41,14 @@ pub fn disasm(input_path: &std::path::Path) -> DecompilerResult<()> {
         .unwrap()
         .to_string_lossy()
         .to_string();
-    let output_filename = input_path
+    let default_output = input_path
         .parent()
         .unwrap()
         .join(format!("{}.hasm", base_name));
+    let output_filename = output.unwrap_or(&default_output);
 
     // Generate the complete disassembly
-    generate_hasm_output(&hbc_file, &output_filename)?;
+    generate_hasm_output(&hbc_file, output_filename, annotate_pc)?;
 
     println!("Disassembled to {}", output_filename.display());
 
@@ -47,7 +56,11 @@ pub fn disasm(input_path: &std::path::Path) -> DecompilerResult<()> {
 }
 
 /// Generate the complete .hasm output
-fn generate_hasm_output(hbc_file: &HbcFile, output_path: &std::path::Path) -> DecompilerResult<()> {
+fn generate_hasm_output(
+    hbc_file: &HbcFile,
+    output_path: &std::path::Path,
+    annotate_pc: bool,
+) -> DecompilerResult<()> {
     // Open file for writing with buffering
     let file = std::fs::File::create(output_path)
         .map_err(|e| DecompilerError::Io(format!("Failed to create output file: {}", e)))?;
@@ -85,7 +98,7 @@ fn generate_hasm_output(hbc_file: &HbcFile, output_path: &std::path::Path) -> De
     })?;
 
     // Generate all functions (streaming)
-    generate_all_functions(hbc_file, &mut file)?;
+    generate_all_functions(hbc_file, &mut file, annotate_pc)?;
 
     // Flush the buffer to ensure all data is written
     file.flush()
@@ -332,8 +345,14 @@ fn generate_function_header(
 fn format_instruction(
     instruction: &crate::hbc::tables::function_table::HbcFunctionInstruction,
     hbc_file: &HbcFile,
+    annotate_pc: bool,
 ) -> String {
-    instruction.format_instruction(hbc_file)
+    let formatted = instruction.format_instruction(hbc_file);
+    if annotate_pc {
+        format!("/* pc={} */ {formatted}", instruction.offset.value())
+    } else {
+        formatted
+    }
 }
 
 /// Generate exception handlers string
@@ -388,6 +407,7 @@ fn generate_single_function(
     hbc_file: &HbcFile,
     _idx: usize,
     parsed_header: &crate::hbc::tables::function_table::ParsedFunctionHeader,
+    annotate_pc: bool,
 ) -> DecompilerResult<String> {
     let function_index = parsed_header.index;
 
@@ -422,7 +442,7 @@ fn generate_single_function(
                 }
 
                 // Format the instruction
-                let formatted = format_instruction(instruction, hbc_file);
+                let formatted = format_instruction(instruction, hbc_file, annotate_pc);
                 result.push_str(&format!("  {}\n", formatted));
 
                 result
@@ -444,7 +464,7 @@ fn generate_single_function(
                 }
 
                 // Format the instruction
-                let formatted = format_instruction(instruction, hbc_file);
+                let formatted = format_instruction(instruction, hbc_file, annotate_pc);
                 result.push_str(&format!("  {}\n", formatted));
 
                 result
@@ -471,6 +491,7 @@ fn generate_single_function(
 fn generate_all_functions(
     hbc_file: &HbcFile,
     file: &mut BufWriter<std::fs::File>,
+    annotate_pc: bool,
 ) -> DecompilerResult<()> {
     let count = hbc_file.functions.parsed_headers.len();
     eprintln!("Generating {} functions...", count);
@@ -491,7 +512,7 @@ fn generate_all_functions(
         .par_iter()
         .enumerate()
         .map(|(idx, parsed_header)| {
-            let result = generate_single_function(hbc_file, idx, parsed_header);
+            let result = generate_single_function(hbc_file, idx, parsed_header, annotate_pc);
             progress_bar.inc(1);
             result
         })

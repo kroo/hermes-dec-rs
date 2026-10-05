@@ -19,7 +19,7 @@ use oxc_allocator::Vec as OxcVec;
 use oxc_ast::ast::*;
 use oxc_ast::AstBuilder;
 use petgraph::graph::NodeIndex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Check if a property name is a standard global that doesn't need globalThis prefix
 fn is_standard_global(property: &str) -> bool {
@@ -116,6 +116,8 @@ pub struct ControlFlowPlanConverter<'a> {
     comment_manager: Option<AddressCommentManager>,
     /// Variable mapper for consistent naming
     variable_mapper: crate::ast::variables::VariableMapper,
+    /// Track dominator declarations already emitted so loop headers can predeclare them.
+    emitted_declarations: HashSet<DuplicatedSSAValue>,
 }
 
 impl<'a> ControlFlowPlanConverter<'a> {
@@ -177,6 +179,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                 None
             },
             variable_mapper,
+            emitted_declarations: HashSet::new(),
         }
     }
 
@@ -330,6 +333,9 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     context,
                 );
             }
+            ControlFlowKind::Unsupported { message } => {
+                statements.push(self.create_unsupported_fallback_statement(message));
+            }
             ControlFlowKind::Empty => {
                 // Empty structure - no statements to generate
             }
@@ -344,8 +350,26 @@ impl<'a> ControlFlowPlanConverter<'a> {
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
-        for element in elements {
-            match element {
+        let mut idx = 0;
+        while idx < elements.len() {
+            if let (
+                Some(SequentialElement::Block(setup_block)),
+                Some(SequentialElement::Structure(structure_id)),
+            ) = (elements.get(idx), elements.get(idx + 1))
+            {
+                if self.try_convert_for_in_sequence(
+                    plan,
+                    *setup_block,
+                    *structure_id,
+                    statements,
+                    context,
+                ) {
+                    idx += 2;
+                    continue;
+                }
+            }
+
+            match &elements[idx] {
                 SequentialElement::Block(block_id) => {
                     self.convert_basic_block(plan, *block_id, 0, false, statements, context);
                 }
@@ -359,6 +383,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     }
                 }
             }
+            idx += 1;
         }
     }
 
@@ -372,10 +397,6 @@ impl<'a> ControlFlowPlanConverter<'a> {
         };
 
         match &structure.kind {
-            ControlFlowKind::Loop {
-                loop_type: LoopType::ForIn,
-                ..
-            } => true,
             ControlFlowKind::Sequential { elements } => {
                 elements.iter().any(|element| match element {
                     SequentialElement::Block(_) => false,
@@ -386,6 +407,192 @@ impl<'a> ControlFlowPlanConverter<'a> {
             }
             _ => false,
         }
+    }
+
+    fn try_convert_for_in_sequence(
+        &mut self,
+        plan: &ControlFlowPlan,
+        setup_block: NodeIndex,
+        structure_id: StructureId,
+        statements: &mut OxcVec<'a, Statement<'a>>,
+        context: Option<&DuplicationContext>,
+    ) -> bool {
+        let Some(structure) = plan.get_structure(structure_id) else {
+            return false;
+        };
+        let ControlFlowKind::Loop {
+            loop_type: LoopType::ForIn,
+            header_block,
+            body,
+            ..
+        } = &structure.kind
+        else {
+            return false;
+        };
+
+        let Some((left, right)) =
+            self.extract_for_in_loop_parts(plan, setup_block, *header_block, context)
+        else {
+            return false;
+        };
+
+        if let Some(setup_instruction_count) =
+            self.get_instruction_prefix_before_get_pname_list(setup_block)
+        {
+            if setup_instruction_count > 0 {
+                self.convert_basic_block(
+                    plan,
+                    setup_block,
+                    setup_instruction_count,
+                    false,
+                    statements,
+                    context,
+                );
+            }
+        }
+
+        let mut body_stmts = self.ast_builder.vec();
+        if let Some(body_structure) = plan.get_structure(*body) {
+            match &body_structure.kind {
+                ControlFlowKind::Sequential { elements } if matches!(elements.first(), Some(SequentialElement::Block(block)) if *block == *header_block) =>
+                {
+                    self.convert_sequential(plan, &elements[1..], &mut body_stmts, context);
+                }
+                ControlFlowKind::BasicBlock { block, .. } if *block == *header_block => {}
+                _ => {
+                    self.convert_structure_id(plan, *body, &mut body_stmts, context);
+                }
+            }
+        } else {
+            self.convert_structure_id(plan, *body, &mut body_stmts, context);
+        }
+
+        let body_stmt = self.ast_builder.statement_block(oxc_span::SPAN, body_stmts);
+        statements.push(
+            self.ast_builder
+                .statement_for_in(oxc_span::SPAN, left, right, body_stmt),
+        );
+        true
+    }
+
+    fn extract_for_in_loop_parts(
+        &mut self,
+        plan: &ControlFlowPlan,
+        setup_block: NodeIndex,
+        header_block: NodeIndex,
+        context: Option<&DuplicationContext>,
+    ) -> Option<(ForStatementLeft<'a>, Expression<'a>)> {
+        let function_analysis = self
+            .hbc_analysis
+            .get_function_analysis_ref(self.function_index)?;
+
+        let setup = function_analysis.cfg.graph().node_weight(setup_block)?;
+        let header = function_analysis.cfg.graph().node_weight(header_block)?;
+
+        let get_pname = setup.instructions().iter().find_map(|instr| {
+            if let UnifiedInstruction::GetPNameList {
+                operand_0,
+                operand_1,
+                ..
+            } = instr.instruction
+            {
+                Some((instr.instruction_index, operand_0, operand_1))
+            } else {
+                None
+            }
+        })?;
+
+        let get_next = header.instructions().iter().find_map(|instr| {
+            if let UnifiedInstruction::GetNextPName {
+                operand_0,
+                operand_1,
+                operand_2,
+                ..
+            } = instr.instruction
+            {
+                Some((instr.instruction_index, operand_0, operand_1, operand_2))
+            } else {
+                None
+            }
+        })?;
+
+        let (setup_pc, iterator_reg, object_reg) = get_pname;
+        let (header_pc, key_reg, next_iterator_reg, next_object_reg) = get_next;
+        if iterator_reg != next_iterator_reg || object_reg != next_object_reg {
+            return None;
+        }
+
+        let right =
+            self.create_register_use_expression(plan, setup_block, setup_pc, object_reg, context)?;
+
+        self.instruction_converter
+            .set_current_pc(header_pc.0 as u32);
+        self.instruction_converter
+            .register_manager_mut()
+            .set_current_block(header_block);
+        let key_name = self
+            .instruction_converter
+            .register_manager_mut()
+            .create_new_variable_for_register(key_reg);
+
+        let key_atom = self.ast_builder.allocator.alloc_str(&key_name);
+        let binding_id = self
+            .ast_builder
+            .binding_identifier(oxc_span::SPAN, key_atom);
+        let binding = self.ast_builder.binding_pattern(
+            oxc_ast::ast::BindingPatternKind::BindingIdentifier(self.ast_builder.alloc(binding_id)),
+            None::<oxc_ast::ast::TSTypeAnnotation>,
+            false,
+        );
+        let declarator = self.ast_builder.variable_declarator(
+            oxc_span::SPAN,
+            oxc_ast::ast::VariableDeclarationKind::Const,
+            binding,
+            None,
+            false,
+        );
+        let left = self.ast_builder.for_statement_left_variable_declaration(
+            oxc_span::SPAN,
+            oxc_ast::ast::VariableDeclarationKind::Const,
+            self.ast_builder.vec1(declarator),
+            false,
+        );
+
+        Some((left, right))
+    }
+
+    fn get_instruction_prefix_before_get_pname_list(&self, block_id: NodeIndex) -> Option<usize> {
+        let function_analysis = self
+            .hbc_analysis
+            .get_function_analysis_ref(self.function_index)?;
+        let block = function_analysis.cfg.graph().node_weight(block_id)?;
+
+        block
+            .instructions()
+            .iter()
+            .position(|instr| matches!(instr.instruction, UnifiedInstruction::GetPNameList { .. }))
+    }
+
+    fn create_register_use_expression(
+        &mut self,
+        plan: &ControlFlowPlan,
+        block_id: NodeIndex,
+        instruction_idx: crate::hbc::InstructionIndex,
+        register: u8,
+        context: Option<&DuplicationContext>,
+    ) -> Option<Expression<'a>> {
+        self.instruction_converter
+            .register_manager_mut()
+            .set_current_block(block_id);
+        self.instruction_converter
+            .set_current_pc(instruction_idx.0 as u32);
+
+        let ssa_value = self
+            .instruction_converter
+            .register_manager_mut()
+            .get_current_ssa_for_register(register)?;
+        let use_site = RegisterUse::new(register, block_id, instruction_idx);
+        Some(self.create_use_expression(&ssa_value, context, plan, Some(use_site)))
     }
 
     fn new_statements_end_sequential(
@@ -545,80 +752,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
     ) {
         // First, handle any variable declarations for the dispatch block
         // These are typically PHI nodes that need to be declared before the switch
-        if let Some(declarations) = plan.block_declarations.get(dispatch_block) {
-            for dup_value in declarations {
-                // Check if this declaration applies to our context
-                if dup_value.duplication_context == context.cloned() {
-                    // Check the declaration strategy
-                    if let Some(strategy) = plan.declaration_strategies.get(dup_value) {
-                        match strategy {
-                            DeclarationStrategy::DeclareAtDominator { kind, .. } => {
-                                // Create a declaration statement
-                                let var_name = self.get_variable_name(dup_value);
-
-                                let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-                                let binding_id = self
-                                    .ast_builder
-                                    .binding_identifier(oxc_span::SPAN, var_atom);
-                                let binding = self.ast_builder.binding_pattern(
-                                    oxc_ast::ast::BindingPatternKind::BindingIdentifier(
-                                        self.ast_builder.alloc(binding_id),
-                                    ),
-                                    None::<oxc_ast::ast::TSTypeAnnotation>,
-                                    false,
-                                );
-                                let decl_kind = match kind {
-                                    VariableKind::Let => oxc_ast::ast::VariableDeclarationKind::Let,
-                                    VariableKind::Const => {
-                                        oxc_ast::ast::VariableDeclarationKind::Const
-                                    }
-                                };
-                                let declarator = self.ast_builder.variable_declarator(
-                                    oxc_span::SPAN,
-                                    decl_kind,
-                                    binding,
-                                    None, // No initializer for dominator declarations
-                                    false,
-                                );
-                                let var_decl = self.ast_builder.declaration_variable(
-                                    oxc_span::SPAN,
-                                    decl_kind,
-                                    self.ast_builder.vec1(declarator),
-                                    false,
-                                );
-                                let stmt = match var_decl {
-                                    oxc_ast::ast::Declaration::VariableDeclaration(v) => {
-                                        Statement::VariableDeclaration(v)
-                                    }
-                                    _ => unreachable!("declaration_variable should always return VariableDeclaration"),
-                                };
-
-                                // Add comment for declaration
-                                if let Some(ref mut comment_manager) = self.comment_manager {
-                                    if self.include_ssa_comments {
-                                        let comment = format!(
-                                            "Variable declaration: {} [r{}_{}]",
-                                            var_name,
-                                            dup_value.original.register,
-                                            dup_value.original.version
-                                        );
-                                        comment_manager.add_comment(
-                                            &stmt,
-                                            comment,
-                                            CommentKind::Line,
-                                            CommentPosition::Leading,
-                                        );
-                                    }
-                                }
-
-                                statements.push(stmt);
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
-        }
+        self.emit_block_declarations(plan, *dispatch_block, statements, context);
 
         // Collect all setup instruction SSA values so we can skip them
         let mut setup_ssa_values = std::collections::HashSet::new();
@@ -1219,7 +1353,12 @@ impl<'a> ControlFlowPlanConverter<'a> {
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
-        if matches!(loop_type, LoopType::ForIn | LoopType::ForOf) {
+        self.emit_block_declarations(plan, header_block, statements, context);
+
+        if matches!(
+            loop_type,
+            LoopType::ForIn | LoopType::ForOf | LoopType::UnsupportedExceptionFallback
+        ) {
             self.convert_iterator_fallback_loop(
                 plan,
                 loop_type,
@@ -1274,7 +1413,87 @@ impl<'a> ControlFlowPlanConverter<'a> {
                     .statement_while(oxc_span::SPAN, test, body_block);
                 statements.push(while_stmt);
             }
-            LoopType::ForIn | LoopType::ForOf => unreachable!("handled above"),
+            LoopType::ForIn | LoopType::ForOf | LoopType::UnsupportedExceptionFallback => {
+                unreachable!("handled above")
+            }
+        }
+    }
+
+    fn emit_block_declarations(
+        &mut self,
+        plan: &ControlFlowPlan,
+        block_id: NodeIndex,
+        statements: &mut OxcVec<'a, Statement<'a>>,
+        context: Option<&DuplicationContext>,
+    ) {
+        if let Some(declarations) = plan.block_declarations.get(&block_id) {
+            for dup_value in declarations {
+                if dup_value.duplication_context != context.cloned() {
+                    continue;
+                }
+                if !self.emitted_declarations.insert(dup_value.clone()) {
+                    continue;
+                }
+
+                if let Some(DeclarationStrategy::DeclareAtDominator { kind, .. }) =
+                    plan.declaration_strategies.get(dup_value)
+                {
+                    let var_name = self.get_variable_name(dup_value);
+                    let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
+                    let binding_id = self
+                        .ast_builder
+                        .binding_identifier(oxc_span::SPAN, var_atom);
+                    let binding = self.ast_builder.binding_pattern(
+                        oxc_ast::ast::BindingPatternKind::BindingIdentifier(
+                            self.ast_builder.alloc(binding_id),
+                        ),
+                        None::<oxc_ast::ast::TSTypeAnnotation>,
+                        false,
+                    );
+                    let decl_kind = match kind {
+                        VariableKind::Let => oxc_ast::ast::VariableDeclarationKind::Let,
+                        VariableKind::Const => oxc_ast::ast::VariableDeclarationKind::Const,
+                    };
+                    let declarator = self.ast_builder.variable_declarator(
+                        oxc_span::SPAN,
+                        decl_kind,
+                        binding,
+                        None,
+                        false,
+                    );
+                    let var_decl = self.ast_builder.declaration_variable(
+                        oxc_span::SPAN,
+                        decl_kind,
+                        self.ast_builder.vec1(declarator),
+                        false,
+                    );
+                    let stmt = match var_decl {
+                        oxc_ast::ast::Declaration::VariableDeclaration(v) => {
+                            Statement::VariableDeclaration(v)
+                        }
+                        _ => unreachable!(
+                            "declaration_variable should always return VariableDeclaration"
+                        ),
+                    };
+
+                    if let Some(ref mut comment_manager) = self.comment_manager {
+                        if self.include_ssa_comments {
+                            let comment = format!(
+                                "Variable declaration: {} [r{}_{}]",
+                                var_name, dup_value.original.register, dup_value.original.version
+                            );
+                            comment_manager.add_comment(
+                                &stmt,
+                                comment,
+                                CommentKind::Line,
+                                CommentPosition::Leading,
+                            );
+                        }
+                    }
+
+                    statements.push(stmt);
+                }
+            }
         }
     }
 
@@ -1291,6 +1510,10 @@ impl<'a> ControlFlowPlanConverter<'a> {
     ) {
         if matches!(loop_type, LoopType::ForIn) {
             statements.push(self.create_unsupported_forin_fallback_statement());
+            return;
+        }
+        if matches!(loop_type, LoopType::UnsupportedExceptionFallback) {
+            statements.push(self.create_unsupported_exception_loop_fallback_statement());
             return;
         }
 
@@ -1424,15 +1647,23 @@ impl<'a> ControlFlowPlanConverter<'a> {
     }
 
     fn create_unsupported_forin_fallback_statement(&self) -> Statement<'a> {
+        self.create_unsupported_fallback_statement("Unsupported for-in loop fallback")
+    }
+
+    fn create_unsupported_exception_loop_fallback_statement(&self) -> Statement<'a> {
+        self.create_unsupported_fallback_statement(
+            "Unsupported exception-region loop reconstruction",
+        )
+    }
+
+    fn create_unsupported_fallback_statement(&self, message: &str) -> Statement<'a> {
         let span = oxc_span::SPAN;
         let error_expr = self
             .ast_builder
             .expression_identifier(span, self.ast_builder.allocator.alloc_str("Error"));
         let message_expr = self.ast_builder.expression_string_literal(
             span,
-            self.ast_builder
-                .allocator
-                .alloc_str("Unsupported for-in loop fallback"),
+            self.ast_builder.allocator.alloc_str(message),
             None,
         );
         let mut args = self.ast_builder.vec();
@@ -1597,6 +1828,11 @@ impl<'a> ControlFlowPlanConverter<'a> {
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
+        if self.structure_contains_unsupported(plan, try_body) {
+            self.convert_structure_id(plan, try_body, statements, context);
+            return;
+        }
+
         // Convert try block
         let mut try_stmts = self.ast_builder.vec();
         self.convert_structure_id(plan, try_body, &mut try_stmts, context);
@@ -1671,6 +1907,72 @@ impl<'a> ControlFlowPlanConverter<'a> {
             self.ast_builder
                 .statement_try(oxc_span::SPAN, try_block, handler, finalizer);
         statements.push(try_stmt);
+    }
+
+    fn structure_contains_unsupported(
+        &self,
+        plan: &ControlFlowPlan,
+        structure_id: StructureId,
+    ) -> bool {
+        let Some(structure) = plan.get_structure(structure_id) else {
+            return false;
+        };
+
+        match &structure.kind {
+            ControlFlowKind::Unsupported { .. } => true,
+            ControlFlowKind::Sequential { elements } => {
+                elements.iter().any(|element| match element {
+                    SequentialElement::Structure(id) => {
+                        self.structure_contains_unsupported(plan, *id)
+                    }
+                    SequentialElement::Block(_) => false,
+                })
+            }
+            ControlFlowKind::Conditional {
+                true_branch,
+                false_branch,
+                ..
+            } => {
+                self.structure_contains_unsupported(plan, *true_branch)
+                    || false_branch
+                        .map(|id| self.structure_contains_unsupported(plan, id))
+                        .unwrap_or(false)
+            }
+            ControlFlowKind::Loop { body, update, .. } => {
+                self.structure_contains_unsupported(plan, *body)
+                    || update
+                        .map(|id| self.structure_contains_unsupported(plan, id))
+                        .unwrap_or(false)
+            }
+            ControlFlowKind::Switch {
+                case_groups,
+                default_case,
+                ..
+            } => {
+                case_groups
+                    .iter()
+                    .any(|group| self.structure_contains_unsupported(plan, group.body))
+                    || default_case
+                        .map(|id| self.structure_contains_unsupported(plan, id))
+                        .unwrap_or(false)
+            }
+            ControlFlowKind::TryCatch {
+                try_body,
+                catch_clause,
+                finally_clause,
+            } => {
+                self.structure_contains_unsupported(plan, *try_body)
+                    || catch_clause
+                        .as_ref()
+                        .map(|catch| self.structure_contains_unsupported(plan, catch.body))
+                        .unwrap_or(false)
+                    || finally_clause
+                        .as_ref()
+                        .map(|finally| self.structure_contains_unsupported(plan, finally.body))
+                        .unwrap_or(false)
+            }
+            ControlFlowKind::BasicBlock { .. } | ControlFlowKind::Empty => false,
+        }
     }
 
     /// Convert a finally block with instruction skipping
@@ -1790,81 +2092,7 @@ impl<'a> ControlFlowPlanConverter<'a> {
         statements: &mut OxcVec<'a, Statement<'a>>,
         context: Option<&DuplicationContext>,
     ) {
-        // Handle any variable declarations for this block
-        if let Some(declarations) = plan.block_declarations.get(&block_id) {
-            for dup_value in declarations {
-                // Check if this declaration applies to our context
-                if dup_value.duplication_context == context.cloned() {
-                    // Check the declaration strategy
-                    if let Some(strategy) = plan.declaration_strategies.get(dup_value) {
-                        match strategy {
-                            DeclarationStrategy::DeclareAtDominator { kind, .. } => {
-                                // Create a declaration statement
-                                let var_name = self.get_variable_name(dup_value);
-
-                                let var_atom = self.ast_builder.allocator.alloc_str(&var_name);
-                                let binding_id = self
-                                    .ast_builder
-                                    .binding_identifier(oxc_span::SPAN, var_atom);
-                                let binding = self.ast_builder.binding_pattern(
-                                    oxc_ast::ast::BindingPatternKind::BindingIdentifier(
-                                        self.ast_builder.alloc(binding_id),
-                                    ),
-                                    None::<oxc_ast::ast::TSTypeAnnotation>,
-                                    false,
-                                );
-                                let decl_kind = match kind {
-                                    VariableKind::Let => oxc_ast::ast::VariableDeclarationKind::Let,
-                                    VariableKind::Const => {
-                                        oxc_ast::ast::VariableDeclarationKind::Const
-                                    }
-                                };
-                                let declarator = self.ast_builder.variable_declarator(
-                                    oxc_span::SPAN,
-                                    decl_kind,
-                                    binding,
-                                    None, // No initializer for dominator declarations
-                                    false,
-                                );
-                                let var_decl = self.ast_builder.declaration_variable(
-                                    oxc_span::SPAN,
-                                    decl_kind,
-                                    self.ast_builder.vec1(declarator),
-                                    false,
-                                );
-                                let stmt = match var_decl {
-                                    oxc_ast::ast::Declaration::VariableDeclaration(v) => {
-                                        Statement::VariableDeclaration(v)
-                                    }
-                                    _ => unreachable!("declaration_variable should always return VariableDeclaration"),
-                                };
-
-                                // Add comment for declaration
-                                if let Some(ref mut comment_manager) = self.comment_manager {
-                                    if self.include_ssa_comments {
-                                        let comment = format!(
-                                            "Variable declaration: {} [r{}_{}]",
-                                            var_name,
-                                            dup_value.original.register,
-                                            dup_value.original.version
-                                        );
-                                        comment_manager.add_comment(
-                                            &stmt,
-                                            comment,
-                                            CommentKind::Line,
-                                            CommentPosition::Leading,
-                                        );
-                                    }
-                                }
-
-                                statements.push(stmt);
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
-        }
+        self.emit_block_declarations(plan, block_id, statements, context);
 
         // Handle any PHI deconstructions for this block
         let phi_key = (block_id, context.cloned());

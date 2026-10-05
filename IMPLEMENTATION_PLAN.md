@@ -1,3 +1,9 @@
+# Historical Implementation Plan
+
+This document records the original design and early progress. Its SWC references
+and completion checklists are historical. The implementation uses OXC; consult
+[docs/roadmap.md](docs/roadmap.md) and the README for current status.
+
 ## Detailed Design Brief
 
 *Rust‑based high‑level decompiler for Hermes bytecode ("Hermes‑dec‑rs")*

@@ -6,6 +6,8 @@ use std::fs;
 /// Arguments for the decompile command
 #[derive(Debug, Clone)]
 pub struct DecompileArgs {
+    pub minify: bool,
+    pub hbc_version: Option<u32>,
     pub input_path: std::path::PathBuf,
     pub function_index: usize,
     pub output_path: Option<std::path::PathBuf>,
@@ -68,6 +70,19 @@ pub fn decompile(args: &DecompileArgs) -> DecompilerResult<()> {
         }
     };
 
+    if args
+        .hbc_version
+        .is_some_and(|expected| expected != hbc_file.header.version())
+    {
+        return Err(DecompilerError::Internal {
+            message: format!(
+                "Expected HBC {}, found {}",
+                args.hbc_version.unwrap(),
+                hbc_file.header.version()
+            ),
+        });
+    }
+
     // Create decompiler
     let mut decompiler = Decompiler::new()?;
 
@@ -89,6 +104,25 @@ pub fn decompile(args: &DecompileArgs) -> DecompilerResult<()> {
                 ),
             });
         }
+    };
+    let output = if args.minify {
+        let allocator = oxc_allocator::Allocator::default();
+        let parsed =
+            oxc_parser::Parser::new(&allocator, &output, oxc_span::SourceType::default()).parse();
+        if !parsed.errors.is_empty() {
+            return Err(DecompilerError::Internal {
+                message: "Cannot minify invalid JavaScript".into(),
+            });
+        }
+        oxc_codegen::Codegen::new()
+            .with_options(oxc_codegen::CodegenOptions {
+                minify: true,
+                ..Default::default()
+            })
+            .build(&parsed.program)
+            .code
+    } else {
+        output
     };
 
     // Write output

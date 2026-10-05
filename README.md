@@ -4,11 +4,13 @@ A Rust-based high-level decompiler for Hermes bytecode (HBC) that converts Herme
 
 ## Features
 
-- **HBC Parsing**: Parse all HBC versions ≥ 80 (React Native 0.72+)
+- **HBC Parsing**: Table-driven instruction support for registered versions through HBC 96; fixture coverage includes HBC 90 and 96
 - **Control Flow Analysis**: Convert bytecode into control flow graphs with modular architecture
 - **High-level Constructs**: Raise to high-level constructs (`if/else`, loops, `try/catch`, `switch`)
 - **OXC Integration**: Emit well-structured OXC AST and pretty-printed JavaScript
-- **Parallel Processing**: Process functions in parallel for better performance
+- **Full-Bundle Export**: Executable physical-register lowering, with parallel function generation and syntax validation
+- **Parallel Disassembly**: Generate and format disassembly in parallel
+- **Package Analysis**: Report CommonJS/Metro modules, dependencies, entrypoints, and suggested layout
 - **Rich Diagnostics**: Color-coded error reporting with span information
 - **Modular CFG**: Extensible control flow graph with separate modules for analysis, visualization, and regions
 
@@ -33,10 +35,8 @@ cargo install hermes-dec-rs
 ### Inspect HBC File
 
 ```bash
-# Inspect header and tables as JSON
-hermes-dec-rs inspect input.hbc --format json
-
-# Inspect as text
+# Inspect header and tables
+hermes-dec-rs inspect input.hbc
 hermes-dec-rs inspect input.hbc --format text
 ```
 
@@ -46,36 +46,66 @@ hermes-dec-rs inspect input.hbc --format text
 # Basic disassembly
 hermes-dec-rs disasm input.hbc
 
-# With PC annotations
-hermes-dec-rs disasm input.hbc --annotate-pc
-
-# Output to file
-hermes-dec-rs disasm input.hbc -o disassembly.txt
+# Writes input.hasm beside the input file
+hermes-dec-rs disasm input.hbc -o output.hasm --annotate-pc
 ```
 
 ### Analyze Control Flow Graph
 
 ```bash
 # Generate CFG visualization
-hermes-dec-rs cfg input.hbc --function 0 --dot
+hermes-dec-rs cfg input.hbc --function 0 --dot cfg.dot
 
 # Export to DOT format
-hermes-dec-rs cfg input.hbc --function 0 --dot -o cfg.dot
+hermes-dec-rs cfg input.hbc --function 0 --loops loops.dot --analysis analysis.dot
 ```
 
 ### Decompile to JavaScript
 
 ```bash
-# Basic decompilation
-hermes-dec-rs decompile input.hbc
+# Complete executable bundle, including all closures and the original entrypoint
+hermes-dec-rs export-bundle input.hbc -o bundle.js
+# Equivalent default mode
+hermes-dec-rs decompile input.hbc -o bundle.js
+
+# Structured single-function output
+hermes-dec-rs decompile input.hbc --function 0
 
 # With options
 hermes-dec-rs decompile input.hbc \
-  --format js \
-  --comments pc \
-  --minify \
+  --function 0 \
+  --comments ssa,instructions \
+  --optimize-safe \
   -o output.js
 ```
+
+Bundle export preserves physical registers, closures, compiled exception/finally
+paths, generators, and iterator cleanup. Function names may be opaque; the output
+is intentionally not a reconstruction of original source files. CommonJS bundles
+run their first listed module; `export-bundle --entry-module ID` chooses another.
+Metro/native-host bundles still require their original host globals and services.
+
+`--minify` compacts either output mode. `decompile --hbc-version N` checks the
+detected version rather than overriding decoding. Only `--format js` is accepted.
+Structured comments, SSA optimizations, nested expansion and validation bypass
+require `--function`; bundle export rejects these rather than ignoring them.
+`--decompile-nested` remains experimental in structured mode. Unsupported bundle
+opcodes/builtin versions fail before replacing output, without placeholders.
+
+Behavioral evidence covers HBC 90 and 96. Parser registry coverage through 96
+does not imply verified bundle semantics for every older version or all programs.
+See [bundle validation](docs/bundle-validation.md) for reproducible workloads,
+runtime requirements and limits of this evidence.
+
+### Analyze Structure and Packages
+
+```bash
+hermes-dec-rs analyze-cfg input.hbc --function 0 --verbose
+hermes-dec-rs package-analyze input.hbc --json
+```
+
+Package layout and clustering are heuristic reports, not reconstructed source
+filenames; executable export does not depend on these heuristics.
 
 ## Architecture
 
@@ -115,6 +145,12 @@ cargo test -- --nocapture
 
 ```bash
 cargo bench
+
+# Opt-in full-bundle API benchmarks for local large fixtures (no file I/O)
+HERMES_BENCH_LARGE=1 cargo bench --bench decompilation_benchmark full_bundle
+
+# Full-project latency, deterministic output, syntax and sampled memory checks
+node scripts/benchmark_bundle.mjs target/release/hermes-dec-rs input.hbc
 ```
 
 ## Project Structure
@@ -176,25 +212,28 @@ The CFG module has been refactored into a modular structure to enable parallel d
 
 ## Implementation Status
 
+See [docs/roadmap.md](docs/roadmap.md) for the current scope and next milestones.
+
 ### ✅ Completed
-- **HBC Parser**: Full support for Hermes bytecode parsing
+- **HBC Parser**: Header, tables, version registry, and instruction decoding
 - **String/Function Tables**: Complete table parsing infrastructure
 - **Instruction System**: Unified instruction handling across versions
 - **CFG Foundation**: Basic control flow graph construction
 - **AST Integration**: OXC AST builder integration
-- **CLI Framework**: Complete command-line interface
-- **Test Suite**: Comprehensive test coverage
+- **Structured Output**: Conditionals, switches, loops, and selected exception patterns
+- **Package Reports**: CommonJS/Metro dependency and layout analysis
+- **Test Suite**: Parser/CFG checks and fixture-based decompilation regressions
+- **Bundle Export**: Complete function table, shared environments and CommonJS bootstrap
+- **CLI Options**: Output paths, PC annotation, JSON/text inspection, minify and version checks
 
 ### 🚧 In Progress
-- **CFG Analysis**: Advanced control flow analysis algorithms
-- **Region Detection**: If/else and switch structure detection
-- **AST Generation**: Converting CFG to OXC AST nodes
+- **Exception Structuring**: Complex exception loops use an instruction dispatch fallback that preserves handler ranges; output is less readable than structured try/catch
+- **Semantic Coverage**: Broader runtime comparisons and native-host app execution
 
 ### 📋 Planned
-- **Control Flow Structuring**: High-level construct reconstruction
-- **Code Generation**: JavaScript output from AST
-- **Performance Optimization**: Parallel processing improvements
-- **Advanced Features**: Type inference, dead code elimination
+- **Readable Module Export**: Recover source layout where evidence supports it
+- **Performance Optimization**: Maintain a sub-second release target on large bundles
+- **Parser Hardening**: Malformed-input tests and explicit version/opcode coverage
 
 ## Dependencies
 
@@ -243,4 +282,4 @@ at your option.
 
 - [Hermes Engine](https://hermesengine.dev/) - The JavaScript engine this decompiler targets
 - [OXC](https://oxc-project.github.io/) - The JavaScript/TypeScript compiler infrastructure
-- [React Native](https://reactnative.dev/) - The primary use case for this tool 
+- [React Native](https://reactnative.dev/) - The primary use case for this tool

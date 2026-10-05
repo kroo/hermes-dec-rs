@@ -15,13 +15,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Export every HBC function as executable JavaScript with opaque names
+    ExportBundle {
+        input: PathBuf,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        #[arg(long)]
+        minify: bool,
+        /// CommonJS module name or numeric module ID to execute
+        #[arg(long)]
+        entry_module: Option<String>,
+    },
     /// Inspect HBC file header and tables
     Inspect {
         /// Input HBC file
         input: PathBuf,
 
         /// Output format (json, text)
-        #[arg(short, long, default_value = "json")]
+        #[arg(short, long, default_value = "json", value_parser = ["json", "text"])]
         format: String,
     },
 
@@ -44,16 +55,16 @@ enum Commands {
         /// Input HBC file
         input: PathBuf,
 
-        /// Function index to decompile (required for now)
+        /// Function index; omit to export the complete executable bundle
         #[arg(long)]
-        function: usize,
+        function: Option<usize>,
 
         /// Output file (defaults to stdout)
         #[arg(short, long)]
         output: Option<PathBuf>,
 
-        /// Output format (js, ts)
-        #[arg(short, long, default_value = "js")]
+        /// Output format (JavaScript only)
+        #[arg(short, long, default_value = "js", value_parser = ["js"])]
         format: String,
 
         /// Include comments (pc, reg, instructions, ssa, none)
@@ -232,14 +243,22 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Inspect { input, format: _ } => {
-            cli::inspect::inspect(&input).map_err(|e| miette!("{}", e))
+        Commands::ExportBundle {
+            input,
+            output,
+            minify,
+            entry_module,
+        } => cli::bundle::export(&input, output.as_deref(), minify, entry_module)
+            .map_err(|e| miette!("{}", e)),
+        Commands::Inspect { input, format } => {
+            cli::inspect::inspect_with_format(&input, &format).map_err(|e| miette!("{}", e))
         }
         Commands::Disasm {
             input,
-            output: _,
-            annotate_pc: _,
-        } => cli::disasm::disasm(&input).map_err(|e| miette!("{}", e)),
+            output,
+            annotate_pc,
+        } => cli::disasm::disasm_with_options(&input, output.as_deref(), annotate_pc)
+            .map_err(|e| miette!("{}", e)),
         Commands::Decompile {
             input,
             function,
@@ -260,9 +279,42 @@ fn main() -> Result<()> {
             inline_constructor_calls,
             inline_object_literals,
             format: _,
-            minify: _,
-            hbc_version: _,
+            minify,
+            hbc_version,
         } => {
+            if function.is_none() {
+                if comments != "none"
+                    || skip_validation
+                    || decompile_nested
+                    || optimize_safe
+                    || optimize_all
+                    || inline_constants
+                    || inline_all_constants
+                    || inline_property_access
+                    || inline_all_property_access
+                    || inline_global_this
+                    || simplify_calls
+                    || unsafe_simplify_calls
+                    || inline_parameters
+                    || inline_constructor_calls
+                    || inline_object_literals
+                {
+                    return Err(miette!("Whole-bundle export does not accept structured-function analysis/optimization flags; use --function for those options"));
+                }
+                if let Some(version) = hbc_version {
+                    let data = std::fs::read(&input).map_err(|error| miette!("{error}"))?;
+                    let hbc =
+                        hermes_dec_rs::HbcFile::parse(&data).map_err(|error| miette!("{error}"))?;
+                    if hbc.header.version() != version {
+                        return Err(miette!(
+                            "Expected HBC {version}, found {}",
+                            hbc.header.version()
+                        ));
+                    }
+                }
+                return cli::bundle::export(&input, output.as_deref(), minify, None)
+                    .map_err(|e| miette!("{e}"));
+            }
             // Apply optimization presets
             let (
                 inline_constants,
@@ -299,7 +351,7 @@ fn main() -> Result<()> {
 
             let args = cli::decompile::DecompileArgs {
                 input_path: input,
-                function_index: function,
+                function_index: function.unwrap(),
                 output_path: output,
                 comments,
                 skip_validation,
@@ -314,6 +366,8 @@ fn main() -> Result<()> {
                 inline_parameters: Some(inline_parameters),
                 inline_constructor_calls: Some(inline_constructor_calls),
                 inline_object_literals: Some(inline_object_literals),
+                minify,
+                hbc_version,
             };
             cli::decompile::decompile(&args).map_err(|e| miette!("{}", e))
         }

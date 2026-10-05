@@ -15,6 +15,7 @@ pub mod comments;
 pub mod context;
 pub mod control_flow;
 pub mod control_flow_plan_converter;
+pub(crate) mod exception_fallback;
 pub mod instructions;
 pub mod optimization;
 pub mod variables;

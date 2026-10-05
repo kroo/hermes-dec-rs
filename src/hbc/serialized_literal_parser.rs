@@ -165,7 +165,7 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
         let (tag_type, length) = if (tag_byte & 0x80) != 0 {
             // Extended format: 1 ttt llll, llll llll
             if offset >= data.len() {
-                break;
+                return Err("Truncated extended literal tag".into());
             }
             let length_byte = data[offset];
             // println!("length_byte: {:?} offset: {}", length_byte, offset);
@@ -184,11 +184,6 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
             let tag_type = TagType::from_u8((tag_byte >> 4) & 0x07)
                 .ok_or_else(|| format!("Unknown tag type: {}", (tag_byte >> 4) & 0x07))?;
             let length = (((tag_byte & 0x0F) as usize) << 8) | (length_byte as usize);
-
-            if tag_type == TagType::LongStringTag {
-                // eprintln!("long string tag, length: {}", length);
-                offset -= 1;
-            }
 
             // eprintln!("tag_type: {:?} length: {}", tag_type, length);
             (tag_type, length)
@@ -231,9 +226,7 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
                         // eprintln!("data[offset..offset + 8]: {:?}", &data[offset..data.len()]);
                         // return Err(format!("Not enough bytes for double (offset={}, data.len={})", offset, data.len()));
 
-                        offset += 8;
-                        // eprintln!("BREAKING OUT OF LOOP");
-                        break;
+                        return Err("Not enough bytes for double".into());
                     }
                     let bytes = &data[offset..offset + 8];
                     let val = f64::from_le_bytes(bytes.try_into().unwrap());
@@ -290,6 +283,9 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
         // eprintln!("after loop, offset: {}, items.len: {}", offset, items.len());
     }
 
+    if num_items.is_some_and(|count| items.len() < count) {
+        return Err("Truncated literal item sequence".into());
+    }
     Ok(SLPArray {
         items: if let Some(n) = num_items {
             items.into_iter().take(n).collect()
@@ -302,6 +298,30 @@ pub fn unpack_slp_array(data: &[u8], num_items: Option<usize>) -> Result<SLPArra
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extended_long_string_sequence_consumes_both_tag_bytes() {
+        let mut data = vec![0xc0, 16];
+        for index in 65536u32..65552 {
+            data.extend(index.to_le_bytes());
+        }
+        data.push(0x71);
+        data.extend((-7i32).to_le_bytes());
+        let result = unpack_slp_array(&data, None).unwrap();
+        assert_eq!(result.items.len(), 17);
+        for (offset, item) in result.items[..16].iter().enumerate() {
+            assert!(matches!(item, SLPValue::LongString(index) if *index == 65536 + offset as u32));
+        }
+        assert!(matches!(result.items[16], SLPValue::Integer(-7)));
+    }
+
+    #[test]
+    fn truncated_literal_sequences_fail_instead_of_silently_shortening() {
+        for data in [vec![0xc0], vec![0x31, 0], vec![0x71, 0], vec![0x51, 0]] {
+            assert!(unpack_slp_array(&data, None).is_err());
+        }
+        assert!(unpack_slp_array(&[0x01], Some(2)).is_err());
+    }
 
     #[test]
     fn test_unpack_slp_array_simple() {

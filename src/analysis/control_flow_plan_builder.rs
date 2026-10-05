@@ -9,7 +9,9 @@ use crate::analysis::control_flow_plan::{
 };
 use crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer;
 use crate::analysis::FunctionAnalysis;
-use crate::cfg::analysis::{ConditionalChain, LoopAnalysis, PostDominatorAnalysis, SwitchRegion};
+use crate::cfg::analysis::{
+    BranchType, ConditionalChain, LoopAnalysis, PostDominatorAnalysis, SwitchRegion,
+};
 use crate::cfg::ssa::{RegisterDef, RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::sparse_switch_analyzer::SparseSwitchAnalyzer;
 use crate::cfg::switch_analysis::SwitchInfo;
@@ -39,6 +41,8 @@ pub struct ControlFlowPlanBuilder<'a> {
     exception_analysis: Option<crate::cfg::exception_analysis::ExceptionAnalysis>,
     /// Exception regions currently being expanded, used to avoid self-recursion
     active_exception_regions: Vec<(u32, u32, Option<usize>)>,
+    /// Sparse switch dispatch blocks rejected as structurally unsafe.
+    unsupported_sparse_switch_dispatches: HashSet<NodeIndex>,
     /// Inline configuration for optimization passes
     inline_config: InlineConfig,
     /// Pre-computed loop analysis for this function
@@ -70,6 +74,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             catch_blocks,
             exception_analysis,
             active_exception_regions: Vec::new(),
+            unsupported_sparse_switch_dispatches: HashSet::new(),
             inline_config: InlineConfig::default(),
             loop_analysis,
         }
@@ -246,6 +251,16 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             .cloned()
     }
 
+    fn sparse_switch_region_revisits_dispatch(
+        &self,
+        region: &crate::cfg::analysis::SwitchRegion,
+    ) -> bool {
+        region
+            .case_analyses
+            .values()
+            .any(|analysis| analysis.blocks.contains(&region.dispatch))
+    }
+
     fn exception_region_exit_blocks(
         &self,
         region: &crate::cfg::exception_analysis::ExceptionRegion,
@@ -357,55 +372,72 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             return None;
         }
 
-        // 1. Check for for-in/for-of setup pattern (GetPNameList or IteratorBegin)
-        if let Some(structure_id) = self.try_detect_forin_forof_pattern(block) {
-            return Some(structure_id);
-        }
+        let result = (|| {
+            // 1. Check for for-in/for-of setup pattern (GetPNameList or IteratorBegin)
+            if let Some(structure_id) = self.try_detect_forin_forof_pattern(block) {
+                return Some(structure_id);
+            }
 
-        // 2. Check for exception regions before other structural heuristics. When a try/catch
-        // lives inside a loop, this keeps it attached to the loop body instead of being peeled
-        // out into a top-level preamble/exception split.
-        if let Some(region) = self.find_exception_region_starting_at_block(block) {
-            return Some(self.build_try_catch_structure(&region));
-        }
+            // 2. Check for exception regions before other structural heuristics. When a try/catch
+            // lives inside a loop, this keeps it attached to the loop body instead of being peeled
+            // out into a top-level preamble/exception split.
+            if let Some(region) = self.find_exception_region_starting_at_block(block) {
+                return Some(self.build_try_catch_structure(&region));
+            }
 
-        // 3. Check for loops before sparse-switch detection so loop headers that start with
-        // internal conditionals do not get misidentified as switches.
-        if let Some(loop_structure) = self.build_loop_structure_at_block(block) {
-            return Some(loop_structure);
-        }
+            // 3. Check for loops before sparse-switch detection so loop headers that start with
+            // internal conditionals do not get misidentified as switches.
+            if let Some(loop_structure) = self.build_loop_structure_at_block(block) {
+                return Some(loop_structure);
+            }
 
-        // 4. Check for dense switch (SwitchImm instruction)
-        if let Some(region) = self.detect_dense_switch_at_block(block) {
-            return Some(self.build_switch_from_region(region));
-        }
-
-        // 5. Check for sparse switch using existing analyzer
-        if let Some(ref postdom) = self.post_dominators {
-            let analyzer = SparseSwitchAnalyzer::with_hbc_file(self.cfg.hbc_file());
-            if let Some(switch_info) = analyzer.detect_switch_pattern(
-                block,
-                self.cfg,
-                &self.function_analysis.ssa,
-                postdom,
-            ) {
-                // Convert switch_info to SwitchRegion and build
-                let region = self.switch_info_to_region(switch_info, block);
+            // 4. Check for dense switch (SwitchImm instruction)
+            if let Some(region) = self.detect_dense_switch_at_block(block) {
                 return Some(self.build_switch_from_region(region));
             }
-        }
 
-        // 6. Check for conditional chains starting at this block
-        if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
-            // Check all top-level chains
-            for chain in &conditional_analysis.chains {
-                if let Some(structure_id) = self.check_chain_at_block(chain, block) {
-                    return Some(structure_id);
+            // 5. Check for sparse switch using existing analyzer.
+            if !self.unsupported_sparse_switch_dispatches.contains(&block) {
+                if let Some(ref postdom) = self.post_dominators {
+                    let analyzer = SparseSwitchAnalyzer::with_hbc_file(self.cfg.hbc_file());
+                    if let Some(switch_info) = analyzer.detect_switch_pattern(
+                        block,
+                        self.cfg,
+                        &self.function_analysis.ssa,
+                        postdom,
+                    ) {
+                        // Convert switch_info to SwitchRegion and reject shapes whose traced case
+                        // bodies loop back through the dispatch. Those candidates are not
+                        // structurally safe to lower as switches and should fall back to the
+                        // ordinary conditional reconstruction path instead.
+                        let mut region = self.switch_info_to_region(switch_info, block);
+                        region.analyze_case_bodies(self.cfg.graph(), self.cfg, None);
+                        if self.sparse_switch_region_revisits_dispatch(&region) {
+                            log::debug!(
+                                "Rejecting sparse switch at block {} because a case body revisits the dispatch block",
+                                block.index()
+                            );
+                            self.unsupported_sparse_switch_dispatches.insert(block);
+                        } else {
+                            return Some(self.build_switch_from_region(region));
+                        }
+                    }
                 }
             }
-        }
 
-        None
+            // 6. Check for conditional chains starting at this block
+            if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
+                // Check all top-level chains
+                for chain in &conditional_analysis.chains {
+                    if let Some(structure_id) = self.check_chain_at_block(chain, block) {
+                        return Some(structure_id);
+                    }
+                }
+            }
+
+            None
+        })();
+        result
     }
 
     fn build_loop_structure_at_block(&mut self, block: NodeIndex) -> Option<StructureId> {
@@ -424,6 +456,12 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 block.index(),
                 loop_info.loop_type
             );
+
+            if self.should_bail_out_exception_loop(&loop_info) {
+                return Some(self.create_unsupported_structure(
+                    "Unsupported exception-region loop reconstruction",
+                ));
+            }
 
             let loop_body = self.build_loop_body_structure(&loop_info);
 
@@ -598,49 +636,31 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         chain: &ConditionalChain,
         block: NodeIndex,
     ) -> Option<StructureId> {
-        // Use a depth parameter to prevent infinite recursion
-        self.check_chain_at_block_with_depth(chain, block, 0, 10)
-    }
+        let mut pending = vec![chain];
+        let mut visited = HashSet::new();
 
-    fn check_chain_at_block_with_depth(
-        &mut self,
-        chain: &ConditionalChain,
-        block: NodeIndex,
-        depth: usize,
-        max_depth: usize,
-    ) -> Option<StructureId> {
-        log::trace!(
-            "check_chain_at_block: block={}, depth={}",
-            block.index(),
-            depth
-        );
-
-        // Prevent infinite recursion
-        if depth > max_depth {
-            log::warn!(
-                "check_chain_at_block: max depth exceeded for block {}",
-                block.index()
+        while let Some(current_chain) = pending.pop() {
+            log::trace!(
+                "check_chain_at_block: block={}, chain_id={}",
+                block.index(),
+                current_chain.chain_id
             );
-            return None;
-        }
 
-        // Check if this chain starts at the current block
-        if let Some(first_branch) = chain.branches.first() {
-            if first_branch.condition_block == block {
-                log::trace!(
-                    "  -> found chain starting at this block, building conditional structure"
-                );
-                return Some(self.build_conditional_structure(chain.clone()));
+            if let Some(first_branch) = current_chain.branches.first() {
+                // Nested analyses restart chain IDs; identity is the CFG source,
+                // not the report-local numeric chain ID.
+                if !visited.insert((first_branch.condition_block, first_branch.branch_entry)) {
+                    continue;
+                }
+                if first_branch.condition_block == block {
+                    log::trace!(
+                        "  -> found chain starting at this block, building conditional structure"
+                    );
+                    return Some(self.build_conditional_structure(current_chain.clone()));
+                }
             }
-        }
 
-        // Recursively check nested chains
-        for nested_chain in &chain.nested_chains {
-            if let Some(structure_id) =
-                self.check_chain_at_block_with_depth(nested_chain, block, depth + 1, max_depth)
-            {
-                return Some(structure_id);
-            }
+            pending.extend(current_chain.nested_chains.iter().rev());
         }
 
         None
@@ -1076,6 +1096,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 .iter()
                 .find(|l| l.primary_header() == block)
             {
+                if self.should_bail_out_exception_loop(loop_info) {
+                    elements.push(SequentialElement::Structure(
+                        self.create_unsupported_structure(
+                            "Unsupported exception-region loop reconstruction",
+                        ),
+                    ));
+                    continue;
+                }
+
                 // Mark all blocks in the loop as processed
                 processed_in_body.extend(&loop_info.body_nodes);
                 for &header in &loop_info.headers {
@@ -1232,12 +1261,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             self.processed_blocks.insert(first_branch.condition_source);
             self.processed_blocks.insert(first_branch.condition_block);
 
-            // Also mark all condition blocks in the chain to prevent re-processing
-            for branch in &chain.branches {
-                self.processed_blocks.insert(branch.condition_block);
-                self.processed_blocks.insert(branch.condition_source);
-            }
-
             // Build the true branch - use all blocks identified in the branch
             let original_true_branch = if first_branch.branch_blocks.is_empty() {
                 // Branch blocks might be empty if the branch entry is a switch dispatch
@@ -1285,7 +1308,14 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             // Build the false branch - handle else/else-if branches
             let original_false_branch = if chain.branches.len() > 1 {
                 if let Some(second_branch) = chain.branches.get(1) {
-                    if second_branch.branch_blocks.is_empty() {
+                    if second_branch.branch_type == BranchType::ElseIf {
+                        // Retain the remaining guards instead of treating an
+                        // else-if body as an unconditional else branch.
+                        let mut remainder = chain.clone();
+                        remainder.branches = chain.branches[1..].to_vec();
+                        remainder.should_invert = false;
+                        Some(self.build_conditional_structure(remainder))
+                    } else if second_branch.branch_blocks.is_empty() {
                         // Branch blocks might be empty if the branch entry is a switch dispatch
                         // Check if branch_entry is already processed to avoid infinite recursion
                         if self.processed_blocks.contains(&second_branch.branch_entry) {
@@ -1912,13 +1942,59 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         let condition_block = self.loop_condition_block(loop_info);
         let condition_expr = self.extract_iterator_condition_info(loop_type, condition_block)?;
 
-        if loop_info.loop_type == crate::cfg::analysis::LoopType::DoWhile {
+        if loop_info.loop_type == crate::cfg::analysis::LoopType::DoWhile
+            || self.should_normalize_self_edge_while_condition(
+                loop_info,
+                condition_block,
+                &condition_expr,
+            )
+        {
             return Some(
                 self.normalize_post_update_loop_condition(condition_block, condition_expr),
             );
         }
 
         Some(condition_expr)
+    }
+
+    fn should_normalize_self_edge_while_condition(
+        &self,
+        loop_info: &crate::cfg::analysis::Loop,
+        condition_block: NodeIndex,
+        condition_expr: &ComparisonExpression,
+    ) -> bool {
+        if loop_info.loop_type != crate::cfg::analysis::LoopType::While {
+            return false;
+        }
+
+        let is_self_edge = loop_info
+            .back_edges
+            .iter()
+            .any(|(tail, header)| tail == header && *header == condition_block);
+        if !is_self_edge {
+            return false;
+        }
+
+        match condition_expr {
+            ComparisonExpression::SimpleCondition { operand_use, .. } => self
+                .condition_operand_has_trailing_alias_rewrite(
+                    condition_block,
+                    operand_use.register,
+                ),
+            ComparisonExpression::BinaryComparison {
+                left_use,
+                right_use,
+                ..
+            } => {
+                self.condition_operand_has_trailing_alias_rewrite(
+                    condition_block,
+                    left_use.register,
+                ) || self.condition_operand_has_trailing_alias_rewrite(
+                    condition_block,
+                    right_use.register,
+                )
+            }
+        }
     }
 
     fn loop_condition_block(&self, loop_info: &crate::cfg::analysis::Loop) -> NodeIndex {
@@ -1933,11 +2009,10 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                         name.starts_with('J') && name != "Jmp" && name != "JmpLong"
                     })
                     .unwrap_or(false);
-                let exits_loop = self
-                    .cfg
-                    .graph()
-                    .edges(*tail)
-                    .any(|edge| !loop_info.body_nodes.contains(&edge.target()));
+                let exits_loop = self.cfg.graph().edges(*tail).any(|edge| {
+                    edge.weight() != &crate::cfg::EdgeKind::Exception
+                        && !loop_info.body_nodes.contains(&edge.target())
+                });
                 if has_conditional_terminator && exits_loop {
                     return *tail;
                 }
@@ -2004,23 +2079,78 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         let terminator_pc = block.instructions().last()?.instruction_index;
 
         for instruction in block.instructions().iter().rev().skip(1) {
-            match instruction.instruction {
-                UnifiedInstruction::Mov {
-                    operand_0,
-                    operand_1,
-                } if operand_1 == compared_register => {
-                    return self
-                        .function_analysis
-                        .ssa
-                        .get_value_before_instruction(operand_0, terminator_pc)
-                        .cloned()
-                        .or_else(|| Some(fallback.clone()));
+            let target = crate::generated::instruction_analysis::analyze_register_usage(
+                &instruction.instruction,
+            )
+            .target;
+
+            if target == Some(compared_register) {
+                match instruction.instruction {
+                    UnifiedInstruction::Mov {
+                        operand_0,
+                        operand_1,
+                    } if operand_0 == compared_register
+                        && self.register_is_live_into_block(condition_block, operand_1) =>
+                    {
+                        return self
+                            .function_analysis
+                            .ssa
+                            .get_value_before_instruction(operand_1, terminator_pc)
+                            .cloned()
+                            .or_else(|| Some(fallback.clone()));
+                    }
+                    _ => break,
                 }
-                _ => {}
             }
         }
 
         Some(fallback.clone())
+    }
+
+    fn condition_operand_has_trailing_alias_rewrite(
+        &self,
+        condition_block: NodeIndex,
+        compared_register: u8,
+    ) -> bool {
+        let Some(block) = self.cfg.graph().node_weight(condition_block) else {
+            return false;
+        };
+
+        block
+            .instructions()
+            .iter()
+            .rev()
+            .skip(1)
+            .find_map(|instruction| {
+                let target = crate::generated::instruction_analysis::analyze_register_usage(
+                    &instruction.instruction,
+                )
+                .target;
+
+                if target != Some(compared_register) {
+                    return None;
+                }
+
+                Some(matches!(
+                    instruction.instruction,
+                    UnifiedInstruction::Mov {
+                        operand_0,
+                        operand_1,
+                    } if operand_0 == compared_register
+                        && self.register_is_live_into_block(condition_block, operand_1)
+                        && !self.register_is_live_into_block(condition_block, operand_0)
+                ))
+            })
+            .unwrap_or(false)
+    }
+
+    fn register_is_live_into_block(&self, block_id: NodeIndex, register: u8) -> bool {
+        self.function_analysis
+            .ssa
+            .live_in
+            .get(&block_id)
+            .map(|live_in| live_in.contains(&register))
+            .unwrap_or(false)
     }
 
     fn extract_iterator_next_result_condition(
@@ -2687,6 +2817,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 .create_structure(ControlFlowKind::Sequential { elements })
         };
 
+        if matches!(
+            self.plan
+                .get_structure(try_body)
+                .map(|structure| &structure.kind),
+            Some(ControlFlowKind::Unsupported { .. })
+        ) {
+            return try_body;
+        }
+
         // Build catch clause if present
         let catch_clause = if let Some(ref catch_handler) = region.catch_handler {
             self.processed_blocks.insert(catch_handler.catch_block);
@@ -2757,6 +2896,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         };
         self.active_exception_regions.pop();
 
+        if matches!(
+            self.plan
+                .get_structure(try_body)
+                .map(|structure| &structure.kind),
+            Some(ControlFlowKind::Unsupported { .. })
+        ) {
+            return try_body;
+        }
+
         // Build the catch clause
         let catch_clause = region.catch_handler.as_ref().map(|handler| {
             self.processed_blocks.insert(handler.catch_block);
@@ -2809,6 +2957,29 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         }
 
         try_catch
+    }
+
+    fn should_bail_out_exception_loop(&self, loop_info: &crate::cfg::analysis::Loop) -> bool {
+        if self.active_exception_regions.is_empty() {
+            return false;
+        }
+
+        let header = loop_info.primary_header();
+        self.cfg
+            .analyze_switch_regions(&self.function_analysis.ssa)
+            .map(|switch_analysis| {
+                switch_analysis
+                    .regions
+                    .iter()
+                    .any(|region| region.dispatch == header)
+            })
+            .unwrap_or(false)
+    }
+
+    fn create_unsupported_structure(&mut self, message: &str) -> StructureId {
+        self.plan.create_structure(ControlFlowKind::Unsupported {
+            message: message.to_string(),
+        })
     }
 
     /// Build a branch structure from a set of blocks  

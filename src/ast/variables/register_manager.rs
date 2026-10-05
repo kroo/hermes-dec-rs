@@ -24,6 +24,7 @@ pub struct RegisterLifetime {
 /// This is now a clean, simple lookup service that uses pre-computed variable mappings
 /// from the VariableMapper. It has no naming logic of its own.
 pub struct RegisterManager {
+    physical_registers: bool,
     /// Pre-computed variable mapping from VariableMapper
     variable_mapping: Option<VariableMapping>,
     /// Current program counter for lookup
@@ -41,6 +42,7 @@ pub struct RegisterManager {
 impl RegisterManager {
     pub fn new(control_flow_plan: Rc<ControlFlowPlan>) -> Self {
         Self {
+            physical_registers: false,
             variable_mapping: None,
             current_pc: None,
             current_block: None,
@@ -48,6 +50,12 @@ impl RegisterManager {
             current_duplication_context: None,
             control_flow_plan,
         }
+    }
+
+    /// Keep bytecode registers mutable across dispatch cases in the CFG fallback.
+    pub(crate) fn use_physical_registers(&mut self) {
+        self.physical_registers = true;
+        self.variable_mapping = None;
     }
 
     /// Set the pre-computed variable mapping (from VariableMapper)
@@ -108,6 +116,9 @@ impl RegisterManager {
     /// Get the current variable name for a register (for reading)
     /// Pure lookup - no naming logic
     pub fn get_variable_name(&mut self, register: u8) -> String {
+        if self.physical_registers {
+            return format!("var{register}");
+        }
         // First check if we're in a duplication context
         if let Some(ref context) = self.current_duplication_context {
             if let (Some(mapping), Some(pc), Some(block)) =
@@ -205,6 +216,9 @@ impl RegisterManager {
     /// Get variable name for a source operand (before current instruction)
     /// This prevents self-reference issues in operations like `r1 = r2 - r1`
     pub fn get_source_variable_name(&mut self, register: u8) -> String {
+        if self.physical_registers {
+            return format!("var{register}");
+        }
         // First check if we're in a duplication context
         if let Some(ref context) = self.current_duplication_context {
             if let (Some(mapping), Some(pc), Some(block)) =
@@ -308,6 +322,9 @@ impl RegisterManager {
     /// Create a new variable name when a register is written to (for definitions)
     /// Pure lookup - the name is already pre-computed by VariableMapper
     pub fn create_new_variable_for_register(&mut self, register: u8) -> String {
+        if self.physical_registers {
+            return format!("var{register}");
+        }
         // First check if we're in a duplication context
         if let Some(ref context) = self.current_duplication_context {
             if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
@@ -397,6 +414,9 @@ impl RegisterManager {
 
     /// Check if the current PC is the first definition of a variable
     pub fn is_first_definition(&self, variable_name: &str) -> bool {
+        if self.physical_registers {
+            return false;
+        }
         if let (Some(mapping), Some(pc)) = (&self.variable_mapping, self.current_pc) {
             if let Some(first_def_pc) = mapping.first_definitions.get(variable_name) {
                 return *first_def_pc == pc;

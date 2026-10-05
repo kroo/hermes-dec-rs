@@ -1844,12 +1844,12 @@ impl<'a> CfgBuilder<'a> {
             .last()
             .map(|i| is_conditional(i.instruction.name()))
             .unwrap_or(false);
-        let header_exits_loop = graph
-            .edges(_header)
-            .any(|edge| !loop_body.contains(&edge.target()));
-        let tail_exits_loop = graph
-            .edges(_tail)
-            .any(|edge| !loop_body.contains(&edge.target()));
+        let header_exits_loop = graph.edges(_header).any(|edge| {
+            edge.weight() != &EdgeKind::Exception && !loop_body.contains(&edge.target())
+        });
+        let tail_exits_loop = graph.edges(_tail).any(|edge| {
+            edge.weight() != &EdgeKind::Exception && !loop_body.contains(&edge.target())
+        });
 
         if has_for_in {
             LoopType::ForIn
@@ -1883,7 +1883,11 @@ impl<'a> CfgBuilder<'a> {
         let mut exits = Vec::new();
 
         for &node in loop_body {
-            for succ in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
+            for edge in graph.edges(node) {
+                if edge.weight() == &EdgeKind::Exception {
+                    continue;
+                }
+                let succ = edge.target();
                 if !loop_body.contains(&succ) {
                     exits.push(succ);
                 }

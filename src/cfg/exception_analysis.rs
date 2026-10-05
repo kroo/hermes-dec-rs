@@ -191,6 +191,43 @@ impl<'a> Cfg<'a> {
 
         log::debug!("Merging {} exception regions", regions.len());
 
+        // Hermes can split one logical try/catch into multiple nested protected ranges that all
+        // target the same catch block. Collapse those first so reconstruction operates on the
+        // widest logical region instead of treating the same catch as multiple sibling regions.
+        let mut normalized = Vec::new();
+        for region in regions {
+            if let Some(existing) = normalized
+                .iter_mut()
+                .find(|existing: &&mut ExceptionRegion| {
+                    let existing_target = existing
+                        .catch_handler
+                        .as_ref()
+                        .map(|handler| handler.catch_target_idx);
+                    let region_target = region
+                        .catch_handler
+                        .as_ref()
+                        .map(|handler| handler.catch_target_idx);
+
+                    existing_target == region_target
+                        && existing_target.is_some()
+                        && region.try_start_idx <= existing.try_end_idx
+                        && existing.try_start_idx <= region.try_end_idx
+                })
+            {
+                let mut combined_blocks: HashSet<_> = existing.try_blocks.iter().copied().collect();
+                combined_blocks.extend(region.try_blocks.iter().copied());
+                let mut merged_blocks: Vec<_> = combined_blocks.into_iter().collect();
+                merged_blocks.sort_by_key(|block| self.graph()[*block].start_pc());
+                existing.try_blocks = merged_blocks;
+                existing.try_start_idx = existing.try_start_idx.min(region.try_start_idx);
+                existing.try_end_idx = existing.try_end_idx.max(region.try_end_idx);
+                continue;
+            }
+
+            normalized.push(region);
+        }
+        regions = normalized;
+
         // Pattern detection for try-catch-finally:
         // When we have multiple handlers with the same try range, they typically represent:
         // 1. First handler: try → catch
