@@ -16,6 +16,7 @@ hermes-dec-rs refs INPUT.hbc 1 --direction in --depth 2
 hermes-dec-rs show INPUT.hbc 0 --around-pc 0 --context 8
 hermes-dec-rs slots INPUT.hbc 1 0 --depth 3 --limit 10
 hermes-dec-rs trace INPUT.hbc 0 0 --depth 32 --limit 128
+hermes-dec-rs origins INPUT.hbc 0 0 --depth 8 --limit 64
 hermes-dec-rs sites INPUT.hbc 0 --kind constructor --depth 3
 hermes-dec-rs sites INPUT.hbc 0 --kind slot-write --slot 0 --depth 8
 hermes-dec-rs sites INPUT.hbc 0 --match FIELD_NAME --depth 8 --compact
@@ -71,6 +72,24 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
   to inspect the full operation and source, not executable substitutions of a
   trace expression. For a captured slot, inspect `slots` candidates, then trace
   a candidate store's arguments; lexical identity still requires verification.
+- `origins INPUT FUNCTION PC` is experimental cross-block register navigation
+  over the exporter's normal JavaScript dispatcher paths. It retains alternative
+  reaching definitions at joins, with exact source spans and PCs. Candidates are
+  not evaluated values, executable substitutions or proof that a path runs.
+  Indirect/unsupported control, same-PC ordering, cycles and bounded omissions
+  remain explicitly unresolved; exceptional/generator behavior is not silently
+  treated as ordinary flow. It does not infer heap mutations, captured-slot
+  identity or framework constructor semantics. Use complete `show` source to
+  verify the alternatives. Errors and byte overflow emit no partial JSON.
+  The `limits` object declares indexing and query caps; exceeding indexing caps
+  fails closed. Source is limited to 64 MiB, output to 16 MiB, blocks to 4,096,
+  and definitions/instructions to 1,048,576. The default query retains at most
+  64 definition nodes with depth eight and 8,192 work units. Displayed normal
+  edges are capped at 256 with total/returned/truncated counts; the internal
+  normal-flow index is separate. Unsupported exceptional/generator functions
+  return explicit unknowns without candidate traversal, not guessed normal flow.
+  `unresolved: false` describes syntactic definition links only, never runtime
+  values, captured identities, predicate feasibility or constructor behavior.
 - `sites` catalogs constructor invocations with ordered explicit arguments,
   property writes and environment-slot accesses in explicitly selected functions.
   It parses complete generated JS once per function and includes bounded local

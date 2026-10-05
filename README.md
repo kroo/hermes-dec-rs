@@ -110,6 +110,8 @@ closure/direct-call links; `slots` shows candidate captured-slot writes.
 ranked by shortest static closure witness, with unresolved scope clearly marked.
 `trace input.hbc FUNCTION PC` follows bounded local JS register-definition
 provenance, not evaluated values or resolved runtime environments.
+Experimental `origins input.hbc FUNCTION PC` follows normal dispatcher
+predecessors, retaining multiple candidate definitions and unresolved paths.
 `sites input.hbc FUNCTION...` batch-catalogs constructor arguments, slot accesses
 and property writes with bounded local provenance for large initializer scans.
 `--kind call` exposes ordered user arguments separately from callee/receiver;

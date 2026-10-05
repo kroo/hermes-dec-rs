@@ -15,6 +15,7 @@ use hermes_dec_rs::cli;
         "Huge initializers: sites INPUT FUNCTION --match NAME --depth 8 --compact filters local source dependencies.\n",
         "--from-pc/--to-pc narrow inclusive byte-PC ranges; --kind call separates callee/receiver/user arguments.\n",
         "Opaque captured slots: captures INPUT FUNCTION_IDS batches reads and candidate ancestor stores.\n",
+        "Cross-block registers: origins INPUT FUNCTION PC reports candidate definitions on normal JS paths.\n",
         "Inspect a candidate: sites INPUT ANCESTOR --kind slot-write --slot N --depth 8 --compact.\n",
         "Use show --around-pc PC --context 250 for bounded JS, refs for static closures/calls, trace for one definition DAG.\n",
         "All matches/captures are syntactic navigation, not evaluated values or authoritative runtime bindings.\n",
@@ -31,6 +32,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Experimental bounded reaching-definition candidates over exporter JS control flow
+    Origins {
+        input: PathBuf,
+        function: u32,
+        pc: u32,
+        /// Dependency depth (0..64); alternatives remain candidates, never runtime values
+        #[arg(long, default_value_t = 8)]
+        depth: usize,
+        /// Maximum definition nodes (1..4096)
+        #[arg(long, default_value_t = 64)]
+        limit: usize,
+        /// JSON byte budget; errors before stdout rather than partial documents
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+    },
     /// Batch captured-slot reads and same-function/ancestor store candidates with JS evidence
     Captures {
         input: PathBuf,
@@ -406,6 +422,15 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Origins {
+            input,
+            function,
+            pc,
+            depth,
+            limit,
+            max_bytes,
+        } => cli::origins::run(&input, function, pc, depth, limit, max_bytes)
+            .map_err(|e| miette!("{e}")),
         Commands::Captures {
             input,
             functions,

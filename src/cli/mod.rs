@@ -16,6 +16,7 @@ pub mod explore;
 pub mod generate;
 pub mod inputs;
 pub mod inspect;
+pub mod origins;
 pub mod package;
 pub mod sites;
 pub mod slots;

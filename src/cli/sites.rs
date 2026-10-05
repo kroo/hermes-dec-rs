@@ -1131,6 +1131,7 @@ fn catalog_sources_format(
         "schema_version": 1, "source": "export_function_fragments", "parsed_source_complete": true,
         "constructor_scope": "Exporter construct-helper invocations only; intrinsic new allocations are not counted.",
         "provenance": "syntactic_local_prior_register_definitions",
+        "cross_block_navigation": "For unresolved block-entry register reads, origins INPUT FUNCTION_ID SITE_PC reports bounded alternative definitions over normal dispatcher paths; it does not evaluate values or resolve captures.",
         "warning": "Definitions are syntactic and not guaranteed runtime writes, runtime values or executable substitutions. Calls/getters are labels only; no lexical resolution, constructor semantics, object mutation evaluation, full heap values or cross-block guesses. Intra-PC definitions are not resolved.",
         "slot_filter_policy": "A nonempty slot filter excludes all non-slot records, including with kind=all.",
         "kind": kind, "slots": slots, "depth": depth, "limit": limit, "offset": offset, "max_bytes": max_bytes,

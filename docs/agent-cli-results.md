@@ -296,3 +296,34 @@ Both fail the full gate, retaining recoverable synchronization, correlation,
 version-boundary and scheduling gaps. More complete raw coverage in a censored
 partial is not successful completion. No reliable improvement, causal feature
 benefit or smaller-model promotion is established. The goal remains active.
+
+V10 is an unscored cross-block navigation prototype, frozen separately as
+`b44da8720ee08d07b60de7e76e9c83362d84da6289e45d056773b66496cff112`.
+The experimental `origins` command indexes typed normal dispatcher paths once,
+then returns bounded alternative register definitions without evaluating calls,
+getters, captures, constructors or heap mutations. Exceptional/generator flows
+stop candidate traversal. Unsupported control, cycles, same-PC ambiguity and
+omissions remain explicit. Enclosing assignment destinations cannot reach their
+own RHS reads. The existing local tools retain their conservative contracts;
+sites now points to origins for unresolved block-entry reads.
+
+The first prototype rejected the real 26,241,984-byte initializer at its 16 MiB
+source cap. After raising bounded indexing caps, its original 1,024-work default
+query still exhausted the budget on the first register before inspecting the
+second. The final default permits 8,192 work units, with a synthetic two-register
+long-predecessor regression. Three isolated warmed queries over that initializer
+then took 601.1, 538.8 and 539.2 ms, returning 13,184 bytes / 18 definitions.
+Both selected root reads have untruncated candidate links; 861 normal edges are
+indexed but only 256 displayed, explicitly flagged as display truncation. All
+displayed definition spans were checked against the complete JS. This proves
+navigation evidence, not resolved values or cold-agent protocol success.
+
+The final frozen binary passed ten warmed full-JS exports per large project with
+no Cargo overlap: Orbit median/worst 392.0/411.4 ms; Modern Animal 237.9/261.5 ms.
+Corrected output hashes remain unchanged, and external syntax checks pass.
+The prototype has not yet been tested in a qualifying cold protocol trial;
+no improvement or model promotion is inferred from these microbenchmarks.
+All 443 local Rust tests pass, including 14 origins tests and the wired CLI
+regression. Formatting passes; Clippy has no diagnostics in the new source or
+tests, while existing unrelated repository warnings remain. Telemetry tests
+still pass (20, with one optional real-session test skipped).

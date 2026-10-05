@@ -445,3 +445,32 @@ fn inspection_defaults_to_bounded_machine_summary() {
     assert!(!bad.status.success());
     assert!(bad.stdout.is_empty());
 }
+
+#[test]
+fn origins_cli_is_deterministic_bounded_and_read_only() {
+    let path = fixture();
+    let input = path.to_str().unwrap();
+    let before = std::fs::read(&path).unwrap();
+    let report = json(&["origins", input, "0", "0"]);
+    assert_eq!(report, json(&["origins", input, "0", "0"]));
+    assert_eq!(report["schema_version"], 1);
+    assert_eq!(report["schema"], "origins-v1");
+    assert!(report["semantics"].as_str().unwrap().contains("candidate"));
+    assert_eq!(report["function"], 0);
+    assert_eq!(report["pc"], 0);
+    for extra in [
+        vec!["--depth", "65"],
+        vec!["--limit", "0"],
+        vec!["--max-bytes", "1"],
+    ] {
+        let mut args = vec!["origins", input, "0", "0"];
+        args.extend(extra);
+        let failed = cli(&args);
+        assert!(!failed.status.success());
+        assert!(failed.stdout.is_empty());
+    }
+    let unknown = cli(&["origins", input, "0", "4294967295"]);
+    assert!(!unknown.status.success());
+    assert!(unknown.stdout.is_empty());
+    assert_eq!(before, std::fs::read(path).unwrap());
+}
