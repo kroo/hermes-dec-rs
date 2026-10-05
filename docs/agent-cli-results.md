@@ -30,6 +30,8 @@ or firmware behavior that cannot be established without device testing.
 | Query v5 discovery failure | 6 Luna / low | 720 | 51 | unavailable | 1 | fail |
 | Query v6 | 6.1 Sol / low | 720 | censored at 720 | unavailable | 49 | fail |
 | Query v6 | 6 Luna / low | 720 | 187 (answer artifact) | 16 (reported) | 17.5 | fail |
+| Query v7 matched | 6.1 Sol / medium | 1200 | 1171 (self final) | 11 | 89.5 | fail |
+| Query v8 matched | 6.1 Sol / medium | 1200 | censored at 1200 | unavailable | 24 | fail |
 
 Original trials primarily used disassembly and were interrupted after about
 439 seconds of research, with artifact drafting afterward. All later trials
@@ -71,6 +73,8 @@ cost estimate. Reasoning output is a subset of output, not added a second time.
 | Query v5 discovery failure | 596,408 | 577,536 | 18,872 | 3,234 | 599,642 |
 | Query v6 Sol | 4,513,629 | 4,278,144 | 235,485 | 14,578 | 4,528,207 |
 | Query v6 Luna | 2,369,408 | 2,253,312 | 116,096 | 8,069 | 2,377,477 |
+| Query v7 matched | 6,381,203 | 5,973,632 | 407,571 | 29,491 | 6,410,694 |
+| Query v8 matched | 5,622,755 | 5,268,480 | 354,275 | 27,101 | 5,649,856 |
 
 Neither a reliable full answer nor a token reduction is established yet. Small
 samples, different caps/efforts/evidence policies and interrupted baselines rule
@@ -205,3 +209,37 @@ library projects and six behavioral fixtures match native Hermes on both HBC
 90 and 96 after the private-storage correction. Existing unrelated Clippy
 warnings remain; the export PR's build/test/fmt/Clippy checks pass, while its
 review-bot job fails because an OAuth access token expired.
+
+The v7/v8 pair then ran concurrently with identical medium-effort Sol settings,
+cold prompts and enforced dispatch-inclusive 1,200-second deadlines. V7 finalized
+before its deadline: 1,171 seconds self-reported, observed session span 1,183.004
+seconds, and parent final observation at 1,183.173 seconds. Its raw score was
+91.5 minus two points for a materially wrong advertisement-identity byte extent.
+Final 89.5 still fails the full-spec gate: recoverable version/sync/correlation/
+schedule gaps remain. V8 was closed while running 36 milliseconds after its
+deadline, with an incomplete saved scaffold and missing measurement artifact:
+24/100, no identified material error, but no implementable control coverage.
+Its observed session span was 1,199.855 seconds. V7 recorded 48 total tools;
+v8 recorded 50. Lower counters for a censored partial are not a successful saving.
+
+The evaluator did not infer feature adoption from help or undeclared files.
+Separately, a parent audit of explicit CLI command literals plus generated report
+metadata establishes one actual v8 compact slot-write catalog query, not ordinary
+call-catalog usage. V7's measurements identify site/slot help only and extensive
+custom initializer normalization scripts. Neither establishes conjunctive-query
+adoption. These are interface-availability trials, not proof that the added
+features caused either score. With n=1, censoring, incomplete answers and a longer
+cap than earlier trials, no causal speedup or smaller-model promotion is established.
+
+The v8 binary also passed ten warmed full-JS exports per large project with no
+Cargo overlap. Orbit median/worst: 386.9/390.7 ms; Modern Animal: 240.3/390.7 ms.
+Output hashes match corrected v6 outputs. All-feature local Rust tests still pass
+(412 on macOS), as do the telemetry tests. The stacked draft CLI PR now runs
+build/test/fmt/Clippy checks and telemetry tests; all four checks passed after its
+branch-filter fix. The separate review-bot authentication failure remains.
+
+Next interface work should target the demonstrated custom initializer/captured-
+symbol navigation burden, while preserving source/PC evidence and avoiding
+path-insensitive guesses presented as resolved values. More feature availability
+alone is not sufficient. The reliable full-protocol reconstruction goal remains
+unachieved; all protocol agents in these rounds have completed or been closed.
