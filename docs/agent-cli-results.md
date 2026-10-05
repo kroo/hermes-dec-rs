@@ -694,3 +694,106 @@ are unchanged and external Node syntax checks pass outside the timer. RSS
 sampling remains unavailable, not zero. Small cross-round timing shifts are not
 attributed to this CLI-only prototype. Fresh qualifying cold trials are still
 required; the full goal remains active and Luna promotion is not established.
+
+### Cold V13/V14 Medium-Sol Comparison
+
+Two independent medium `gpt-6.1-sol` agents received the same cold JS-primary
+task and dispatch-inclusive 30-minute cap, using the separately frozen v13 and
+v14 binaries. Both finalized before the cap and were closed after terminal
+completion. Neither trial was censored. A common non-interrupting deadline
+reminder supplied no protocol hints. The independent frozen grader scored A
+95.5 and B 95, but both full gates fail: required version distinctions and
+complete client control/query coverage remain incomplete. One exact read-byte
+prescription is unverified against the frozen audit, not a newly proven device
+rejection. Precision outside that audit is not retroactively certified.
+
+| Trial | Parent terminal observation (s) | Session span (s) | Input tokens | Cached input | Uncached input | Output tokens | Recorded total | Tools |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A: v13 medium | 1,636.274 | 1,636.228 | 13,628,137 | 13,046,016 | 582,121 | 61,086 | 13,689,223 | 101 |
+| B: v14 medium | 1,565.544 | 1,565.455 | 14,730,644 | 14,077,184 | 653,460 | 55,858 | 14,786,502 | 104 |
+
+These are actual final cumulative session counters, not summed snapshots,
+unique evidence volume or billing estimates. Reasoning tokens (7,965 / 6,181)
+are included in output; cached input is included in input and total. Actual
+tool-output UTF-8 volume is 1,285,057 / 1,470,217 bytes. Each session has an
+explicit task completion and no interruption/timeout marker. Agent artifact
+checkpoints (1,631.030 / 1,558.959 seconds dispatch-inclusive) exclude a few
+seconds of final write/reply overhead and do not replace terminal task time.
+
+A reports 13 CLI invocations including actual compact PC-bounded call sites,
+batched JS and captures. B reports 14 including actual symbols, captures and
+origins text queries; its show call is help-only. Neither uses typed expressions.
+B reports text provenance helped; its filtered symbols query returns no rows,
+exhausts the work budget, scans 2,474 of 7,398 stores and supplies a next cursor.
+It does not continue that scan and instead uses custom static text extraction.
+That empty page is not negative protocol evidence. Complete JS plus bespoke
+initializer/slot/schema extraction still dominates both workflows.
+
+The temporary AC sleep assertion was verified and removed after trial closure;
+the power-log interval contains no sleep/wake events. Parent guidance edits and
+short Cargo verification overlapped early research but changed neither frozen
+binary. These parallel workflow measurements are not isolated query benchmarks.
+The modest wall-time difference, higher recorded input for B and failed gates
+do not establish a causal efficiency improvement or qualify Luna promotion.
+Private dispatch/closure/telemetry/grade artifacts and original sessions remain
+preserved; no protocol reports or proprietary bundle are committed.
+
+At prototype commit `4603da9`, hosted build/fmt/Clippy/test checks pass in run
+`37384048672`. At guidance commit `74163e8`, they pass in `37385971508`;
+25 focused workspace/CLI tests and all 488 Rust tests also pass locally.
+The separate prototype review-bot log explicitly reports expired OAuth/401
+(`37384048786`); code checks are not blocked by that credential failure.
+
+### V15 Scan Controls And Literal Locations
+
+V15 is separately frozen as
+`7a1df9dd68f0370b0ee3f9778a28c2ccf043726cff683e8ff4b5184a04464a0e`.
+`symbols --scan-work` controls aggregate dependency work up to 16,777,216;
+the original 1,048,576 default is retained. Unfinished pages return structured
+continuation arguments preserving cursor, filters and limits. Uncertain
+filtered-out rows are counted, and paging does not repair earlier omissions.
+
+Bounded `filter_literal_diagnostics` separately checks indexed instruction-string
+syntax (not identifiers, nested function bodies or runtime values). Counts,
+scope, completeness and a 33,554,432 charged-work ceiling are explicit; input
+bytes are charged before case conversion and expanded bytes before comparisons.
+Each term has at most three PC-labelled raw-span examples, independently capped.
+Only a complete zero-match diagnostic skips dependency queries, with skipped
+counts explicit; a partial diagnostic never enables that shortcut. Literal
+locations are not store associations, argument identities or evaluated values.
+
+All 493 Rust tests pass, including empty-page continuation, hostile argument
+tokens, preflight scan bounds, filtered-out unknowns, diagnostic scope versus
+RHS scope, complete/partial zero-match guards and independent example limits.
+Formatting passes and Clippy has no changed-code/test diagnostics; unrelated
+warnings remain. A wired-test assumption that function zero had multiple stores
+failed initially; the repaired test selects a fixture function that actually
+exercises continuation. No dependency or executable bundle/runtime code changes.
+
+Private sequential microchecks preserve the unsuccessful larger-budget attempt:
+the same completed-agent query at 1,048,576 / 4,194,304 / 16,777,216 work scans
+2,474 / 4,737 / all 7,398 stores but returns no RHS rows. Three warmed timings
+are 619.0/608.0/618.8, 794.0/791.6/799.2 and 1,001.5/1,005.0/1,011.6 ms.
+The larger default was not retained. An initial smaller diagnostic cap was
+incomplete after 62,051 of 118,181 tokens and did not skip any queries; its
+1,029.4 ms first query and 630.1/630.3 ms repeats remain preserved.
+
+The final diagnostic scans all 118,181 indexed tokens, finding one occurrence
+per requested term outside the returned bounded RHS evidence. Original JS
+context shows property-helper keys, not slot-write RHS labels: this is a scope
+gap, not absence or proof of a slot value. The returned PC examples offer direct
+JS navigation, including existing property-write sites; no protocol hints are
+baked into the binary. The final same-query timings are 1,041.5/668.3/661.9 ms
+and 4,566 output bytes. No generic sub-second query guarantee or speed win is
+claimed. Positive slot queries take 568.9/573.9 ms, with candidate rows and
+definitions identical to v14; all 70 inspected candidate/example spans join
+the raw JS exactly. These are microchecks, not fresh cold-agent qualification.
+
+Ten isolated warmed full-JS exports per large input give Orbit median/worst
+402.2/435.0 ms and Modern Animal 245.8/259.4 ms. All outputs retain the corrected
+hashes and external Node syntax checks pass outside timing. RSS is unavailable,
+not zero. Full-project startup/read/parse/lower/validate/write remains below one
+second; small cross-round changes are not causally attributed to CLI analysis.
+The next trial must test actual use of literal locations/property-role evidence
+and complete version/control coverage, not count an empty page as a failed
+literal search. The goal remains active; no Luna promotion is established.

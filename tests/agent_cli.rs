@@ -80,6 +80,66 @@ fn source_symbols_and_text_provenance_are_wired_with_atomic_budgets() {
     assert_eq!(symbols["schema"], "symbols-v1");
     assert_eq!(symbols, json(&["symbols", path, "0", "--limit", "2"]));
     assert_eq!(symbols["expression_source"]["offset_unit"], "utf8_bytes");
+    assert_eq!(symbols["query_work_cap"], 1_048_576);
+    let data = std::fs::read(&input).unwrap();
+    let hbc = hermes_dec_rs::HbcFile::parse(&data).unwrap();
+    let function = (0..hbc.functions.count())
+        .find(|&id| {
+            let bytes =
+                hermes_dec_rs::cli::symbols::report(&input, id, &Default::default()).unwrap();
+            let value: Value = serde_json::from_slice(&bytes).unwrap();
+            value["stores_total"].as_u64().unwrap() > 1
+        })
+        .expect("fixture must have a function with multiple slot stores")
+        .to_string();
+    let empty = json(&[
+        "symbols",
+        path,
+        &function,
+        "--match",
+        "not-a-present-literal;$(no-eval)",
+        "--scan-work",
+        "1",
+    ]);
+    assert!(empty["rows"].as_array().unwrap().is_empty());
+    assert_eq!(empty["query_work_cap"], 1);
+    assert_eq!(empty["scan_complete"], true);
+    assert_eq!(empty["query_work_used"], 0);
+    assert_eq!(empty["filter_literal_diagnostics"]["complete"], true);
+    let page = json(&[
+        "symbols",
+        path,
+        &function,
+        "--scan-work",
+        "1",
+        "--limit",
+        "1",
+    ]);
+    assert!(page["next_offset"].is_number());
+    let mut continued = vec!["symbols", path, &function];
+    continued.extend(
+        page["continuation_query"]["flags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap()),
+    );
+    let next = json(&continued);
+    assert_eq!(next["offset"], page["next_offset"]);
+    assert_eq!(next["matches"], page["matches"]);
+    assert_eq!(next["query_work_cap"], 1);
+    for work in ["0", "16777217"] {
+        let invalid = cli(&[
+            "symbols",
+            "/private/tmp/missing-scan-input.hbc",
+            "0",
+            "--scan-work",
+            work,
+        ]);
+        assert!(!invalid.status.success());
+        assert!(invalid.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&invalid.stderr).contains("scan_work"));
+    }
     for command in ["symbols", "origins"] {
         let args = if command == "symbols" {
             vec![command, path, "0", "--max-bytes", "1"]

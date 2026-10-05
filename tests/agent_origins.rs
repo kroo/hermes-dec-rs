@@ -42,6 +42,7 @@ fn symbol_options() -> origins::SymbolOptions {
         limit: 32,
         offset: 0,
         max_bytes: 1_000_000,
+        scan_work: origins::DEFAULT_SYMBOL_SCAN_WORK,
         slots: vec![],
         matches: vec![],
     }
@@ -120,6 +121,187 @@ fn symbols_do_not_search_environment_labels_or_decode_raw_js_strings() {
         v["rows"][0]["literal_mentions"][0]["source"]["javascript"],
         "'\\u0061bc'"
     );
+}
+
+#[test]
+fn symbols_work_budget_continuation_survives_empty_pages_and_hostile_tokens() {
+    let s = source("case 0: {\n// HBC function 0, PC 0\nr[7].slots[1] = 'skip';\n// HBC function 0, PC 2\nr[7].slots[2] = 'needle;$(not-executed)'; return; }");
+    let o = origins::SymbolOptions {
+        scan_work: 1,
+        matches: vec!["needle;$(not-executed)".into()],
+        ..symbol_options()
+    };
+    let first: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    assert!(first["rows"].as_array().unwrap().is_empty());
+    assert_eq!(first["query_work_used"], 1);
+    assert_eq!(first["query_work_cap"], 1);
+    assert_eq!(first["query_work_truncated"], true);
+    assert_eq!(first["next_offset"], 1);
+    let next = &first["continuation_query"];
+    assert_eq!(next["input"], "INPUT");
+    assert_eq!(next["function"], 0);
+    assert!(next.get("shell").is_none());
+    let flags = next["flags"].as_array().unwrap();
+    assert!(flags
+        .windows(2)
+        .any(|v| v == [serde_json::json!("--offset"), serde_json::json!("1")]));
+    assert!(flags
+        .windows(2)
+        .any(|v| v == [serde_json::json!("--scan-work"), serde_json::json!("1")]));
+    assert!(flags.windows(2).any(|v| v
+        == [
+            serde_json::json!("--match"),
+            serde_json::json!("needle;$(not-executed)")
+        ]));
+    let continued = origins::SymbolOptions {
+        offset: 1,
+        ..o.clone()
+    };
+    let second: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &continued, &[]).unwrap())
+            .unwrap();
+    assert_eq!(second["rows"][0]["store_ordinal"], 1);
+    assert_eq!(second["scan_complete"], true);
+    assert!(second["continuation_query"].is_null());
+    let larger = origins::SymbolOptions { scan_work: 2, ..o };
+    let complete: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &larger, &[]).unwrap())
+            .unwrap();
+    assert_eq!(complete["rows"], second["rows"]);
+    assert_eq!(complete["query_work_used"], 2);
+    assert_eq!(complete["scan_complete"], true);
+}
+
+#[test]
+fn symbols_filtered_out_unresolved_rows_still_report_dependency_omissions() {
+    let s = source("case 0: {\n// HBC function 0, PC 0\nr[7] = 'absent';\n// HBC function 0, PC 2\nr[7].slots[1] = r[1]; return; }");
+    let o = origins::SymbolOptions {
+        matches: vec!["absent".into()],
+        ..symbol_options()
+    };
+    let v: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    assert!(v["rows"].as_array().unwrap().is_empty());
+    assert_eq!(v["scan_complete"], true);
+    assert_eq!(v["dependency_search_incomplete_rows"], 1);
+    for scan_work in [0, origins::MAX_SYMBOL_SCAN_WORK + 1] {
+        let invalid = origins::SymbolOptions {
+            scan_work,
+            ..o.clone()
+        };
+        assert!(origins::analyze_symbols_source(&s, &invalid, &[]).is_err());
+    }
+}
+
+#[test]
+fn symbol_filter_diagnostics_separate_identifier_spelling_from_raw_literals() {
+    let s = source("case 0: {\n// HBC function 0, PC 0\nr[1] = 'raw-name';\n// HBC function 0, PC 2\nr[7] = 'environment-name';\n// HBC function 0, PC 4\nr[7].slots[1] = r[1]; return; }");
+    for (term, count, rows) in [
+        ("raw_name", 0, 0),
+        ("RAW-NAME", 1, 1),
+        ("environment-name", 1, 0),
+    ] {
+        let o = origins::SymbolOptions {
+            matches: vec![term.into()],
+            ..symbol_options()
+        };
+        let v: Value =
+            serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+        let diagnostic = &v["filter_literal_diagnostics"];
+        assert_eq!(diagnostic["complete"], true);
+        assert_eq!(diagnostic["terms"][0]["term"], term);
+        assert_eq!(diagnostic["terms"][0]["indexed_literal_mentions"], count);
+        let examples = diagnostic["terms"][0]["examples"].as_array().unwrap();
+        assert_eq!(examples.len(), count as usize);
+        for example in examples {
+            let span = &example["source"];
+            assert_eq!(
+                &s[span["start"].as_u64().unwrap() as usize
+                    ..span["end"].as_u64().unwrap() as usize],
+                span["javascript"].as_str().unwrap()
+            );
+            assert_eq!(
+                example["pc"],
+                if term == "environment-name" { 2 } else { 0 }
+            );
+        }
+        assert_eq!(v["rows"].as_array().unwrap().len(), rows);
+        if count == 0 {
+            assert_eq!(v["dependency_queries_used"], 0);
+            assert_eq!(v["query_work_used"], 0);
+            assert_eq!(v["dependency_queries_skipped_by_literal_filter"], 1);
+            assert_eq!(v["literal_filter_excludes_all_indexed_mentions"], true);
+        } else {
+            assert!(v["dependency_queries_used"].as_u64().unwrap() > 0);
+            assert_eq!(v["literal_filter_excludes_all_indexed_mentions"], false);
+        }
+        assert!(diagnostic["scope"]
+            .as_str()
+            .unwrap()
+            .contains("not RHS dependencies"));
+    }
+    let v: Value = serde_json::from_slice(
+        &origins::analyze_symbols_source(&s, &symbol_options(), &[]).unwrap(),
+    )
+    .unwrap();
+    assert!(v["filter_literal_diagnostics"].is_null());
+}
+
+#[test]
+fn symbol_filter_literal_examples_are_bounded_separately_from_search_counts() {
+    let assignments = (0..20)
+        .map(|i| format!("// HBC function 0, PC {}\nr[1] = 'repeat';\n", i * 2))
+        .collect::<String>();
+    let s = source(&format!(
+        "case 0: {{\n{assignments}// HBC function 0, PC 42\nr[7].slots[1] = r[1]; return; }}"
+    ));
+    let o = origins::SymbolOptions {
+        matches: vec!["repeat".into()],
+        ..symbol_options()
+    };
+    let v: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    let d = &v["filter_literal_diagnostics"];
+    assert_eq!(d["complete"], true);
+    assert_eq!(d["example_limit_per_term"], 3);
+    assert_eq!(d["terms"][0]["indexed_literal_mentions"], 20);
+    assert_eq!(d["terms"][0]["examples_truncated"], true);
+    let examples = d["terms"][0]["examples"].as_array().unwrap();
+    assert_eq!(examples.len(), 3);
+    assert_eq!(
+        examples
+            .iter()
+            .map(|e| e["pc"].as_u64().unwrap())
+            .collect::<Vec<_>>(),
+        vec![0, 2, 4]
+    );
+}
+
+#[test]
+fn symbol_filter_diagnostics_bound_work_and_keep_zero_counts_incomplete() {
+    let literal = "X".repeat(1_000_000);
+    let s = source(&format!(
+        "case 0: {{\n// HBC function 0, PC 0\nr[7].slots[1] = '{literal}'; return; }}"
+    ));
+    let o = origins::SymbolOptions {
+        matches: vec!["missing".into(); 64],
+        ..symbol_options()
+    };
+    let v: Value =
+        serde_json::from_slice(&origins::analyze_symbols_source(&s, &o, &[]).unwrap()).unwrap();
+    let d = &v["filter_literal_diagnostics"];
+    assert_eq!(d["complete"], false);
+    assert_eq!(d["tokens_inspected"], 0);
+    assert_eq!(d["tokens_total"], 1);
+    assert_eq!(v["literal_filter_excludes_all_indexed_mentions"], false);
+    assert_eq!(v["dependency_queries_used"], 1);
+    assert!(d["charged_work"].as_u64().unwrap() <= d["work_cap"].as_u64().unwrap());
+    assert!(d["terms"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|r| r["indexed_literal_mentions"] == 0));
 }
 
 #[test]

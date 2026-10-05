@@ -77,6 +77,9 @@ enum Commands {
         offset: usize,
         #[arg(long, default_value_t = 100_000)]
         max_bytes: usize,
+        /// Aggregate dependency scan budget (1..16777216); unfinished pages have a continuation query
+        #[arg(long, default_value_t = cli::origins::DEFAULT_SYMBOL_SCAN_WORK)]
+        scan_work: usize,
     },
     /// Batch captured-slot reads and same-function/ancestor store candidates with JS evidence
     Captures {
@@ -502,6 +505,7 @@ fn main() -> Result<()> {
             limit,
             offset,
             max_bytes,
+            scan_work,
         } => cli::symbols::run(
             &input,
             function,
@@ -514,6 +518,7 @@ fn main() -> Result<()> {
                 limit,
                 offset,
                 max_bytes,
+                scan_work,
             },
         )
         .map_err(|e| miette!("{e}")),

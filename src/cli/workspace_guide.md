@@ -44,6 +44,20 @@ The environment expression is separate from the searched RHS. Unknowns and
 literal-search omissions matter even when a page has no rows. Follow next_offset
 with --offset; it is a raw store-ordinal cursor, not a filtered result count.
 scan_complete means the store scan ended, not that all dependencies are known.
+continuation_query preserves options as separate argument tokens; supply your
+chosen binary and original input. --scan-work adjusts aggregate dependency work
+(default 1048576, maximum 16777216), not depth or literal/definition limits.
+dependency_search_incomplete_rows also counts filtered-out uncertain rows;
+continuing the store scan does not repair those earlier omitted dependencies.
+filter_literal_diagnostics checks bounded raw instruction-string syntax outside
+the RHS query too. Its matches do not establish store dependencies; its complete
+flag covers only that diagnostic scope. Identifier spellings are not aliases for
+raw strings. Check original JS spelling and diagnostic limits, not just the cursor.
+Each term has at most three PC-labelled literal examples; inspect their original
+JS context. Example omissions are separate from search completeness, and these
+locations do not establish slot values, dependencies or argument roles.
+Only a complete zero-match diagnostic skips dependency queries; explicit skipped
+counts do not prove runtime absence. Partial diagnostics never skip these queries.
 
 For less verbose provenance, use origins INPUT ID PC --text. Add --expressions
 for syntax summaries, but text explicitly omits typed graph nodes and cannot

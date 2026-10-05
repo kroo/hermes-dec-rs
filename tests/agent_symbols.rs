@@ -119,6 +119,7 @@ fn wrapper_preserves_typed_options_and_exception_metadata() {
             limit: options.limit,
             offset: options.offset,
             max_bytes: options.max_bytes,
+            scan_work: options.scan_work,
             slots: options.slots.clone(),
             matches: options.matches.clone(),
         };
@@ -140,6 +141,7 @@ fn literal_mentions_join_raw_syntax_in_a_complete_typed_fragment() {
         limit: 32,
         offset: 0,
         max_bytes: 100_000,
+        scan_work: origins::DEFAULT_SYMBOL_SCAN_WORK,
         slots: vec![],
         matches: vec![],
     };
@@ -196,6 +198,14 @@ fn invalid_options_are_rejected_before_reading_input() {
         },
         Options {
             max_bytes: 16_777_217,
+            ..Options::default()
+        },
+        Options {
+            scan_work: 0,
+            ..Options::default()
+        },
+        Options {
+            scan_work: origins::MAX_SYMBOL_SCAN_WORK + 1,
             ..Options::default()
         },
         Options {

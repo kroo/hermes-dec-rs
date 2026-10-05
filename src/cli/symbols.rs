@@ -19,6 +19,7 @@ pub struct Options {
     pub limit: usize,
     pub offset: usize,
     pub max_bytes: usize,
+    pub scan_work: usize,
     pub slots: Vec<u32>,
     pub matches: Vec<String>,
 }
@@ -32,6 +33,7 @@ impl Default for Options {
             limit: 32,
             offset: 0,
             max_bytes: 100_000,
+            scan_work: origins::DEFAULT_SYMBOL_SCAN_WORK,
             slots: Vec::new(),
             matches: Vec::new(),
         }
@@ -48,8 +50,9 @@ fn validate(options: &Options) -> DecompilerResult<()> {
         || !(1..=128).contains(&options.literal_limit)
         || !(1..=1000).contains(&options.limit)
         || !(1..=OUTPUT_CAP).contains(&options.max_bytes)
+        || !(1..=origins::MAX_SYMBOL_SCAN_WORK).contains(&options.scan_work)
     {
-        return Err(error("symbols bounds: depth 0..64, definition_limit 1..4096, literal_limit 1..128, limit 1..1000, max_bytes 1..16777216"));
+        return Err(error("symbols bounds: depth 0..64, definition_limit 1..4096, literal_limit 1..128, limit 1..1000, max_bytes 1..16777216, scan_work 1..16777216"));
     }
     if options.slots.len() > SLOT_CAP
         || options.matches.len() > MATCH_CAP
@@ -97,6 +100,7 @@ pub fn report(input: &Path, function: u32, options: &Options) -> DecompilerResul
         limit: options.limit,
         offset: options.offset,
         max_bytes: options.max_bytes,
+        scan_work: options.scan_work,
         slots: options.slots.clone(),
         matches: options.matches.clone(),
     };

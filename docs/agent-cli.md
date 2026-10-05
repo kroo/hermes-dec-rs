@@ -173,6 +173,26 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
   unknowns are separately explicit, including for excluded rows. Query work,
   literal projection work/bytes, source size and fully serialized stdout have
   bounds. No match in this bounded scope is not runtime absence.
+  `--scan-work` controls aggregate dependency work (default 1,048,576, maximum
+  16,777,216); it does not relax per-row depth, definition or literal limits.
+  Unfinished scans offer `continuation_query` with separate argument tokens,
+  including all filters/options. Continue even when `rows` is empty; use the
+  original input and chosen executable, not shell evaluation. Paging does not
+  repair earlier omitted dependencies. `dependency_search_incomplete_rows`
+  includes uncertain rows discarded by filtering; `scan_complete` is not
+  dependency/value completeness.
+  `filter_literal_diagnostics` separately checks bounded indexed instruction
+  string tokens, not just the RHS dependencies. Its term counts and own
+  completeness/work cap distinguish raw spelling/scope from dependency paging;
+  identifier labels are not automatically literal-string aliases. Neither a
+  diagnostic match nor a complete diagnostic proves a slot value or absence.
+  Each term has at most three PC-labelled raw-source examples, with independent
+  example omissions. These are literal locations, not store associations or
+  value/call-argument identities. Inspect their complete JS before inferring roles.
+  Only a complete zero-match diagnostic skips dependency queries, since every
+  projected literal comes from that same indexed set. Skipped-query counts are
+  explicit; a partial diagnostic never enables this shortcut. Store scanning
+  still honors offsets/slot filters. This excludes syntactic rows, not values.
 - `origins --text` emits escaped, stable line-oriented candidate records with
   complete returned definition/read links and status flags. It does not evaluate
   or substitute source. With `--expressions`, typed graph nodes are explicitly

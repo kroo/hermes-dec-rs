@@ -1054,11 +1054,15 @@ pub struct SymbolOptions {
     pub limit: usize,
     pub offset: usize,
     pub max_bytes: usize,
+    pub scan_work: usize,
     pub slots: Vec<u32>,
     pub matches: Vec<String>,
 }
 
-const SYMBOL_QUERY_WORK_CAP: usize = 1_048_576;
+pub const DEFAULT_SYMBOL_SCAN_WORK: usize = 1_048_576;
+pub const MAX_SYMBOL_SCAN_WORK: usize = 16_777_216;
+const SYMBOL_FILTER_WORK_CAP: usize = 33_554_432;
+const SYMBOL_FILTER_EXAMPLE_CAP: usize = 3;
 const SYMBOL_LITERAL_RECORD_CAP: usize = 262_144;
 const SYMBOL_LITERAL_BYTE_CAP: usize = 128 * 1024 * 1024;
 const SYMBOL_LITERAL_ROW_CAP: usize = 512;
@@ -1076,6 +1080,58 @@ struct LiteralMention {
     register: Option<u32>,
     source: Excerpt,
     matches_filter: bool,
+}
+
+fn filter_literal_diagnostics(
+    source: &str,
+    index: &SourceIndex,
+    terms: &[String],
+    folded: &[String],
+) -> serde_json::Value {
+    if terms.is_empty() {
+        return serde_json::Value::Null;
+    }
+    let total: usize = index.instructions.iter().map(|i| i.literals.len()).sum();
+    let mut counts = vec![0usize; terms.len()];
+    let mut examples = vec![Vec::<serde_json::Value>::new(); terms.len()];
+    let mut inspected = 0usize;
+    let mut work = 0usize;
+    'instructions: for instruction in &index.instructions {
+        for span in &instruction.literals {
+            let raw = &source[span.start as usize..span.end as usize];
+            // Charge input bytes before case conversion and expanded bytes
+            // before comparisons; do not assume a Unicode expansion factor.
+            if raw.len() > SYMBOL_FILTER_WORK_CAP - work {
+                break 'instructions;
+            }
+            work += raw.len();
+            let raw = raw.to_lowercase();
+            let comparisons = raw.len().saturating_mul(terms.len());
+            if comparisons > SYMBOL_FILTER_WORK_CAP - work {
+                break 'instructions;
+            }
+            work += comparisons;
+            inspected += 1;
+            for ((count, examples), term) in counts.iter_mut().zip(&mut examples).zip(folded) {
+                if raw.contains(term) {
+                    *count += 1;
+                    if examples.len() < SYMBOL_FILTER_EXAMPLE_CAP {
+                        examples.push(
+                            serde_json::json!({"pc":instruction.pc,"source":excerpt(source,*span)}),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    serde_json::json!({
+        "scope":"Indexed instruction string-literal tokens, not RHS dependencies or runtime values. Nested function bodies and non-string identifier/property labels are excluded.",
+        "terms": terms.iter().zip(counts).zip(examples).map(|((term,count),examples)|serde_json::json!({"term":term,"indexed_literal_mentions":count,"examples_truncated":count>examples.len(),"examples":examples})).collect::<Vec<_>>(),
+        "tokens_total":total,"tokens_inspected":inspected,"complete":inspected==total,
+        "charged_work":work,"work_cap":SYMBOL_FILTER_WORK_CAP,
+        "example_limit_per_term":SYMBOL_FILTER_EXAMPLE_CAP,
+        "interpretation":"A spelling may match literal syntax elsewhere without reaching a store RHS. No inspected matches is not runtime absence. Identifier spellings are not aliases for raw strings; check original JS spelling and scope."
+    })
 }
 
 fn literal_mentions(
@@ -1133,11 +1189,12 @@ pub fn analyze_symbols_source(
     bounds(o.depth, o.definition_limit, o.max_bytes)?;
     if !(1..=128).contains(&o.literal_limit)
         || !(1..=1000).contains(&o.limit)
+        || !(1..=MAX_SYMBOL_SCAN_WORK).contains(&o.scan_work)
         || o.matches.len() > 64
         || o.matches.iter().any(|s| s.is_empty() || s.len() > 1024)
         || o.slots.len() > 4096
     {
-        return Err(error("symbols bounds: literals 1..128, limit 1..1000, at most 64 nonempty match terms of 1024 bytes and 4096 slots"));
+        return Err(error("symbols bounds: literals 1..128, limit 1..1000, scan_work 1..16777216, at most 64 nonempty match terms of 1024 bytes and 4096 slots"));
     }
     if source.len() > SOURCE_CAP {
         return Err(error("symbols source byte cap exceeded"));
@@ -1160,6 +1217,13 @@ pub fn analyze_symbols_source(
     )?;
     let stores_total: usize = index.instructions.iter().map(|i| i.slot_writes.len()).sum();
     let matches: Vec<_> = o.matches.iter().map(|s| s.to_lowercase()).collect();
+    let filter_diagnostics = filter_literal_diagnostics(source, &index, &o.matches, &matches);
+    let literal_filter_excludes = filter_diagnostics["complete"] == true
+        && filter_diagnostics["terms"].as_array().is_some_and(|terms| {
+            terms
+                .iter()
+                .all(|term| term["indexed_literal_mentions"] == 0)
+        });
     let wanted_slots: BTreeSet<_> = o.slots.iter().copied().collect();
     let mut definitions = BTreeMap::<String, serde_json::Value>::new();
     let mut rows = Vec::new();
@@ -1169,6 +1233,9 @@ pub fn analyze_symbols_source(
     let mut query_work_truncated = false;
     let mut literal_work = LiteralWork::default();
     let mut literal_search_truncated_rows = 0usize;
+    let mut dependency_search_incomplete_rows = 0usize;
+    let mut dependency_queries_used = 0usize;
+    let mut dependency_queries_skipped = 0usize;
     let mut serialized_records_bytes = 0usize;
     let mut ordinal = 0;
     for instruction in &index.instructions {
@@ -1179,18 +1246,25 @@ pub fn analyze_symbols_source(
                 continue;
             }
             if rows.len() >= o.limit
-                || work_used == SYMBOL_QUERY_WORK_CAP
+                || work_used == o.scan_work
                 || literal_work.records == SYMBOL_LITERAL_RECORD_CAP
                 || literal_work.bytes == SYMBOL_LITERAL_BYTE_CAP
             {
                 next_offset = Some(cursor);
-                query_work_truncated = work_used == SYMBOL_QUERY_WORK_CAP;
+                query_work_truncated = work_used == o.scan_work;
                 break;
             }
             scanned += 1;
             if !wanted_slots.is_empty() && !wanted_slots.contains(&store.slot) {
                 continue;
             }
+            // Every projected mention comes from this same indexed literal set.
+            // A complete zero-match diagnostic excludes syntax rows, not values.
+            if literal_filter_excludes {
+                dependency_queries_skipped += 1;
+                continue;
+            }
+            dependency_queries_used += 1;
             let (result, used) = query_index(
                 source,
                 &index,
@@ -1203,9 +1277,11 @@ pub fn analyze_symbols_source(
                     expressions: false,
                 },
                 Some(store.value),
-                Some(SYMBOL_QUERY_WORK_CAP - work_used),
+                Some(o.scan_work - work_used),
             )?;
             work_used += used;
+            dependency_search_incomplete_rows +=
+                usize::from(result.truncated || result.unresolved || !result.unknown.is_empty());
             let (mut literals, mut literal_mentions_total, mut literal_search_truncated) =
                 literal_mentions(
                     source,
@@ -1331,14 +1407,40 @@ pub fn analyze_symbols_source(
             break;
         }
     }
+    let continuation_query = next_offset.map(|offset| {
+        let mut flags = vec![
+            "--offset".to_owned(), offset.to_string(),
+            "--depth".to_owned(), o.depth.to_string(),
+            "--definition-limit".to_owned(), o.definition_limit.to_string(),
+            "--literal-limit".to_owned(), o.literal_limit.to_string(),
+            "--limit".to_owned(), o.limit.to_string(),
+            "--max-bytes".to_owned(), o.max_bytes.to_string(),
+            "--scan-work".to_owned(), o.scan_work.to_string(),
+        ];
+        for slot in &o.slots {
+            flags.extend(["--slot".to_owned(), slot.to_string()]);
+        }
+        for term in &o.matches {
+            flags.extend(["--match".to_owned(), term.clone()]);
+        }
+        serde_json::json!({"command":"hermes-dec-rs","subcommand":"symbols",
+            "input":"INPUT","function":o.function,"flags":flags,
+            "reason":"store_scan_incomplete",
+            "semantics":"Continue at the next raw store ordinal, even if rows is empty. Earlier omitted dependencies are not repaired by paging. Argument tokens are not shell code; use the original input and chosen CLI."})
+    });
     let report = serde_json::json!({
         "schema_version":1,"schema":"symbols-v1","function":o.function,
         "semantics":"Raw string mentions in candidate slot-write RHS dependencies, not slot values, symbol names, constructor results, runtime bindings or frame identities. No JS is evaluated.",
         "source":"export_function_fragments","parsed_source_complete":true,
         "expression_source":expression_source(source),"stores_total":stores_total,
         "offset":o.offset,"scanned":scanned,"next_offset":next_offset,
+        "continuation_query":continuation_query,
         "scan_complete":next_offset.is_none(),"query_work_truncated":query_work_truncated,
-        "query_work_used":work_used,"query_work_cap":SYMBOL_QUERY_WORK_CAP,
+        "query_work_used":work_used,"query_work_cap":o.scan_work,
+        "dependency_search_incomplete_rows":dependency_search_incomplete_rows,
+        "dependency_queries_used":dependency_queries_used,
+        "dependency_queries_skipped_by_literal_filter":dependency_queries_skipped,
+        "literal_filter_excludes_all_indexed_mentions":literal_filter_excludes,
         "literal_search_truncated_rows":literal_search_truncated_rows,
         "literal_work_truncated": next_offset.is_some() && (literal_work.records == SYMBOL_LITERAL_RECORD_CAP || literal_work.bytes == SYMBOL_LITERAL_BYTE_CAP),
         "literal_records_used":literal_work.records,"literal_records_cap":SYMBOL_LITERAL_RECORD_CAP,
@@ -1346,6 +1448,7 @@ pub fn analyze_symbols_source(
         "literal_search_cap_per_row":SYMBOL_LITERAL_ROW_CAP,
         "depth":o.depth,"definition_limit":o.definition_limit,"literal_limit":o.literal_limit,
         "limit":o.limit,"matches":o.matches,"slots":o.slots,
+        "filter_literal_diagnostics":filter_diagnostics,
         "match_policy":"OR case-insensitive substrings in complete raw JS string-literal tokens discovered through bounded normal-flow candidate definitions, not decoded strings or runtime values. Other labels/properties and unresolved captures are not searched.",
         "negative_result_policy":"Omitted or unresolved dependencies and unscanned stores are not evidence of runtime absence.",
         "mention_order":"Matching tokens first, then PC/source span; this is source order, not evaluation or argument order.",
