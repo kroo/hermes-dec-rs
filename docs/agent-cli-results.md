@@ -844,5 +844,76 @@ v15 medium, v16 medium, and exploratory v16 low, all 6.1 Sol. Each has an
 independent frozen binary/output directory and a 30-minute dispatch-inclusive
 cap. No source IDs, protocol constants or grader findings are provided. Actual
 token telemetry and unchanged independent grading are required before any
-efficiency or full-protocol claim. Results are pending; the goal remains active
-and Luna remains unqualified.
+efficiency or full-protocol claim. Completed results follow; the goal remains
+active and Luna remains unqualified.
+
+### Completed V15/V16 Medium/Low Cold Comparison
+
+All three agents completed before the 1,800-second cap, with explicit session
+completion markers and no interruption/timeout. The private frozen binaries
+and reference/rubric hashes remain unchanged. Owned temporary awake assertion
+was active on AC during research and released afterward; no sleep/wake events
+occurred in the trial interval. The user's separate assertion was untouched.
+
+| Trial | Frozen CLI | 6.1 Sol Effort | Parent Wall Seconds | Session Wall Seconds | Score | Full Gate |
+|---|---|---|---:|---:|---:|---|
+| A | v15 | medium | 1598.981 | 1598.944 | 92.5 | fail |
+| B | v16 | medium | 1349.722 | 1349.665 | 93.5 | fail |
+| C | v16 | low | 1747.301 | 1747.198 | 92.5 | fail |
+
+Parent timings include dispatch through observed terminal status, including
+notification handling. Agent artifact clock samples are separate and earlier
+than terminal observation. Only still-running A/C received the same generic
+time reminder; B had already completed. No protocol hints or changed criteria
+were supplied. Trials were concurrent on one host, not isolated causal tests.
+
+| Trial | Tool Calls | Tool Output Bytes | Actual Input Tokens | Cached Input | Uncached Input | Output Tokens |
+|---|---:|---:|---:|---:|---:|---:|
+| A | 105 | 1369638 | 15936766 | 15055104 | 881662 | 65852 |
+| B | 89 | 1248972 | 12163538 | 11604096 | 559442 | 55068 |
+| C | 114 | 1549535 | 15782134 | 14823680 | 958454 | 72727 |
+
+These are final recorded cumulative counters, not estimated or summed snapshots.
+Cached input is included in input, and reasoning is included in output. Recorded
+reasoning counts are 9,108/9,458/8,854; total tokens are
+16,002,618/12,218,606/15,854,861. Tool calls include non-CLI research tools, while
+self-reported CLI calls are 18/17/11. Neither metric is unique evidence size or
+a billing estimate; no token counter decreases or missing completion markers.
+
+Independent frozen grading credits only answer.md and explicitly declared
+appendices, not hidden logs, workspace reconstruction or undeclared scratch.
+All three support bounded core control/status mappings for both families, but
+all omit required model/version interpretation. B also omits some client-visible
+update-format distinctions. A incurs a two-point advertisement byte-extent
+error; C incurs a two-point unsupported numeric-coercion error. Neither is
+classified as an invented fundamental wire/control protocol. Native/firmware
+unknowns remain separate from these recoverable client omissions, and novel
+precision outside the frozen completed audit is unadjudicated, not certified.
+
+A actually uses symbols and origins text; sites/captures/show are help-only.
+B uses one scoped properties data query, compact filtered sites and origins,
+but workspace JS and bespoke initializer extraction remain primary. C uses
+workspace/search/captures/origins; its narrative mentions scoped properties,
+but no actual properties command is reported, so adoption is not established.
+Typed-expression adoption is not established in any arm. No disassembly is
+reported as research evidence. More report rows/types do not close semantic
+mappings or automatically satisfy the gate.
+
+B has lower observed time and tokens in this round, but a failed full gate and
+single concurrent comparison do not establish a successful causal efficiency
+win. Low effort is slower and has more recorded output than B here; it is not
+a demonstrated cost/reliability improvement. No Luna promotion is justified.
+The common bottleneck remains bespoke static initializer/argument/field
+reconstruction plus operation-level direction/unit/version cross-checking.
+The next generic CLI experiment should reduce that extraction work without
+turning source candidates into evaluated framework values or adding app hints.
+The goal remains active, and all research/evaluator agents are closed.
+
+At implementation commit `462f787`, hosted build/fmt/Clippy/test checks pass
+in `37393756939`. The separate current review workflow `37393756701` explicitly
+fails with expired OAuth/401 authentication_error and needs reauthentication,
+not a code bypass. All 522 local Rust tests and corrected telemetry test
+invocation pass; an initial mistyped telemetry test path ran no tests and is
+not counted as successful verification. No executable bundle/runtime or
+dependency changes in this iteration; full-JS performance evidence above
+predates research and retains the corrected output hashes.
