@@ -1,347 +1,121 @@
-//! Comprehensive test framework for sparse switch simplification
-//!
-//! Tests the simplified switch converter according to the design document acceptance criteria.
-//! This includes golden tests, edge cases, performance validation, and semantic equivalence.
-
+use assert_cmd::Command;
+use hermes_dec_rs::{decompiler::Decompiler, hbc::HbcFile};
+use std::fs;
 use std::path::Path;
-use std::time::Instant;
 
-/// Test data structure for golden test cases
-#[derive(Debug, Clone)]
-struct SwitchTestCase {
-    name: &'static str,
-    description: &'static str,
-    hbc_file: &'static str,
-    function_id: u32,
-    expected_pattern: ExpectedPattern,
-    should_bail_out: bool,
-    bail_out_reason: Option<&'static str>,
+fn decompile_fixture(hbc_path: &Path, func_index: u32) -> String {
+    let data = fs::read(hbc_path).expect("Failed to read HBC fixture");
+    let hbc = HbcFile::parse(&data).expect("Failed to parse HBC fixture");
+    let mut decompiler = Decompiler::new().expect("Failed to create decompiler");
+    decompiler
+        .decompile_function(&hbc, func_index)
+        .expect("Failed to decompile sparse switch fixture")
 }
 
-/// Expected pattern for test validation
-#[derive(Debug, Clone)]
-enum ExpectedPattern {
-    /// Switch with specific number of cases and default
-    Switch {
-        case_count: usize,
-        has_default: bool,
-        discriminator_register: u8,
-    },
-    /// Should bail out and fall back to if/else
-    BailOut(&'static str),
-    /// No switch pattern detected
-    NoPattern,
+fn decompile_fixture_via_cli(hbc_path: &Path, func_index: u32) -> String {
+    let output = Command::cargo_bin("hermes-dec-rs")
+        .expect("Failed to resolve hermes-dec-rs binary")
+        .args([
+            "decompile",
+            hbc_path
+                .to_str()
+                .expect("fixture path should be valid UTF-8"),
+            "--function",
+            &func_index.to_string(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    String::from_utf8(output).expect("CLI output should be valid UTF-8")
 }
 
-/// Golden test cases covering various sparse switch patterns
-const GOLDEN_TEST_CASES: &[SwitchTestCase] = &[
-    // Basic sparse switch patterns
-    SwitchTestCase {
-        name: "simple_sparse_switch",
-        description: "Simple sparse switch with 3 non-consecutive cases",
-        hbc_file: "data/sparse_switch_simple.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::Switch {
-            case_count: 3,
-            has_default: true,
-            discriminator_register: 0,
-        },
-        should_bail_out: false,
-        bail_out_reason: None,
-    },
-    SwitchTestCase {
-        name: "mixed_type_switch",
-        description: "Sparse switch with both numeric and string cases",
-        hbc_file: "data/sparse_switch_mixed.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::Switch {
-            case_count: 4,
-            has_default: true,
-            discriminator_register: 0,
-        },
-        should_bail_out: false,
-        bail_out_reason: None,
-    },
-    // Edge cases that should bail out
-    SwitchTestCase {
-        name: "non_constant_comparison",
-        description: "Switch with non-constant comparison values",
-        hbc_file: "data/sparse_switch_non_constant.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::BailOut("non-constant comparison"),
-        should_bail_out: true,
-        bail_out_reason: Some("non-constant comparison detected"),
-    },
-    SwitchTestCase {
-        name: "complex_phi_scenario",
-        description: "Switch with complex PHI requirements",
-        hbc_file: "data/sparse_switch_complex_phi.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::BailOut("complex PHI analysis"),
-        should_bail_out: true,
-        bail_out_reason: Some("PHI analysis too complex"),
-    },
-    SwitchTestCase {
-        name: "shared_tail_pattern",
-        description: "Switch with meaningful shared tail",
-        hbc_file: "data/sparse_switch_shared_tail.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::Switch {
-            case_count: 2,
-            has_default: false,
-            discriminator_register: 0,
-        },
-        should_bail_out: false,
-        bail_out_reason: None,
-    },
-    SwitchTestCase {
-        name: "irreducible_control_flow",
-        description: "Switch with irreducible loops - should bail out",
-        hbc_file: "data/sparse_switch_irreducible.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::BailOut("irreducible control flow"),
-        should_bail_out: true,
-        bail_out_reason: Some("irreducible control flow detected"),
-    },
-    SwitchTestCase {
-        name: "no_switch_pattern",
-        description: "Code with no switch pattern",
-        hbc_file: "data/no_switch.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::NoPattern,
-        should_bail_out: false,
-        bail_out_reason: None,
-    },
-];
+fn count_occurrences(haystack: &str, needle: &str) -> usize {
+    haystack.matches(needle).count()
+}
 
-/// Edge case test scenarios
-const EDGE_CASE_TESTS: &[SwitchTestCase] = &[
-    SwitchTestCase {
-        name: "infinity_nan_cases",
-        description: "Switch with Infinity and NaN case values",
-        hbc_file: "data/sparse_switch_special_values.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::BailOut("special numeric values"),
-        should_bail_out: true,
-        bail_out_reason: Some("Infinity and NaN values not supported in switch conversion"),
-    },
-    SwitchTestCase {
-        name: "exception_handler_interference",
-        description: "Switch pattern interrupted by exception handlers",
-        hbc_file: "data/sparse_switch_exceptions.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::BailOut("exception handler interference"),
-        should_bail_out: true,
-        bail_out_reason: Some("exception handlers detected in switch pattern"),
-    },
-    SwitchTestCase {
-        name: "deeply_nested_switch",
-        description: "Switch nested within complex control flow",
-        hbc_file: "data/sparse_switch_nested.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::BailOut("deeply nested control flow"),
-        should_bail_out: true,
-        bail_out_reason: Some("switch pattern too complex due to deep nesting"),
-    },
-    SwitchTestCase {
-        name: "register_reuse_conflict",
-        description: "Switch where discriminator register is reused",
-        hbc_file: "data/sparse_switch_register_reuse.hbc",
-        function_id: 1,
-        expected_pattern: ExpectedPattern::BailOut("register reuse conflict"),
-        should_bail_out: true,
-        bail_out_reason: Some("discriminator register reused unsafely"),
-    },
-];
-
-/// Test sparse switch pattern detection
 #[test]
-fn test_golden_patterns() {
-    // For now, skip running actual tests since we don't have test data files
-    // This framework is ready for when test data is available
-    println!(
-        "Golden test framework ready - {} test cases defined",
-        GOLDEN_TEST_CASES.len()
-    );
-
-    // Validate that test framework compiles and runs
-    assert_eq!(GOLDEN_TEST_CASES.len(), 7);
-
-    // Use all fields to avoid warnings
-    for tc in GOLDEN_TEST_CASES.iter() {
-        println!("Test case: {} - {}", tc.name, tc.description);
-        println!("  HBC file: {}, Function: {}", tc.hbc_file, tc.function_id);
-        println!("  Should bail out: {}", tc.should_bail_out);
-        if let Some(reason) = tc.bail_out_reason {
-            println!("  Bail out reason: {}", reason);
-        }
-        match &tc.expected_pattern {
-            ExpectedPattern::Switch {
-                case_count,
-                has_default,
-                discriminator_register,
-            } => {
-                println!(
-                    "  Expected switch with {} cases, default: {}, discriminator: r{}",
-                    case_count, has_default, discriminator_register
-                );
-            }
-            ExpectedPattern::BailOut(msg) => {
-                println!("  Expected to bail out: {}", msg);
-            }
-            ExpectedPattern::NoPattern => {
-                println!("  Expected no pattern");
-            }
-        }
-    }
-
-    assert!(GOLDEN_TEST_CASES.iter().any(|tc| !tc.should_bail_out));
-    assert!(GOLDEN_TEST_CASES.iter().any(|tc| tc.should_bail_out));
-}
-
-/// Test edge cases that should bail out gracefully
-#[test]
-fn test_edge_cases() {
-    // For now, skip running actual tests since we don't have test data files
-    // This framework is ready for when test data is available
-    println!(
-        "Edge case test framework ready - {} test cases defined",
-        EDGE_CASE_TESTS.len()
-    );
-
-    // Validate edge case structure
-    assert_eq!(EDGE_CASE_TESTS.len(), 4);
-    let bailout_count = EDGE_CASE_TESTS
-        .iter()
-        .filter(|tc| tc.should_bail_out)
-        .count();
-    let success_count = EDGE_CASE_TESTS
-        .iter()
-        .filter(|tc| !tc.should_bail_out)
-        .count();
-    assert!(
-        bailout_count + success_count == 4,
-        "All edge cases should be categorized"
-    );
-    println!(
-        "Edge cases: {} bail out, {} succeed",
-        bailout_count, success_count
-    );
-}
-
-/// Performance validation test
-#[test]
-fn test_performance_requirements() {
-    // For now, validate that performance framework is ready
-    println!("Performance test framework ready - would test < 10% overhead requirement");
-
-    let start_time = Instant::now();
-    // Simulate some work
-    std::thread::sleep(std::time::Duration::from_millis(10));
-    let duration = start_time.elapsed();
-
-    // Requirement: < 10% compilation overhead (would be much higher threshold in real test)
-    assert!(
-        duration.as_millis() < 1000, // Very generous for mock test
-        "Performance requirement failed: took {}ms",
-        duration.as_millis()
-    );
-}
-
-/// Test deterministic output requirement
-#[test]
-fn test_deterministic_output() {
-    // For now, validate that deterministic testing framework is ready
-    println!("Deterministic output test framework ready");
-
-    // Test that our test framework itself is deterministic
-    let test_case = &GOLDEN_TEST_CASES[0];
-    assert_eq!(test_case.name, "simple_sparse_switch");
-
-    // Would test: same input bytecode -> identical AST structure
-    assert!(true, "Deterministic test framework validated");
-}
-
-/// Test semantic equivalence validation
-#[test]
-fn test_semantic_equivalence() {
-    // For now, validate that semantic equivalence testing framework is ready
-    println!("Semantic equivalence test framework ready");
-
-    // Would test: old vs new implementations produce semantically equivalent JavaScript
-    // for finite test domains: {all case keys} ∪ {one non-member}
-
-    let successful_cases = GOLDEN_TEST_CASES
-        .iter()
-        .filter(|tc| !tc.should_bail_out)
-        .count();
+fn test_sparse_switch_fixture_decompiles_to_structured_switch() {
+    let hbc_path = Path::new("data/dense_switch_test.hbc");
+    let output = decompile_fixture(hbc_path, 2);
 
     assert!(
-        successful_cases >= 3,
-        "Should have at least 3 successful test cases"
+        output.contains("switch (param1)"),
+        "expected sparse switch fixture to decompile as a structured switch:\n{}",
+        output
+    );
+
+    for case in [
+        "case 100:",
+        "case 200:",
+        "case 201:",
+        "case 400:",
+        "case 401:",
+        "case 403:",
+        "case 404:",
+        "case 500:",
+    ] {
+        assert!(
+            output.contains(case),
+            "expected sparse switch case `{}` in decompiled output:\n{}",
+            case,
+            output
+        );
+    }
+
+    assert_eq!(
+        count_occurrences(&output, "case "),
+        8,
+        "expected exactly eight sparse switch cases:\n{}",
+        output
+    );
+    assert_eq!(
+        count_occurrences(&output, "default:"),
+        1,
+        "expected exactly one sparse switch default case:\n{}",
+        output
+    );
+    assert_eq!(
+        count_occurrences(&output, "switch ("),
+        1,
+        "expected sparse switch fixture to emit exactly one switch:\n{}",
+        output
     );
 }
 
-/// Test memory efficiency requirement
 #[test]
-fn test_memory_efficiency() {
-    // Test that new data structures don't cause memory regressions
-    // This would typically be done with a memory profiler or custom allocator
-    // For now, just validate the test framework compiles
-    assert!(GOLDEN_TEST_CASES.len() > 0);
+fn test_sparse_switch_cli_matches_library_output() {
+    let hbc_path = Path::new("data/dense_switch_test.hbc");
+    let library_output = decompile_fixture(hbc_path, 2);
+    let cli_output = decompile_fixture_via_cli(hbc_path, 2);
+
+    assert_eq!(
+        cli_output.trim(),
+        library_output.trim(),
+        "CLI decompilation output diverged from the library path"
+    );
 }
 
-/// Test that bail-out conditions are comprehensive
 #[test]
-fn test_comprehensive_bailouts() {
-    let bailout_scenarios = [
-        "infinity_nan_cases",
-        "exception_handler_interference",
-        "deeply_nested_switch",
-        "register_reuse_conflict",
-    ];
+fn test_sparse_switch_cli_regression_command_is_stable() {
+    let hbc_path = Path::new("data/dense_switch_test.hbc");
+    let output = decompile_fixture_via_cli(hbc_path, 2);
 
-    for scenario in &bailout_scenarios {
-        let test_case = EDGE_CASE_TESTS.iter().find(|t| t.name == *scenario);
-
-        // Just validate the test data exists and is marked as bail-out
-        if let Some(test_case) = test_case {
-            assert!(
-                test_case.should_bail_out,
-                "Scenario {} should be marked as bail-out",
-                scenario
-            );
-        }
-    }
-}
-
-/// Integration test with existing block converter
-#[test]
-fn test_block_converter_integration() {
-    // Test that switch converter integrates properly with block converter
-    // This would test the actual convert_switch_region method
-
-    let test_case = &GOLDEN_TEST_CASES[0];
-    let hbc_path = Path::new(test_case.hbc_file);
-
-    if !hbc_path.exists() {
-        println!("Skipping integration test - test data not available");
-        return;
-    }
-
-    // This would test the full integration path:
-    // HBC -> CFG -> Switch Region -> Pattern Detection -> AST Generation
-    // For now, just validate that the interface is compatible
-
-    // This would test the full integration with AST generation
-    // let allocator = Allocator::default();
-    // let ast_builder = AstBuilder::new(&allocator);
-    // let _switch_converter = SwitchConverter::new(&ast_builder);
-
-    // Mock block converter integration
-    // let mut block_converter = BlockToStatementConverter::new(...);
-    // let result = switch_converter.convert_switch_region(&region, &cfg, &mut block_converter);
-
-    // For now, just validate analysis works
-    assert!(true, "Basic integration test passed");
+    assert!(
+        output.contains("function largeSwitchTest(arg0)"),
+        "expected CLI decompile regression output for the sparse switch fixture:\n{}",
+        output
+    );
+    assert!(
+        output.contains("const var0_h = \"unknown\";"),
+        "expected sparse switch default branch in CLI output:\n{}",
+        output
+    );
+    assert!(
+        !output.contains("if (param1"),
+        "expected sparse switch fixture to avoid falling back to an if-chain:\n{}",
+        output
+    );
 }

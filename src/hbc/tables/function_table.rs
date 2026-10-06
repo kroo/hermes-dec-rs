@@ -279,7 +279,9 @@ impl<'a> FunctionTable<'a> {
                 let large_header_data: LargeFunctionHeader =
                     data.gread_with(&mut new_offset, scroll::LE)?;
                 large_header = Some(large_header_data);
-                *offset = new_offset + std::mem::size_of::<LargeFunctionHeader>();
+                // gread already advances past the full header. Exception data
+                // follows it directly, not another header-width later.
+                *offset = new_offset;
             } else {
                 *offset = small_header.info_offset() as usize;
             }
@@ -293,8 +295,7 @@ impl<'a> FunctionTable<'a> {
                     *offset += 4 - (*offset % 4);
                 }
 
-                let exc_count = u32::from_le_bytes(data[*offset..*offset + 4].try_into().unwrap());
-                *offset += 4;
+                let exc_count: u32 = data.gread_with(offset, scroll::LE)?;
 
                 // Read exception handler info
                 for _ in 0..exc_count {
@@ -349,7 +350,12 @@ impl<'a> FunctionTable<'a> {
                 large_header,
                 exc_handlers,
                 debug_offsets,
-                body: &data[body_offset..body_offset + body_size],
+                body: data.get(body_offset..body_offset + body_size).ok_or(
+                    scroll::Error::BadInput {
+                        size: body_size,
+                        msg: "Function body exceeds file bounds",
+                    },
+                )?,
                 version: header.version(),
                 cached_instructions: std::sync::OnceLock::new(),
             };
@@ -375,7 +381,12 @@ impl<'a> FunctionTable<'a> {
         }
 
         let parsed_header = &self.parsed_headers[index as usize];
-        let name_index = parsed_header.header.function_name() as u32;
+        let name_index = parsed_header
+            .large_header
+            .as_ref()
+            .map_or(parsed_header.header.function_name(), |header| {
+                header.function_name
+            });
 
         // Use O(1) string lookup instead of extracting all strings
         match string_table.get(name_index) {
@@ -433,6 +444,15 @@ impl<'a> FunctionTable<'a> {
         }
     }
 
+    /// Borrow cached instructions without copying a whole function's bytecode.
+    pub fn get_instructions_ref(&self, index: u32) -> DecompilerResult<&[HbcFunctionInstruction]> {
+        self.get_parsed_header(index)
+            .ok_or_else(|| DecompilerError::Internal {
+                message: format!("Function index {index} out of bounds"),
+            })?
+            .instructions_ref()
+    }
+
     /// Get a single instruction by index
     pub fn get_instruction(
         &self,
@@ -454,20 +474,23 @@ impl<'a> ParsedFunctionHeader<'a> {
     /// Parse the function body into instructions.
     /// This method caches the parsed instructions to avoid re-parsing.
     pub fn instructions(&self) -> DecompilerResult<Vec<HbcFunctionInstruction>> {
-        if let Some(result) = self.cached_instructions.get() {
-            return result.clone();
-        }
+        self.instructions_ref()
+            .map(<[HbcFunctionInstruction]>::to_vec)
+    }
 
-        let result = self.parse_instructions();
-        let _ = self.cached_instructions.set(result.clone());
-        result
+    pub fn instructions_ref(&self) -> DecompilerResult<&[HbcFunctionInstruction]> {
+        self.cached_instructions
+            .get_or_init(|| self.parse_instructions())
+            .as_ref()
+            .map(Vec::as_slice)
+            .map_err(Clone::clone)
     }
 
     pub fn instruction(
         &self,
         instruction_index: InstructionIndex,
     ) -> DecompilerResult<HbcFunctionInstruction> {
-        let instructions = self.instructions()?;
+        let instructions = self.instructions_ref()?;
         let index = instruction_index.value();
 
         if index < instructions.len() {
@@ -494,6 +517,26 @@ impl<'a> ParsedFunctionHeader<'a> {
 
             match UnifiedInstruction::parse(self.version, opcode, self.body, &mut offset) {
                 Ok((instruction, _bytes_read)) => {
+                    // HBC 95 added a caller-strictness byte to DirectEval.
+                    // The unified opcode keeps the shared register operands.
+                    if self.version >= 95
+                        && matches!(instruction, UnifiedInstruction::DirectEval { .. })
+                    {
+                        let strict =
+                            self.body
+                                .get(offset)
+                                .ok_or_else(|| DecompilerError::Parse {
+                                    offset,
+                                    message: "Truncated DirectEval strictness operand".into(),
+                                })?;
+                        if *strict > 1 {
+                            return Err(DecompilerError::Parse {
+                                offset,
+                                message: "Invalid DirectEval strictness operand".into(),
+                            });
+                        }
+                        offset += 1;
+                    }
                     instructions.push(HbcFunctionInstruction {
                         offset: InstructionOffset::from(start_offset as u32),
                         function_index: self.index as u32,

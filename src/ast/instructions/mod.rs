@@ -2037,47 +2037,70 @@ impl<'a> InstructionToStatementConverter<'a> {
         let is_first_definition = self.register_manager.is_first_definition(variable_name);
 
         if is_first_definition {
-            // Check if variable should be const - first check declaration strategy, then fallback to usage analysis
-            let declaration_kind =
-                if let Some(kind) = self.get_declaration_kind_from_plan(variable_name) {
-                    // Use declaration strategy from control flow plan
-                    match kind {
-                        VariableKind::Const => oxc_ast::ast::VariableDeclarationKind::Const,
-                        VariableKind::Let => oxc_ast::ast::VariableDeclarationKind::Let,
+            if let Some(strategy) = self.get_declaration_strategy_from_plan(variable_name) {
+                match strategy {
+                    DeclarationStrategy::DeclareAndInitialize { kind } => {
+                        let declaration_kind = match kind {
+                            VariableKind::Const => oxc_ast::ast::VariableDeclarationKind::Const,
+                            VariableKind::Let => oxc_ast::ast::VariableDeclarationKind::Let,
+                        };
+                        return self.create_variable_declaration(
+                            variable_name,
+                            init_expression,
+                            declaration_kind,
+                        );
                     }
-                } else if self.register_manager.should_be_const(variable_name) {
-                    // Fallback to variable usage analysis
-                    oxc_ast::ast::VariableDeclarationKind::Const
-                } else {
-                    oxc_ast::ast::VariableDeclarationKind::Let
-                };
-            // Create declaration: let/const variable_name = init_expression
-            self.create_variable_declaration(variable_name, init_expression, declaration_kind)
-        } else {
-            // Track that this variable was used without declaration
-            self.undeclared_variables.insert(variable_name.to_string());
-
-            // Create assignment: variable_name = init_expression
-            if let Some(init_expr) = init_expression {
-                let span = oxc_span::Span::default();
-                let var_atom = self.ast_builder.allocator.alloc_str(variable_name);
-                let assign_expr = self.ast_builder.expression_assignment(
-                    span,
-                    oxc_ast::ast::AssignmentOperator::Assign,
-                    oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(
-                        self.ast_builder.alloc(oxc_ast::ast::IdentifierReference {
-                            span,
-                            name: oxc_span::Atom::from(var_atom),
-                            reference_id: std::cell::Cell::new(None),
-                        }),
-                    ),
-                    init_expr,
-                );
-                Ok(self.ast_builder.statement_expression(span, assign_expr))
-            } else {
-                // No init expression, return empty statement
-                Ok(self.ast_builder.statement_empty(oxc_span::Span::default()))
+                    DeclarationStrategy::DeclareAtDominator { .. }
+                    | DeclarationStrategy::AssignOnly => {
+                        return self.create_assignment_statement(variable_name, init_expression);
+                    }
+                    DeclarationStrategy::Skip => {
+                        return Ok(self.ast_builder.statement_empty(oxc_span::Span::default()));
+                    }
+                    DeclarationStrategy::SideEffectOnly => {}
+                }
             }
+
+            let declaration_kind = if self.register_manager.should_be_const(variable_name) {
+                oxc_ast::ast::VariableDeclarationKind::Const
+            } else {
+                oxc_ast::ast::VariableDeclarationKind::Let
+            };
+            return self.create_variable_declaration(
+                variable_name,
+                init_expression,
+                declaration_kind,
+            );
+        }
+
+        self.create_assignment_statement(variable_name, init_expression)
+    }
+
+    fn create_assignment_statement(
+        &mut self,
+        variable_name: &str,
+        init_expression: Option<oxc_ast::ast::Expression<'a>>,
+    ) -> Result<Statement<'a>, StatementConversionError> {
+        self.undeclared_variables.insert(variable_name.to_string());
+
+        if let Some(init_expr) = init_expression {
+            let span = oxc_span::Span::default();
+            let var_atom = self.ast_builder.allocator.alloc_str(variable_name);
+            let assign_expr = self.ast_builder.expression_assignment(
+                span,
+                oxc_ast::ast::AssignmentOperator::Assign,
+                oxc_ast::ast::AssignmentTarget::AssignmentTargetIdentifier(self.ast_builder.alloc(
+                    oxc_ast::ast::IdentifierReference {
+                        span,
+                        name: oxc_span::Atom::from(var_atom),
+                        reference_id: std::cell::Cell::new(None),
+                    },
+                )),
+                init_expr,
+            );
+            Ok(self.ast_builder.statement_expression(span, assign_expr))
+        } else {
+            Ok(self.ast_builder.statement_empty(oxc_span::Span::default()))
         }
     }
 
@@ -2389,8 +2412,11 @@ impl<'a> InstructionToStatementConverter<'a> {
         )
     }
 
-    /// Get the declaration kind (const vs let) from the control flow plan
-    fn get_declaration_kind_from_plan(&self, variable_name: &str) -> Option<VariableKind> {
+    /// Get the declaration strategy from the control flow plan for a variable.
+    fn get_declaration_strategy_from_plan(
+        &self,
+        variable_name: &str,
+    ) -> Option<DeclarationStrategy> {
         let plan = &self.control_flow_plan;
 
         // Look through all declaration strategies to find one that matches this variable name
@@ -2400,11 +2426,7 @@ impl<'a> InstructionToStatementConverter<'a> {
                 .register_manager
                 .get_variable_name_for_duplicated(dup_ssa);
             if strategy_var_name == variable_name {
-                return match strategy {
-                    DeclarationStrategy::DeclareAndInitialize { kind } => Some(*kind),
-                    DeclarationStrategy::DeclareAtDominator { kind, .. } => Some(*kind),
-                    _ => None,
-                };
+                return Some(strategy.clone());
             }
         }
         None

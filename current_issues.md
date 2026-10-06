@@ -1,4 +1,9 @@
-# Current Issues in dense_switch_test Output
+# Historical dense_switch_test Issues
+
+These observations predate the current control-flow stabilization work and are
+not a verified list of outstanding bugs. Current regressions live in
+`tests/dense_switch.rs`, `tests/sparse_switch_converter.rs`, and
+`tests/loop_integration.rs`. See `docs/roadmap.md` for remaining work.
 
 ## Function 3 - switchWithBreak ✅
 **Status**: Working correctly

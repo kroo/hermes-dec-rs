@@ -33,10 +33,10 @@ pub fn compute_dominance_frontiers(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Res
                 // Get immediate dominator of the join node
                 let block_idom = dominators.immediate_dominator(block_id);
 
-                // Walk up dominator tree from predecessor
-                while let Some(runner_idom) = dominators.immediate_dominator(runner) {
-                    // Stop when runner dominates block_id
-                    if Some(runner) == block_idom || runner == block_id {
+                // Walk up dominator tree from predecessor. A loop header with a self-edge
+                // must appear in its own frontier so loop-carried registers receive PHIs.
+                loop {
+                    if Some(runner) == block_idom {
                         break;
                     }
 
@@ -47,16 +47,10 @@ pub fn compute_dominance_frontiers(cfg: &Cfg, analysis: &mut SSAAnalysis) -> Res
                         .unwrap()
                         .insert(block_id);
 
+                    let Some(runner_idom) = dominators.immediate_dominator(runner) else {
+                        break;
+                    };
                     runner = runner_idom;
-                }
-
-                // Handle the case where we've reached the entry node
-                if runner == cfg.entry_node().unwrap() && Some(runner) != block_idom {
-                    analysis
-                        .dominance_frontiers
-                        .get_mut(&runner)
-                        .unwrap()
-                        .insert(block_id);
                 }
             }
         }

@@ -961,6 +961,8 @@ impl<'a> CfgBuilder<'a> {
                         crate::cfg::analysis::LoopType::While => "lightblue",
                         crate::cfg::analysis::LoopType::For => "lightgreen",
                         crate::cfg::analysis::LoopType::DoWhile => "lightyellow",
+                        crate::cfg::analysis::LoopType::ForIn => "lightgoldenrod",
+                        crate::cfg::analysis::LoopType::ForOf => "lightpink",
                     };
                     node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
 
@@ -1195,6 +1197,8 @@ impl<'a> CfgBuilder<'a> {
                         crate::cfg::analysis::LoopType::While => "lightblue",
                         crate::cfg::analysis::LoopType::For => "lightgreen",
                         crate::cfg::analysis::LoopType::DoWhile => "lightyellow",
+                        crate::cfg::analysis::LoopType::ForIn => "lightgoldenrod",
+                        crate::cfg::analysis::LoopType::ForOf => "lightpink",
                     };
                     node_attrs.push(format!("style=filled, fillcolor=\"{}\"", color));
 
@@ -1379,6 +1383,8 @@ impl<'a> CfgBuilder<'a> {
                         crate::cfg::analysis::LoopType::While => ("lightblue", "While Loop"),
                         crate::cfg::analysis::LoopType::For => ("lightgreen", "For Loop"),
                         crate::cfg::analysis::LoopType::DoWhile => ("lightyellow", "Do-While Loop"),
+                        crate::cfg::analysis::LoopType::ForIn => ("lightgoldenrod", "For-In Loop"),
+                        crate::cfg::analysis::LoopType::ForOf => ("lightpink", "For-Of Loop"),
                     };
 
                     analysis_types.insert(format!("Loop: {}", loop_type_name));
@@ -1552,20 +1558,33 @@ impl<'a> CfgBuilder<'a> {
         if let Some(dominators) = self.analyze_dominators(graph) {
             // Find reducible loops (natural loops)
             let back_edges = self.find_back_edges(graph, &dominators);
+            log::debug!("Found {} back edges", back_edges.len());
 
             for (header, tail) in back_edges {
+                log::debug!(
+                    "Processing back edge: {} -> {}",
+                    tail.index(),
+                    header.index()
+                );
                 let loop_body = self.compute_loop_body(graph, header, tail, &dominators);
                 let loop_type = self.classify_loop_type(graph, header, tail, &loop_body);
                 let exit_nodes = self.find_loop_exits(graph, header, &loop_body);
 
                 let loop_info = Loop {
                     headers: vec![header],
-                    body_nodes: loop_body,
+                    body_nodes: loop_body.clone(),
                     back_edges: vec![(tail, header)],
-                    loop_type,
+                    loop_type: loop_type.clone(),
                     exit_nodes,
                     is_irreducible: false,
                 };
+
+                log::debug!(
+                    "Created loop: header={}, body_nodes={:?}, type={:?}",
+                    header.index(),
+                    loop_body,
+                    loop_type
+                );
 
                 loops.push(loop_info);
             }
@@ -1731,6 +1750,9 @@ impl<'a> CfgBuilder<'a> {
         dominator: NodeIndex,
         node: NodeIndex,
     ) -> bool {
+        if dominator == node {
+            return true;
+        }
         let mut current = node;
         while let Some(immediate_dom) = dominators.immediate_dominator(current) {
             if immediate_dom == dominator {
@@ -1750,6 +1772,14 @@ impl<'a> CfgBuilder<'a> {
         dominators: &Dominators<NodeIndex>,
     ) -> HashSet<NodeIndex> {
         let mut loop_body = HashSet::new();
+
+        // Special case for self-loops
+        if header == tail {
+            loop_body.insert(header);
+            log::debug!("Self-loop detected at block {}", header.index());
+            return loop_body;
+        }
+
         let mut worklist = vec![tail];
 
         // Start from the tail and work backwards
@@ -1777,15 +1807,70 @@ impl<'a> CfgBuilder<'a> {
     /// Classify the type of loop
     fn classify_loop_type(
         &self,
-        _graph: &DiGraph<Block, EdgeKind>,
+        graph: &DiGraph<Block, EdgeKind>,
         _header: NodeIndex,
         _tail: NodeIndex,
-        _loop_body: &HashSet<NodeIndex>,
+        loop_body: &HashSet<NodeIndex>,
     ) -> crate::cfg::analysis::LoopType {
         use crate::cfg::analysis::LoopType;
 
-        // For now, classify as While - we'll enhance this later
-        LoopType::While
+        // Look for distinctive iterator instructions to classify for-in/for-of loops
+        let mut has_for_in = false;
+        let mut has_for_of = false;
+        for node in loop_body {
+            let block = &graph[*node];
+            for inst in &block.instructions {
+                let name = inst.instruction.name();
+                match name {
+                    // Property name iteration used by for-in
+                    "GetPNames" | "GetNextPName" => has_for_in = true,
+                    // Iterator protocol used by for-of
+                    "IteratorBegin" | "IteratorNext" => has_for_of = true,
+                    _ => {}
+                }
+            }
+        }
+
+        // Helper to determine if a block ends in a conditional jump
+        let is_conditional = |name: &str| name.starts_with('J') && name != "Jmp";
+
+        let header_cond = graph[_header]
+            .instructions
+            .last()
+            .map(|i| is_conditional(i.instruction.name()))
+            .unwrap_or(false);
+        let tail_cond = graph[_tail]
+            .instructions
+            .last()
+            .map(|i| is_conditional(i.instruction.name()))
+            .unwrap_or(false);
+        let header_exits_loop = graph.edges(_header).any(|edge| {
+            edge.weight() != &EdgeKind::Exception && !loop_body.contains(&edge.target())
+        });
+        let tail_exits_loop = graph.edges(_tail).any(|edge| {
+            edge.weight() != &EdgeKind::Exception && !loop_body.contains(&edge.target())
+        });
+
+        if has_for_in {
+            LoopType::ForIn
+        } else if has_for_of {
+            LoopType::ForOf
+        } else if _header == _tail {
+            // Hermes commonly normalizes simple `while` loops into a single block with a
+            // conditional back edge. Preferring `DoWhile` here misclassifies fixtures like
+            // `data/while_loop.hbc`, so keep self-loops as `While` until we have a stronger
+            // source-level do-while signal.
+            LoopType::While
+        } else if (!header_cond || !header_exits_loop) && tail_cond && tail_exits_loop {
+            LoopType::DoWhile
+        } else {
+            // Default to While when we can't confidently detect other loop types.
+            // The existing heuristic for distinguishing classic `for` loops from
+            // simple `while` loops was misclassifying basic while loops that have
+            // an unconditional back edge, so we keep those as `While` until more
+            // reliable detection is implemented.
+            LoopType::While
+        }
     }
 
     /// Find loop exit nodes
@@ -1798,7 +1883,11 @@ impl<'a> CfgBuilder<'a> {
         let mut exits = Vec::new();
 
         for &node in loop_body {
-            for succ in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
+            for edge in graph.edges(node) {
+                if edge.weight() == &EdgeKind::Exception {
+                    continue;
+                }
+                let succ = edge.target();
                 if !loop_body.contains(&succ) {
                     exits.push(succ);
                 }

@@ -344,11 +344,21 @@ fn test_block_creation() {
 }
 
 #[test]
-#[ignore]
 fn test_block_contains_pc() {
     let block = Block::new(InstructionIndex::new(0x1000), vec![]);
-    assert!(block.contains_pc(InstructionIndex::new(0x1000)));
+    assert!(!block.contains_pc(InstructionIndex::new(0x1000)));
     assert!(!block.contains_pc(InstructionIndex::new(0x1001)));
+    let block = Block::new(
+        InstructionIndex::new(0x1000),
+        make_test_instructions(vec![
+            UnifiedInstruction::LoadConstZero { operand_0: 0 },
+            UnifiedInstruction::Ret { operand_0: 0 },
+        ]),
+    );
+    assert!(!block.contains_pc(InstructionIndex::new(0x0fff)));
+    assert!(block.contains_pc(InstructionIndex::new(0x1000)));
+    assert!(block.contains_pc(InstructionIndex::new(0x1001)));
+    assert!(!block.contains_pc(InstructionIndex::new(0x1002)));
 }
 
 #[test]
@@ -1236,29 +1246,66 @@ fn test_cfg_integration_with_hbc_files() {
             });
 
             // Compare actual vs expected
-            if all_dot_output != expected_content {
+            if dot_topology(&all_dot_output) != dot_topology(&expected_content) {
                 // Generate a detailed diff for debugging
                 let diff = generate_dot_diff(&expected_content, &all_dot_output);
                 panic!("CFG DOT output mismatch for {}:\n\n{}", test_name, diff);
             }
 
             println!("    ✓ DOT output matches expected");
-        } else {
-            // Create expected file for first run
-            fs::write(&expected_dot_path, &all_dot_output).unwrap_or_else(|_| {
-                panic!(
-                    "Failed to write expected DOT file: {}",
-                    expected_dot_path.display()
-                )
-            });
-            println!(
-                "    ✓ Created expected DOT file: {}",
-                expected_dot_path.display()
-            );
         }
 
         println!("✓ {} CFG analysis completed", test_name);
     }
+}
+
+// Pin nodes, edges and edge kinds without coupling CFG tests to instruction formatting.
+fn dot_topology(dot: &str) -> Vec<String> {
+    let mut topology: Vec<_> = dot
+        .lines()
+        .map(str::trim)
+        .filter_map(|line| {
+            if line.contains(" -> ") {
+                Some(line.to_string())
+            } else if line.starts_with('f') && line.contains(" [ label = ") {
+                Some(line.split_whitespace().next()?.to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    topology.sort();
+    topology
+}
+
+#[test]
+fn test_cfg_dot_rendering_matches_expected() {
+    let data = fs::read("data/hermes_dec_sample.hbc").unwrap();
+    let hbc = HbcFile::parse(&data).unwrap();
+    let mut actual = String::from("// CFG analysis for hermes_dec_sample\n// Generated from data/hermes_dec_sample.hbc\n\ndigraph {\n  rankdir=TB;\n  node [shape=box, fontname=\"monospace\"];\n\n");
+    for function_index in 0..hbc.functions.count() {
+        let mut cfg = Cfg::new(&hbc, function_index);
+        cfg.build();
+        actual.push_str(&cfg.to_dot_subgraph(&hbc, function_index));
+        actual.push('\n');
+    }
+    actual.push_str("}\n");
+    assert_eq!(actual, include_str!("../data/hermes_dec_sample.dot"));
+}
+
+#[test]
+fn test_dot_topology_preserves_edges_and_ignores_instruction_labels() {
+    let original = "f1_n0 [ label = \"Block 0 AddN r1\" ]\nf1_n1 [ label = \"EXIT\" ]\nf1_n0 -> f1_n1 [ label = \"True\" ]";
+    let recompiled = original.replace("AddN r1", "Inc r2");
+    assert_eq!(dot_topology(original), dot_topology(&recompiled));
+    assert_ne!(
+        dot_topology(original),
+        dot_topology(&original.replace("True", "False"))
+    );
+    assert_ne!(
+        dot_topology(original),
+        dot_topology(&original.replace("f1_n0 -> f1_n1", "f1_n1 -> f1_n0"))
+    );
 }
 
 /// Validate basic CFG structure properties
@@ -2498,10 +2545,6 @@ fn test_generate_loop_visualization_demo() {
     cfg.build();
 
     let dot_output = cfg.to_dot_with_loops();
-
-    // Write to a file for manual inspection
-    use std::fs;
-    fs::write("loop_visualization_demo.dot", &dot_output).expect("Failed to write DOT file");
 
     // Verify the output contains expected elements
     assert!(

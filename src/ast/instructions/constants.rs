@@ -115,10 +115,6 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             return Ok(InstructionResult::None);
         }
 
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
-
         let span = Span::default();
         let value_expr = self.ast_builder.expression_numeric_literal(
             span,
@@ -127,7 +123,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             oxc_syntax::number::NumberBase::Decimal,
         );
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(value_expr))?;
+        let stmt = self.create_register_assignment_statement(dest_reg, value_expr)?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -142,14 +138,10 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             return Ok(InstructionResult::None);
         }
 
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
-
         let span = Span::default();
         let value_expr = self.ast_builder.expression_boolean_literal(span, value);
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(value_expr))?;
+        let stmt = self.create_register_assignment_statement(dest_reg, value_expr)?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -163,14 +155,10 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             return Ok(InstructionResult::None);
         }
 
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
-
         let span = Span::default();
         let value_expr = self.ast_builder.expression_null_literal(span);
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(value_expr))?;
+        let stmt = self.create_register_assignment_statement(dest_reg, value_expr)?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -184,16 +172,11 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
             return Ok(InstructionResult::None);
         }
 
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
-
         let span = Span::default();
         let undefined_atom = self.ast_builder.allocator.alloc_str("undefined");
         let undefined_expr = self.ast_builder.expression_identifier(span, undefined_atom);
 
-        let stmt =
-            self.create_variable_declaration_or_assignment(&dest_var, Some(undefined_expr))?;
+        let stmt = self.create_register_assignment_statement(dest_reg, undefined_expr)?;
 
         Ok(InstructionResult::Statement(stmt))
     }
@@ -252,10 +235,6 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         &mut self,
         dest_reg: u8,
     ) -> Result<InstructionResult<'a>, StatementConversionError> {
-        let dest_var = self
-            .register_manager
-            .create_new_variable_for_register(dest_reg);
-
         let span = Span::default();
 
         // Create a comment expression representing the empty value
@@ -263,7 +242,7 @@ impl<'a> ConstantHelpers<'a> for InstructionToStatementConverter<'a> {
         let comment_atom = self.ast_builder.allocator.alloc_str(empty_comment);
         let empty_expr = self.ast_builder.expression_identifier(span, comment_atom);
 
-        let stmt = self.create_variable_declaration_or_assignment(&dest_var, Some(empty_expr))?;
+        let stmt = self.create_register_assignment_statement(dest_reg, empty_expr)?;
 
         Ok(InstructionResult::Statement(stmt))
     }

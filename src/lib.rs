@@ -5,6 +5,7 @@
 
 pub mod analysis;
 pub mod ast;
+pub mod bundle;
 pub mod cfg;
 pub mod cli;
 pub mod decompiler;

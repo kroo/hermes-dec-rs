@@ -199,18 +199,27 @@ pub fn detect_sparse_switch_chain(
     let mut current_node = start_node;
     let mut seen_values = HashSet::<ComparisonValue>::new();
     let mut chain_blocks = Vec::new(); // Track all blocks in this chain
+    let mut visited_comparison_blocks = HashSet::new();
 
     // Follow the chain of comparisons
     loop {
         // Check if the next block in the chain has already been processed
-        // This prevents detecting overlapping chains
+        // This prevents detecting overlapping chains. A chain that runs into previously
+        // claimed infrastructure is ambiguous, so bail out instead of truncating it.
         if current_node != start_node && processed.contains(&current_node) {
-            // If we haven't collected any blocks yet, this isn't a valid chain
-            if comparison_blocks.is_empty() {
-                return None;
-            }
-            // Otherwise, end the chain here
-            break;
+            log::debug!(
+                "Bailing out of sparse switch detection at {:?}: chain overlaps an already processed block",
+                current_node
+            );
+            return None;
+        }
+
+        if !visited_comparison_blocks.insert(current_node) {
+            log::debug!(
+                "Bailing out of sparse switch detection at {:?}: comparison chain revisits a block",
+                current_node
+            );
+            return None;
         }
 
         let block = &graph[current_node];
@@ -231,7 +240,12 @@ pub fn detect_sparse_switch_chain(
 
         // Check for duplicate values
         if !seen_values.insert(value.clone()) {
-            break;
+            log::debug!(
+                "Bailing out of sparse switch detection at {:?}: duplicate case value {:?}",
+                current_node,
+                value
+            );
+            return None;
         }
 
         chain_blocks.push(current_node);
@@ -253,6 +267,15 @@ pub fn detect_sparse_switch_chain(
             target_block: case_target,
             next_comparison: Some(next_target),
         });
+
+        if visited_comparison_blocks.contains(&next_target) {
+            log::debug!(
+                "Bailing out of sparse switch detection at {:?}: next comparison target {:?} creates a cycle",
+                current_node,
+                next_target
+            );
+            return None;
+        }
 
         // Check if the next target is another comparison
         let next_block = &graph[next_target];
@@ -774,5 +797,225 @@ pub fn sparse_candidate_to_switch_region(candidate: &SparseSwitchCandidate) -> S
         default_head: candidate.default_block,
         join_block: candidate.join_block,
         case_analyses: std::collections::HashMap::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cfg::analysis::PostDominatorAnalysis;
+    use crate::cfg::ssa::SSAAnalysis;
+    use crate::cfg::Cfg;
+    use crate::hbc::tables::function_table::HbcFunctionInstruction;
+    use crate::hbc::{HbcFile, InstructionIndex, InstructionOffset};
+    use petgraph::algo::dominators;
+    use std::collections::HashMap;
+
+    fn load_fixture_hbc() -> HbcFile<'static> {
+        let bytes = std::fs::read("data/dense_switch_test.hbc")
+            .expect("failed to read dense_switch_test.hbc fixture");
+        let leaked = Box::leak(bytes.into_boxed_slice());
+        HbcFile::parse(leaked).expect("failed to parse dense_switch_test.hbc fixture")
+    }
+
+    fn make_instruction(index: usize, instruction: UnifiedInstruction) -> HbcFunctionInstruction {
+        HbcFunctionInstruction {
+            offset: InstructionOffset::new(index as u32),
+            function_index: 0,
+            instruction_index: InstructionIndex::new(index),
+            instruction,
+        }
+    }
+
+    fn make_comparison_block(block_idx: usize, compared_value: u8) -> Block {
+        let start = block_idx * 2;
+        Block::new(
+            InstructionIndex::new(start),
+            vec![
+                make_instruction(
+                    start,
+                    UnifiedInstruction::LoadConstUInt8 {
+                        operand_0: 1,
+                        operand_1: compared_value,
+                    },
+                ),
+                make_instruction(
+                    start + 1,
+                    UnifiedInstruction::JStrictEqual {
+                        operand_0: 0,
+                        operand_1: 0,
+                        operand_2: 1,
+                    },
+                ),
+            ],
+        )
+    }
+
+    fn make_return_block(block_idx: usize) -> Block {
+        let start = 1000 + block_idx;
+        Block::new(
+            InstructionIndex::new(start),
+            vec![make_instruction(
+                start,
+                UnifiedInstruction::Ret { operand_0: 0 },
+            )],
+        )
+    }
+
+    fn dominates_in_graph(
+        dominators: &dominators::Dominators<NodeIndex>,
+        dominator: NodeIndex,
+        node: NodeIndex,
+    ) -> bool {
+        let mut current = node;
+        loop {
+            if current == dominator {
+                return true;
+            }
+            if let Some(immediate_dom) = dominators.immediate_dominator(current) {
+                current = immediate_dom;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    fn compute_post_dominators(
+        graph: &DiGraph<Block, EdgeKind>,
+        exit_node: NodeIndex,
+    ) -> PostDominatorAnalysis {
+        let mut reversed_graph = DiGraph::new();
+        let mut node_mapping = HashMap::new();
+
+        for node_idx in graph.node_indices() {
+            let reversed = reversed_graph.add_node(graph[node_idx].clone());
+            node_mapping.insert(node_idx, reversed);
+        }
+
+        for edge in graph.edge_references() {
+            reversed_graph.add_edge(
+                node_mapping[&edge.target()],
+                node_mapping[&edge.source()],
+                edge.weight().clone(),
+            );
+        }
+
+        let dominators = dominators::simple_fast(&reversed_graph, node_mapping[&exit_node]);
+        let mut post_dominators = HashMap::new();
+        let mut immediate_post_dominators = HashMap::new();
+
+        for node_idx in graph.node_indices() {
+            let reversed_node = node_mapping[&node_idx];
+            let mut post_dom_set = HashSet::new();
+
+            for other_node_idx in graph.node_indices() {
+                let other_reversed = node_mapping[&other_node_idx];
+                if dominates_in_graph(&dominators, other_reversed, reversed_node) {
+                    post_dom_set.insert(other_node_idx);
+                }
+            }
+
+            post_dominators.insert(node_idx, post_dom_set);
+            let immediate_post_dom =
+                dominators
+                    .immediate_dominator(reversed_node)
+                    .and_then(|dom_node| {
+                        node_mapping
+                            .iter()
+                            .find(|(_, &reversed)| reversed == dom_node)
+                            .map(|(&original, _)| original)
+                    });
+            immediate_post_dominators.insert(node_idx, immediate_post_dom);
+        }
+
+        PostDominatorAnalysis {
+            post_dominators,
+            immediate_post_dominators,
+        }
+    }
+
+    #[test]
+    fn detects_long_sparse_switch_chain_without_depth_cutoff() {
+        let mut graph = DiGraph::new();
+        let comparison_blocks: Vec<_> = (0..12)
+            .map(|idx| graph.add_node(make_comparison_block(idx, (idx + 1) as u8)))
+            .collect();
+        let case_blocks: Vec<_> = (0..12)
+            .map(|idx| graph.add_node(make_return_block(idx)))
+            .collect();
+        let default_block = graph.add_node(make_return_block(99));
+        let exit_block = graph.add_node(Block::new_exit());
+
+        for (idx, comparison_block) in comparison_blocks.iter().copied().enumerate() {
+            graph.add_edge(comparison_block, case_blocks[idx], EdgeKind::True);
+            let next = comparison_blocks
+                .get(idx + 1)
+                .copied()
+                .unwrap_or(default_block);
+            graph.add_edge(comparison_block, next, EdgeKind::False);
+            graph.add_edge(case_blocks[idx], exit_block, EdgeKind::Uncond);
+        }
+        graph.add_edge(default_block, exit_block, EdgeKind::Uncond);
+
+        let post_doms = compute_post_dominators(&graph, exit_block);
+        let hbc = load_fixture_hbc();
+        let cfg = Cfg::new(&hbc, 0);
+        let ssa = SSAAnalysis::new(0);
+        let mut processed = HashSet::new();
+
+        let candidate = detect_sparse_switch_chain(
+            &graph,
+            &post_doms,
+            comparison_blocks[0],
+            &mut processed,
+            &hbc,
+            &ssa.ssa_values,
+            &cfg,
+            &ssa,
+        )
+        .expect("expected long sparse switch chain to be detected");
+
+        assert_eq!(candidate.comparison_blocks.len(), 12);
+        assert_eq!(candidate.default_block, Some(default_block));
+        assert_eq!(candidate.join_block, exit_block);
+    }
+
+    #[test]
+    fn bails_out_on_cyclic_sparse_switch_chain() {
+        let mut graph = DiGraph::new();
+        let first = graph.add_node(make_comparison_block(0, 1));
+        let second = graph.add_node(make_comparison_block(1, 2));
+        let first_case = graph.add_node(make_return_block(0));
+        let second_case = graph.add_node(make_return_block(1));
+        let exit_block = graph.add_node(Block::new_exit());
+
+        graph.add_edge(first, first_case, EdgeKind::True);
+        graph.add_edge(first, second, EdgeKind::False);
+        graph.add_edge(second, second_case, EdgeKind::True);
+        graph.add_edge(second, first, EdgeKind::False);
+        graph.add_edge(first_case, exit_block, EdgeKind::Uncond);
+        graph.add_edge(second_case, exit_block, EdgeKind::Uncond);
+
+        let post_doms = compute_post_dominators(&graph, exit_block);
+        let hbc = load_fixture_hbc();
+        let cfg = Cfg::new(&hbc, 0);
+        let ssa = SSAAnalysis::new(0);
+        let mut processed = HashSet::new();
+
+        let candidate = detect_sparse_switch_chain(
+            &graph,
+            &post_doms,
+            first,
+            &mut processed,
+            &hbc,
+            &ssa.ssa_values,
+            &cfg,
+            &ssa,
+        );
+
+        assert!(
+            candidate.is_none(),
+            "cyclic sparse switch infrastructure should bail out"
+        );
     }
 }

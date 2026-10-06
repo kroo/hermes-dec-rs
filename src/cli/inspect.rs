@@ -4,6 +4,10 @@ use std::fs;
 
 /// Run the inspect subcommand
 pub fn inspect(input_path: &std::path::Path) -> DecompilerResult<()> {
+    inspect_with_format(input_path, "json")
+}
+
+pub fn inspect_with_format(input_path: &std::path::Path, format: &str) -> DecompilerResult<()> {
     // Read the input file
     let data = match fs::read(input_path) {
         Ok(data) => data,
@@ -24,6 +28,23 @@ pub fn inspect(input_path: &std::path::Path) -> DecompilerResult<()> {
             });
         }
     };
+
+    if format == "text" {
+        println!(
+            "HBC {}: {} functions, {} strings, {} CommonJS modules, entrypoint {}",
+            hbc_file.header.version(),
+            hbc_file.functions.count(),
+            hbc_file.header.string_count(),
+            hbc_file.cjs_modules.entries.len(),
+            hbc_file.header.global_code_index()
+        );
+        return Ok(());
+    }
+    if format != "json" {
+        return Err(DecompilerError::Internal {
+            message: format!("Unsupported inspect format: {format}"),
+        });
+    }
 
     // Output as JSON
     match serde_json::to_string_pretty(&hbc_file) {

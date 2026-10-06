@@ -64,6 +64,17 @@ impl<'a> HbcFile<'a> {
 
     /// Parse an HBC file from a byte slice
     pub fn parse(data: &'a [u8]) -> Result<Self, String> {
+        Self::parse_with_analysis(data, true)
+    }
+
+    /// Decode all tables and instructions for full-bundle lowering, without
+    /// allocating the label/CFG analysis indexes used only by the structurer.
+    /// Switch tables and referenced literal validation are still included.
+    pub(crate) fn parse_for_bundle(data: &'a [u8]) -> Result<Self, String> {
+        Self::parse_with_analysis(data, false)
+    }
+
+    fn parse_with_analysis(data: &'a [u8], build_analysis: bool) -> Result<Self, String> {
         let mut offset = 0;
 
         // Step 1: Parse base header to get version for context
@@ -193,7 +204,7 @@ impl<'a> HbcFile<'a> {
             .map(|function_index| {
                 hbc_file
                     .functions
-                    .get_instructions(function_index)
+                    .get_instructions_ref(function_index)
                     .map_err(|e| {
                         format!(
                             "Failed to pre-parse instructions for function {}: {}",
@@ -203,6 +214,9 @@ impl<'a> HbcFile<'a> {
             })
             .collect();
         parse_results.map_err(|e| format!("Failed to pre-parse instructions: {}", e))?;
+        hbc_file
+            .serialized_literals
+            .validate_references(&hbc_file.functions)?;
         // let parse_elapsed = parse_start.elapsed();
         // eprintln!(
         //     "Pre-parsing completed in {:.2?} ({:.1} functions/second)",
@@ -214,52 +228,58 @@ impl<'a> HbcFile<'a> {
         let function_count = hbc_file.functions.count();
         // let start_time = std::time::Instant::now();
 
-        // Build jump table data in parallel
-        let jump_table_results: Result<Vec<_>, _> = (0..function_count)
-            .into_par_iter()
-            .map(|function_index| {
-                // Get just the instructions (more efficient than full function data)
-                let instructions = hbc_file
-                    .functions
-                    .get_instructions(function_index)
-                    .map_err(|e| {
-                        format!(
-                            "Failed to get instructions for function {}: {}",
-                            function_index, e
-                        )
-                    })?;
+        if build_analysis {
+            // Build jump table data in parallel
+            let jump_table_results: Result<Vec<_>, _> = (0..function_count)
+                .into_par_iter()
+                .map(|function_index| {
+                    // Get just the instructions (more efficient than full function data)
+                    let instructions = hbc_file
+                        .functions
+                        .get_instructions_ref(function_index)
+                        .map_err(|e| {
+                            format!(
+                                "Failed to get instructions for function {}: {}",
+                                function_index, e
+                            )
+                        })?;
 
-                // Get exception handlers for this function
-                let exc_handlers = if let Some(parsed_header) =
-                    hbc_file.functions.get_parsed_header(function_index)
-                {
-                    &parsed_header.exc_handlers
-                } else {
-                    &[] as &[tables::function_table::ExceptionHandlerInfo]
-                };
+                    // Get exception handlers for this function
+                    let exc_handlers = if let Some(parsed_header) =
+                        hbc_file.functions.get_parsed_header(function_index)
+                    {
+                        &parsed_header.exc_handlers
+                    } else {
+                        &[] as &[tables::function_table::ExceptionHandlerInfo]
+                    };
 
-                // Build jump table data for this function without modifying the main jump table
-                JumpTable::build_for_function_parallel(function_index, &instructions, exc_handlers)
+                    // Build jump table data for this function without modifying the main jump table
+                    JumpTable::build_for_function_parallel(
+                        function_index,
+                        instructions,
+                        exc_handlers,
+                    )
                     .map_err(|e| {
                         format!(
                             "Failed to build jump table for function {}: {}",
                             function_index, e
                         )
                     })
-            })
-            .collect();
+                })
+                .collect();
 
-        // Merge all results into the main jump table
-        for result in jump_table_results? {
-            let (function_index, labels, jumps, label_map, jump_map, address_to_index) = result;
-            hbc_file.jump_table.merge_function_data(
-                function_index,
-                labels,
-                jumps,
-                label_map,
-                jump_map,
-                address_to_index,
-            );
+            // Merge all results into the main jump table
+            for result in jump_table_results? {
+                let (function_index, labels, jumps, label_map, jump_map, address_to_index) = result;
+                hbc_file.jump_table.merge_function_data(
+                    function_index,
+                    labels,
+                    jumps,
+                    label_map,
+                    jump_map,
+                    address_to_index,
+                );
+            }
         }
 
         // let elapsed = start_time.elapsed();
@@ -281,7 +301,7 @@ impl<'a> HbcFile<'a> {
                 // Get instructions for this function
                 let instructions = hbc_file
                     .functions
-                    .get_instructions(function_index)
+                    .get_instructions_ref(function_index)
                     .map_err(|e| {
                         format!(
                             "Failed to get instructions for function {}: {}",
@@ -309,7 +329,7 @@ impl<'a> HbcFile<'a> {
                 // Parse switch tables for this function
                 JumpTable::parse_switch_tables_for_function(
                     function_index,
-                    &instructions,
+                    instructions,
                     data, // Pass the full HBC file data instead of just function bytecode
                     &mut local_jump_table_cache,
                     function_body_offset,

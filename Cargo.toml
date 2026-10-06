@@ -2,10 +2,10 @@
 name = "hermes-dec-rs"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Elliot Kroo"]
 description = "Rust-based high-level decompiler for Hermes bytecode"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/yourusername/hermes-dec-rs"
+repository = "https://github.com/kroo/hermes-dec-rs"
 keywords = ["decompiler", "hermes", "bytecode", "javascript", "react-native"]
 categories = ["development-tools", "parsing"]
 default-run = "hermes-dec-rs"

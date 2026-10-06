@@ -1,6 +1,47 @@
-use hermes_dec_rs::cli::disasm::disasm;
+use hermes_dec_rs::{cli::disasm::disasm, decompiler::Decompiler, hbc::HbcFile};
 use std::fs;
 use std::path::Path;
+use tempfile::tempdir;
+
+fn count_occurrences(haystack: &str, needle: &str) -> usize {
+    haystack.matches(needle).count()
+}
+
+fn decompile(hbc_path: &Path, func_index: u32) -> Option<String> {
+    let data = fs::read(hbc_path).ok()?;
+    let hbc = HbcFile::parse(&data).ok()?;
+    let mut decompiler = Decompiler::new().ok()?;
+    decompiler.decompile_function(&hbc, func_index).ok()
+}
+
+fn disassemble_fixture(hbc_file: &Path) -> String {
+    let temp_dir = tempdir().expect("Failed to create temporary directory for disassembly");
+    let temp_hbc_file = temp_dir.path().join(
+        hbc_file
+            .file_name()
+            .expect("fixture should have a filename"),
+    );
+
+    fs::copy(hbc_file, &temp_hbc_file).expect("Failed to copy HBC fixture into temp directory");
+
+    let result = disasm(&temp_hbc_file);
+    assert!(result.is_ok(), "Disassembly failed: {:?}", result.err());
+
+    let output_file = temp_hbc_file.with_extension("hasm");
+    let mut attempts = 0;
+    while !output_file.exists() && attempts < 10 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        attempts += 1;
+    }
+
+    assert!(
+        output_file.exists(),
+        "Output file was not created: {}",
+        output_file.display()
+    );
+
+    fs::read_to_string(&output_file).expect("Failed to read disassembly output file")
+}
 
 /// Test that dense switch instructions are parsed and disassembled correctly
 #[test]
@@ -20,25 +61,7 @@ fn test_dense_switch_disassembly() {
         expected_file.display()
     );
 
-    // Run disassembler
-    let result = disasm(hbc_file);
-    assert!(result.is_ok(), "Disassembly failed: {:?}", result.err());
-
-    // Wait for output file and read it
-    let output_file = hbc_file.with_extension("hasm");
-    let mut attempts = 0;
-    while !output_file.exists() && attempts < 10 {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        attempts += 1;
-    }
-
-    assert!(
-        output_file.exists(),
-        "Output file was not created: {}",
-        output_file.display()
-    );
-
-    let actual_content = fs::read_to_string(&output_file).expect("Failed to read output file");
+    let actual_content = disassemble_fixture(hbc_file);
 
     // Note: We're no longer comparing exact output since the test file has changed
     // The important thing is that the disassembly completes successfully and contains expected patterns
@@ -96,13 +119,7 @@ fn test_dense_switch_disassembly() {
 fn test_sparse_switch_disassembly() {
     let hbc_file = Path::new("data/dense_switch_test.hbc");
 
-    // Run disassembler
-    let result = disasm(hbc_file);
-    assert!(result.is_ok(), "Disassembly failed: {:?}", result.err());
-
-    // Read the output
-    let output_file = hbc_file.with_extension("hasm");
-    let actual_content = fs::read_to_string(&output_file).expect("Failed to read output file");
+    let actual_content = disassemble_fixture(hbc_file);
 
     // Verify sparse switch uses individual comparisons
     assert!(
@@ -139,13 +156,7 @@ fn test_sparse_switch_disassembly() {
 fn test_switch_control_flow() {
     let hbc_file = Path::new("data/dense_switch_test.hbc");
 
-    // Run disassembler
-    let result = disasm(hbc_file);
-    assert!(result.is_ok(), "Disassembly failed: {:?}", result.err());
-
-    // Read the output
-    let output_file = hbc_file.with_extension("hasm");
-    let actual_content = fs::read_to_string(&output_file).expect("Failed to read output file");
+    let actual_content = disassemble_fixture(hbc_file);
 
     // Verify function structure
     assert!(
@@ -194,4 +205,128 @@ fn test_dense_switch_hbc_parsing() {
             i
         );
     }
+}
+
+#[test]
+fn test_dense_switch_nested_join_regression() -> Result<(), Box<dyn std::error::Error>> {
+    let hbc_path = Path::new("data/dense_switch_test.hbc");
+    let output = decompile(hbc_path, 8).expect("Failed to decompile dense switch fixture");
+
+    assert!(
+        output.contains("switch (param2)"),
+        "expected outer nested switch in case 1:\n{}",
+        output
+    );
+    assert!(
+        output.contains("default: switch (param1)"),
+        "expected nested switch in the default branch of case 1:\n{}",
+        output
+    );
+    assert_eq!(
+        output.matches("a=1,b=other,c=other").count(),
+        1,
+        "dead tail for the inner switch default was emitted more than once:\n{}",
+        output
+    );
+    assert_eq!(
+        output.matches("a=1,b=other,c=2").count(),
+        1,
+        "dead tail for the inner switch case 2 was emitted more than once:\n{}",
+        output
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_large_sparse_switch_fixture_decompiles_as_switch() {
+    let hbc_path = Path::new("data/dense_switch_test.hbc");
+    let output = decompile(hbc_path, 2).expect("Failed to decompile sparse switch fixture");
+
+    assert!(
+        output.contains("switch (param1)"),
+        "expected large sparse switch fixture to decompile as a switch:\n{}",
+        output
+    );
+
+    for case in [
+        "case 100:",
+        "case 200:",
+        "case 201:",
+        "case 400:",
+        "case 401:",
+        "case 403:",
+        "case 404:",
+        "case 500:",
+    ] {
+        assert!(
+            output.contains(case),
+            "expected sparse switch case `{}` in decompiled output:\n{}",
+            case,
+            output
+        );
+    }
+
+    assert!(
+        output.contains("default:"),
+        "expected sparse switch fixture to retain a default case:\n{}",
+        output
+    );
+
+    assert_eq!(
+        count_occurrences(&output, "case "),
+        8,
+        "expected exactly eight sparse switch cases in the fixture output:\n{}",
+        output
+    );
+}
+
+#[test]
+fn test_switch_with_try_catch_preserves_nested_switch() -> Result<(), Box<dyn std::error::Error>> {
+    let hbc_path = Path::new("data/dense_switch_test.hbc");
+    let output = decompile(hbc_path, 9).expect("Failed to decompile switchWithTryCatch fixture");
+
+    assert!(
+        output.contains("try {"),
+        "expected switchWithTryCatch fixture to keep the outer try block:\n{}",
+        output
+    );
+    assert!(
+        output.contains("switch (var3)"),
+        "expected switchWithTryCatch fixture to keep the inner switch:\n{}",
+        output
+    );
+    assert!(
+        output.contains("case \"divide\":"),
+        "expected switchWithTryCatch fixture to retain the divide case:\n{}",
+        output
+    );
+    assert!(
+        output.contains("case \"sqrt\":"),
+        "expected switchWithTryCatch fixture to retain the sqrt case:\n{}",
+        output
+    );
+    assert!(
+        output.contains("case \"log\":"),
+        "expected switchWithTryCatch fixture to retain the log case:\n{}",
+        output
+    );
+    assert!(
+        output.contains("catch ("),
+        "expected switchWithTryCatch fixture to keep a catch handler:\n{}",
+        output
+    );
+    assert!(
+        !output.contains("try {}"),
+        "expected switchWithTryCatch fixture to avoid empty try blocks:\n{}",
+        output
+    );
+    assert_eq!(
+        count_occurrences(&output, "switch ("),
+        1,
+        "expected switchWithTryCatch fixture to emit exactly one switch:\n{}",
+        output
+    );
+
+    Ok(())
 }

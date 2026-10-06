@@ -43,10 +43,7 @@ pub struct CatchHandler {
 
 impl<'a> Cfg<'a> {
     /// Analyze exception handlers in the function
-    pub fn analyze_exception_handlers(
-        &self,
-        ssa: &crate::cfg::ssa::SSAAnalysis,
-    ) -> Option<ExceptionAnalysis> {
+    pub fn analyze_exception_handlers(&self) -> Option<ExceptionAnalysis> {
         // Get the parsed header for this function
         let parsed_header = self
             .hbc_file()
@@ -121,7 +118,7 @@ impl<'a> Cfg<'a> {
         }
 
         // Merge overlapping regions if needed
-        regions = self.merge_exception_regions(regions, ssa);
+        regions = self.merge_exception_regions(regions);
 
         Some(ExceptionAnalysis { regions })
     }
@@ -173,11 +170,7 @@ impl<'a> Cfg<'a> {
     }
 
     /// Merge overlapping or nested exception regions and detect finally blocks
-    fn merge_exception_regions(
-        &self,
-        mut regions: Vec<ExceptionRegion>,
-        ssa: &crate::cfg::ssa::SSAAnalysis,
-    ) -> Vec<ExceptionRegion> {
+    fn merge_exception_regions(&self, mut regions: Vec<ExceptionRegion>) -> Vec<ExceptionRegion> {
         // Sort regions by start index, then by catch target
         regions.sort_by(|a, b| {
             a.try_start_idx.cmp(&b.try_start_idx).then_with(|| {
@@ -197,6 +190,43 @@ impl<'a> Cfg<'a> {
         });
 
         log::debug!("Merging {} exception regions", regions.len());
+
+        // Hermes can split one logical try/catch into multiple nested protected ranges that all
+        // target the same catch block. Collapse those first so reconstruction operates on the
+        // widest logical region instead of treating the same catch as multiple sibling regions.
+        let mut normalized = Vec::new();
+        for region in regions {
+            if let Some(existing) = normalized
+                .iter_mut()
+                .find(|existing: &&mut ExceptionRegion| {
+                    let existing_target = existing
+                        .catch_handler
+                        .as_ref()
+                        .map(|handler| handler.catch_target_idx);
+                    let region_target = region
+                        .catch_handler
+                        .as_ref()
+                        .map(|handler| handler.catch_target_idx);
+
+                    existing_target == region_target
+                        && existing_target.is_some()
+                        && region.try_start_idx <= existing.try_end_idx
+                        && existing.try_start_idx <= region.try_end_idx
+                })
+            {
+                let mut combined_blocks: HashSet<_> = existing.try_blocks.iter().copied().collect();
+                combined_blocks.extend(region.try_blocks.iter().copied());
+                let mut merged_blocks: Vec<_> = combined_blocks.into_iter().collect();
+                merged_blocks.sort_by_key(|block| self.graph()[*block].start_pc());
+                existing.try_blocks = merged_blocks;
+                existing.try_start_idx = existing.try_start_idx.min(region.try_start_idx);
+                existing.try_end_idx = existing.try_end_idx.max(region.try_end_idx);
+                continue;
+            }
+
+            normalized.push(region);
+        }
+        regions = normalized;
 
         // Pattern detection for try-catch-finally:
         // When we have multiple handlers with the same try range, they typically represent:
@@ -244,7 +274,7 @@ impl<'a> Cfg<'a> {
                 // This could be try-catch with implicit finally or try-finally
                 if let (Some(_handler0), Some(handler1)) = (&r0.catch_handler, &r1.catch_handler) {
                     // Check if the second handler looks like a finally block
-                    if self.has_finally_pattern(handler1.catch_block, ssa) {
+                    if self.has_finally_pattern(handler1.catch_block) {
                         log::debug!("Detected try-finally pattern (2 handlers, same range)");
                         return vec![ExceptionRegion {
                             try_blocks: r0.try_blocks.clone(),
@@ -260,7 +290,7 @@ impl<'a> Cfg<'a> {
             // Single handler - check if it's actually a finally block
             let mut region = regions[0].clone();
             if let Some(ref handler) = region.catch_handler {
-                if self.has_finally_pattern(handler.catch_block, ssa) {
+                if self.has_finally_pattern(handler.catch_block) {
                     log::debug!(
                         "Detected finally block (single handler) at {:?}",
                         handler.catch_block
@@ -277,8 +307,8 @@ impl<'a> Cfg<'a> {
         regions
     }
 
-    /// Check if a block has the finally pattern (Catch followed by code and Throw of same exception)
-    fn has_finally_pattern(&self, block: NodeIndex, ssa: &crate::cfg::ssa::SSAAnalysis) -> bool {
+    /// Check if a block has the finally pattern (Catch followed by code and Throw of same register)
+    fn has_finally_pattern(&self, block: NodeIndex) -> bool {
         use crate::generated::unified_instructions::UnifiedInstruction;
 
         let block_data = &self.graph()[block];
@@ -289,47 +319,20 @@ impl<'a> Cfg<'a> {
         }
 
         // First instruction should be Catch
-        let (catch_idx, catch_register) = match instructions.first() {
-            Some(instr) => match &instr.instruction {
-                UnifiedInstruction::Catch { operand_0 } => (instr.instruction_index, *operand_0),
-                _ => return false,
-            },
+        let catch_register = match instructions.first().map(|i| &i.instruction) {
+            Some(UnifiedInstruction::Catch { operand_0 }) => *operand_0,
             _ => return false,
         };
 
-        // Last instruction should be Throw
-        let (throw_idx, throws_register) = match instructions.last() {
-            Some(instr) => match &instr.instruction {
-                UnifiedInstruction::Throw { operand_0 } => (instr.instruction_index, *operand_0),
-                _ => return false,
-            },
-            _ => return false,
+        // Last instruction should be Throw of the same register
+        let throws_same_register = match instructions.last().map(|i| &i.instruction) {
+            Some(UnifiedInstruction::Throw { operand_0 }) => *operand_0 == catch_register,
+            _ => false,
         };
 
-        // Use SSA to check if the same value is thrown
-        // Find the SSA value defined by Catch
-        let catch_def = crate::cfg::ssa::types::RegisterDef {
-            register: catch_register,
-            block_id: block,
-            instruction_idx: catch_idx,
-        };
-
-        // Find the SSA value used by Throw
-        let throw_use = crate::cfg::ssa::types::RegisterUse {
-            register: throws_register,
-            block_id: block,
-            instruction_idx: throw_idx,
-        };
-
-        // Check if Throw uses the value defined by Catch
-        if let Some(thrown_def) = ssa.use_def_chains.get(&throw_use) {
-            // In a finally block, the Throw should use the exact value from Catch
-            // In a catch block, it would use a different value (the new exception)
-            thrown_def == &catch_def
-        } else {
-            // If we can't find the use-def chain, conservatively assume it's not a finally
-            false
-        }
+        // Must throw the same register that was caught (finally pattern)
+        // If it throws a different register, it's a catch block that creates a new exception
+        throws_same_register
     }
 }
 

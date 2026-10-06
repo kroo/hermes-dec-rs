@@ -1,0 +1,1 @@
+exports.entry = () => require('./entry');

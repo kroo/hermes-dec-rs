@@ -290,6 +290,8 @@ pub enum ControlFlowKind {
     Loop {
         loop_type: LoopType,
         header_block: NodeIndex,
+        /// Full condition expression used to control loop entry
+        condition_expr: Option<ComparisonExpression>,
         condition: Option<SSAValue>,
         condition_use: Option<RegisterUse>, // The specific use of the condition value
         body: StructureId,
@@ -311,6 +313,9 @@ pub enum ControlFlowKind {
         instruction_count: usize,
         is_synthetic: bool, // Created by analysis vs original CFG block
     },
+
+    /// Explicit fallback for unsupported reconstruction shapes
+    Unsupported { message: String },
 
     /// Empty structure (for missing else branches, etc.)
     Empty,
@@ -412,6 +417,7 @@ pub enum LoopType {
     For,
     ForIn,
     ForOf,
+    UnsupportedExceptionFallback,
 }
 
 /// Variable scope information
@@ -628,6 +634,7 @@ impl ControlFlowPlan {
                     None
                 }
             }
+            ControlFlowKind::Unsupported { .. } => Some(TerminationReason::Throw),
             _ => None,
         }
     }
@@ -874,6 +881,7 @@ impl ControlFlowStructure {
             ControlFlowKind::BasicBlock { block, .. } => {
                 blocks.push(*block);
             }
+            ControlFlowKind::Unsupported { .. } => {}
             ControlFlowKind::Empty => {}
         }
     }
@@ -1177,6 +1185,9 @@ impl ControlFlowPlan {
                 } else {
                     writeln!(f, " ({} instructions)", instruction_count)?;
                 }
+            }
+            ControlFlowKind::Unsupported { message } => {
+                writeln!(f, "Unsupported ({message})")?;
             }
             ControlFlowKind::Empty => {
                 writeln!(f, "Empty")?;

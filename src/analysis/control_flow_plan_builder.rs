@@ -9,8 +9,10 @@ use crate::analysis::control_flow_plan::{
 };
 use crate::analysis::control_flow_plan_analyzer::ControlFlowPlanAnalyzer;
 use crate::analysis::FunctionAnalysis;
-use crate::cfg::analysis::{ConditionalChain, PostDominatorAnalysis, SwitchRegion};
-use crate::cfg::ssa::{RegisterUse, SSAValue};
+use crate::cfg::analysis::{
+    BranchType, ConditionalChain, LoopAnalysis, PostDominatorAnalysis, SwitchRegion,
+};
+use crate::cfg::ssa::{RegisterDef, RegisterUse, SSAValue};
 use crate::cfg::switch_analysis::sparse_switch_analyzer::SparseSwitchAnalyzer;
 use crate::cfg::switch_analysis::SwitchInfo;
 use crate::cfg::Cfg;
@@ -35,8 +37,16 @@ pub struct ControlFlowPlanBuilder<'a> {
     post_dominators: Option<PostDominatorAnalysis>,
     /// Set of catch blocks to exclude from normal control flow
     catch_blocks: HashSet<NodeIndex>,
+    /// Cached exception analysis for try/catch detection during normal traversal
+    exception_analysis: Option<crate::cfg::exception_analysis::ExceptionAnalysis>,
+    /// Exception regions currently being expanded, used to avoid self-recursion
+    active_exception_regions: Vec<(u32, u32, Option<usize>)>,
+    /// Sparse switch dispatch blocks rejected as structurally unsafe.
+    unsupported_sparse_switch_dispatches: HashSet<NodeIndex>,
     /// Inline configuration for optimization passes
     inline_config: InlineConfig,
+    /// Pre-computed loop analysis for this function
+    loop_analysis: LoopAnalysis,
 }
 
 impl<'a> ControlFlowPlanBuilder<'a> {
@@ -46,13 +56,13 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         let post_dominators = cfg.analyze_post_dominators();
 
         // Identify catch blocks from exception analysis
-        let catch_blocks = if let Some(exception_analysis) =
-            cfg.analyze_exception_handlers(&function_analysis.ssa)
-        {
-            crate::cfg::exception_analysis::get_catch_blocks(&exception_analysis)
-        } else {
-            HashSet::new()
-        };
+        let exception_analysis = cfg.analyze_exception_handlers();
+        let catch_blocks = exception_analysis
+            .as_ref()
+            .map(crate::cfg::exception_analysis::get_catch_blocks)
+            .unwrap_or_default();
+
+        let loop_analysis = cfg.analyze_loops();
 
         Self {
             plan: ControlFlowPlan::new(),
@@ -62,7 +72,11 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             stop_blocks: HashSet::new(),
             post_dominators,
             catch_blocks,
+            exception_analysis,
+            active_exception_regions: Vec::new(),
+            unsupported_sparse_switch_dispatches: HashSet::new(),
             inline_config: InlineConfig::default(),
+            loop_analysis,
         }
     }
 
@@ -115,18 +129,22 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Use existing CFG analyses instead of reimplementing
 
         // Check for exception handlers first
-        if let Some(exception_analysis) = self
-            .cfg
-            .analyze_exception_handlers(&self.function_analysis.ssa)
-        {
+        if let Some(exception_analysis) = self.exception_analysis.clone() {
             if !exception_analysis.regions.is_empty() {
-                log::debug!(
-                    "Found {} exception regions",
-                    exception_analysis.regions.len()
-                );
-                let root = self.build_from_exception_analysis(&exception_analysis);
-                self.plan.set_root(root);
-                return self.plan;
+                if self.should_use_loop_aware_exception_reconstruction(&exception_analysis) {
+                    log::debug!("Found simple exception region; using sequential reconstruction");
+                } else {
+                    let loop_region_count =
+                        self.loop_enclosed_exception_region_count(&exception_analysis);
+                    log::debug!(
+                        "Found {} exception regions ({} intersect loops); using exception-root reconstruction",
+                        exception_analysis.regions.len(),
+                        loop_region_count
+                    );
+                    let root = self.build_from_exception_analysis(&exception_analysis);
+                    self.plan.set_root(root);
+                    return self.plan;
+                }
             }
         } else {
             log::debug!(
@@ -146,29 +164,127 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             }
         }
 
-        // Get conditional chains if any
-        if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
-            if !conditional_analysis.chains.is_empty() {
-                let root = self.build_from_conditional_analysis(&conditional_analysis);
-                self.plan.set_root(root);
-                return self.plan;
-            }
-        }
-
-        // Get loop analysis
-        let loop_analysis = self.cfg.analyze_loops();
-        if !loop_analysis.loops.is_empty() {
-            let root = self.build_from_loop_analysis(&loop_analysis);
-            self.plan.set_root(root);
-            return self.plan;
-        }
-
         // Fallback: build sequential structure from entry
         let entry_block = NodeIndex::new(0);
         let root_structure = self.build_sequential_structure(entry_block);
         self.plan.set_root(root_structure);
 
         self.plan
+    }
+
+    fn loop_enclosed_exception_region_count(
+        &self,
+        analysis: &crate::cfg::exception_analysis::ExceptionAnalysis,
+    ) -> usize {
+        analysis
+            .regions
+            .iter()
+            .filter(|region| {
+                region
+                    .try_blocks
+                    .iter()
+                    .copied()
+                    .chain(
+                        region
+                            .catch_handler
+                            .iter()
+                            .map(|handler| handler.catch_block),
+                    )
+                    .chain(region.finally_block)
+                    .any(|block| self.loop_analysis.is_node_in_loop(block))
+            })
+            .count()
+    }
+
+    fn should_use_loop_aware_exception_reconstruction(
+        &self,
+        analysis: &crate::cfg::exception_analysis::ExceptionAnalysis,
+    ) -> bool {
+        analysis.regions.len() == 1 && self.loop_enclosed_exception_region_count(analysis) > 0
+    }
+
+    fn exception_region_key(
+        region: &crate::cfg::exception_analysis::ExceptionRegion,
+    ) -> (u32, u32, Option<usize>) {
+        (
+            region.try_start_idx,
+            region.try_end_idx,
+            region
+                .catch_handler
+                .as_ref()
+                .map(|handler| handler.catch_block.index()),
+        )
+    }
+
+    fn exception_region_entry_block(
+        &self,
+        region: &crate::cfg::exception_analysis::ExceptionRegion,
+    ) -> Option<NodeIndex> {
+        region
+            .try_blocks
+            .iter()
+            .copied()
+            .min_by_key(|block| self.cfg.graph()[*block].start_pc())
+    }
+
+    fn is_exception_region_active(
+        &self,
+        region: &crate::cfg::exception_analysis::ExceptionRegion,
+    ) -> bool {
+        self.active_exception_regions
+            .contains(&Self::exception_region_key(region))
+    }
+
+    fn find_exception_region_starting_at_block(
+        &self,
+        block: NodeIndex,
+    ) -> Option<crate::cfg::exception_analysis::ExceptionRegion> {
+        self.exception_analysis
+            .as_ref()?
+            .regions
+            .iter()
+            .filter(|region| {
+                self.exception_region_entry_block(region) == Some(block)
+                    && !self.is_exception_region_active(region)
+            })
+            .max_by_key(|region| region.try_end_idx.saturating_sub(region.try_start_idx))
+            .cloned()
+    }
+
+    fn sparse_switch_region_revisits_dispatch(
+        &self,
+        region: &crate::cfg::analysis::SwitchRegion,
+    ) -> bool {
+        region
+            .case_analyses
+            .values()
+            .any(|analysis| analysis.blocks.contains(&region.dispatch))
+    }
+
+    fn exception_region_exit_blocks(
+        &self,
+        region: &crate::cfg::exception_analysis::ExceptionRegion,
+    ) -> Vec<NodeIndex> {
+        let mut region_blocks: HashSet<NodeIndex> = region.try_blocks.iter().copied().collect();
+        if let Some(handler) = &region.catch_handler {
+            region_blocks.insert(handler.catch_block);
+        }
+        if let Some(finally_block) = region.finally_block {
+            region_blocks.insert(finally_block);
+        }
+
+        let mut exits = HashSet::new();
+        for &block in &region_blocks {
+            for succ in self.cfg.graph().edges(block).map(|edge| edge.target()) {
+                if !region_blocks.contains(&succ) {
+                    exits.insert(succ);
+                }
+            }
+        }
+
+        let mut exit_blocks: Vec<_> = exits.into_iter().collect();
+        exit_blocks.sort_by_key(|block| self.cfg.graph()[*block].start_pc());
+        exit_blocks
     }
 
     /// Build a sequential structure starting from a block
@@ -245,137 +361,273 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         }
     }
 
-    /// Build from conditional analysis
-    fn build_from_conditional_analysis(
-        &mut self,
-        analysis: &crate::cfg::analysis::ConditionalAnalysis,
-    ) -> StructureId {
-        log::debug!("Building from {} conditional chains", analysis.chains.len());
-
-        // Build a sequence containing all conditional chains and unprocessed blocks
-        let mut structures = Vec::new();
-
-        // Process each conditional chain
-        for (i, chain) in analysis.chains.iter().enumerate() {
-            log::debug!(
-                "Processing conditional chain {}/{}",
-                i + 1,
-                analysis.chains.len()
-            );
-
-            // Skip if this chain's blocks have already been processed
-            // Check the first branch's condition block since chains don't have a single condition_block
-            let chain_already_processed = chain
-                .branches
-                .iter()
-                .any(|branch| self.processed_blocks.contains(&branch.condition_block));
-
-            if chain_already_processed {
-                log::debug!("  Chain {} already processed, skipping", i);
-                continue;
-            }
-
-            let structure = self.build_conditional_structure(chain.clone());
-            structures.push(structure);
-        }
-
-        // Now collect any remaining unprocessed blocks
-        let all_blocks: Vec<NodeIndex> = self
-            .cfg
-            .graph()
-            .node_indices()
-            .filter(|&idx| !self.cfg.graph()[idx].is_exit())
-            .collect();
-
-        log::debug!(
-            "Checking {} total blocks for unprocessed ones",
-            all_blocks.len()
-        );
-
-        for &block in &all_blocks {
-            if !self.processed_blocks.contains(&block) && !self.stop_blocks.contains(&block) {
-                log::debug!("  Found unprocessed block {}", block.index());
-
-                // Create a basic block structure for this unprocessed block
-                if let Some(structure) = self.try_build_basic_block(block) {
-                    structures.push(structure);
-                }
-            } else if block.index() == 3 {
-                log::debug!(
-                    "  Block 3 status: processed={}, stop={}",
-                    self.processed_blocks.contains(&block),
-                    self.stop_blocks.contains(&block)
-                );
-            }
-        }
-
-        // If we have multiple structures, wrap them in a sequence
-        match structures.len() {
-            0 => self.plan.create_structure(ControlFlowKind::Empty),
-            1 => structures[0],
-            _ => {
-                log::debug!("Creating sequence with {} structures", structures.len());
-                // Convert StructureId elements to SequentialElement
-                let elements: Vec<SequentialElement> = structures
-                    .into_iter()
-                    .map(|id| SequentialElement::Structure(id))
-                    .collect();
-                self.plan
-                    .create_structure(ControlFlowKind::Sequential { elements })
-            }
-        }
-    }
-
     /// Build from loop analysis
-    fn build_from_loop_analysis(
-        &mut self,
-        analysis: &crate::cfg::analysis::LoopAnalysis,
-    ) -> StructureId {
-        // TODO: Implement loop building
-        let _ = analysis;
-        self.plan.create_structure(ControlFlowKind::Empty)
-    }
-
     /// Try to build a control flow structure starting at this block
     fn try_build_control_structure(&mut self, block: NodeIndex) -> Option<StructureId> {
+        log::trace!("try_build_control_structure: block={}", block.index());
+
         // Don't try to detect patterns in already processed blocks
         if self.processed_blocks.contains(&block) {
+            log::trace!("  -> block already processed, returning None");
             return None;
         }
 
-        // 1. Check for dense switch (SwitchImm instruction)
-        if let Some(region) = self.detect_dense_switch_at_block(block) {
-            return Some(self.build_switch_from_region(region));
-        }
+        let result = (|| {
+            // 1. Check for for-in/for-of setup pattern (GetPNameList or IteratorBegin)
+            if let Some(structure_id) = self.try_detect_forin_forof_pattern(block) {
+                return Some(structure_id);
+            }
 
-        // 2. Check for sparse switch using existing analyzer
-        if let Some(ref postdom) = self.post_dominators {
-            let analyzer = SparseSwitchAnalyzer::with_hbc_file(self.cfg.hbc_file());
-            if let Some(switch_info) = analyzer.detect_switch_pattern(
-                block,
-                self.cfg,
-                &self.function_analysis.ssa,
-                postdom,
-            ) {
-                // Convert switch_info to SwitchRegion and build
-                let region = self.switch_info_to_region(switch_info, block);
+            // 2. Check for exception regions before other structural heuristics. When a try/catch
+            // lives inside a loop, this keeps it attached to the loop body instead of being peeled
+            // out into a top-level preamble/exception split.
+            if let Some(region) = self.find_exception_region_starting_at_block(block) {
+                return Some(self.build_try_catch_structure(&region));
+            }
+
+            // 3. Check for loops before sparse-switch detection so loop headers that start with
+            // internal conditionals do not get misidentified as switches.
+            if let Some(loop_structure) = self.build_loop_structure_at_block(block) {
+                return Some(loop_structure);
+            }
+
+            // 4. Check for dense switch (SwitchImm instruction)
+            if let Some(region) = self.detect_dense_switch_at_block(block) {
                 return Some(self.build_switch_from_region(region));
             }
+
+            // 5. Check for sparse switch using existing analyzer.
+            if !self.unsupported_sparse_switch_dispatches.contains(&block) {
+                if let Some(ref postdom) = self.post_dominators {
+                    let analyzer = SparseSwitchAnalyzer::with_hbc_file(self.cfg.hbc_file());
+                    if let Some(switch_info) = analyzer.detect_switch_pattern(
+                        block,
+                        self.cfg,
+                        &self.function_analysis.ssa,
+                        postdom,
+                    ) {
+                        // Convert switch_info to SwitchRegion and reject shapes whose traced case
+                        // bodies loop back through the dispatch. Those candidates are not
+                        // structurally safe to lower as switches and should fall back to the
+                        // ordinary conditional reconstruction path instead.
+                        let mut region = self.switch_info_to_region(switch_info, block);
+                        region.analyze_case_bodies(self.cfg.graph(), self.cfg, None);
+                        if self.sparse_switch_region_revisits_dispatch(&region) {
+                            log::debug!(
+                                "Rejecting sparse switch at block {} because a case body revisits the dispatch block",
+                                block.index()
+                            );
+                            self.unsupported_sparse_switch_dispatches.insert(block);
+                        } else {
+                            return Some(self.build_switch_from_region(region));
+                        }
+                    }
+                }
+            }
+
+            // 6. Check for conditional chains starting at this block
+            if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
+                // Check all top-level chains
+                for chain in &conditional_analysis.chains {
+                    if let Some(structure_id) = self.check_chain_at_block(chain, block) {
+                        return Some(structure_id);
+                    }
+                }
+            }
+
+            None
+        })();
+        result
+    }
+
+    fn build_loop_structure_at_block(&mut self, block: NodeIndex) -> Option<StructureId> {
+        log::debug!("Checking for loops starting at block {}", block.index());
+        log::debug!("Total loops detected: {}", self.loop_analysis.loops.len());
+
+        if let Some(loop_info) = self
+            .loop_analysis
+            .loops
+            .iter()
+            .find(|loop_info| loop_info.primary_header() == block)
+            .cloned()
+        {
+            log::debug!(
+                "Found loop at block {}: {:?}",
+                block.index(),
+                loop_info.loop_type
+            );
+
+            if self.should_bail_out_exception_loop(&loop_info) {
+                return Some(self.create_unsupported_structure(
+                    "Unsupported exception-region loop reconstruction",
+                ));
+            }
+
+            let loop_body = self.build_loop_body_structure(&loop_info);
+
+            for &body_block in &loop_info.body_nodes {
+                if !loop_info.exit_nodes.contains(&body_block) {
+                    self.processed_blocks.insert(body_block);
+                }
+            }
+            for &header in &loop_info.headers {
+                self.processed_blocks.insert(header);
+            }
+
+            let loop_type = match loop_info.loop_type {
+                crate::cfg::analysis::LoopType::While => {
+                    crate::analysis::control_flow_plan::LoopType::While
+                }
+                crate::cfg::analysis::LoopType::DoWhile => {
+                    crate::analysis::control_flow_plan::LoopType::DoWhile
+                }
+                crate::cfg::analysis::LoopType::For => {
+                    crate::analysis::control_flow_plan::LoopType::For
+                }
+                crate::cfg::analysis::LoopType::ForIn => {
+                    crate::analysis::control_flow_plan::LoopType::ForIn
+                }
+                crate::cfg::analysis::LoopType::ForOf => {
+                    crate::analysis::control_flow_plan::LoopType::ForOf
+                }
+            };
+
+            let header = loop_info.primary_header();
+            let condition_expr = self.extract_condition_for_loop(&loop_info, loop_type.clone());
+            let (condition, condition_use) = condition_expr
+                .as_ref()
+                .map(|expr| expr.extract_legacy_format())
+                .unwrap_or((None, None));
+
+            let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
+                loop_type,
+                header_block: header,
+                condition_expr,
+                condition,
+                condition_use,
+                body: loop_body,
+                update: None,
+                break_target: None,
+                continue_target: None,
+            });
+
+            if let Some(structure) = self.plan.get_structure_mut(loop_structure) {
+                structure.entry_blocks.push(header);
+                structure
+                    .exit_blocks
+                    .extend(loop_info.exit_nodes.iter().copied());
+                log::debug!(
+                    "Loop structure: entry={:?}, exits={:?}",
+                    structure.entry_blocks,
+                    structure.exit_blocks
+                );
+            }
+
+            return Some(loop_structure);
         }
 
-        // 3. Check for conditional chains starting at this block
-        if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
-            // Check all top-level chains
-            for chain in &conditional_analysis.chains {
-                if let Some(structure_id) = self.check_chain_at_block(chain, block) {
-                    return Some(structure_id);
+        let mut has_self_edge = false;
+        let mut exit_nodes = Vec::new();
+        for edge in self.cfg.graph().edges(block) {
+            if edge.target() == block {
+                has_self_edge = true;
+            } else {
+                exit_nodes.push(edge.target());
+            }
+        }
+        if has_self_edge {
+            self.processed_blocks.insert(block);
+            let mut body_nodes = std::collections::HashSet::new();
+            body_nodes.insert(block);
+            let loop_body = self.build_sequential_from_blocks(&body_nodes);
+            let condition_expr = self.extract_loop_condition_info(block);
+            let (condition, condition_use) = condition_expr
+                .as_ref()
+                .map(|expr| expr.extract_legacy_format())
+                .unwrap_or((None, None));
+            let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
+                loop_type: crate::analysis::control_flow_plan::LoopType::While,
+                header_block: block,
+                condition_expr,
+                condition,
+                condition_use,
+                body: loop_body,
+                update: None,
+                break_target: None,
+                continue_target: None,
+            });
+            if let Some(structure) = self.plan.get_structure_mut(loop_structure) {
+                structure.entry_blocks.push(block);
+                structure.exit_blocks.extend(exit_nodes);
+            }
+            return Some(loop_structure);
+        }
+
+        None
+    }
+
+    fn build_loop_body_structure(&mut self, loop_info: &crate::cfg::analysis::Loop) -> StructureId {
+        use crate::analysis::control_flow_plan::SequentialElement;
+
+        let mut sorted_blocks: Vec<_> = loop_info.body_nodes.iter().copied().collect();
+        sorted_blocks.sort_by_key(|block| self.cfg.graph()[*block].start_pc());
+
+        let mut elements = Vec::new();
+        let mut processed_in_body = HashSet::new();
+
+        for &header in &loop_info.headers {
+            self.processed_blocks.insert(header);
+        }
+
+        for block in sorted_blocks {
+            if processed_in_body.contains(&block) {
+                continue;
+            }
+
+            let is_loop_control_block = loop_info.headers.contains(&block)
+                || loop_info.back_edges.iter().any(|(tail, _)| *tail == block)
+                || self
+                    .cfg
+                    .graph()
+                    .edges(block)
+                    .any(|edge| loop_info.headers.contains(&edge.target()));
+
+            if is_loop_control_block {
+                processed_in_body.insert(block);
+                elements.push(SequentialElement::Block(block));
+                continue;
+            }
+
+            if let Some(structure) = self.try_build_control_structure(block) {
+                elements.push(SequentialElement::Structure(structure));
+                for &candidate in &loop_info.body_nodes {
+                    if self.processed_blocks.contains(&candidate) {
+                        processed_in_body.insert(candidate);
+                    }
                 }
+            } else {
+                processed_in_body.insert(block);
+                elements.push(SequentialElement::Block(block));
             }
         }
 
-        // 4. TODO: Could also check for loops here
-
-        None
+        if elements.is_empty() {
+            self.plan.create_structure(ControlFlowKind::Empty)
+        } else if elements.len() == 1 {
+            match elements.into_iter().next().unwrap() {
+                SequentialElement::Block(block) => {
+                    self.plan.create_structure(ControlFlowKind::BasicBlock {
+                        block,
+                        instruction_count: self.cfg.graph()[block].instructions().len(),
+                        is_synthetic: false,
+                    })
+                }
+                SequentialElement::Structure(id) => id,
+            }
+        } else {
+            self.plan
+                .create_structure(ControlFlowKind::Sequential { elements })
+        }
     }
 
     /// Check if a conditional chain (or its nested chains) starts at the given block
@@ -384,18 +636,31 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         chain: &ConditionalChain,
         block: NodeIndex,
     ) -> Option<StructureId> {
-        // Check if this chain starts at the current block
-        if let Some(first_branch) = chain.branches.first() {
-            if first_branch.condition_block == block {
-                return Some(self.build_conditional_structure(chain.clone()));
-            }
-        }
+        let mut pending = vec![chain];
+        let mut visited = HashSet::new();
 
-        // Recursively check nested chains
-        for nested_chain in &chain.nested_chains {
-            if let Some(structure_id) = self.check_chain_at_block(nested_chain, block) {
-                return Some(structure_id);
+        while let Some(current_chain) = pending.pop() {
+            log::trace!(
+                "check_chain_at_block: block={}, chain_id={}",
+                block.index(),
+                current_chain.chain_id
+            );
+
+            if let Some(first_branch) = current_chain.branches.first() {
+                // Nested analyses restart chain IDs; identity is the CFG source,
+                // not the report-local numeric chain ID.
+                if !visited.insert((first_branch.condition_block, first_branch.branch_entry)) {
+                    continue;
+                }
+                if first_branch.condition_block == block {
+                    log::trace!(
+                        "  -> found chain starting at this block, building conditional structure"
+                    );
+                    return Some(self.build_conditional_structure(current_chain.clone()));
+                }
             }
+
+            pending.extend(current_chain.nested_chains.iter().rev());
         }
 
         None
@@ -463,8 +728,29 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Mark join block as processed
         self.processed_blocks.insert(region.join_block);
 
-        let switch_info_final =
-            switch_info.expect("Switch info should be populated by this point.");
+        let Some(switch_info_final) = switch_info else {
+            log::warn!(
+                "Failed to build switch metadata for region at dispatch block {}; falling back to a sequential structure",
+                region.dispatch.index()
+            );
+
+            let mut fallback_blocks = vec![region.dispatch];
+            fallback_blocks.extend(region.cases.iter().map(|case| case.case_head));
+            if let Some(default_block) = region.default_head {
+                fallback_blocks.push(default_block);
+            }
+            if region.join_block.index() < self.cfg.graph().node_count()
+                && !self.cfg.graph()[region.join_block]
+                    .instructions()
+                    .is_empty()
+            {
+                fallback_blocks.push(region.join_block);
+            }
+
+            fallback_blocks.sort_by_key(|block| block.index());
+            fallback_blocks.dedup();
+            return self.build_structure_from_blocks(&fallback_blocks);
+        };
 
         // Extract the discriminator SSA value and RegisterUse
         // For SwitchImm, the discriminator is used in the switch instruction itself
@@ -729,6 +1015,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         let mut sorted_blocks = filtered_blocks;
         sorted_blocks.sort_by_key(|b| b.index());
 
+        let sync_processed_blocks =
+            |processed_in_body: &mut HashSet<NodeIndex>, processed_blocks: &HashSet<NodeIndex>| {
+                for &candidate in &sorted_blocks {
+                    if processed_blocks.contains(&candidate) {
+                        processed_in_body.insert(candidate);
+                    }
+                }
+            };
+
         // Process blocks in order, detecting nested control flow
         for &block in &sorted_blocks {
             if processed_in_body.contains(&block) {
@@ -759,6 +1054,7 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 // Build the nested switch structure
                 let switch_structure = self.build_switch_from_region(nested_switch.clone());
                 elements.push(SequentialElement::Structure(switch_structure));
+                sync_processed_blocks(&mut processed_in_body, &self.processed_blocks);
                 continue;
             }
 
@@ -780,10 +1076,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 // A sparse switch has a specific pattern: sequential equality comparisons on the same variable
                 if let Some(switch_structure) = self.try_build_sparse_switch_from_chain(chain) {
                     elements.push(SequentialElement::Structure(switch_structure));
+                    sync_processed_blocks(&mut processed_in_body, &self.processed_blocks);
                 } else {
                     // Build as a regular conditional structure
                     let conditional_structure = self.build_conditional_structure(chain.clone());
                     elements.push(SequentialElement::Structure(conditional_structure));
+
+                    // Mark all blocks that were processed by the conditional structure.
+                    // This includes nested structures like switches in either branch.
+                    sync_processed_blocks(&mut processed_in_body, &self.processed_blocks);
                 }
                 continue;
             }
@@ -795,14 +1096,22 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 .iter()
                 .find(|l| l.primary_header() == block)
             {
+                if self.should_bail_out_exception_loop(loop_info) {
+                    elements.push(SequentialElement::Structure(
+                        self.create_unsupported_structure(
+                            "Unsupported exception-region loop reconstruction",
+                        ),
+                    ));
+                    continue;
+                }
+
                 // Mark all blocks in the loop as processed
                 processed_in_body.extend(&loop_info.body_nodes);
                 for &header in &loop_info.headers {
                     processed_in_body.insert(header);
                 }
 
-                // Build the loop structure (simplified for now)
-                let loop_body = self.build_sequential_from_blocks(&loop_info.body_nodes);
+                let loop_body = self.build_loop_body_structure(loop_info);
 
                 // Convert cfg LoopType to control_flow_plan LoopType
                 let loop_type = match loop_info.loop_type {
@@ -815,15 +1124,26 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                     crate::cfg::analysis::LoopType::For => {
                         crate::analysis::control_flow_plan::LoopType::For
                     }
+                    crate::cfg::analysis::LoopType::ForIn => {
+                        crate::analysis::control_flow_plan::LoopType::ForIn
+                    }
+                    crate::cfg::analysis::LoopType::ForOf => {
+                        crate::analysis::control_flow_plan::LoopType::ForOf
+                    }
                 };
 
-                // Extract condition info from the loop header
+                // Extract full condition expression from the loop header
                 let header = loop_info.primary_header();
-                let (condition, condition_use) = self.extract_loop_condition_info(header);
+                let condition_expr = self.extract_condition_for_loop(loop_info, loop_type.clone());
+                let (condition, condition_use) = condition_expr
+                    .as_ref()
+                    .map(|expr| expr.extract_legacy_format())
+                    .unwrap_or((None, None));
 
                 let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
                     loop_type,
                     header_block: header,
+                    condition_expr,
                     condition,
                     condition_use,
                     body: loop_body,
@@ -931,41 +1251,109 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     fn build_conditional_structure(&mut self, chain: ConditionalChain) -> StructureId {
         // Build a simple if-else from the first branch, applying inversion if needed
         if let Some(first_branch) = chain.branches.first() {
+            log::trace!(
+                "build_conditional_structure: condition_block={}, branch_entry={}",
+                first_branch.condition_block.index(),
+                first_branch.branch_entry.index()
+            );
+
+            // Mark all blocks in the chain as being processed to prevent infinite recursion
             self.processed_blocks.insert(first_branch.condition_source);
             self.processed_blocks.insert(first_branch.condition_block);
 
             // Build the true branch - use all blocks identified in the branch
             let original_true_branch = if first_branch.branch_blocks.is_empty() {
-                self.plan.create_structure(ControlFlowKind::Empty)
+                // Branch blocks might be empty if the branch entry is a switch dispatch
+                // Check if branch_entry is already processed to avoid infinite recursion
+                if self.processed_blocks.contains(&first_branch.branch_entry) {
+                    // Already processed, just create empty structure
+                    self.plan.create_structure(ControlFlowKind::Empty)
+                } else if let Some(structure) =
+                    self.try_build_control_structure(first_branch.branch_entry)
+                {
+                    structure
+                } else {
+                    self.plan.create_structure(ControlFlowKind::Empty)
+                }
             } else if first_branch.branch_blocks.len() == 1 {
                 // Single block branch
                 let block = first_branch.branch_blocks[0];
-                self.processed_blocks.insert(block);
-                self.plan.create_structure(ControlFlowKind::BasicBlock {
-                    block,
-                    instruction_count: self.cfg.graph()[block].instructions().len(),
-                    is_synthetic: false,
-                })
+                // Check if this block starts a control structure
+                if let Some(structure) = self.try_build_control_structure(block) {
+                    structure
+                } else {
+                    self.processed_blocks.insert(block);
+                    self.plan.create_structure(ControlFlowKind::BasicBlock {
+                        block,
+                        instruction_count: self.cfg.graph()[block].instructions().len(),
+                        is_synthetic: false,
+                    })
+                }
             } else {
                 // Multiple blocks - build from the identified blocks
-                self.build_branch_from_blocks(&first_branch.branch_blocks)
+                // Filter out any blocks that are already processed to avoid cycles
+                let unprocessed_blocks: Vec<NodeIndex> = first_branch
+                    .branch_blocks
+                    .iter()
+                    .filter(|&&b| !self.processed_blocks.contains(&b))
+                    .copied()
+                    .collect();
+                if unprocessed_blocks.is_empty() {
+                    self.plan.create_structure(ControlFlowKind::Empty)
+                } else {
+                    self.build_branch_from_blocks(&unprocessed_blocks)
+                }
             };
 
             // Build the false branch - handle else/else-if branches
             let original_false_branch = if chain.branches.len() > 1 {
                 if let Some(second_branch) = chain.branches.get(1) {
-                    if second_branch.branch_blocks.is_empty() {
-                        Some(self.plan.create_structure(ControlFlowKind::Empty))
+                    if second_branch.branch_type == BranchType::ElseIf {
+                        // Retain the remaining guards instead of treating an
+                        // else-if body as an unconditional else branch.
+                        let mut remainder = chain.clone();
+                        remainder.branches = chain.branches[1..].to_vec();
+                        remainder.should_invert = false;
+                        Some(self.build_conditional_structure(remainder))
+                    } else if second_branch.branch_blocks.is_empty() {
+                        // Branch blocks might be empty if the branch entry is a switch dispatch
+                        // Check if branch_entry is already processed to avoid infinite recursion
+                        if self.processed_blocks.contains(&second_branch.branch_entry) {
+                            // Already processed, just create empty structure
+                            Some(self.plan.create_structure(ControlFlowKind::Empty))
+                        } else if let Some(structure) =
+                            self.try_build_control_structure(second_branch.branch_entry)
+                        {
+                            Some(structure)
+                        } else {
+                            Some(self.plan.create_structure(ControlFlowKind::Empty))
+                        }
                     } else if second_branch.branch_blocks.len() == 1 {
                         let block = second_branch.branch_blocks[0];
-                        self.processed_blocks.insert(block);
-                        Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
-                            block,
-                            instruction_count: self.cfg.graph()[block].instructions().len(),
-                            is_synthetic: false,
-                        }))
+                        // Check if this block starts a control structure
+                        if let Some(structure) = self.try_build_control_structure(block) {
+                            Some(structure)
+                        } else {
+                            self.processed_blocks.insert(block);
+                            Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
+                                block,
+                                instruction_count: self.cfg.graph()[block].instructions().len(),
+                                is_synthetic: false,
+                            }))
+                        }
                     } else {
-                        Some(self.build_branch_from_blocks(&second_branch.branch_blocks))
+                        // Filter out any blocks that are already processed to avoid cycles
+                        let unprocessed_blocks: Vec<NodeIndex> = second_branch
+                            .branch_blocks
+                            .iter()
+                            .filter(|&&b| !self.processed_blocks.contains(&b))
+                            .copied()
+                            .collect();
+                        if unprocessed_blocks.is_empty() {
+                            Some(self.plan.create_structure(ControlFlowKind::Empty))
+                        } else {
+                            Some(self.build_branch_from_blocks(&unprocessed_blocks))
+                        }
                     }
                 } else {
                     None
@@ -1405,26 +1793,393 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         }
     }
 
-    /// Extract condition SSAValue and RegisterUse for loops (backward compatibility)
+    /// Try to detect for-in or for-of patterns including their setup blocks
+    fn try_detect_forin_forof_pattern(&mut self, block: NodeIndex) -> Option<StructureId> {
+        let block_data = &self.cfg.graph()[block];
+
+        // Check for GetPNameList (for-in setup) or IteratorBegin (for-of setup)
+        let mut is_forin_setup = false;
+        let mut is_forof_setup = false;
+
+        for instr in block_data.instructions() {
+            match instr.instruction.name() {
+                "GetPNameList" => is_forin_setup = true,
+                "IteratorBegin" => is_forof_setup = true,
+                _ => {}
+            }
+        }
+
+        if !is_forin_setup && !is_forof_setup {
+            return None;
+        }
+
+        log::debug!("Found for-in/for-of setup at block {}", block.index());
+
+        // Find the actual loop that follows this setup
+        // The setup block should have a conditional jump to the loop header
+        let successors: Vec<_> = self.cfg.graph().edges(block).map(|e| e.target()).collect();
+
+        if successors.len() != 2 {
+            log::debug!(
+                "  Setup block has {} successors, expected 2",
+                successors.len()
+            );
+            return None;
+        }
+
+        // One successor should be the loop header, the other the exit
+        // The loop header should be in our loop analysis
+        for &successor in &successors {
+            if let Some(loop_idx) = self
+                .loop_analysis
+                .loops
+                .iter()
+                .position(|l| l.primary_header() == successor)
+            {
+                let loop_info = self.loop_analysis.loops[loop_idx].clone();
+                log::debug!("  Found associated loop at block {}", successor.index());
+
+                // Mark the setup block as processed
+                self.processed_blocks.insert(block);
+
+                // Build the loop body separately, then wrap setup + loop in a sequential
+                // fallback so setup instructions still reach codegen before specialized
+                // for-in/for-of AST lowering exists.
+                let loop_body = self.build_loop_body_structure(&loop_info);
+
+                for &body_block in &loop_info.body_nodes {
+                    if !loop_info.exit_nodes.contains(&body_block) {
+                        self.processed_blocks.insert(body_block);
+                    }
+                }
+                for &header in &loop_info.headers {
+                    self.processed_blocks.insert(header);
+                }
+
+                let loop_type = if is_forin_setup {
+                    crate::analysis::control_flow_plan::LoopType::ForIn
+                } else {
+                    crate::analysis::control_flow_plan::LoopType::ForOf
+                };
+
+                let header = loop_info.primary_header();
+                let condition_expr = self.extract_loop_condition_info(header);
+                let (condition, condition_use) = condition_expr
+                    .as_ref()
+                    .map(|expr| expr.extract_legacy_format())
+                    .unwrap_or((None, None));
+
+                let loop_structure = self.plan.create_structure(ControlFlowKind::Loop {
+                    loop_type,
+                    header_block: header,
+                    condition_expr,
+                    condition,
+                    condition_use,
+                    body: loop_body,
+                    update: None,
+                    break_target: None,
+                    continue_target: None,
+                });
+
+                // Record entry and exit blocks on the loop itself.
+                if let Some(s) = self.plan.get_structure_mut(loop_structure) {
+                    s.entry_blocks.push(header);
+                    s.exit_blocks.extend(loop_info.exit_nodes.iter().copied());
+                    log::debug!(
+                        "  Loop structure: entry={:?}, exits={:?}",
+                        s.entry_blocks,
+                        s.exit_blocks
+                    );
+                }
+
+                let wrapper = self.plan.create_structure(ControlFlowKind::Sequential {
+                    elements: vec![
+                        SequentialElement::Block(block),
+                        SequentialElement::Structure(loop_structure),
+                    ],
+                });
+
+                if let Some(s) = self.plan.get_structure_mut(wrapper) {
+                    s.entry_blocks.push(block);
+                    s.exit_blocks.extend(loop_info.exit_nodes.iter().copied());
+                }
+
+                return Some(wrapper);
+            }
+        }
+
+        log::debug!("  No associated loop found for setup block");
+        None
+    }
+
+    /// Extract the full condition expression for loop headers
     fn extract_loop_condition_info(
         &self,
         condition_block: NodeIndex,
-    ) -> (Option<SSAValue>, Option<RegisterUse>) {
-        // Get comparison expression and extract the first operand for backward compatibility
-        if let Some(comparison) = self.extract_condition_info(condition_block) {
-            match comparison {
-                ComparisonExpression::SimpleCondition {
-                    operand,
-                    operand_use,
-                } => (Some(operand), Some(operand_use)),
-                ComparisonExpression::BinaryComparison { left, left_use, .. } => {
-                    // For loops, just return the left operand for now
-                    (Some(left), Some(left_use))
+    ) -> Option<ComparisonExpression> {
+        self.extract_condition_info(condition_block)
+    }
+
+    fn extract_iterator_condition_info(
+        &self,
+        loop_type: crate::analysis::control_flow_plan::LoopType,
+        condition_block: NodeIndex,
+    ) -> Option<ComparisonExpression> {
+        if loop_type == crate::analysis::control_flow_plan::LoopType::ForOf {
+            return self
+                .extract_iterator_next_result_condition(condition_block)
+                .or_else(|| self.extract_loop_condition_info(condition_block));
+        }
+
+        self.extract_loop_condition_info(condition_block)
+    }
+
+    fn extract_condition_for_loop(
+        &self,
+        loop_info: &crate::cfg::analysis::Loop,
+        loop_type: crate::analysis::control_flow_plan::LoopType,
+    ) -> Option<ComparisonExpression> {
+        let condition_block = self.loop_condition_block(loop_info);
+        let condition_expr = self.extract_iterator_condition_info(loop_type, condition_block)?;
+
+        if loop_info.loop_type == crate::cfg::analysis::LoopType::DoWhile
+            || self.should_normalize_self_edge_while_condition(
+                loop_info,
+                condition_block,
+                &condition_expr,
+            )
+        {
+            return Some(
+                self.normalize_post_update_loop_condition(condition_block, condition_expr),
+            );
+        }
+
+        Some(condition_expr)
+    }
+
+    fn should_normalize_self_edge_while_condition(
+        &self,
+        loop_info: &crate::cfg::analysis::Loop,
+        condition_block: NodeIndex,
+        condition_expr: &ComparisonExpression,
+    ) -> bool {
+        if loop_info.loop_type != crate::cfg::analysis::LoopType::While {
+            return false;
+        }
+
+        let is_self_edge = loop_info
+            .back_edges
+            .iter()
+            .any(|(tail, header)| tail == header && *header == condition_block);
+        if !is_self_edge {
+            return false;
+        }
+
+        match condition_expr {
+            ComparisonExpression::SimpleCondition { operand_use, .. } => self
+                .condition_operand_has_trailing_alias_rewrite(
+                    condition_block,
+                    operand_use.register,
+                ),
+            ComparisonExpression::BinaryComparison {
+                left_use,
+                right_use,
+                ..
+            } => {
+                self.condition_operand_has_trailing_alias_rewrite(
+                    condition_block,
+                    left_use.register,
+                ) || self.condition_operand_has_trailing_alias_rewrite(
+                    condition_block,
+                    right_use.register,
+                )
+            }
+        }
+    }
+
+    fn loop_condition_block(&self, loop_info: &crate::cfg::analysis::Loop) -> NodeIndex {
+        if loop_info.loop_type == crate::cfg::analysis::LoopType::DoWhile {
+            for (tail, _) in &loop_info.back_edges {
+                let block = &self.cfg.graph()[*tail];
+                let has_conditional_terminator = block
+                    .instructions()
+                    .last()
+                    .map(|instr| {
+                        let name = instr.instruction.name();
+                        name.starts_with('J') && name != "Jmp" && name != "JmpLong"
+                    })
+                    .unwrap_or(false);
+                let exits_loop = self.cfg.graph().edges(*tail).any(|edge| {
+                    edge.weight() != &crate::cfg::EdgeKind::Exception
+                        && !loop_info.body_nodes.contains(&edge.target())
+                });
+                if has_conditional_terminator && exits_loop {
+                    return *tail;
                 }
             }
-        } else {
-            (None, None)
         }
+
+        loop_info.primary_header()
+    }
+
+    fn normalize_post_update_loop_condition(
+        &self,
+        condition_block: NodeIndex,
+        condition_expr: ComparisonExpression,
+    ) -> ComparisonExpression {
+        match condition_expr {
+            ComparisonExpression::SimpleCondition {
+                operand,
+                operand_use,
+            } => ComparisonExpression::SimpleCondition {
+                operand: self
+                    .rewrite_condition_operand_after_loop_update(
+                        condition_block,
+                        operand_use.register,
+                        &operand,
+                    )
+                    .unwrap_or(operand),
+                operand_use,
+            },
+            ComparisonExpression::BinaryComparison {
+                operator,
+                left,
+                left_use,
+                right,
+                right_use,
+            } => ComparisonExpression::BinaryComparison {
+                operator,
+                left: self
+                    .rewrite_condition_operand_after_loop_update(
+                        condition_block,
+                        left_use.register,
+                        &left,
+                    )
+                    .unwrap_or(left),
+                left_use,
+                right: self
+                    .rewrite_condition_operand_after_loop_update(
+                        condition_block,
+                        right_use.register,
+                        &right,
+                    )
+                    .unwrap_or(right),
+                right_use,
+            },
+        }
+    }
+
+    fn rewrite_condition_operand_after_loop_update(
+        &self,
+        condition_block: NodeIndex,
+        compared_register: u8,
+        fallback: &SSAValue,
+    ) -> Option<SSAValue> {
+        let block = self.cfg.graph().node_weight(condition_block)?;
+        let terminator_pc = block.instructions().last()?.instruction_index;
+
+        for instruction in block.instructions().iter().rev().skip(1) {
+            let target = crate::generated::instruction_analysis::analyze_register_usage(
+                &instruction.instruction,
+            )
+            .target;
+
+            if target == Some(compared_register) {
+                match instruction.instruction {
+                    UnifiedInstruction::Mov {
+                        operand_0,
+                        operand_1,
+                    } if operand_0 == compared_register
+                        && self.register_is_live_into_block(condition_block, operand_1) =>
+                    {
+                        return self
+                            .function_analysis
+                            .ssa
+                            .get_value_before_instruction(operand_1, terminator_pc)
+                            .cloned()
+                            .or_else(|| Some(fallback.clone()));
+                    }
+                    _ => break,
+                }
+            }
+        }
+
+        Some(fallback.clone())
+    }
+
+    fn condition_operand_has_trailing_alias_rewrite(
+        &self,
+        condition_block: NodeIndex,
+        compared_register: u8,
+    ) -> bool {
+        let Some(block) = self.cfg.graph().node_weight(condition_block) else {
+            return false;
+        };
+
+        block
+            .instructions()
+            .iter()
+            .rev()
+            .skip(1)
+            .find_map(|instruction| {
+                let target = crate::generated::instruction_analysis::analyze_register_usage(
+                    &instruction.instruction,
+                )
+                .target;
+
+                if target != Some(compared_register) {
+                    return None;
+                }
+
+                Some(matches!(
+                    instruction.instruction,
+                    UnifiedInstruction::Mov {
+                        operand_0,
+                        operand_1,
+                    } if operand_0 == compared_register
+                        && self.register_is_live_into_block(condition_block, operand_1)
+                        && !self.register_is_live_into_block(condition_block, operand_0)
+                ))
+            })
+            .unwrap_or(false)
+    }
+
+    fn register_is_live_into_block(&self, block_id: NodeIndex, register: u8) -> bool {
+        self.function_analysis
+            .ssa
+            .live_in
+            .get(&block_id)
+            .map(|live_in| live_in.contains(&register))
+            .unwrap_or(false)
+    }
+
+    fn extract_iterator_next_result_condition(
+        &self,
+        condition_block: NodeIndex,
+    ) -> Option<ComparisonExpression> {
+        let block = self.cfg.graph().node_weight(condition_block)?;
+        let (result_register, instruction_index) =
+            block.instructions().iter().find_map(|instr| {
+                if let UnifiedInstruction::IteratorNext { operand_0, .. } = instr.instruction {
+                    Some((operand_0, instr.instruction_index))
+                } else {
+                    None
+                }
+            })?;
+
+        let operand_use = RegisterUse::new(result_register, condition_block, instruction_index);
+        let def_site = RegisterDef::new(result_register, condition_block, instruction_index);
+        let operand = self
+            .function_analysis
+            .ssa
+            .ssa_values
+            .get(&def_site)
+            .cloned()?;
+
+        Some(ComparisonExpression::SimpleCondition {
+            operand,
+            operand_use,
+        })
     }
 
     /// Find the next sequential block after a given block
@@ -1453,13 +2208,36 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     fn find_next_block_after_structure(&self, structure_id: StructureId) -> Option<NodeIndex> {
         // Get the structure
         if let Some(structure) = self.plan.get_structure(structure_id) {
-            // The exit blocks of the structure might lead to the next sequential block
+            log::debug!(
+                "find_next_block_after_structure: structure has {} exit blocks: {:?}",
+                structure.exit_blocks.len(),
+                structure.exit_blocks
+            );
+            // For loops, the exit block itself might be the next block to process
+            // (e.g., when one loop follows another)
             if structure.exit_blocks.len() == 1 {
-                self.find_next_sequential_block(structure.exit_blocks[0])
+                let exit_block = structure.exit_blocks[0];
+                // If the exit block is not processed, it's the next block
+                if !self.processed_blocks.contains(&exit_block)
+                    && !self.catch_blocks.contains(&exit_block)
+                {
+                    log::debug!(
+                        "  -> exit block {} is unprocessed, using it",
+                        exit_block.index()
+                    );
+                    Some(exit_block)
+                } else {
+                    // Otherwise, look for the next sequential block after the exit
+                    let next = self.find_next_sequential_block(exit_block);
+                    log::debug!("  -> next sequential block after exit: {:?}", next);
+                    next
+                }
             } else {
+                log::debug!("  -> no single exit, returning None");
                 None
             }
         } else {
+            log::debug!("find_next_block_after_structure: structure not found");
             None
         }
     }
@@ -1672,12 +2450,21 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             );
 
             if let Some(postdom) = self.cfg.analyze_post_dominators() {
-                analyzer.detect_switch_pattern(
-                    region.dispatch,
-                    self.cfg,
-                    &self.function_analysis.ssa,
-                    &postdom,
-                )
+                analyzer
+                    .detect_switch_pattern(
+                        region.dispatch,
+                        self.cfg,
+                        &self.function_analysis.ssa,
+                        &postdom,
+                    )
+                    .or_else(|| {
+                        analyzer.synthesize_switch_info_from_region(
+                            region,
+                            self.cfg,
+                            &self.function_analysis.ssa,
+                            &postdom,
+                        )
+                    })
             } else {
                 None
             }
@@ -1876,43 +2663,55 @@ impl<'a> ControlFlowPlanBuilder<'a> {
         // Sort preamble blocks by their start PC
         preamble_blocks.sort_by_key(|&node| self.cfg.graph()[node].start_pc());
 
-        // Build the exception structure
-        let exception_structure = if analysis.regions.len() == 1 {
-            let region = &analysis.regions[0];
-            self.build_try_catch_structure(region)
-        } else if analysis.regions.len() > 1 {
-            // Build nested exception regions recursively
-            self.build_nested_exception_structures(&analysis.regions)
+        let preamble_structure = if preamble_blocks.is_empty() {
+            None
         } else {
-            // Fallback to sequential structure
-            let entry_block = NodeIndex::new(0);
-            self.build_sequential_structure(entry_block)
+            log::debug!(
+                "Building structures from {} preamble blocks",
+                preamble_blocks.len()
+            );
+            Some(if preamble_blocks.len() == 1 {
+                self.build_sequential_structure(preamble_blocks[0])
+            } else {
+                self.build_structure_from_blocks(&preamble_blocks)
+            })
         };
 
-        // If we have preamble blocks, create a sequential structure
-        if !preamble_blocks.is_empty() {
-            use crate::analysis::control_flow_plan::SequentialElement;
-            let mut elements = Vec::new();
+        let remaining_regions: Vec<_> = analysis
+            .regions
+            .iter()
+            .filter(|region| {
+                self.exception_region_entry_block(region)
+                    .map(|entry| !self.processed_blocks.contains(&entry))
+                    .unwrap_or(true)
+            })
+            .cloned()
+            .collect();
 
-            // Add each preamble block as a structure
-            for block in preamble_blocks {
-                self.processed_blocks.insert(block);
-                let block_structure = self.plan.create_structure(ControlFlowKind::BasicBlock {
-                    block,
-                    instruction_count: self.cfg.graph()[block].instructions().len(),
-                    is_synthetic: false,
-                });
-                elements.push(SequentialElement::Structure(block_structure));
-            }
-
-            // Add the exception structure
-            elements.push(SequentialElement::Structure(exception_structure));
-
-            // Create and return the sequential structure
-            self.plan
-                .create_structure(ControlFlowKind::Sequential { elements })
+        let exception_structure = if remaining_regions.len() == 1 {
+            Some(self.build_try_catch_structure(&remaining_regions[0]))
+        } else if remaining_regions.len() > 1 {
+            Some(self.build_nested_exception_structures(&remaining_regions))
+        } else if preamble_structure.is_none() {
+            let entry_block = NodeIndex::new(0);
+            Some(self.build_sequential_structure(entry_block))
         } else {
-            exception_structure
+            None
+        };
+
+        match (preamble_structure, exception_structure) {
+            (Some(preamble_structure), Some(exception_structure)) => {
+                use crate::analysis::control_flow_plan::SequentialElement;
+                self.plan.create_structure(ControlFlowKind::Sequential {
+                    elements: vec![
+                        SequentialElement::Structure(preamble_structure),
+                        SequentialElement::Structure(exception_structure),
+                    ],
+                })
+            }
+            (Some(preamble_structure), None) => preamble_structure,
+            (None, Some(exception_structure)) => exception_structure,
+            (None, None) => self.plan.create_structure(ControlFlowKind::Empty),
         }
     }
 
@@ -2018,6 +2817,15 @@ impl<'a> ControlFlowPlanBuilder<'a> {
                 .create_structure(ControlFlowKind::Sequential { elements })
         };
 
+        if matches!(
+            self.plan
+                .get_structure(try_body)
+                .map(|structure| &structure.kind),
+            Some(ControlFlowKind::Unsupported { .. })
+        ) {
+            return try_body;
+        }
+
         // Build catch clause if present
         let catch_clause = if let Some(ref catch_handler) = region.catch_handler {
             self.processed_blocks.insert(catch_handler.catch_block);
@@ -2050,12 +2858,22 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             .finally_block
             .map(|block| self.build_finally_clause(block));
 
-        // Create the try-catch structure
-        self.plan.create_structure(ControlFlowKind::TryCatch {
+        let try_catch = self.plan.create_structure(ControlFlowKind::TryCatch {
             try_body,
             catch_clause,
             finally_clause,
-        })
+        });
+
+        let entry_block = self.exception_region_entry_block(region);
+        let exit_blocks = self.exception_region_exit_blocks(region);
+        if let Some(structure) = self.plan.get_structure_mut(try_catch) {
+            if let Some(entry) = entry_block {
+                structure.entry_blocks.push(entry);
+            }
+            structure.exit_blocks.extend(exit_blocks);
+        }
+
+        try_catch
     }
 
     /// Build a try-catch structure from exception region
@@ -2065,25 +2883,31 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     ) -> StructureId {
         use crate::analysis::control_flow_plan::CatchClause;
 
-        // Mark all try blocks and catch block as processed
-        for &block in &region.try_blocks {
-            self.processed_blocks.insert(block);
-        }
-
-        if let Some(ref catch_handler) = region.catch_handler {
-            self.processed_blocks.insert(catch_handler.catch_block);
-        }
+        self.active_exception_regions
+            .push(Self::exception_region_key(region));
 
         // Build the try body - check for patterns within the try blocks
         let try_body = if region.try_blocks.is_empty() {
             self.plan.create_structure(ControlFlowKind::Empty)
         } else {
             // Analyze patterns within the try blocks
+            log::debug!("Building try body from blocks: {:?}", region.try_blocks);
             self.build_structure_from_blocks(&region.try_blocks)
         };
+        self.active_exception_regions.pop();
+
+        if matches!(
+            self.plan
+                .get_structure(try_body)
+                .map(|structure| &structure.kind),
+            Some(ControlFlowKind::Unsupported { .. })
+        ) {
+            return try_body;
+        }
 
         // Build the catch clause
         let catch_clause = region.catch_handler.as_ref().map(|handler| {
+            self.processed_blocks.insert(handler.catch_block);
             let catch_body = self.plan.create_structure(ControlFlowKind::BasicBlock {
                 block: handler.catch_block,
                 instruction_count: self.cfg.graph()[handler.catch_block].instructions().len(),
@@ -2110,11 +2934,51 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             None
         };
 
-        // Create the try-catch structure
-        self.plan.create_structure(ControlFlowKind::TryCatch {
+        let try_catch = self.plan.create_structure(ControlFlowKind::TryCatch {
             try_body,
             catch_clause,
             finally_clause,
+        });
+
+        let entry_block = self.exception_region_entry_block(region);
+        let exit_blocks = self.exception_region_exit_blocks(region);
+        if let Some(structure) = self.plan.get_structure_mut(try_catch) {
+            if let Some(entry) = entry_block {
+                structure.entry_blocks.push(entry);
+            }
+            structure.exit_blocks.extend(exit_blocks);
+        }
+
+        for &block in &region.try_blocks {
+            self.processed_blocks.insert(block);
+        }
+        if let Some(handler) = &region.catch_handler {
+            self.processed_blocks.insert(handler.catch_block);
+        }
+
+        try_catch
+    }
+
+    fn should_bail_out_exception_loop(&self, loop_info: &crate::cfg::analysis::Loop) -> bool {
+        if self.active_exception_regions.is_empty() {
+            return false;
+        }
+
+        let header = loop_info.primary_header();
+        self.cfg
+            .analyze_switch_regions(&self.function_analysis.ssa)
+            .map(|switch_analysis| {
+                switch_analysis
+                    .regions
+                    .iter()
+                    .any(|region| region.dispatch == header)
+            })
+            .unwrap_or(false)
+    }
+
+    fn create_unsupported_structure(&mut self, message: &str) -> StructureId {
+        self.plan.create_structure(ControlFlowKind::Unsupported {
+            message: message.to_string(),
         })
     }
 
@@ -2122,27 +2986,69 @@ impl<'a> ControlFlowPlanBuilder<'a> {
     fn build_branch_from_blocks(&mut self, blocks: &[NodeIndex]) -> StructureId {
         use crate::analysis::control_flow_plan::SequentialElement;
 
-        // Mark all blocks as processed
-        for &block in blocks {
-            self.processed_blocks.insert(block);
-        }
-
-        // Build sequential structure from the blocks
         if blocks.is_empty() {
-            self.plan.create_structure(ControlFlowKind::Empty)
+            return self.plan.create_structure(ControlFlowKind::Empty);
         } else if blocks.len() == 1 {
             let block = blocks[0];
-            self.plan.create_structure(ControlFlowKind::BasicBlock {
+            // Check if this single block starts a control structure
+            if let Some(structure) = self.try_build_control_structure(block) {
+                return structure;
+            }
+            // Otherwise, mark as processed and create a basic block
+            self.processed_blocks.insert(block);
+            return self.plan.create_structure(ControlFlowKind::BasicBlock {
                 block,
                 instruction_count: self.cfg.graph()[block].instructions().len(),
                 is_synthetic: false,
-            })
+            });
+        }
+
+        // Multiple blocks - need to detect nested control flow patterns
+        let mut elements = Vec::new();
+        let mut processed_in_branch = HashSet::new();
+
+        // Sort blocks by index to process them in order
+        let mut sorted_blocks = blocks.to_vec();
+        sorted_blocks.sort_by_key(|b| b.index());
+
+        for &block in &sorted_blocks {
+            if processed_in_branch.contains(&block) || self.processed_blocks.contains(&block) {
+                continue;
+            }
+
+            // Check if this block starts a control flow pattern
+            if let Some(structure) = self.try_build_control_structure(block) {
+                elements.push(SequentialElement::Structure(structure));
+                // Mark all blocks handled by the structure as processed
+                // The structure builder already marks them in self.processed_blocks
+                for &b in blocks {
+                    if self.processed_blocks.contains(&b) {
+                        processed_in_branch.insert(b);
+                    }
+                }
+            } else {
+                // Regular block
+                self.processed_blocks.insert(block);
+                processed_in_branch.insert(block);
+                elements.push(SequentialElement::Block(block));
+            }
+        }
+
+        // Create the appropriate structure
+        if elements.is_empty() {
+            self.plan.create_structure(ControlFlowKind::Empty)
+        } else if elements.len() == 1 {
+            match elements.into_iter().next().unwrap() {
+                SequentialElement::Block(block) => {
+                    self.plan.create_structure(ControlFlowKind::BasicBlock {
+                        block,
+                        instruction_count: self.cfg.graph()[block].instructions().len(),
+                        is_synthetic: false,
+                    })
+                }
+                SequentialElement::Structure(id) => id,
+            }
         } else {
-            // Create sequential elements for all blocks
-            let elements: Vec<SequentialElement> = blocks
-                .iter()
-                .map(|&block| SequentialElement::Block(block))
-                .collect();
             self.plan
                 .create_structure(ControlFlowKind::Sequential { elements })
         }
@@ -2150,57 +3056,47 @@ impl<'a> ControlFlowPlanBuilder<'a> {
 
     /// Build structure from a set of blocks, detecting patterns like switches
     fn build_structure_from_blocks(&mut self, blocks: &[NodeIndex]) -> StructureId {
-        // Check if these blocks contain a switch pattern
-        if let Some(switch_analysis) = self.cfg.analyze_switch_regions(&self.function_analysis.ssa)
-        {
-            // Check if any switch region matches our blocks
-            for region in &switch_analysis.regions {
-                // Check if the switch dispatch block is in our blocks
-                if blocks.contains(&region.dispatch) {
-                    // Mark blocks as processed
-                    for &block in blocks {
-                        self.processed_blocks.insert(block);
+        use crate::analysis::control_flow_plan::SequentialElement;
+
+        let mut sorted_blocks = blocks.to_vec();
+        sorted_blocks.sort_by_key(|&b| self.cfg.graph()[b].start_pc());
+
+        let mut elements = Vec::new();
+        let mut processed_local = HashSet::new();
+
+        for &block in &sorted_blocks {
+            if processed_local.contains(&block) || self.processed_blocks.contains(&block) {
+                continue;
+            }
+
+            if let Some(structure) = self.try_build_control_structure(block) {
+                elements.push(SequentialElement::Structure(structure));
+                for &candidate in blocks {
+                    if self.processed_blocks.contains(&candidate) {
+                        processed_local.insert(candidate);
                     }
-                    // Build the switch structure
-                    return self.build_switch_from_region(region.clone());
                 }
+            } else {
+                processed_local.insert(block);
+                self.processed_blocks.insert(block);
+                elements.push(SequentialElement::Block(block));
             }
         }
 
-        // Check for conditional patterns
-        if let Some(conditional_analysis) = self.cfg.analyze_conditional_chains() {
-            for chain in &conditional_analysis.chains {
-                // Check if this chain's blocks overlap with our blocks
-                let has_overlap = chain.branches.iter().any(|branch| {
-                    blocks.contains(&branch.condition_block)
-                        || branch.branch_blocks.iter().any(|b| blocks.contains(b))
-                });
-
-                if has_overlap {
-                    // Mark blocks as processed
-                    for &block in blocks {
-                        self.processed_blocks.insert(block);
-                    }
-                    // Build the conditional structure
-                    return self.build_conditional_structure(chain.clone());
+        if elements.is_empty() {
+            self.plan.create_structure(ControlFlowKind::Empty)
+        } else if elements.len() == 1 {
+            match elements[0] {
+                SequentialElement::Block(block) => {
+                    self.plan.create_structure(ControlFlowKind::BasicBlock {
+                        block,
+                        instruction_count: self.cfg.graph()[block].instructions().len(),
+                        is_synthetic: false,
+                    })
                 }
+                SequentialElement::Structure(id) => id,
             }
-        }
-
-        // Fallback: build sequential structure from blocks
-        if blocks.len() == 1 {
-            let block = blocks[0];
-            self.plan.create_structure(ControlFlowKind::BasicBlock {
-                block,
-                instruction_count: self.cfg.graph()[block].instructions().len(),
-                is_synthetic: false,
-            })
         } else {
-            use crate::analysis::control_flow_plan::SequentialElement;
-            let elements: Vec<SequentialElement> = blocks
-                .iter()
-                .map(|&block| SequentialElement::Block(block))
-                .collect();
             self.plan
                 .create_structure(ControlFlowKind::Sequential { elements })
         }
@@ -2297,24 +3193,6 @@ impl<'a> ControlFlowPlanBuilder<'a> {
             body,
             skip_start,
             skip_end,
-        }
-    }
-
-    /// Try to build a basic block structure if it hasn't been processed yet
-    fn try_build_basic_block(&mut self, block: NodeIndex) -> Option<StructureId> {
-        // Check if this block exists and hasn't been processed
-        if block.index() < self.cfg.graph().node_count() && !self.processed_blocks.contains(&block)
-        {
-            self.processed_blocks.insert(block);
-
-            let instruction_count = self.cfg.graph()[block].instructions().len();
-            Some(self.plan.create_structure(ControlFlowKind::BasicBlock {
-                block,
-                instruction_count,
-                is_synthetic: false,
-            }))
-        } else {
-            None
         }
     }
 }

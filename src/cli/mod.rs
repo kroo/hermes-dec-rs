@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 pub mod analyze_cfg;
+pub mod bundle;
 pub mod cfg;
 pub mod decompile;
 pub mod disasm;
@@ -102,6 +103,8 @@ impl Cli {
                 inline_object_literals,
             } => {
                 let args = decompile::DecompileArgs {
+                    minify: false,
+                    hbc_version: None,
                     input_path: input,
                     function_index: function,
                     output_path: output,
