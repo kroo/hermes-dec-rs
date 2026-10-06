@@ -7,13 +7,39 @@ CLI `inspect` defaults to a bounded JSON summary; use explicit `--format json`
 for the legacy full-table dump or `--format text` for one-line counts. The library
 `inspect()` default is unchanged. Invalid-input diagnostics go only to stderr.
 
+For broad reconstruction, start with `workspace INPUT -o NEW_DIRECTORY` and
+search its index for function IDs. `view/f<ID>.txt` is the compact inspection
+entry point; raw `f<ID>.js` remains authoritative. The other commands below are
+targeted follow-ups, not prerequisites for reading the complete project.
+CLI workspaces also include `links.jsonl` and `initializers.jsonl`: independently
+selectable source navigation designs, not evaluated bindings or framework records.
+Select their row by `function` and inspect `report`; exact raw source spans join
+the manifest's per-function header prefix. Check limits and uncertainty before
+following intermediate call/constructor dependencies in complete JS. A local
+copy does not prove there is no later conversion. Use `--evidence`
+to select `links`, `initializers`, `all` (default), or `none` for controlled
+comparisons. `--raw-only` omits views and sidecars; explicit `--evidence` conflicts
+with it. Existing library workspace entry points retain the v19 layout.
+The generated guide contains targeted jq joins for selected slot stores and their
+shared dependency definitions, with status/limits emitted first. Source IDs are
+input-local span keys, not content hashes. Links use atomic budget rejection;
+initializers can return explicit bounded prefixes with generic `sites` continuation
+for supported exporter slot writes. Direct `env[N]` prefixes without a replayable
+cursor fail closed. No table establishes a call result or evaluated framework key.
+
 ```sh
 hermes-dec-rs inputs .
+hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
+hermes-dec-rs workspace INPUT.hbc -o LINK_DIRECTORY --evidence links
+hermes-dec-rs workspace INPUT.hbc -o INIT_DIRECTORY --evidence initializers
 hermes-dec-rs inspect INPUT.hbc
 hermes-dec-rs search INPUT.hbc iterator --limit 10 --json
 hermes-dec-rs show INPUT.hbc 0,1 -o bodies.js --max-bytes 1000000
 hermes-dec-rs refs INPUT.hbc 1 --direction in --depth 2
 hermes-dec-rs show INPUT.hbc 0 --around-pc 0 --context 8
+hermes-dec-rs read INPUT.hbc 0 --match TEXT
+hermes-dec-rs read INPUT.hbc 0 --from-pc 0 --to-pc 100 --json
+hermes-dec-rs json-literals INPUT.hbc 0 --match TEXT --pointer /PATH
 hermes-dec-rs slots INPUT.hbc 1 0 --depth 3 --limit 10
 hermes-dec-rs trace INPUT.hbc 0 0 --depth 32 --limit 128
 hermes-dec-rs origins INPUT.hbc 0 0 --depth 8 --limit 64
@@ -22,15 +48,82 @@ hermes-dec-rs origins INPUT.hbc 0 0 --text
 hermes-dec-rs symbols INPUT.hbc 0 --match RAW_TOKEN --limit 8
 hermes-dec-rs symbols INPUT.hbc 0 --slot 1,2 --literal-limit 16
 hermes-dec-rs properties INPUT.hbc 0 --match FIELD_NAME --limit 8
+hermes-dec-rs objects INPUT.hbc 0 --match TEXT --limit 8
+hermes-dec-rs objects INPUT.hbc 0 ORIGIN_PC --limit 16
 hermes-dec-rs sites INPUT.hbc 0 --kind constructor --depth 3
 hermes-dec-rs sites INPUT.hbc 0 --kind slot-write --slot 0 --depth 8
 hermes-dec-rs sites INPUT.hbc 0 --match FIELD_NAME --depth 8 --compact
 hermes-dec-rs sites INPUT.hbc 0 --from-pc 0 --to-pc 100 --kind call --compact
 hermes-dec-rs captures INPUT.hbc 1,2 --depth 3 --limit 5
-hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
+hermes-dec-rs workspace INPUT.hbc -o RAW_DIRECTORY --raw-only
 ```
 
 ## Evidence and output contracts
+
+- `read INPUT FUNCTION` pairs authoritative raw decompiled JS with a primitive
+  literal candidate view, never a runnable substitution. It follows only plain
+  register aliases in straight-line blocks and preserves exact string, numeric,
+  boolean and null source spellings. Fields, calls, captures, conditional writes,
+  same-PC writes, block entries and exception ambiguity are not folded. Text is
+  the default; `--json` reports UTF-8 source/literal spans and shared definition
+  IDs. `--match` filters raw source or literal syntax, not decoded runtime text;
+  inclusive PC ranges and raw-PC-ordinal pagination bound pages. Defaults are
+  50 rows, alias depth 16, 100,000 output bytes and 2,097,152 query work. At most
+  128 reads per row and 4,096 bytes per literal are rendered with explicit
+  omissions. HBC/source/string-table caps are 128/64/64 MiB; candidate/filter
+  copying is capped at 128 MiB and preconstruction at 16 MiB. Unsupported source
+  mutations, labeled control flow, mismatched exporter roots and out-of-root PC markers fail before
+  stdout. Parsing precedes the AST depth/work checks; hostile parser exhaustion
+  is not certified by these tests. These are work/expansion caps, not a total-memory
+  or elapsed-time sandbox; omitted candidates are not absence.
+
+- `json-literals INPUT FUNCTION` emits bounded `json-literals-v1` JSON from
+  object/array documents embedded in root-body string expressions. It does not
+  execute JavaScript, calls or constructors, nor prove schema reachability.
+  `--pointer` uses strict RFC6901; `--pc` must be an existing root instruction;
+  `--match` OR-filters complete decoded JSON text, case-insensitively. Offsets
+  count all root string-expression ordinals before filtering. Continuation
+  separates command, input, function and argument tokens. Duplicate decoded
+  keys omit the whole document, recursively, with a separate count; malformed
+  JSON and lone-surrogate JS strings also have explicit omission counts. Selected
+  values are never truncated. Documents are also omitted with a separate count
+  if numeric re-serialization changes an exact decimal value or negative-zero
+  sign; this uses normalized decimal coefficients, not floating-point equality.
+  Numeric spelling may change, and this does not imply JavaScript conversion.
+  Exact UTF-8 literal spans join raw JS.
+  Defaults are 32 documents, 1 MiB output and 64 MiB scan work. HBC/source/string
+  table caps are 128/64/64 MiB, each literal is capped at 1 MiB raw and decoded,
+  filtering at 64 MiB, output at 16 MiB and query work at 128 MiB. Conservative
+  source-depth/expression guards and serde_json's recursion guard may reject
+  valid inputs. Failures emit no partial stdout. Limits are not a total-memory
+  or time sandbox; negative results do not establish runtime absence.
+
+- `objects INPUT FUNCTION [ORIGIN_PC]` groups property writes by local source
+  definitions, following only transparent plain register copies. Discovery
+  `--match` OR-filters raw site/dependency syntax; it does not decode strings.
+  Returned `object_queries` clear discovery filters and offsets to navigate
+  sibling writes rooted at a terminal definition PC. Anchors are explicitly
+  PC-wide unions: distinct definition IDs at one PC remain distinct, not one
+  inferred object. The query lists at most 64 source-definition IDs with explicit
+  omission/count fields. Constructor operands,
+  member reads and helper results are dependencies, not aliases. Neither origin
+  nor sibling grouping proves heap identity, values, framework semantics or
+  execution order. Unknown block entries, exception boundaries, conditional and
+  same-PC writes remain unresolved. `origin_summary` includes filtered-out
+  uncertainty. Shared IDs and spans join complete raw exporter JS fragments.
+  `--alias-depth` defaults to 16 (0..64), independently of provenance `--depth`
+  3 (0..8). `--offset` and continuation count raw property stores; paging cannot
+  repair omitted dependencies. Default limit is 5, output 100,000 bytes and
+  aggregate query work 2,097,152 (maximum 16,777,216). Source is capped at 64 MiB;
+  raw filter work at 128 MiB; HBC input at 128 MiB before parsing,
+  cumulative escaped string-table literals at 64 MiB before conversion, and
+  pre-compaction provenance construction at 16 MiB. Bounded export uses
+  conservative variable-sized instruction preflights; fitting source may still
+  be refused. These are expansion/work caps, not a total-memory or time sandbox.
+  Unsupported helper
+  shapes/scopes, optional chains, destructuring assignments, register shadowing,
+  binding updates, slot deletions, structured non-dispatcher loops and budget
+  exhaustion fail before stdout. No app or JavaScript is executed.
 
 - `properties INPUT FUNCTION` separates object, key and value source expressions
   for simple member assignments and exact exporter `put`/`own` helper shapes.
@@ -221,6 +314,24 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
   16 MiB ceiling. Either error occurs before any stdout, not midway through lines.
 - `workspace` exports every complete function into `f<ID>.js`, plus a manifest,
   bounded `index.jsonl`, a short `GUIDE.md` and inspection-only `runtime.js`.
+  By default it also writes `view/f<ID>.txt`: non-executable compact PC labels
+  replace actual parser-recognized marker comments; every other original source
+  byte, including control flow, calls and multiline payloads, is preserved.
+  Separately labelled single-line JSON notes use `read`'s conservative local
+  primitive candidates, never executable substitutions.
+  Plain-copy RHS notes are skipped with explicit counts to avoid repetition;
+  source copies and subsequent alias provenance remain intact. `use_span`, `from`,
+  definition IDs and aliases join raw fragments; field meanings and shared limits
+  are in manifest `view_note_contract`. Per-function note status reports scanned,
+  bounded-prefix or unavailable analysis; unknown and omitted evidence is not
+  runtime absence. Notes have an 8 MiB function/64 KiB instruction ceiling,
+  16,777,216 query-work limit, 128 reads per instruction, alias depth 16 and
+  4096-byte literal ceiling. Source is capped at 64 MiB and renderer output at 128
+  MiB; parsing happens before syntax traversal guards, so these are not a
+  hostile-parser, total-memory or elapsed-time sandbox. `--raw-only` omits views
+  for controlled comparisons. Raw JS spans do not apply directly to view text.
+  `views_bytes` counts only view files; `js_bytes` excludes them. `file_count`
+  counts regular files, not the additional view directory.
   The guide and function headers point to source-derived capture, site and
   typed-expression navigation, without supplying app-specific hints.
   The guide and shared templates also offer raw RHS symbol mentions and escaped

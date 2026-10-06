@@ -16,6 +16,9 @@ use std::path::Path;
 const PREVIEW: usize = 1024;
 const NODE_CAP: usize = 32;
 const OPERAND_CAP: usize = 128;
+const OBJECT_SOURCE_CAP: usize = 64 * 1024 * 1024;
+const OBJECT_SYNTAX_CAP: usize = 8_388_608;
+const OBJECT_FILTER_CAP: usize = 134_217_728;
 
 fn error(message: impl Into<String>) -> DecompilerError {
     DecompilerError::internal(message.into())
@@ -97,6 +100,18 @@ struct Syntax<'s> {
     malformed_constructor: bool,
     malformed_call: bool,
     wrapper_assignments: BTreeSet<u32>,
+    object_mode: bool,
+    aliases: BTreeMap<u32, Span>,
+    primitive_rhs: BTreeMap<u32, Span>,
+    literal_read_exclusions: BTreeSet<(u32, u32)>,
+    ambiguous_writes: BTreeSet<u32>,
+    conditional_depth: usize,
+    function_depth: usize,
+    root_function: Option<Span>,
+    root_register: Option<Span>,
+    work: usize,
+    depth: usize,
+    object_error: Option<&'static str>,
 }
 
 impl Syntax<'_> {
@@ -141,6 +156,202 @@ impl Syntax<'_> {
 }
 
 impl<'a> Visit<'a> for Syntax<'_> {
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if self.object_mode {
+            self.work += 1;
+            if self.work > OBJECT_SYNTAX_CAP || self.depth == 256 {
+                self.object_error = Some("objects syntax work/depth cap exceeded");
+                return;
+            }
+            self.depth += 1;
+        }
+        walk::walk_expression(self, it);
+        if self.object_mode {
+            self.depth -= 1;
+        }
+    }
+
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        if self.object_mode {
+            self.work += 1;
+            if self.work > OBJECT_SYNTAX_CAP || self.depth == 256 {
+                self.object_error = Some("objects syntax work/depth cap exceeded");
+                return;
+            }
+            self.depth += 1;
+        }
+        walk::walk_statement(self, it);
+        if self.object_mode {
+            self.depth -= 1;
+        }
+    }
+
+    fn visit_function(
+        &mut self,
+        it: &oxc_ast::ast::Function<'a>,
+        flags: oxc_syntax::scope::ScopeFlags,
+    ) {
+        if self.object_mode && self.function_depth > 0 {
+            self.object_error = Some("objects nested function scopes are unsupported");
+            return;
+        }
+        if self.object_mode {
+            if self.root_function.replace(it.span).is_some() {
+                self.object_error = Some("objects requires one root function scope");
+                return;
+            }
+            self.boundaries.extend([it.span.start, it.span.end]);
+            if let Some(body) = &it.body {
+                for statement in &body.statements {
+                    let Statement::VariableDeclaration(declaration) = statement else {
+                        continue;
+                    };
+                    for declaration in &declaration.declarations {
+                        if let oxc_ast::ast::BindingPatternKind::BindingIdentifier(binding) =
+                            &declaration.id.kind
+                        {
+                            if binding.name == "r"
+                                && self.root_register.replace(binding.span).is_some()
+                            {
+                                self.object_error =
+                                    Some("objects requires one root register binding");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.function_depth += 1;
+        walk::walk_function(self, it, flags);
+        self.function_depth -= 1;
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &oxc_ast::ast::ArrowFunctionExpression<'a>) {
+        if self.object_mode {
+            self.object_error = Some("objects nested function scopes are unsupported");
+        } else {
+            walk::walk_arrow_function_expression(self, it);
+        }
+    }
+
+    fn visit_class(&mut self, it: &oxc_ast::ast::Class<'a>) {
+        if self.object_mode {
+            self.object_error = Some("objects class scopes are unsupported");
+        } else {
+            walk::walk_class(self, it);
+        }
+    }
+
+    fn visit_binding_identifier(&mut self, it: &oxc_ast::ast::BindingIdentifier<'a>) {
+        if self.object_mode && it.name == "r" && self.root_register != Some(it.span) {
+            self.object_error = Some("objects register shadowing is unsupported");
+        }
+    }
+
+    fn visit_labeled_statement(&mut self, it: &oxc_ast::ast::LabeledStatement<'a>) {
+        if self.object_mode {
+            self.object_error = Some("objects labeled control flow is unsupported");
+            return;
+        }
+        walk::walk_labeled_statement(self, it);
+    }
+
+    fn visit_for_statement(&mut self, it: &oxc_ast::ast::ForStatement<'a>) {
+        if self.object_mode {
+            if it.init.is_some() || it.test.is_some() || it.update.is_some() {
+                self.object_error = Some("objects structured loops are unsupported");
+                return;
+            }
+            self.boundaries.extend([it.span.start, it.span.end]);
+        }
+        walk::walk_for_statement(self, it);
+    }
+
+    fn visit_while_statement(&mut self, it: &oxc_ast::ast::WhileStatement<'a>) {
+        if self.object_mode {
+            self.object_error = Some("objects structured loops are unsupported");
+        } else {
+            walk::walk_while_statement(self, it);
+        }
+    }
+
+    fn visit_do_while_statement(&mut self, it: &oxc_ast::ast::DoWhileStatement<'a>) {
+        if self.object_mode {
+            self.object_error = Some("objects structured loops are unsupported");
+        } else {
+            walk::walk_do_while_statement(self, it);
+        }
+    }
+
+    fn visit_for_in_statement(&mut self, it: &oxc_ast::ast::ForInStatement<'a>) {
+        if self.object_mode {
+            self.object_error = Some("objects structured loops are unsupported");
+        } else {
+            walk::walk_for_in_statement(self, it);
+        }
+    }
+
+    fn visit_for_of_statement(&mut self, it: &oxc_ast::ast::ForOfStatement<'a>) {
+        if self.object_mode {
+            self.object_error = Some("objects structured loops are unsupported");
+        } else {
+            walk::walk_for_of_statement(self, it);
+        }
+    }
+
+    fn visit_switch_statement(&mut self, it: &oxc_ast::ast::SwitchStatement<'a>) {
+        if self.object_mode {
+            self.boundaries.extend([it.span.start, it.span.end]);
+        }
+        walk::walk_switch_statement(self, it);
+    }
+
+    fn visit_try_statement(&mut self, it: &oxc_ast::ast::TryStatement<'a>) {
+        if self.object_mode {
+            self.boundaries.extend([it.span.start, it.span.end]);
+            if let Some(handler) = &it.handler {
+                self.boundaries
+                    .extend([handler.span.start, handler.span.end]);
+            }
+            if let Some(finalizer) = &it.finalizer {
+                self.boundaries
+                    .extend([finalizer.span.start, finalizer.span.end]);
+            }
+        }
+        walk::walk_try_statement(self, it);
+    }
+
+    fn visit_conditional_expression(&mut self, it: &oxc_ast::ast::ConditionalExpression<'a>) {
+        self.conditional_depth += 1;
+        walk::walk_conditional_expression(self, it);
+        self.conditional_depth -= 1;
+    }
+
+    fn visit_logical_expression(&mut self, it: &oxc_ast::ast::LogicalExpression<'a>) {
+        self.conditional_depth += 1;
+        walk::walk_logical_expression(self, it);
+        self.conditional_depth -= 1;
+    }
+
+    fn visit_chain_expression(&mut self, it: &oxc_ast::ast::ChainExpression<'a>) {
+        if self.object_mode {
+            self.object_error = Some("objects optional chains are unsupported");
+        } else {
+            walk::walk_chain_expression(self, it);
+        }
+    }
+
+    fn visit_if_statement(&mut self, it: &oxc_ast::ast::IfStatement<'a>) {
+        if self.object_mode {
+            self.boundaries.extend([it.span.start, it.span.end]);
+            self.conditional_depth += 1;
+        }
+        walk::walk_if_statement(self, it);
+        if self.object_mode {
+            self.conditional_depth -= 1;
+        }
+    }
+
     fn visit_program(&mut self, it: &Program<'a>) {
         // Only the typed, top-level tables emitted by the exporter are wrappers.
         // Continue walking their RHS so F[id]'s function body is still cataloged.
@@ -189,13 +400,75 @@ impl<'a> Visit<'a> for Syntax<'_> {
     }
 
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if self.object_mode
+            && matches!(
+                it.left,
+                AssignmentTarget::ArrayAssignmentTarget(_)
+                    | AssignmentTarget::ObjectAssignmentTarget(_)
+            )
+        {
+            self.object_error = Some("objects destructuring assignments are unsupported");
+            return;
+        }
+        if self.object_mode
+            && matches!(&it.left, AssignmentTarget::AssignmentTargetIdentifier(id) if id.name == "r")
+        {
+            self.object_error = Some("objects register binding reassignment is unsupported");
+            return;
+        }
         if self.wrapper_assignments.contains(&it.span.start) {
             self.visit_expression(&it.right);
             return;
         }
         let lhs = it.left.span();
+        let root_member = match &it.left {
+            AssignmentTarget::ComputedMemberExpression(m) => {
+                m.object.without_parentheses().is_specific_id("r")
+            }
+            AssignmentTarget::StaticMemberExpression(m) => {
+                m.object.without_parentheses().is_specific_id("r")
+            }
+            _ => false,
+        };
+        if self.object_mode && root_member && self.register(lhs).is_none() {
+            self.object_error = Some("objects noncanonical register mutations are unsupported");
+            return;
+        }
         if let Some(register) = self.register(lhs) {
             self.writes.push((register, it.span));
+            if self.object_mode {
+                if self.conditional_depth > 0 || it.operator.is_logical() {
+                    self.ambiguous_writes.insert(it.span.start);
+                }
+                if it.operator.is_assign() && self.register(it.right.span()).is_some() {
+                    self.aliases.insert(it.span.start, it.right.span());
+                }
+                if it.operator.is_assign() {
+                    let rhs = it.right.without_parentheses();
+                    let primitive = match rhs {
+                        Expression::StringLiteral(_)
+                        | Expression::NumericLiteral(_)
+                        | Expression::BooleanLiteral(_)
+                        | Expression::NullLiteral(_) => true,
+                        Expression::UnaryExpression(u) => {
+                            matches!(
+                                u.operator,
+                                oxc_ast::ast::UnaryOperator::UnaryNegation
+                                    | oxc_ast::ast::UnaryOperator::UnaryPlus
+                            ) && matches!(
+                                u.argument.without_parentheses(),
+                                Expression::NumericLiteral(_)
+                            )
+                        }
+                        _ => false,
+                    };
+                    if primitive {
+                        self.primitive_rhs.insert(it.span.start, rhs.span());
+                    }
+                } else {
+                    self.literal_read_exclusions.insert((lhs.start, lhs.end));
+                }
+            }
             if it.operator.is_assign() {
                 self.visit_expression(&it.right);
                 return;
@@ -217,6 +490,10 @@ impl<'a> Visit<'a> for Syntax<'_> {
                 _ => None,
             };
             if let Some((slot, object, key)) = member {
+                if self.object_mode && !it.operator.is_assign() {
+                    self.object_error = Some("objects requires simple property assignments");
+                    return;
+                }
                 self.sites.push(SiteSpan {
                     kind: if slot.is_some() {
                         "slot-write"
@@ -251,20 +528,92 @@ impl<'a> Visit<'a> for Syntax<'_> {
                 }
             }
         }
+        // Logical-assignment RHS is conditional too, including nested writes.
+        let conditional = self.object_mode && it.operator.is_logical();
+        self.conditional_depth += usize::from(conditional);
         walk::walk_assignment_expression(self, it);
+        self.conditional_depth -= usize::from(conditional);
     }
 
     fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
+        let root_member = match &it.argument {
+            oxc_ast::ast::SimpleAssignmentTarget::ComputedMemberExpression(m) => {
+                m.object.without_parentheses().is_specific_id("r")
+            }
+            oxc_ast::ast::SimpleAssignmentTarget::StaticMemberExpression(m) => {
+                m.object.without_parentheses().is_specific_id("r")
+            }
+            _ => false,
+        };
+        if self.object_mode && root_member && self.register(it.argument.span()).is_none() {
+            self.object_error = Some("objects noncanonical register mutations are unsupported");
+            return;
+        }
+        if self.object_mode
+            && matches!(&it.argument, oxc_ast::ast::SimpleAssignmentTarget::AssignmentTargetIdentifier(id) if id.name == "r")
+        {
+            self.object_error = Some("objects register binding reassignment is unsupported");
+            return;
+        }
         if let Some(register) = self.register(it.argument.span()) {
+            if self.object_mode {
+                self.literal_read_exclusions
+                    .insert((it.argument.span().start, it.argument.span().end));
+            }
             self.writes.push((register, it.span));
+            if self.object_mode && self.conditional_depth > 0 {
+                self.ambiguous_writes.insert(it.span.start);
+            }
         }
         walk::walk_update_expression(self, it);
     }
 
+    fn visit_unary_expression(&mut self, it: &oxc_ast::ast::UnaryExpression<'a>) {
+        let root_member = match it.argument.without_parentheses() {
+            Expression::ComputedMemberExpression(m) => {
+                m.object.without_parentheses().is_specific_id("r")
+            }
+            Expression::StaticMemberExpression(m) => {
+                m.object.without_parentheses().is_specific_id("r")
+            }
+            _ => false,
+        };
+        if self.object_mode && it.operator.is_delete() && root_member {
+            self.object_error = Some("objects register slot deletion is unsupported");
+            return;
+        }
+        walk::walk_unary_expression(self, it);
+    }
+
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.object_mode && it.optional {
+            self.object_error = Some("objects optional calls are unsupported");
+            return;
+        }
         if let Expression::Identifier(callee) = &it.callee {
             let name = callee.name.as_str();
-            if name == "construct" {
+            if self.object_mode && (name == "construct" || name == "apply") {
+                let valid = match it.arguments.as_slice() {
+                    [callee, receiver, oxc_ast::ast::Argument::ArrayExpression(args)] => {
+                        !it.optional
+                            && !matches!(callee, oxc_ast::ast::Argument::SpreadElement(_))
+                            && !matches!(receiver, oxc_ast::ast::Argument::SpreadElement(_))
+                            && !args.elements.iter().any(|arg| {
+                                matches!(
+                                    arg,
+                                    oxc_ast::ast::ArrayExpressionElement::SpreadElement(_)
+                                        | oxc_ast::ast::ArrayExpressionElement::Elision(_)
+                                )
+                            })
+                    }
+                    _ => false,
+                };
+                if !valid {
+                    self.object_error = Some("objects malformed construct/apply helper");
+                    return;
+                }
+            }
+            if name == "construct" && !self.object_mode {
                 if let [callee, receiver, oxc_ast::ast::Argument::ArrayExpression(args)] =
                     it.arguments.as_slice()
                 {
@@ -288,7 +637,7 @@ impl<'a> Visit<'a> for Syntax<'_> {
                 } else {
                     self.malformed_constructor = true;
                 }
-            } else if name == "apply" {
+            } else if name == "apply" && !self.object_mode {
                 if let [callee, receiver, oxc_ast::ast::Argument::ArrayExpression(args)] =
                     it.arguments.as_slice()
                 {
@@ -328,6 +677,18 @@ impl<'a> Visit<'a> for Syntax<'_> {
                     self.malformed_call = true;
                 }
             } else if name == "put" || name == "own" {
+                if self.object_mode
+                    && (it.optional
+                        || it.arguments.len() != if name == "put" { 5 } else { 4 }
+                        || it
+                            .arguments
+                            .iter()
+                            .any(|a| matches!(a, oxc_ast::ast::Argument::SpreadElement(_))))
+                {
+                    self.object_error =
+                        Some("objects put/own requires exact arity, no optional call or spreads");
+                    return;
+                }
                 let operands = it
                     .arguments
                     .iter()
@@ -372,6 +733,8 @@ struct Definition {
     pc: u32,
     register: u32,
     span: Span,
+    alias: Option<Span>,
+    primitive: Option<Span>,
 }
 
 struct Index {
@@ -379,6 +742,7 @@ struct Index {
     markers: Vec<(u32, u32, u32)>,
     reads: Vec<Read>,
     definitions: Vec<Definition>,
+    literal_read_exclusions: BTreeSet<(u32, u32)>,
 }
 
 fn reads_in(reads: &[Read], span: Span) -> &[Read] {
@@ -392,20 +756,100 @@ fn index_source(
     function: u32,
     exceptions: &BTreeSet<u32>,
 ) -> DecompilerResult<Index> {
+    index_source_mode(source, function, exceptions, false)
+}
+
+fn index_source_mode(
+    source: &str,
+    function: u32,
+    exceptions: &BTreeSet<u32>,
+    object_mode: bool,
+) -> DecompilerResult<Index> {
+    if object_mode && source.len() > OBJECT_SOURCE_CAP {
+        return Err(error("objects source byte cap exceeded"));
+    }
     if source.len() > u32::MAX as usize {
         return Err(error("Exporter source exceeds AST span bounds"));
     }
     let allocator = oxc_allocator::Allocator::default();
     let parsed =
         oxc_parser::Parser::new(&allocator, source, oxc_span::SourceType::default()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.errors.is_empty() || parsed.panicked {
         return Err(error("sites requires valid complete exporter JavaScript"));
     }
     let mut syntax = Syntax {
         source,
+        object_mode,
         ..Syntax::default()
     };
     syntax.visit_program(&parsed.program);
+    if let Some(message) = syntax.object_error {
+        return Err(error(message));
+    }
+    if object_mode {
+        if syntax.root_register.is_none() {
+            return Err(error("objects requires one root register binding"));
+        }
+        let root = syntax
+            .root_function
+            .ok_or_else(|| error("objects requires one root function scope"))?;
+        let mut exporter_body = None;
+        for statement in &parsed.program.body {
+            let Statement::ExpressionStatement(statement) = statement else {
+                continue;
+            };
+            let Expression::AssignmentExpression(assignment) = &statement.expression else {
+                continue;
+            };
+            let AssignmentTarget::ComputedMemberExpression(member) = &assignment.left else {
+                continue;
+            };
+            if !member.object.is_specific_id("F") {
+                continue;
+            }
+            if !assignment.operator.is_assign()
+                || !matches!(&member.expression, Expression::NumericLiteral(id) if id.value == f64::from(function))
+            {
+                return Err(error("objects wrong-function exporter root"));
+            }
+            let Expression::FunctionExpression(fun) = &assignment.right else {
+                return Err(error("objects root requires a literal function"));
+            };
+            if fun.span != root || exporter_body.is_some() {
+                return Err(error("objects requires one matching exporter root"));
+            }
+            exporter_body = fun.body.as_ref().map(|body| body.span);
+        }
+        let body = exporter_body.ok_or_else(|| error("objects missing matching exporter root"))?;
+        if parsed.program.comments.iter().any(|comment| {
+            source[comment.span.start as usize..comment.span.end as usize]
+                .starts_with("// HBC function ")
+                && (comment.span.start < body.start || comment.span.end > body.end)
+        }) {
+            return Err(error("objects PC marker outside exporter root"));
+        }
+        if syntax
+            .reads
+            .iter()
+            .chain(&syntax.writes)
+            .any(|(_, span)| span.start < root.start || span.end > root.end)
+            || syntax
+                .sites
+                .iter()
+                .any(|site| site.span.start < root.start || site.span.end > root.end)
+        {
+            return Err(error(
+                "objects register/property syntax outside root function",
+            ));
+        }
+    }
+    if object_mode
+        && (syntax.reads.len() > 2_097_152
+            || syntax.writes.len() > 1_048_576
+            || syntax.sites.len() > 1_048_576)
+    {
+        return Err(error("objects syntax record cap exceeded"));
+    }
     if syntax.malformed_constructor {
         return Err(error("Malformed exporter construct helper"));
     }
@@ -452,6 +896,7 @@ fn index_source(
     let mut reads = Vec::with_capacity(syntax.reads.len());
     let mut definitions = Vec::with_capacity(syntax.writes.len());
     let mut prior: BTreeMap<u32, usize> = BTreeMap::new();
+    let mut ambiguous = BTreeSet::new();
     let mut previous = 0;
     for (i, &(pc, _, start)) in markers.iter().enumerate() {
         let end = markers.get(i + 1).map_or(source.len() as u32, |m| m.1);
@@ -462,11 +907,17 @@ fn index_source(
                 .is_some()
         {
             prior.clear();
+            ambiguous.clear();
         }
         let ws = syntax.writes.partition_point(|(_, s)| s.start < start);
         let we = syntax.writes.partition_point(|(_, s)| s.start < end);
         let mut first_end = BTreeMap::new();
+        let mut write_counts = BTreeMap::<u32, usize>::new();
         for &(reg, span) in &syntax.writes[ws..we] {
+            if object_mode && span.end > end {
+                return Err(error("objects definition crosses PC boundary"));
+            }
+            *write_counts.entry(reg).or_default() += 1;
             first_end
                 .entry(reg)
                 .and_modify(|e: &mut u32| *e = (*e).min(span.end))
@@ -486,6 +937,8 @@ fn index_source(
                 "unresolved_intra_pc_write"
             } else if definition.is_some() {
                 "prior_definition"
+            } else if object_mode && ambiguous.contains(&register) {
+                "unresolved_ambiguous_source_write"
             } else {
                 "unresolved_block_entry_or_external"
             };
@@ -499,12 +952,28 @@ fn index_source(
         let last_boundary = syntax.boundaries.range(start..end).next_back().copied();
         if last_boundary.is_some() {
             prior.clear();
+            ambiguous.clear();
         }
         for &(register, span) in &syntax.writes[ws..we] {
             let id = definitions.len();
-            definitions.push(Definition { pc, register, span });
+            definitions.push(Definition {
+                pc,
+                register,
+                span,
+                alias: syntax.aliases.get(&span.start).copied(),
+                primitive: syntax.primitive_rhs.get(&span.start).copied(),
+            });
             if last_boundary.is_none_or(|b| span.start > b) {
-                prior.insert(register, id);
+                if object_mode
+                    && (write_counts[&register] > 1
+                        || syntax.ambiguous_writes.contains(&span.start))
+                {
+                    prior.remove(&register);
+                    ambiguous.insert(register);
+                } else {
+                    prior.insert(register, id);
+                    ambiguous.remove(&register);
+                }
             }
         }
         previous = start;
@@ -514,6 +983,7 @@ fn index_source(
         markers,
         reads,
         definitions,
+        literal_read_exclusions: syntax.literal_read_exclusions,
     })
 }
 
@@ -638,6 +1108,43 @@ fn operand(source: &str, index: &Index, span: &OperandSpan, depth: usize) -> Ope
     }
 }
 
+fn object_operand(
+    source: &str,
+    index: &Index,
+    span: &OperandSpan,
+    depth: usize,
+    budget: &mut ObjectBudget,
+) -> DecompilerResult<Operand> {
+    // Preflight the bounded traversal before allocating verbose edge/snippet copies.
+    budget.charge()?;
+    let reads = reads_in(&index.reads, span.span);
+    let mut seen = BTreeSet::new();
+    let mut queue = VecDeque::new();
+    for read in reads.iter().take(NODE_CAP) {
+        budget.charge()?;
+        if let Some(id) = read.definition {
+            queue.push_back((id, 1));
+        }
+    }
+    while let Some((id, level)) = queue.pop_front() {
+        budget.charge()?;
+        if seen.contains(&id) || level > depth || seen.len() == NODE_CAP {
+            continue;
+        }
+        seen.insert(id);
+        for read in reads_in(&index.reads, index.definitions[id].span)
+            .iter()
+            .take(NODE_CAP)
+        {
+            budget.charge()?;
+            if let Some(id) = read.definition {
+                queue.push_back((id, level + 1));
+            }
+        }
+    }
+    Ok(operand(source, index, span, depth))
+}
+
 #[derive(Serialize)]
 struct Site {
     function_id: u32,
@@ -704,18 +1211,22 @@ pub struct SiteFilter {
 
 impl SiteFilter {
     fn matcher(&self) -> DecompilerResult<Option<Regex>> {
+        self.matcher_with_limit(16)
+    }
+
+    fn matcher_with_limit(&self, limit: usize) -> DecompilerResult<Option<Regex>> {
         if self.from_pc.zip(self.to_pc).is_some_and(|(a, b)| a > b) {
             return Err(error("--from-pc must not exceed --to-pc"));
         }
-        if self.matches.len() > 16
+        if self.matches.len() > limit
             || self
                 .matches
                 .iter()
                 .any(|query| query.is_empty() || query.len() > 1024)
         {
-            return Err(error(
-                "--match accepts at most 16 nonempty queries of at most 1024 bytes",
-            ));
+            return Err(error(format!(
+                "--match accepts at most {limit} nonempty queries of at most 1024 bytes"
+            )));
         }
         if self.matches.is_empty() {
             return Ok(None);
@@ -771,19 +1282,31 @@ fn matching_dependencies(
     depth: usize,
     matcher: &Regex,
     definition_matches: &[bool],
-) -> MatchCandidates {
+    mut budget: Option<&mut ObjectBudget>,
+) -> DecompilerResult<MatchCandidates> {
+    let direct = if let Some(b) = budget.as_deref_mut() {
+        b.matches(source, site.span, matcher)?
+    } else {
+        matcher.is_match(&source[site.span.start as usize..site.span.end as usize])
+    };
     let mut result = MatchCandidates {
-        direct: matcher.is_match(&source[site.span.start as usize..site.span.end as usize]),
+        direct,
         definitions: BTreeSet::new(),
         truncated: site.operands.len() > OPERAND_CAP,
         unresolved: false,
     };
     for operand in site.operands.iter().take(OPERAND_CAP) {
+        if let Some(b) = budget.as_deref_mut() {
+            b.charge()?;
+        }
         let reads = reads_in(&index.reads, operand.span);
         result.truncated |= reads.len() > NODE_CAP;
         let mut queue = VecDeque::new();
         let mut visited = BTreeSet::new();
         for read in reads.iter().take(NODE_CAP) {
+            if let Some(b) = budget.as_deref_mut() {
+                b.charge()?;
+            }
             if let Some(id) = read.definition {
                 queue.push_back((id, 1));
             } else {
@@ -791,6 +1314,9 @@ fn matching_dependencies(
             }
         }
         while let Some((id, level)) = queue.pop_front() {
+            if let Some(b) = budget.as_deref_mut() {
+                b.charge()?;
+            }
             if visited.contains(&id) {
                 continue;
             }
@@ -805,6 +1331,9 @@ fn matching_dependencies(
             let reads = reads_in(&index.reads, index.definitions[id].span);
             result.truncated |= reads.len() > NODE_CAP;
             for read in reads.iter().take(NODE_CAP) {
+                if let Some(b) = budget.as_deref_mut() {
+                    b.charge()?;
+                }
                 if let Some(next) = read.definition {
                     queue.push_back((next, level + 1));
                 } else {
@@ -813,7 +1342,7 @@ fn matching_dependencies(
             }
         }
     }
-    result
+    Ok(result)
 }
 
 fn match_evidence(
@@ -894,6 +1423,896 @@ struct CompactDefinition {
 }
 
 type DefinitionTable = BTreeMap<String, CompactDefinition>;
+
+#[derive(Clone, Debug)]
+pub struct ObjectOptions {
+    pub alias_depth: usize,
+    pub depth: usize,
+    pub limit: usize,
+    pub offset: usize,
+    pub max_bytes: usize,
+    pub scan_work: usize,
+    pub matches: Vec<String>,
+}
+
+impl Default for ObjectOptions {
+    fn default() -> Self {
+        Self {
+            alias_depth: 16,
+            depth: 3,
+            limit: 5,
+            offset: 0,
+            max_bytes: 100_000,
+            scan_work: 2_097_152,
+            matches: vec![],
+        }
+    }
+}
+
+fn object_options(options: &ObjectOptions) -> DecompilerResult<Option<Regex>> {
+    if options.alias_depth > 64
+        || options.depth > 8
+        || !(1..=1000).contains(&options.limit)
+        || !(1..=16_777_216).contains(&options.max_bytes)
+        || !(1..=16_777_216).contains(&options.scan_work)
+    {
+        return Err(error("objects bounds: alias_depth 0..64, depth 0..8, limit 1..1000, max_bytes/scan_work 1..16777216"));
+    }
+    SiteFilter {
+        matches: options.matches.clone(),
+        ..SiteFilter::default()
+    }
+    .matcher_with_limit(64)
+}
+
+/// Navigation views retain raw JS; substitutions are source candidates, not execution.
+pub struct LiteralViewOptions {
+    pub matches: Vec<String>,
+    pub from_pc: Option<u32>,
+    pub to_pc: Option<u32>,
+    pub alias_depth: usize,
+    pub limit: usize,
+    pub offset: usize,
+    pub max_bytes: usize,
+    pub scan_work: usize,
+    pub json: bool,
+}
+
+impl Default for LiteralViewOptions {
+    fn default() -> Self {
+        Self {
+            matches: vec![],
+            from_pc: None,
+            to_pc: None,
+            alias_depth: 16,
+            limit: 50,
+            offset: 0,
+            max_bytes: 100_000,
+            scan_work: 2_097_152,
+            json: false,
+        }
+    }
+}
+
+fn literal_view_options(o: &LiteralViewOptions) -> DecompilerResult<Option<Regex>> {
+    if o.alias_depth > 64
+        || !(1..=1000).contains(&o.limit)
+        || !(1..=16_777_216).contains(&o.max_bytes)
+        || !(1..=16_777_216).contains(&o.scan_work)
+    {
+        return Err(error(
+            "read bounds: alias_depth 0..64, limit 1..1000, max_bytes/scan_work 1..16777216",
+        ));
+    }
+    SiteFilter {
+        matches: o.matches.clone(),
+        from_pc: o.from_pc,
+        to_pc: o.to_pc,
+    }
+    .matcher_with_limit(64)
+}
+
+#[derive(Serialize)]
+struct LiteralRead {
+    register: u32,
+    source_span: [u32; 2],
+    status: &'static str,
+    definition_id: Option<String>,
+    definition_pc: Option<u32>,
+    literal_span: Option<[u32; 2]>,
+    alias_definition_ids: Vec<String>,
+    literal: Option<String>,
+}
+
+#[derive(Serialize)]
+struct LiteralRow {
+    pc: u32,
+    source_span: [u32; 2],
+    source: String,
+    view: String,
+    reads: Vec<LiteralRead>,
+    read_count: usize,
+    reads_omitted: usize,
+}
+
+fn primitive_read(
+    source: &str,
+    function: u32,
+    index: &Index,
+    read: &Read,
+    depth: usize,
+    budget: &mut ObjectBudget,
+) -> DecompilerResult<LiteralRead> {
+    budget.charge()?;
+    let mut result = LiteralRead {
+        register: read.register,
+        source_span: [read.span.start, read.span.end],
+        status: read.status,
+        definition_id: None,
+        definition_pc: None,
+        literal_span: None,
+        alias_definition_ids: vec![],
+        literal: None,
+    };
+    if index
+        .literal_read_exclusions
+        .contains(&(read.span.start, read.span.end))
+    {
+        result.status = "assignment_target_not_substituted";
+        return Ok(result);
+    }
+    let mut current = read;
+    loop {
+        budget.charge()?;
+        let Some(id) = current.definition else {
+            result.status = current.status;
+            return Ok(result);
+        };
+        let d = &index.definitions[id];
+        let definition_id = format!("{function}:{}:{}", d.span.start, d.span.end);
+        if let Some(span) = d.primitive {
+            result.definition_id = Some(definition_id);
+            result.definition_pc = Some(d.pc);
+            result.literal_span = Some([span.start, span.end]);
+            if span.end - span.start > 4096 {
+                result.status = "literal_byte_limit";
+            } else {
+                budget.filter_charge(span)?;
+                result.literal = Some(source[span.start as usize..span.end as usize].to_owned());
+                result.status = "source_literal_candidate";
+            }
+            return Ok(result);
+        }
+        let Some(alias) = d.alias else {
+            result.status = "non_primitive_definition";
+            result.definition_id = Some(definition_id);
+            result.definition_pc = Some(d.pc);
+            return Ok(result);
+        };
+        if result.alias_definition_ids.len() == depth {
+            result.status = "alias_depth_limit";
+            return Ok(result);
+        }
+        result.alias_definition_ids.push(definition_id);
+        let [next] = reads_in(&index.reads, alias) else {
+            result.status = "unresolved_alias_read";
+            return Ok(result);
+        };
+        if next.span != alias || next.definition.is_some_and(|next| next >= id) {
+            result.status = "unresolved_alias_read";
+            return Ok(result);
+        }
+        current = next;
+    }
+}
+
+fn literal_view_flags(o: &LiteralViewOptions, offset: usize) -> Vec<String> {
+    let mut flags = vec![
+        "--alias-depth".into(),
+        o.alias_depth.to_string(),
+        "--limit".into(),
+        o.limit.to_string(),
+        "--offset".into(),
+        offset.to_string(),
+        "--max-bytes".into(),
+        o.max_bytes.to_string(),
+        "--scan-work".into(),
+        o.scan_work.to_string(),
+    ];
+    for m in &o.matches {
+        flags.push(format!("--match={m}"));
+    }
+    for (flag, value) in [("--from-pc", o.from_pc), ("--to-pc", o.to_pc)] {
+        if let Some(pc) = value {
+            flags.extend([flag.into(), pc.to_string()]);
+        }
+    }
+    if o.json {
+        flags.push("--json".into());
+    }
+    flags
+}
+
+/// A bounded, source-linked candidate view. This never replaces runnable export.
+pub fn analyze_literal_view_source(
+    source: &str,
+    function: u32,
+    exceptions: &BTreeSet<u32>,
+    o: &LiteralViewOptions,
+) -> DecompilerResult<Vec<u8>> {
+    let matcher = literal_view_options(o)?;
+    let index = index_source_mode(source, function, exceptions, true)?;
+    let mut budget = ObjectBudget {
+        used: 0,
+        cap: o.scan_work,
+        filter_used: 0,
+    };
+    let mut rows = Vec::new();
+    let mut next_offset = None;
+    let mut total = 0usize;
+    let mut construction = 0usize;
+    let mut unresolved = 0usize;
+    let mut omitted = 0usize;
+    for (ordinal, &(pc, _, start)) in index.markers.iter().enumerate() {
+        budget.charge()?;
+        if o.from_pc.is_some_and(|p| pc < p) || o.to_pc.is_some_and(|p| pc > p) {
+            continue;
+        }
+        let end = index
+            .markers
+            .get(ordinal + 1)
+            .map_or(source.len() as u32, |m| m.1);
+        let span = Span::new(start, end);
+        let raw = &source[start as usize..end as usize];
+        let mut matched = matcher
+            .as_ref()
+            .map(|m| budget.matches(source, span, m))
+            .transpose()?
+            .unwrap_or(true);
+        let reads = reads_in(&index.reads, span);
+        let mut candidates = Vec::new();
+        for read in reads {
+            let candidate =
+                primitive_read(source, function, &index, read, o.alias_depth, &mut budget)?;
+            unresolved += usize::from(candidate.status != "source_literal_candidate");
+            if let (Some(m), Some(text)) = (&matcher, &candidate.literal) {
+                matched |= m.is_match(text);
+            }
+            if candidates.len() < 128 {
+                candidates.push(candidate);
+            }
+        }
+        omitted += reads.len().saturating_sub(128);
+        if !matched {
+            continue;
+        }
+        total += 1;
+        if ordinal < o.offset {
+            continue;
+        }
+        if rows.len() == o.limit {
+            next_offset.get_or_insert(ordinal);
+            continue;
+        }
+        // Charge worst-case JSON escaping before duplicating raw source or literals.
+        let estimate = raw.len().saturating_mul(12).saturating_add(
+            candidates
+                .iter()
+                .map(|r| {
+                    r.literal
+                        .as_ref()
+                        .map_or(0, String::len)
+                        .saturating_mul(12)
+                        .saturating_add(r.alias_definition_ids.len().saturating_mul(128))
+                        .saturating_add(1024)
+                })
+                .sum::<usize>(),
+        );
+        construction = construction.saturating_add(estimate);
+        if construction > 16_777_216 {
+            return Err(error(
+                "read construction byte cap exceeded before stdout; narrow the PC range or page",
+            ));
+        }
+        let mut view = String::with_capacity(raw.len());
+        let mut cursor = start as usize;
+        for candidate in &candidates {
+            if let Some(literal) = &candidate.literal {
+                let [a, b] = candidate.source_span;
+                if (a as usize) < cursor || b > end {
+                    return Err(error("read overlapping or cross-PC replacement"));
+                }
+                view.push_str(&source[cursor..a as usize]);
+                view.push('(');
+                view.push_str(literal);
+                view.push(')');
+                cursor = b as usize;
+            }
+        }
+        view.push_str(&source[cursor..end as usize]);
+        rows.push(LiteralRow {
+            pc,
+            source_span: [start, end],
+            source: raw.to_owned(),
+            view,
+            reads: candidates,
+            read_count: reads.len(),
+            reads_omitted: reads.len().saturating_sub(128),
+        });
+    }
+    let continuation = next_offset.map(|offset| serde_json::json!({"command":"read","function":function,
+        "flags":literal_view_flags(o,offset),"input_scope":"same_input_hbc","offset_scope":"Raw PC-marker ordinal before filters",
+        "semantics":"Argument tokens are data, not shell code; paging does not repair unresolved or omitted reads."}));
+    let warning = "Navigation-only source-local literal candidates, NOT executable output or proof of runtime values. Raw source is authoritative. Only string/number/boolean/null literal syntax and plain register copies within normal local blocks are substituted. Calls, heap fields, captures and framework objects are never evaluated. Same-PC/conditional/block/exception uncertainty remains unresolved.";
+    let mut bytes = if o.json {
+        serde_json::to_vec(&serde_json::json!({"schema":"literal-view-v1","schema_version":1,"function":function,
+            "source":"export_function_fragments","source_span_basis":"Complete raw function fragment, excluding workspace prefix",
+            "warning":warning,"format":"json","limit":o.limit,"offset":o.offset,"offset_scope":"Raw PC-marker ordinal before filters",
+            "from_pc":o.from_pc,"to_pc":o.to_pc,"matches":o.matches,"alias_depth":o.alias_depth,
+            "total":total,"unfiltered_total":index.markers.len(),"next_offset":next_offset,"scan_complete":next_offset.is_none(),
+            "summary_scope":"All reads in the selected PC range, including source-filtered-out uncertainty",
+            "unresolved_reads":unresolved,"reads_omitted":omitted,"work_used":budget.used,"work_cap":budget.cap,
+            "filter_work_used":budget.filter_used,"filter_work_cap":OBJECT_FILTER_CAP,"construction_upper_bound":construction,
+            "limits":{"source_bytes":OBJECT_SOURCE_CAP,"candidate_literal_bytes":4096,"reads_per_row":128,"output_bytes":o.max_bytes,
+                "construction_bytes":16_777_216,"syntax_work":OBJECT_SYNTAX_CAP,"syntax_depth":256},
+            "rows":rows,"continuation_query":continuation})).map_err(|e|error(e.to_string()))?
+    } else {
+        let mut text = format!("# F{function} source-local literal view\n# {warning}\n# Spans join complete raw fragments, excluding workspace prefix.\n");
+        for row in &rows {
+            use std::fmt::Write as _;
+            writeln!(
+                text,
+                "PC {} raw [{}:{}]:\n{}",
+                row.pc,
+                row.source_span[0],
+                row.source_span[1],
+                row.source.trim_end()
+            )
+            .unwrap();
+            if row.source != row.view {
+                writeln!(text, "candidate view:\n{}", row.view.trim_end()).unwrap();
+            }
+            for read in &row.reads {
+                writeln!(
+                    text,
+                    "  r[{}] [{}:{}] {} definition={} PC={} literal_span={:?} aliases={}",
+                    read.register,
+                    read.source_span[0],
+                    read.source_span[1],
+                    read.status,
+                    read.definition_id.as_deref().unwrap_or("?"),
+                    read.definition_pc
+                        .map_or_else(|| "?".into(), |p| p.to_string()),
+                    read.literal_span,
+                    read.alias_definition_ids.join(",")
+                )
+                .unwrap();
+            }
+            if row.reads_omitted > 0 {
+                writeln!(text, "  omitted_reads={}", row.reads_omitted).unwrap();
+            }
+        }
+        use std::fmt::Write as _;
+        writeln!(text,"# matched_PCs={total} unresolved_reads={unresolved} omitted_reads={omitted} scan_complete={} work={}/{}",next_offset.is_none(),budget.used,budget.cap).unwrap();
+        if let Some(query) = continuation {
+            writeln!(text, "# continuation_query={query}").unwrap();
+        }
+        text.into_bytes()
+    };
+    if !bytes.ends_with(b"\n") {
+        bytes.push(b'\n');
+    }
+    if bytes.len() > o.max_bytes {
+        return Err(error("read output byte budget exceeded before stdout; narrow the PC range, reduce --limit, or increase --max-bytes"));
+    }
+    Ok(bytes)
+}
+
+pub fn report_literal_view(
+    input: &Path,
+    function: u32,
+    options: &LiteralViewOptions,
+) -> DecompilerResult<Vec<u8>> {
+    literal_view_options(options)?;
+    use std::io::Read;
+    let mut data = Vec::new();
+    std::fs::File::open(input)?
+        .take(134_217_729)
+        .read_to_end(&mut data)?;
+    if data.len() > 134_217_728 {
+        return Err(error("read HBC input cap exceeded before parsing"));
+    }
+    let hbc = HbcFile::parse_for_bundle(&data).map_err(error)?;
+    let header = hbc
+        .functions
+        .get_parsed_header(function)
+        .ok_or_else(|| error("Unknown read function"))?;
+    let exceptions = header
+        .exc_handlers
+        .iter()
+        .flat_map(|h| [h.start, h.end, h.target])
+        .collect();
+    let source = crate::bundle::export_function_fragment_bounded(
+        &hbc,
+        function,
+        OBJECT_SOURCE_CAP,
+        OBJECT_SOURCE_CAP,
+    )?;
+    analyze_literal_view_source(&source, function, &exceptions, options)
+}
+
+/// Compact workspace notes use the same conservative candidates as `read`.
+/// Raw source is always retained; these notes never substitute executable JS.
+#[derive(Default)]
+pub struct WorkspaceLiteralNotes {
+    pub notes: BTreeMap<u32, String>,
+    pub unresolved_reads: usize,
+    pub reads_omitted: usize,
+    pub copy_reads_skipped: usize,
+    pub next_offset: Option<usize>,
+    pub work_used: usize,
+}
+
+#[derive(Serialize)]
+struct WorkspaceLiteralUse {
+    r: u32,
+    use_span: [u32; 2],
+    literal: String,
+    from: [u32; 3],
+    definition: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    via: Vec<String>,
+}
+
+pub fn workspace_literal_notes(
+    source: &str,
+    function: u32,
+    exceptions: &BTreeSet<u32>,
+) -> DecompilerResult<WorkspaceLiteralNotes> {
+    const NOTE_BYTES: usize = 8 * 1024 * 1024;
+    const ROW_BYTES: usize = 64 * 1024;
+    let index = index_source_mode(source, function, exceptions, true)?;
+    let mut result = WorkspaceLiteralNotes::default();
+    let copies: BTreeSet<_> = index
+        .definitions
+        .iter()
+        .filter_map(|d| d.alias)
+        .map(|span| (span.start, span.end))
+        .collect();
+    let mut budget = ObjectBudget {
+        used: 0,
+        cap: 16_777_216,
+        filter_used: 0,
+    };
+    let mut bytes = 0usize;
+    for (ordinal, &(pc, _, start)) in index.markers.iter().enumerate() {
+        if budget.used == budget.cap {
+            result.next_offset = Some(ordinal);
+            break;
+        }
+        budget.charge()?;
+        let end = index
+            .markers
+            .get(ordinal + 1)
+            .map_or(source.len() as u32, |m| m.1);
+        let reads = reads_in(&index.reads, Span::new(start, end));
+        let mut candidates = Vec::new();
+        let mut row_bytes = 0usize;
+        for read in reads.iter().take(128) {
+            // Copies remain in the raw view and provenance chains; annotate actual uses.
+            if copies.contains(&(read.span.start, read.span.end)) {
+                result.copy_reads_skipped += 1;
+                continue;
+            }
+            let candidate = match primitive_read(source, function, &index, read, 16, &mut budget) {
+                Ok(candidate) => candidate,
+                Err(_) if budget.used == budget.cap || budget.filter_used > OBJECT_FILTER_CAP => {
+                    result.next_offset = Some(ordinal);
+                    break;
+                }
+                Err(error) => return Err(error),
+            };
+            if candidate.literal.is_none() {
+                result.unresolved_reads += 1;
+                continue;
+            }
+            let (Some(literal), Some(definition), Some(pc), Some([a, b])) = (
+                candidate.literal,
+                candidate.definition_id,
+                candidate.definition_pc,
+                candidate.literal_span,
+            ) else {
+                return Err(error("workspace literal candidate lacks source provenance"));
+            };
+            let candidate = WorkspaceLiteralUse {
+                r: candidate.register,
+                use_span: candidate.source_span,
+                literal,
+                from: [pc, a, b],
+                definition,
+                via: candidate.alias_definition_ids,
+            };
+            // Exact per-candidate serialization keeps the row bound independent of escaping.
+            let size = serde_json::to_string(&candidate)
+                .map_err(|e| error(e.to_string()))?
+                .replace('\u{2028}', "\\u2028")
+                .replace('\u{2029}', "\\u2029")
+                .len();
+            if row_bytes.saturating_add(size + 1) > ROW_BYTES - 2 {
+                result.reads_omitted += 1;
+                continue;
+            }
+            row_bytes += size + 1;
+            candidates.push(candidate);
+        }
+        result.reads_omitted += reads.len().saturating_sub(128);
+        if result.next_offset.is_some() {
+            break;
+        }
+        if !candidates.is_empty() {
+            let note = serde_json::to_string(&candidates)
+                .map_err(|e| error(e.to_string()))?
+                .replace('\u{2028}', "\\u2028")
+                .replace('\u{2029}', "\\u2029");
+            if bytes.saturating_add(note.len()) > NOTE_BYTES {
+                result.next_offset = Some(ordinal);
+                break;
+            }
+            bytes += note.len();
+            result.notes.insert(pc, note);
+        }
+    }
+    result.work_used = budget.used;
+    Ok(result)
+}
+
+struct ObjectBudget {
+    used: usize,
+    cap: usize,
+    filter_used: usize,
+}
+impl ObjectBudget {
+    fn charge(&mut self) -> DecompilerResult<()> {
+        if self.used == self.cap {
+            return Err(error("objects scan_work cap exceeded before stdout"));
+        }
+        self.used += 1;
+        Ok(())
+    }
+    fn filter_charge(&mut self, span: Span) -> DecompilerResult<()> {
+        let bytes = (span.end - span.start) as usize;
+        if bytes > OBJECT_FILTER_CAP - self.filter_used {
+            return Err(error("objects filter byte-work cap exceeded before stdout"));
+        }
+        self.filter_used += bytes;
+        Ok(())
+    }
+    fn matches(&mut self, source: &str, span: Span, matcher: &Regex) -> DecompilerResult<bool> {
+        self.filter_charge(span)?;
+        Ok(matcher.is_match(&source[span.start as usize..span.end as usize]))
+    }
+}
+
+struct ObjectTrace {
+    status: &'static str,
+    register: Option<u32>,
+    terminal: Option<usize>,
+    aliases: Vec<usize>,
+    alias_depth_truncated: bool,
+}
+
+fn object_trace(
+    index: &Index,
+    site: &SiteSpan,
+    depth: usize,
+    budget: &mut ObjectBudget,
+) -> DecompilerResult<ObjectTrace> {
+    budget.charge()?;
+    let mut trace = ObjectTrace {
+        status: "non_register_expression",
+        register: None,
+        terminal: None,
+        aliases: vec![],
+        alias_depth_truncated: false,
+    };
+    let Some(object) = site.operands.iter().find(|o| o.role == "object") else {
+        return Ok(trace);
+    };
+    let reads = reads_in(&index.reads, object.span);
+    let [read] = reads else {
+        return Ok(trace);
+    };
+    if read.span != object.span {
+        return Ok(trace);
+    }
+    trace.register = Some(read.register);
+    let mut current = read;
+    let mut visited = BTreeSet::new();
+    loop {
+        budget.charge()?;
+        let Some(id) = current.definition else {
+            trace.status = current.status;
+            break;
+        };
+        if !visited.insert(id) {
+            trace.status = "unresolved_alias_cycle";
+            break;
+        }
+        let d = &index.definitions[id];
+        let Some(alias) = d.alias else {
+            trace.status = "resolved";
+            trace.terminal = Some(id);
+            break;
+        };
+        if trace.aliases.len() == depth {
+            trace.status = "alias_depth_truncated";
+            trace.alias_depth_truncated = true;
+            break;
+        }
+        trace.aliases.push(id);
+        let [next] = reads_in(&index.reads, alias) else {
+            trace.status = "unresolved_alias_read";
+            break;
+        };
+        if next.span != alias {
+            trace.status = "unresolved_alias_read";
+            break;
+        }
+        current = next;
+    }
+    Ok(trace)
+}
+
+fn object_flags(o: &ObjectOptions, offset: usize, include_matches: bool) -> Vec<String> {
+    let mut flags = vec![
+        "--alias-depth".into(),
+        o.alias_depth.to_string(),
+        "--depth".into(),
+        o.depth.to_string(),
+        "--limit".into(),
+        o.limit.to_string(),
+        "--offset".into(),
+        offset.to_string(),
+        "--max-bytes".into(),
+        o.max_bytes.to_string(),
+        "--scan-work".into(),
+        o.scan_work.to_string(),
+    ];
+    if include_matches {
+        for m in &o.matches {
+            flags.extend(["--match".into(), m.clone()]);
+        }
+    }
+    flags
+}
+
+/// Source-local object-definition navigation; never resolves heap identity or values.
+pub fn analyze_objects_source(
+    source: &str,
+    function: u32,
+    origin_pc: Option<u32>,
+    exceptions: &BTreeSet<u32>,
+    options: &ObjectOptions,
+) -> DecompilerResult<Vec<u8>> {
+    let o = options;
+    let matcher = object_options(o)?;
+    let index = index_source_mode(source, function, exceptions, true)?;
+    if origin_pc.is_some_and(|pc| index.markers.binary_search_by_key(&pc, |m| m.0).is_err()) {
+        return Err(error("Unknown exact objects origin PC"));
+    }
+    let mut budget = ObjectBudget {
+        used: 0,
+        cap: o.scan_work,
+        filter_used: 0,
+    };
+    let mut definition_matches = Vec::with_capacity(index.definitions.len());
+    for d in &index.definitions {
+        definition_matches.push(match &matcher {
+            Some(m) => {
+                budget.charge()?;
+                budget.matches(source, d.span, m)?
+            }
+            None => false,
+        });
+    }
+    let mut selected = Vec::new();
+    let mut traces = Vec::new();
+    let mut next_offset = None;
+    let mut construction_bytes = 0usize;
+    let mut total = 0usize;
+    let mut unfiltered_total = 0usize;
+    let mut unresolved_origins = 0usize;
+    let mut alias_truncated = 0usize;
+    let mut non_register = 0usize;
+    let mut dependency_search_truncated_sites = 0usize;
+    let mut unresolved_dependency_sites = 0usize;
+    let mut ordinals = BTreeMap::new();
+    for site in index.syntax.iter().filter(|s| s.kind == "property-write") {
+        unfiltered_total += 1;
+        let marker = index.markers.partition_point(|m| m.2 <= site.span.start);
+        if marker == 0 {
+            return Err(error("objects site has unknown PC"));
+        }
+        let (pc, _, body_start) = index.markers[marker - 1];
+        let end = index
+            .markers
+            .get(marker)
+            .map_or(source.len() as u32, |m| m.1);
+        if site.span.end > end {
+            return Err(error("objects site crosses PC boundary"));
+        }
+        let ordinal = ordinals.entry(pc).or_insert(0usize);
+        let this_ordinal = *ordinal;
+        *ordinal += 1;
+        let trace = object_trace(&index, site, o.alias_depth, &mut budget)?;
+        unresolved_origins +=
+            usize::from(trace.status != "resolved" && trace.status != "non_register_expression");
+        alias_truncated += usize::from(trace.alias_depth_truncated);
+        non_register += usize::from(trace.status == "non_register_expression");
+        if origin_pc.is_some_and(|wanted| {
+            trace
+                .terminal
+                .is_none_or(|id| index.definitions[id].pc != wanted)
+        }) {
+            continue;
+        }
+        let matches = matcher
+            .as_ref()
+            .map(|m| {
+                matching_dependencies(
+                    source,
+                    &index,
+                    site,
+                    o.depth,
+                    m,
+                    &definition_matches,
+                    Some(&mut budget),
+                )
+            })
+            .transpose()?;
+        if let Some(m) = &matches {
+            dependency_search_truncated_sites += usize::from(m.truncated);
+            unresolved_dependency_sites += usize::from(m.unresolved);
+            if !m.direct && m.definitions.is_empty() {
+                continue;
+            }
+        }
+        let store_ordinal = unfiltered_total - 1;
+        if store_ordinal >= o.offset && selected.len() == o.limit && next_offset.is_none() {
+            next_offset = Some(store_ordinal);
+        }
+        if store_ordinal >= o.offset && selected.len() < o.limit {
+            if let Some(m) = &matches {
+                if m.direct {
+                    budget.filter_charge(site.span)?;
+                }
+                for &id in m.definitions.iter().take(8 - usize::from(m.direct)) {
+                    budget.filter_charge(index.definitions[id].span)?;
+                }
+            }
+            let selected_site = Site {
+                function_id: function,
+                pc,
+                kind: site.kind,
+                source_span: [site.span.start, site.span.end],
+                ordinal: this_ordinal,
+                exact_expression: snippet(source, site.span),
+                source: snippet(source, Span::new(body_start, end)),
+                operands: site
+                    .operands
+                    .iter()
+                    .take(OPERAND_CAP)
+                    .map(|s| object_operand(source, &index, s, o.depth, &mut budget))
+                    .collect::<DecompilerResult<_>>()?,
+                operand_count: site.operands.len(),
+                operands_truncated: site.operands.len() > OPERAND_CAP,
+                slot: site.slot,
+                source_matches: matches.as_ref().map(|m| {
+                    source_matches(source, &index, site, pc, matcher.as_ref().unwrap(), m)
+                }),
+            };
+            construction_bytes += serde_json::to_vec(&selected_site)
+                .map_err(|e| error(e.to_string()))?
+                .len();
+            if construction_bytes > 16_777_216 {
+                return Err(error(
+                    "objects pre-compaction construction byte cap exceeded before stdout",
+                ));
+            }
+            selected.push(selected_site);
+            traces.push(trace);
+        }
+        total += 1;
+    }
+    let follow_up_queries = follow_up_queries(&selected);
+    let (mut sites, mut definitions) = compact_sites(selected)?;
+    let mut query_pcs = BTreeSet::new();
+    for (site, trace) in sites.as_array_mut().unwrap().iter_mut().zip(traces) {
+        let mut intern = |id: usize| {
+            let d = &index.definitions[id];
+            intern_definition(
+                &mut definitions,
+                function,
+                d.pc,
+                [d.span.start, d.span.end],
+                d.register,
+                snippet(source, d.span),
+            )
+        };
+        let terminal = trace.terminal.map(|id| {
+            query_pcs.insert(index.definitions[id].pc);
+            intern(id)
+        });
+        let aliases = trace.aliases.into_iter().map(intern).collect::<Vec<_>>();
+        site["object_origin"] = serde_json::json!({"status":trace.status,"register":trace.register,"terminal_definition":terminal,"alias_definition_ids":aliases,"alias_depth_truncated":trace.alias_depth_truncated});
+    }
+    let object_queries = query_pcs.into_iter().map(|pc| {
+        budget.charge()?;
+        let start = index.definitions.partition_point(|d| d.pc < pc);
+        let end = index.definitions.partition_point(|d| d.pc <= pc);
+        let mut ids = Vec::new();
+        for d in index.definitions[start..end].iter().take(64) {
+            budget.charge()?;
+            ids.push(format!("{function}:{}:{}",d.span.start,d.span.end));
+        }
+        Ok(serde_json::json!({"command":"objects","function":function,"origin_pc":pc,
+            "origin_scope":"pc_wide_definition_union","terminal_definition_ids":ids,
+            "source_definition_count":end-start,"definition_ids_truncated":end-start>64,
+            "flags":object_flags(o,0,false),"input_scope":"same_input_hbc",
+            "semantics":"Inspect source writes rooted at any definition at this PC. Match terms and offset deliberately cleared. PC-wide source-definition IDs remain distinct and may include definitions not selected as origins; this union is not one object or runtime heap identity."}))
+    }).collect::<DecompilerResult<Vec<_>>>()?;
+    let continuation_query=next_offset.map(|offset|serde_json::json!({"command":"objects","function":function,"origin_pc":origin_pc,"flags":object_flags(o,offset,true),"input_scope":"same_input_hbc","semantics":"Continue matched source-record paging with the original input and chosen binary. Argument tokens are data, never shell code."}));
+    let report = serde_json::json!({"schema":"objects-v1","schema_version":1,"source":"export_function_fragments","parsed_source_complete":true,"function":function,"origin_pc":origin_pc,"format":"compact",
+        "origin_scope":"pc_wide_definition_union","semantics":"Source-local property writes grouped by terminal prior register-definition PC through plain register copies. Anchors union distinct definitions at that PC, not one object. Not runtime objects, allocation identity, evaluated fields, constructor semantics, execution order or frame identity. No JS executes.",
+        "alias_policy":"Only simple plain r[N] = r[M] copies. Member accesses, calls, constructor arguments and arbitrary expression dependencies are not aliases. Intra-PC/conditional writes and cross-block/exception entry remain unresolved.",
+        "negative_result_policy":"Unresolved or omitted origins/dependencies cannot prove runtime absence. Discovery covers bounded source candidates; sibling mode is not a complete heap or field-value reconstruction.",
+        "depth":o.depth,"alias_depth":o.alias_depth,"limit":o.limit,"offset":o.offset,"offset_scope":"Raw property-store ordinal in this function, before origin or source filters", "matches":o.matches,"total":total,"unfiltered_total":unfiltered_total,"next_offset":next_offset,"scan_complete":next_offset.is_none(),
+        "work_used":budget.used,"work_cap":budget.cap,"filter_work_used":budget.filter_used,"filter_work_cap":OBJECT_FILTER_CAP,
+        "origin_summary":{"scope":"All eligible property-write sites, including source-filtered-out uncertainty","unresolved_origins":unresolved_origins,"alias_depth_truncated":alias_truncated,"non_register_expressions":non_register},
+        "filter_summary":{"dependency_search_truncated_sites":dependency_search_truncated_sites,"unresolved_dependency_sites":unresolved_dependency_sites,"match_policy":"OR escaped case-insensitive raw site/local candidate syntax, not decoded names or values; source search depth is bounded."},
+        "construction_bytes":construction_bytes,"limits":{"source_bytes":OBJECT_SOURCE_CAP,"output_bytes":16_777_216,"pre_compaction_bytes":16_777_216,"syntax_work":OBJECT_SYNTAX_CAP,"syntax_depth":256,"instructions_or_writes":1_048_576,"reads":2_097_152,"nodes_per_operand":NODE_CAP,"operands_per_record":OPERAND_CAP,"snippet_bytes":PREVIEW},
+        "definitions":definitions,"sites":sites,"object_queries":object_queries,"follow_up_queries":follow_up_queries,"continuation_query":continuation_query});
+    let mut bytes = serde_json::to_vec(&report).map_err(|e| error(e.to_string()))?;
+    bytes.push(b'\n');
+    if bytes.len() > o.max_bytes {
+        return Err(error("objects output byte budget exceeded before stdout"));
+    }
+    Ok(bytes)
+}
+
+pub fn report_objects(
+    input: &Path,
+    function: u32,
+    origin_pc: Option<u32>,
+    options: &ObjectOptions,
+) -> DecompilerResult<Vec<u8>> {
+    object_options(options)?;
+    use std::io::Read;
+    let mut data = Vec::new();
+    std::fs::File::open(input)?
+        .take(134_217_729)
+        .read_to_end(&mut data)?;
+    if data.len() > 134_217_728 {
+        return Err(error("objects HBC input byte cap exceeded before parsing"));
+    }
+    let hbc = HbcFile::parse_for_bundle(&data).map_err(error)?;
+    let header = hbc
+        .functions
+        .get_parsed_header(function)
+        .ok_or_else(|| error(format!("Unknown function {function}")))?;
+    let exceptions = header
+        .exc_handlers
+        .iter()
+        .flat_map(|h| [h.start, h.end, h.target])
+        .collect();
+    let source = crate::bundle::export_function_fragment_bounded(
+        &hbc,
+        function,
+        OBJECT_SOURCE_CAP,
+        OBJECT_SOURCE_CAP,
+    )?;
+    analyze_objects_source(&source, function, origin_pc, &exceptions, options)
+}
 
 fn intern_definition(
     table: &mut DefinitionTable,
@@ -1121,9 +2540,12 @@ fn catalog_sources_format(
             {
                 continue;
             }
-            let matches = matcher.as_ref().map(|m| {
-                matching_dependencies(source, &index, site, depth, m, &definition_matches)
-            });
+            let matches = matcher
+                .as_ref()
+                .map(|m| {
+                    matching_dependencies(source, &index, site, depth, m, &definition_matches, None)
+                })
+                .transpose()?;
             if let Some(matches) = &matches {
                 dependency_search_truncated_sites += usize::from(matches.truncated);
                 unresolved_dependency_sites += usize::from(matches.unresolved);

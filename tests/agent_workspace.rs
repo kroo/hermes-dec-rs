@@ -25,7 +25,11 @@ fn exports_every_complete_function_with_a_searchable_index() {
     assert_eq!(manifest["schema_version"], 1);
     assert_eq!(manifest["hbc_version"], hbc.header.version());
     assert_eq!(manifest["function_count"], hbc.functions.count());
-    assert_eq!(manifest["file_count"], u64::from(hbc.functions.count()) + 4);
+    assert_eq!(
+        manifest["file_count"],
+        u64::from(hbc.functions.count()) * 2 + 4
+    );
+    assert_eq!(manifest["view_directory"], "view");
     assert_eq!(manifest["guide_path"], "GUIDE.md");
     assert!(manifest["js_bytes_description"]
         .as_str()
@@ -48,8 +52,9 @@ fn exports_every_complete_function_with_a_searchable_index() {
     let entries = manifest["functions"].as_array().unwrap();
     assert_eq!(entries.len(), rows.len());
     let mut bytes = 0;
+    let mut view_bytes = 0;
     let navigation = manifest["navigation"].as_array().unwrap();
-    assert_eq!(navigation.len(), 7);
+    assert_eq!(navigation.len(), 10);
     for query in navigation {
         assert_eq!(query["command"], "hermes-dec-rs");
         assert_eq!(query["function"], "FUNCTION");
@@ -69,6 +74,14 @@ fn exports_every_complete_function_with_a_searchable_index() {
     assert_eq!(navigation[5]["pc"], "PC");
     assert_eq!(navigation[5]["flags"], serde_json::json!(["--text"]));
     assert_eq!(navigation[6]["subcommand"], "properties");
+    assert_eq!(navigation[7]["subcommand"], "objects");
+    assert_eq!(navigation[8]["subcommand"], "read");
+    assert_eq!(navigation[9]["subcommand"], "json-literals");
+    assert!(navigation[7].get("pc").is_none());
+    assert_eq!(
+        navigation[7]["flags"],
+        serde_json::json!(["--match", "TEXT"])
+    );
     assert_eq!(
         navigation[6]["flags"],
         serde_json::json!(["--match", "KEY"])
@@ -106,6 +119,14 @@ fn exports_every_complete_function_with_a_searchable_index() {
             hbc.functions.get_function_name(id, &hbc.strings).unwrap()
         );
         assert_eq!(entry["js_bytes"], code.len());
+        let view_path = format!("view/f{id}.txt");
+        assert_eq!(entry["view_path"], view_path);
+        assert_eq!(row["view_path"], view_path);
+        let view = fs::read_to_string(output.join(view_path)).unwrap();
+        assert_eq!(entry["view_bytes"], view.len());
+        assert!(view.contains("# literal_note_status:"));
+        assert!(entry["literal_notes"].is_object());
+        view_bytes += view.len();
         assert_eq!(row["id"], id);
         assert_eq!(row["name"], entry["name"]);
         assert_eq!(row["path"], entry["path"]);
@@ -134,6 +155,7 @@ fn exports_every_complete_function_with_a_searchable_index() {
     assert!(runtime.ends_with(include_str!("../src/bundle/runtime.js")));
     assert_eq!(manifest["runtime_bytes"], runtime.len());
     assert_eq!(manifest["js_bytes"], bytes + runtime.len());
+    assert_eq!(manifest["views_bytes"], view_bytes);
     let guide = fs::read_to_string(output.join("GUIDE.md")).unwrap();
     for topic in [
         "complete f<ID>.js",
@@ -150,12 +172,82 @@ fn exports_every_complete_function_with_a_searchable_index() {
         "scan_complete",
         "origins INPUT ID PC --text",
         "omits typed graph nodes",
+        "objects INPUT ID --match TEXT",
+        "object_queries",
+        "Only plain register copies",
         "Do not execute",
     ] {
         assert!(guide.contains(topic), "missing guide topic: {topic}");
     }
-    assert_eq!(fs::read_dir(&output).unwrap().count(), rows.len() + 4);
+    assert_eq!(fs::read_dir(&output).unwrap().count(), rows.len() + 5);
+    assert_eq!(
+        fs::read_dir(output.join("view")).unwrap().count(),
+        rows.len()
+    );
     assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn raw_only_workspace_preserves_raw_fragments_without_views() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = temp.path().join("raw");
+    hermes_dec_rs::cli::workspace::workspace_with_views(fixture(), &output, false).unwrap();
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(output.join("manifest.json")).unwrap()).unwrap();
+    let count = manifest["function_count"].as_u64().unwrap();
+    assert_eq!(manifest["file_count"], count + 4);
+    assert_eq!(manifest["views_bytes"], 0);
+    assert!(manifest.get("view_directory").is_none());
+    assert!(!output.join("view").exists());
+    assert_eq!(fs::read_dir(&output).unwrap().count() as u64, count + 4);
+    for function in manifest["functions"].as_array().unwrap() {
+        assert!(function.get("view_path").is_none());
+        assert!(function.get("literal_notes").is_none());
+    }
+}
+
+#[test]
+fn wired_cli_reports_and_writes_the_selected_workspace_layout() {
+    let temp = tempfile::tempdir().unwrap();
+    for raw_only in [false, true] {
+        let output = temp.path().join(if raw_only { "raw" } else { "views" });
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_hermes-dec-rs"));
+        command
+            .arg("workspace")
+            .arg(fixture())
+            .arg("-o")
+            .arg(&output);
+        if raw_only {
+            command.arg("--raw-only");
+        }
+        let result = command.output().unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let response: Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert_eq!(
+            response["views"],
+            if raw_only {
+                Value::Null
+            } else {
+                Value::from("view")
+            }
+        );
+        assert_eq!(output.join("view").exists(), !raw_only);
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(output.join("manifest.json")).unwrap()).unwrap();
+        for function in manifest["functions"].as_array().unwrap() {
+            if !raw_only {
+                let text = fs::read_to_string(output.join(function["view_path"].as_str().unwrap()))
+                    .unwrap();
+                assert!(text.contains("@0"));
+                assert!(text.contains("# literal_note_status:"));
+                assert_eq!(text.len() as u64, function["view_bytes"].as_u64().unwrap());
+            }
+        }
+    }
 }
 
 #[test]

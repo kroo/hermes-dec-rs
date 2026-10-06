@@ -10,7 +10,10 @@ use hermes_dec_rs::cli;
 #[command(
     after_help = concat!(
         "Agent workflow: inputs . finds hidden/Git-ignored header candidates, largest first.\n",
-        "Then inspect INPUT, search INPUT QUERY --json, and show INPUT FUNCTION_IDS for complete JS.\n",
+        "Then workspace INPUT -o NEW_DIR: start with view/f<ID>.txt (compact PC-labelled JS and separate literal candidates); raw f<ID>.js stays authoritative.\n",
+        "Use index.jsonl to find function IDs; inspect INPUT, search INPUT QUERY --json, and show INPUT FUNCTION_IDS are alternatives.\n",
+        "Source-linked literal view: read INPUT FUNCTION --match TEXT pairs raw JS with local string/number/boolean/null candidates.\n",
+        "Embedded JSON strings: json-literals INPUT FUNCTION --match TEXT --pointer /PATH slices literal documents, not runtime objects.\n",
         "Search is OR by default; --all intersects queries and --word avoids substring noise.\n",
         "Huge initializers: sites INPUT FUNCTION --match NAME --depth 8 --compact filters local source dependencies.\n",
         "--from-pc/--to-pc narrow inclusive byte-PC ranges; --kind call separates callee/receiver/user arguments.\n",
@@ -19,6 +22,7 @@ use hermes_dec_rs::cli;
         "Opaque initializer stores: symbols INPUT FUNCTION --match NAME extracts raw literal mentions from bounded cross-block RHS candidates.\n",
         "Use symbols --slot N for a stored-slot candidate view; origins --text reduces JSON overhead without evaluating JS.\n",
         "Property keys: properties INPUT FUNCTION --match NAME keeps key/value source candidates separate across normal blocks.\n",
+        "Record/array initializer writes: objects INPUT FUNCTION --match NAME discovers local source origins; object_queries pages sibling writes without evaluating fields.\n",
         "Inspect a candidate: sites INPUT ANCESTOR --kind slot-write --slot N --depth 8 --compact.\n",
         "Use show --around-pc PC --context 250 for bounded JS, refs for static closures/calls, trace for one definition DAG.\n",
         "All matches/captures are syntactic navigation, not evaluated values or authoritative runtime bindings.\n",
@@ -35,6 +39,78 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Slice embedded JSON string literals without executing JS or inferring schema reachability
+    JsonLiterals {
+        input: PathBuf,
+        function: u32,
+        /// OR case-insensitive substring matches on complete decoded JSON text
+        #[arg(long = "match")]
+        matches: Vec<String>,
+        /// Restrict to an existing root instruction byte PC
+        #[arg(long)]
+        pc: Option<u32>,
+        /// Strict RFC6901 pointer; omitted or empty selects the complete document
+        #[arg(long)]
+        pointer: Option<String>,
+        #[arg(long, default_value_t = 32)]
+        limit: usize,
+        /// Raw root string-expression ordinal before all filters
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 1_048_576)]
+        max_bytes: usize,
+        #[arg(long, default_value_t = 67_108_864)]
+        scan_work: usize,
+    },
+    /// Pair raw decompiled JS with a bounded primitive-literal candidate view (not executable output)
+    Read {
+        input: PathBuf,
+        function: u32,
+        /// OR raw source/literal syntax; no call, capture or framework evaluation
+        #[arg(long = "match")]
+        matches: Vec<String>,
+        #[arg(long)]
+        from_pc: Option<u32>,
+        #[arg(long)]
+        to_pc: Option<u32>,
+        #[arg(long, default_value_t = 16)]
+        alias_depth: usize,
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+        /// Raw PC-marker ordinal before source/range filters
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+        #[arg(long, default_value_t = 2_097_152)]
+        scan_work: usize,
+        /// Machine-readable source spans and candidate provenance (default: compact text)
+        #[arg(long)]
+        json: bool,
+    },
+    /// Group property writes by bounded local source definitions through plain register aliases
+    Objects {
+        input: PathBuf,
+        function: u32,
+        /// Optional source-definition byte PC from an object_queries entry
+        origin_pc: Option<u32>,
+        /// OR raw site/local dependency syntax, not evaluated keys or values
+        #[arg(long = "match")]
+        matches: Vec<String>,
+        #[arg(long, default_value_t = 16)]
+        alias_depth: usize,
+        #[arg(long, default_value_t = 3)]
+        depth: usize,
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        /// Raw property-store ordinal, not matched row index
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+        #[arg(long, default_value_t = 2_097_152)]
+        scan_work: usize,
+    },
     /// Inspect property-write keys and values with separate bounded source provenance
     Properties {
         input: PathBuf,
@@ -187,12 +263,18 @@ enum Commands {
         #[arg(long, default_value_t = 10)]
         limit: usize,
     },
-    /// Generate complete JS function files, a searchable index and a navigation guide
+    /// Generate raw JS, compact views, source dependency tables, index and guide
     Workspace {
         input: PathBuf,
         /// New output directory (must not already exist)
         #[arg(short, long)]
         output: PathBuf,
+        /// Omit compact inspection views for a raw-only controlled comparison
+        #[arg(long)]
+        raw_only: bool,
+        /// Source navigation sidecars, not runtime bindings or evaluated framework records
+        #[arg(long, value_enum, default_value = "all", conflicts_with = "raw_only")]
+        evidence: cli::workspace::EvidenceDesign,
     },
     /// Find names/literals with function IDs and byte PCs; bounded results, no huge dumps
     Search {
@@ -516,6 +598,66 @@ fn main() -> Result<()> {
                 cli::origins::run(&input, query).map_err(|e| miette!("{e}"))
             }
         }
+        Commands::JsonLiterals {
+            input,
+            function,
+            matches,
+            pc,
+            pointer,
+            limit,
+            offset,
+            max_bytes,
+            scan_work,
+        } => cli::json_literals::run(
+            &input,
+            function,
+            &cli::json_literals::Options {
+                matches,
+                pc,
+                pointer,
+                limit,
+                offset,
+                max_bytes,
+                scan_work,
+            },
+        )
+        .map_err(|e| miette!("{e}")),
+        Commands::Read {
+            input,
+            function,
+            matches,
+            from_pc,
+            to_pc,
+            alias_depth,
+            limit,
+            offset,
+            max_bytes,
+            scan_work,
+            json,
+        } => {
+            use std::io::Write;
+            let bytes = cli::sites::report_literal_view(
+                &input,
+                function,
+                &cli::sites::LiteralViewOptions {
+                    matches,
+                    from_pc,
+                    to_pc,
+                    alias_depth,
+                    limit,
+                    offset,
+                    max_bytes,
+                    scan_work,
+                    json,
+                },
+            )
+            .map_err(|e| miette!("{e}"))?;
+            std::io::stdout()
+                .lock()
+                .write_all(&bytes)
+                .map_err(|e| miette!("{e}"))?;
+            Ok(())
+        }
         Commands::Properties {
             input,
             function,
@@ -533,6 +675,32 @@ fn main() -> Result<()> {
                 matches,
                 depth,
                 definition_limit,
+                limit,
+                offset,
+                max_bytes,
+                scan_work,
+            },
+        )
+        .map_err(|e| miette!("{e}")),
+        Commands::Objects {
+            input,
+            function,
+            origin_pc,
+            matches,
+            alias_depth,
+            depth,
+            limit,
+            offset,
+            max_bytes,
+            scan_work,
+        } => cli::objects::run(
+            &input,
+            function,
+            origin_pc,
+            &cli::objects::Options {
+                matches,
+                alias_depth,
+                depth,
                 limit,
                 offset,
                 max_bytes,
@@ -629,11 +797,22 @@ fn main() -> Result<()> {
             depth,
             limit,
         } => cli::slots::run(&input, function, slot, depth, limit).map_err(|e| miette!("{e}")),
-        Commands::Workspace { input, output } => {
-            cli::workspace::workspace(&input, &output).map_err(|e| miette!("{e}"))?;
+        Commands::Workspace {
+            input,
+            output,
+            raw_only,
+            evidence,
+        } => {
+            let evidence = if raw_only {
+                cli::workspace::EvidenceDesign::None
+            } else {
+                evidence
+            };
+            cli::workspace::workspace_with_evidence(&input, &output, !raw_only, evidence)
+                .map_err(|e| miette!("{e}"))?;
             println!(
                 "{}",
-                serde_json::json!({"schema_version":1,"workspace":output,"manifest":"manifest.json","index":"index.jsonl","guide":"GUIDE.md"})
+                serde_json::json!({"schema_version":1,"workspace":output,"manifest":"manifest.json","index":"index.jsonl","guide":"GUIDE.md","views":if raw_only {None} else {Some("view")},"evidence":format!("{evidence:?}").to_lowercase()})
             );
             Ok(())
         }

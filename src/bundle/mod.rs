@@ -331,7 +331,7 @@ pub(crate) fn operands(
         .collect()
 }
 
-struct Lowerer<'a, 'data> {
+struct Lowerer<'a, 'data, const BOUNDED: bool = false> {
     hbc: &'a HbcFile<'data>,
     strings: &'a [String],
     index: u32,
@@ -339,6 +339,66 @@ struct Lowerer<'a, 'data> {
     env_size: u32,
     generator: bool,
     boundaries: Vec<u32>,
+    source_limit: usize,
+}
+
+const MAX_FRAGMENT_BYTES: usize = 64 * 1024 * 1024;
+
+fn source_budget_error() -> DecompilerError {
+    error("Bounded fragment exceeds max_source_bytes")
+}
+
+// The unbounded instantiation keeps ordinary String reservation and writes.
+struct FragmentSource<const BOUNDED: bool> {
+    text: String,
+    limit: usize,
+    exceeded: bool,
+}
+
+impl<const BOUNDED: bool> FragmentSource<BOUNDED> {
+    #[inline]
+    fn reserve(&mut self, additional: usize) {
+        if BOUNDED {
+            self.text
+                .reserve_exact(additional.min(self.limit.saturating_sub(self.text.len())));
+        } else {
+            self.text.reserve(additional);
+        }
+    }
+
+    #[inline]
+    fn push_str(&mut self, value: &str) {
+        self.write_str(value).unwrap();
+    }
+
+    fn check(&self) -> DecompilerResult<()> {
+        if BOUNDED && self.exceeded {
+            Err(source_budget_error())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<const BOUNDED: bool> Write for FragmentSource<BOUNDED> {
+    #[inline]
+    fn write_str(&mut self, value: &str) -> std::fmt::Result {
+        if BOUNDED {
+            if self.exceeded || value.len() > self.limit.saturating_sub(self.text.len()) {
+                self.exceeded = true;
+                return Ok(());
+            }
+            let needed = self.text.len() + value.len();
+            if needed > self.text.capacity() {
+                let capacity = needed
+                    .max(self.text.capacity().saturating_mul(2))
+                    .min(self.limit);
+                self.text.reserve_exact(capacity - self.text.len());
+            }
+        }
+        self.text.push_str(value);
+        Ok(())
+    }
 }
 
 struct Register(i64);
@@ -369,7 +429,15 @@ impl std::fmt::Display for Register {
     }
 }
 
-impl Lowerer<'_, '_> {
+impl<const BOUNDED: bool> Lowerer<'_, '_, BOUNDED> {
+    fn preflight(&self, bytes: usize) -> DecompilerResult<()> {
+        if BOUNDED && bytes > self.source_limit {
+            Err(source_budget_error())
+        } else {
+            Ok(())
+        }
+    }
+
     fn string(&self, index: i64) -> DecompilerResult<&str> {
         self.strings
             .get(index as usize)
@@ -397,18 +465,41 @@ impl Lowerer<'_, '_> {
         if count < 1 || count + 6 > i64::from(self.frame_size) {
             return Err(error(format!("Invalid call argument count {count}")));
         }
+        if BOUNDED {
+            self.preflight((count as usize).saturating_mul(24).saturating_add(256))?;
+        }
         Ok((0..count)
             .map(|i| format!("r[{}]", i64::from(self.frame_size) - 7 - i))
             .collect())
     }
 
     fn literal(&self, data: &[u8], offset: i64, count: i64) -> DecompilerResult<Vec<String>> {
+        if BOUNDED {
+            if count < 0 {
+                return Err(error("Invalid literal count"));
+            }
+            self.preflight((count as usize).saturating_mul(5).saturating_add(256))?;
+        }
         let bytes = data
             .get(offset as usize..)
             .ok_or_else(|| error("Literal offset out of range"))?;
         let values = unpack_slp_array(bytes, Some(count as usize)).map_err(error)?;
         if values.items.len() != count as usize {
             return Err(error("Truncated literal buffer"));
+        }
+        if BOUNDED {
+            let mut size = 256usize;
+            for value in &values.items {
+                let length = match value {
+                    SLPValue::LongString(n) => self.string(i64::from(*n))?.len(),
+                    SLPValue::ShortString(n) => self.string(i64::from(*n))?.len(),
+                    SLPValue::ByteString(n) => self.string(i64::from(*n))?.len(),
+                    SLPValue::Number(n) => number(*n).len(),
+                    _ => 32,
+                };
+                size = size.saturating_add(length).saturating_add(1);
+                self.preflight(size)?;
+            }
         }
         values
             .items
@@ -439,6 +530,31 @@ impl Lowerer<'_, '_> {
         }
         let o = operands(instruction)?;
         let n = instruction.name();
+        if BOUNDED {
+            // At most two string operands occur in any one instruction.
+            let ids: &[i64] = match n {
+                "LoadConstString" | "LoadConstStringLongIndex" => &o[1..2],
+                "GetById" | "GetByIdShort" | "GetByIdLong" | "TryGetById" | "TryGetByIdLong"
+                | "PutById" | "PutByIdLong" | "TryPutById" | "TryPutByIdLong" => &o[3..4],
+                "PutNewOwnById"
+                | "PutNewOwnByIdShort"
+                | "PutNewOwnByIdLong"
+                | "PutNewOwnNEById"
+                | "PutNewOwnNEByIdLong"
+                | "DelById"
+                | "DelByIdLong" => &o[2..3],
+                "DeclareGlobalVar" | "ThrowIfHasRestrictedGlobalProperty" => &o[..1],
+                "CreateRegExp" => &o[1..3],
+                _ => &[],
+            };
+            if !ids.is_empty() {
+                let mut size = 256usize;
+                for &id in ids {
+                    size = size.saturating_add(self.string(id)?.len());
+                }
+                self.preflight(size)?;
+            }
+        }
         let r = |i: usize| Register(o[i]);
         let assign = |v: String| format!("{} = {v};", r(0));
         let binary = |op: &str| assign(format!("{} {op} {}", r(1), r(2)));
@@ -454,6 +570,7 @@ impl Lowerer<'_, '_> {
                 let offset = u32::from_le_bytes(entry[..4].try_into().unwrap()) as usize;
                 let length = u32::from_le_bytes(entry[4..].try_into().unwrap()) as usize;
                 let bytes = self.hbc.bigints.storage.get(offset..offset + length).ok_or_else(|| error("Truncated bigint"))?;
+                if BOUNDED { self.preflight(length.saturating_mul(3).saturating_add(256))?; }
                 assign(format!("{}n", num_bigint::BigInt::from_signed_bytes_le(bytes)))
             }
             "LoadConstEmpty" => assign("EMPTY".into()),
@@ -511,6 +628,7 @@ impl Lowerer<'_, '_> {
             "NewObjectWithBuffer" | "NewObjectWithBufferLong" => {
                 let keys = self.literal(self.hbc.serialized_literals.object_keys_data, o[3], o[2])?;
                 let values = self.literal(self.hbc.serialized_literals.object_values_data, o[4], o[2])?;
+                if BOUNDED { self.preflight(keys.iter().chain(&values).fold(256usize, |size, value| size.saturating_add(value.len()).saturating_add(1)))?; }
                 assign(format!("objectLiteral([{}], [{}])", keys.join(","), values.join(",")))
             }
             "GetById" | "GetByIdShort" | "GetByIdLong" => assign(format!("{}[{}]", r(1), self.string(o[3])?)),
@@ -569,6 +687,7 @@ impl Lowerer<'_, '_> {
             "Unreachable" => "throw new ErrorCtor('Unreachable bytecode executed');".into(),
             "SwitchImm" => {
                 let table = self.hbc.switch_tables.get_switch_table_by_instruction(self.index, ins.instruction_index.value() as u32).ok_or_else(|| error("Missing switch table"))?;
+                if BOUNDED { self.preflight(table.cases.len().saturating_mul(64).saturating_add(256))?; }
                 let mut code = format!("switch ({}) {{", r(0));
                 for case in &table.cases {
                     let target = self.target(pc, i64::from(case.target_offset))?;
@@ -633,8 +752,23 @@ fn lower_function_with_pcs(
     strings: &[String],
     annotate_pc: bool,
 ) -> DecompilerResult<String> {
+    lower_function_impl::<false>(hbc, index, allocator, strings, annotate_pc, usize::MAX)
+}
+
+fn lower_function_impl<const BOUNDED: bool>(
+    hbc: &HbcFile<'_>,
+    index: u32,
+    allocator: &oxc_allocator::Allocator,
+    strings: &[String],
+    annotate_pc: bool,
+    source_limit: usize,
+) -> DecompilerResult<String> {
     let start = std::time::Instant::now();
-    let mut output = String::new();
+    let mut output = FragmentSource::<BOUNDED> {
+        text: String::new(),
+        limit: source_limit,
+        exceeded: false,
+    };
     let mut failures = BTreeMap::<String, String>::new();
     {
         let header = hbc
@@ -673,7 +807,7 @@ fn lower_function_with_pcs(
         let generator = instructions
             .iter()
             .any(|i| i.instruction.name() == "StartGenerator");
-        let lowerer = Lowerer {
+        let lowerer = Lowerer::<BOUNDED> {
             hbc,
             strings,
             index,
@@ -681,6 +815,7 @@ fn lower_function_with_pcs(
             env_size,
             generator,
             boundaries: instructions.iter().map(|i| i.offset.value()).collect(),
+            source_limit,
         };
         let name = lowerer.string(i64::from(
             header
@@ -732,6 +867,9 @@ fn lower_function_with_pcs(
             output.push_str("const r = objectCreate(null); let pc = 0, caught;\n");
         }
         output.push_str("for (;;) { try { switch (pc) {\n");
+        if BOUNDED {
+            output.check()?;
+        }
         let mut case_open = false;
         for ins in instructions {
             let pc = ins.offset.value();
@@ -754,10 +892,16 @@ fn lower_function_with_pcs(
                     writeln!(output, "{code}").unwrap();
                 }
                 Err(e) => {
+                    if BOUNDED {
+                        return Err(e);
+                    }
                     failures
                         .entry(ins.instruction.name().into())
                         .or_insert_with(|| format!("function {index}, byte offset {pc}: {e}"));
                 }
+            }
+            if BOUNDED {
+                output.check()?;
             }
         }
         if case_open {
@@ -783,6 +927,9 @@ fn lower_function_with_pcs(
         }
         output.push_str("throw error;\n} } };\n");
     }
+    if BOUNDED {
+        output.check()?;
+    }
     if !failures.is_empty() {
         return Err(error(format!(
             "Bundle export refused: {} unsupported or invalid opcode kinds:\n{}",
@@ -790,6 +937,7 @@ fn lower_function_with_pcs(
             failures.values().cloned().collect::<Vec<_>>().join("\n")
         )));
     }
+    let output = output.text;
     validate_javascript_with_allocator(&format!("'use strict';\n{output}"), allocator)?;
     if output.len() > 100_000 {
         log::debug!(
@@ -833,6 +981,150 @@ pub fn export_function_fragments(
             result
         })
         .collect()
+}
+
+fn escaped_char_size(c: char) -> usize {
+    match c {
+        '"' | '\\' | '\n' | '\r' | '\t' | '\u{8}' | '\u{c}' => 2,
+        '\u{0}'..='\u{1f}' | '\u{2028}' | '\u{2029}' => 6,
+        _ => c.len_utf8(),
+    }
+}
+
+// Inspect borrowed bytes, not converted strings or cached values. Invalid UTF-8
+// contributes one replacement character per lossy-decoding error sequence.
+fn escaped_entry_size(bytes: &[u8], utf16: bool) -> usize {
+    if utf16 {
+        return bytes.chunks_exact(2).fold(2usize, |size, pair| {
+            let unit = u16::from_le_bytes([pair[0], pair[1]]);
+            size.saturating_add(if (32..=126).contains(&unit) && unit != 34 && unit != 92 {
+                1
+            } else {
+                6
+            })
+        });
+    }
+    let mut remaining = bytes;
+    let mut size = 2usize;
+    loop {
+        let (valid, invalid) = match std::str::from_utf8(remaining) {
+            Ok(valid) => (valid, None),
+            Err(e) => (
+                std::str::from_utf8(&remaining[..e.valid_up_to()]).unwrap(),
+                Some((e.valid_up_to(), e.error_len())),
+            ),
+        };
+        for c in valid.chars() {
+            size = size.saturating_add(escaped_char_size(c));
+        }
+        match invalid {
+            None => break,
+            Some((offset, length)) => {
+                size = size.saturating_add(3);
+                match length {
+                    Some(length) => remaining = &remaining[offset + length..],
+                    None => break,
+                }
+            }
+        }
+    }
+    size
+}
+
+fn bounded_javascript_string(bytes: &[u8], utf16: bool, capacity: usize) -> String {
+    let mut literal = String::with_capacity(capacity);
+    literal.push('"');
+    if utf16 {
+        for pair in bytes.chunks_exact(2) {
+            let unit = u16::from_le_bytes([pair[0], pair[1]]);
+            if (32..=126).contains(&unit) && unit != 34 && unit != 92 {
+                literal.push(char::from(unit as u8));
+            } else {
+                write!(literal, "\\u{unit:04x}").unwrap();
+            }
+        }
+    } else {
+        for c in String::from_utf8_lossy(bytes).chars() {
+            match c {
+                '"' => literal.push_str("\\\""),
+                '\\' => literal.push_str("\\\\"),
+                '\n' => literal.push_str("\\n"),
+                '\r' => literal.push_str("\\r"),
+                '\t' => literal.push_str("\\t"),
+                '\u{8}' => literal.push_str("\\b"),
+                '\u{c}' => literal.push_str("\\f"),
+                '\u{0}'..='\u{1f}' | '\u{2028}' | '\u{2029}' => {
+                    write!(literal, "\\u{:04x}", c as u32).unwrap();
+                }
+                _ => literal.push(c),
+            }
+        }
+    }
+    literal.push('"');
+    literal
+}
+
+/// Export one PC-annotated function fragment, identical to the corresponding
+/// `export_function_fragments` result on success (not standalone JavaScript).
+///
+/// Both limits must be in `1..=64 * 1024 * 1024`. `max_source_bytes` caps returned
+/// UTF-8 source bytes; `max_string_bytes` caps cumulative escaped literal bytes
+/// across ALL table entries, including duplicates and unused entries. The table
+/// is preflighted before conversion and source growth is capped before syntax
+/// validation. Variable-sized instruction temporaries use conservative source
+/// preflights, so some fragments smaller than the source limit may be refused.
+///
+/// These are expansion limits, not a total-memory or execution-time sandbox:
+/// caller-owned parsing/caches, collection overhead, allocator rounding, bounded
+/// temporary copies, and the validator AST are not included in these budgets.
+pub fn export_function_fragment_bounded(
+    hbc: &HbcFile<'_>,
+    index: u32,
+    max_source_bytes: usize,
+    max_string_bytes: usize,
+) -> DecompilerResult<String> {
+    for (name, limit) in [
+        ("max_source_bytes", max_source_bytes),
+        ("max_string_bytes", max_string_bytes),
+    ] {
+        if limit == 0 || limit > MAX_FRAGMENT_BYTES {
+            return Err(error(format!(
+                "{name} must be in 1..=67108864 bytes (64 MiB)"
+            )));
+        }
+    }
+    if index >= hbc.functions.count() {
+        return Err(error(format!("Unknown function {index}")));
+    }
+    let mut total = 0usize;
+    for id in 0..hbc.strings.string_count {
+        let entry = hbc.strings.get_entry(id).map_err(error)?;
+        let size = escaped_entry_size(entry.bytes, entry.is_utf16);
+        if size > max_string_bytes.saturating_sub(total) {
+            return Err(error(
+                "Bounded fragment exceeds max_string_bytes (all table entries)",
+            ));
+        }
+        total += size;
+    }
+    let strings = (0..hbc.strings.string_count)
+        .map(|id| {
+            let entry = hbc.strings.get_entry(id).map_err(error)?;
+            Ok(bounded_javascript_string(
+                entry.bytes,
+                entry.is_utf16,
+                escaped_entry_size(entry.bytes, entry.is_utf16),
+            ))
+        })
+        .collect::<DecompilerResult<Vec<_>>>()?;
+    lower_function_impl::<true>(
+        hbc,
+        index,
+        &oxc_allocator::Allocator::default(),
+        &strings,
+        true,
+        max_source_bytes,
+    )
 }
 
 fn validate_javascript(code: &str) -> DecompilerResult<()> {

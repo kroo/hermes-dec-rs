@@ -1,4 +1,4 @@
-// Include the owned production module without requiring parent CLI wiring.
+// Exercise crate-internal source helpers; public wrappers have separate integration coverage.
 pub use hermes_dec_rs::{bundle, DecompilerError, DecompilerResult};
 struct HbcFile;
 impl HbcFile {
@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 fn source(body: &str) -> String {
-    format!("function f() {{ const r = []; let pc = 0; switch (pc) {{ case 0: {{\n{body}\n}} default: throw 0; }} }}")
+    format!("F[0] = function f() {{ const r = []; let pc = 0; switch (pc) {{ case 0: {{\n{body}\n}} default: throw 0; }} }};")
 }
 
 fn analyze(body: &str, kind: &str, slots: &[u32], depth: usize) -> Value {
@@ -32,6 +32,91 @@ fn analyze(body: &str, kind: &str, slots: &[u32], depth: usize) -> Value {
 }
 
 const CONSTRUCTOR: &str = "// HBC function 0, PC 0\nr[1] = getCtor();\n// HBC function 0, PC 2\nr[2] = {};\n// HBC function 0, PC 4\nr[3] = 17;\n// HBC function 0, PC 6\nr[4] = 'opaque';\n// HBC function 0, PC 8\nr[5] = construct(r[1], r[2], [r[4],r[3],false]);\n// HBC function 0, PC 10\nr[6].slots[9] = r[5];";
+
+#[test]
+fn object_mode_is_opt_in_and_does_not_change_legacy_catalogs() {
+    let js = source("// HBC function 0, PC 0\nr[0] = {};\n// HBC function 0, PC 1\nput(r[0], 'needle', 1, false, false);");
+    let sources = [(0, js.clone(), BTreeSet::new())];
+    let legacy = sites::catalog_sources(&sources, "all", &[], 3, 5, 0, 100000).unwrap();
+    let object = sites::analyze_objects_source(
+        &js,
+        0,
+        None,
+        &BTreeSet::new(),
+        &sites::ObjectOptions::default(),
+    )
+    .unwrap();
+    let object: Value = serde_json::from_slice(&object).unwrap();
+    assert_eq!(object["schema"], "objects-v1");
+    assert_eq!(object["sites"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        legacy,
+        sites::catalog_sources(&sources, "all", &[], 3, 5, 0, 100000).unwrap()
+    );
+    sites::report_objects(fixture(), 0, None, &sites::ObjectOptions::default()).unwrap();
+}
+
+#[test]
+fn shared_index_literal_view_preserves_source_in_legacy_test_namespace() {
+    let js =
+        source("// HBC function 0, PC 0\nr[0] = 'field';\n// HBC function 0, PC 1\nreturn r[0];");
+    let options = sites::LiteralViewOptions {
+        json: true,
+        ..Default::default()
+    };
+    let bytes = sites::analyze_literal_view_source(&js, 0, &BTreeSet::new(), &options).unwrap();
+    let v: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["schema"], "literal-view-v1");
+    assert!(v["rows"][1]["source"]
+        .as_str()
+        .unwrap()
+        .contains("return r[0]"));
+    assert!(v["rows"][1]["view"].as_str().unwrap().contains("('field')"));
+    sites::report_literal_view(fixture(), 0, &options).unwrap();
+}
+
+#[test]
+fn workspace_notes_share_the_legacy_test_namespace_index() {
+    let js =
+        source("// HBC function 0, PC 0\nr[0] = 'field';\n// HBC function 0, PC 1\nreturn r[0];");
+    let notes = sites::workspace_literal_notes(&js, 0, &BTreeSet::new()).unwrap();
+    assert_eq!(notes.notes.len(), 1);
+    assert_eq!(notes.unresolved_reads, 0);
+    assert_eq!(notes.reads_omitted, 0);
+    assert_eq!(notes.copy_reads_skipped, 0);
+    assert!(notes.next_offset.is_none());
+    assert!(notes.work_used > 0);
+}
+
+#[test]
+fn object_mutation_rejections_do_not_restrict_legacy_catalogs() {
+    for mutation in [
+        "a?.[r[0] = {}];",
+        "[r[0]] = [{}];",
+        "({key: r[0]} = {key: {}});",
+        "r++;",
+        "delete (r[0]);",
+    ] {
+        let js = source(&format!(
+            "// HBC function 0, PC 0\nr[0] = {{}};\n\
+             // HBC function 0, PC 1\n{mutation}\n\
+             // HBC function 0, PC 2\nown(r[0], 'key', 0, true);"
+        ));
+        assert!(sites::analyze_objects_source(
+            &js,
+            0,
+            None,
+            &BTreeSet::new(),
+            &sites::ObjectOptions::default(),
+        )
+        .is_err());
+        let legacy =
+            sites::catalog_sources(&[(0, js, BTreeSet::new())], "all", &[], 3, 5, 0, 100000)
+                .unwrap();
+        let legacy: Value = serde_json::from_slice(&legacy).unwrap();
+        assert_eq!(legacy["sites"].as_array().unwrap().len(), 1);
+    }
+}
 
 #[test]
 fn follow_up_direct_block_entry_and_included_ancestor_have_compact_parity() {
