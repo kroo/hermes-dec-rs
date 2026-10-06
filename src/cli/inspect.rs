@@ -19,15 +19,27 @@ pub fn inspect_with_format(input_path: &std::path::Path, format: &str) -> Decomp
     };
 
     // Parse the HBC file
-    let hbc_file: HbcFile = match HbcFile::parse(&data) {
+    let parsed = if format == "text" || format == "summary" {
+        HbcFile::parse_for_bundle(&data)
+    } else {
+        HbcFile::parse(&data)
+    };
+    let hbc_file: HbcFile = match parsed {
         Ok(file) => file,
         Err(error) => {
-            println!("Failed to parse HBC file: {}", error);
             return Err(DecompilerError::Internal {
-                message: format!("Failed to parse HBC file: {}", error),
+                message: format!("Failed to parse HBC file: {error}"),
             });
         }
     };
+
+    if format == "summary" {
+        println!(
+            "{}",
+            serde_json::json!({"schema_version":1,"hbc_version":hbc_file.header.version(),"input_bytes":data.len(),"functions":hbc_file.functions.count(),"strings":hbc_file.header.string_count(),"commonjs_modules":hbc_file.cjs_modules.entries.len(),"entrypoint":hbc_file.header.global_code_index(),"next":"search INPUT QUERY --json, then show INPUT FUNCTION_IDS; full tables require inspect --format json"})
+        );
+        return Ok(());
+    }
 
     if format == "text" {
         println!(
@@ -49,7 +61,7 @@ pub fn inspect_with_format(input_path: &std::path::Path, format: &str) -> Decomp
     // Output as JSON
     match serde_json::to_string_pretty(&hbc_file) {
         Ok(json) => {
-            println!("{}", json);
+            println!("{json}");
             Ok(())
         }
         Err(_) => Err(DecompilerError::Internal {
