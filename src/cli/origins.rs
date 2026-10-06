@@ -4,6 +4,7 @@ use crate::{DecompilerError, DecompilerResult, HbcFile};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk, Visit};
 use oxc_span::{GetSpan, Span};
+use regex::RegexBuilder;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::Write;
@@ -120,6 +121,9 @@ struct Syntax {
     literals: Vec<Span>,
     slot_writes: Vec<SlotWrite>,
     capture_symbols: bool,
+    capture_properties: bool,
+    property_writes: Vec<PropertyWrite>,
+    malformed_properties: bool,
 }
 impl<'a> Visit<'a> for Syntax {
     fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
@@ -148,6 +152,37 @@ impl<'a> Visit<'a> for Syntax {
         walk::walk_computed_member_expression(self, it);
     }
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if self.capture_properties {
+            let target = match &it.left {
+                AssignmentTarget::ComputedMemberExpression(m) if !identifier(&m.object, "r") => {
+                    let numeric_slot = matches!(&m.object, Expression::StaticMemberExpression(s) if s.property.name == "slots")
+                        && numeric(&m.expression).is_some();
+                    (!numeric_slot).then_some((
+                        m.object.span(),
+                        m.expression.span(),
+                        "computed_assignment",
+                    ))
+                }
+                AssignmentTarget::StaticMemberExpression(m) if !identifier(&m.object, "r") => {
+                    Some((m.object.span(), m.property.span, "static_assignment"))
+                }
+                _ => None,
+            };
+            if let Some((object, key, form)) = target {
+                if it.operator.is_assign() {
+                    self.property_writes.push(PropertyWrite {
+                        span: it.span,
+                        object,
+                        key,
+                        value: it.right.span(),
+                        form,
+                        helper_arguments: vec![],
+                    });
+                } else {
+                    self.malformed_properties = true;
+                }
+            }
+        }
         if self.capture_symbols {
             if let AssignmentTarget::ComputedMemberExpression(m) = &it.left {
                 if let Expression::StaticMemberExpression(slots) = &m.object {
@@ -182,6 +217,46 @@ impl<'a> Visit<'a> for Syntax {
             }
         }
         walk::walk_assignment_expression(self, it);
+    }
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if self.capture_properties {
+            if let Expression::Identifier(callee) = &it.callee {
+                let arity = match callee.name.as_str() {
+                    "put" => Some(5),
+                    "own" => Some(4),
+                    _ => None,
+                };
+                if let Some(arity) = arity {
+                    if it.optional
+                        || it.arguments.len() != arity
+                        || it
+                            .arguments
+                            .iter()
+                            .any(|a| matches!(a, Argument::SpreadElement(_)))
+                    {
+                        self.malformed_properties = true;
+                    } else {
+                        self.property_writes.push(PropertyWrite {
+                            span: it.span,
+                            object: it.arguments[0].span(),
+                            key: it.arguments[1].span(),
+                            value: it.arguments[2].span(),
+                            form: if arity == 5 { "put" } else { "own" },
+                            helper_arguments: it.arguments[3..].iter().map(GetSpan::span).collect(),
+                        });
+                    }
+                }
+            }
+        }
+        walk::walk_call_expression(self, it);
+    }
+    fn visit_class(&mut self, it: &Class<'a>) {
+        if self.capture_properties {
+            // Instance fields are deferred scopes, not the enclosing PC's flow.
+            self.malformed_properties = true;
+        } else {
+            walk::walk_class(self, it);
+        }
     }
     fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
         if matches!(&it.argument, SimpleAssignmentTarget::AssignmentTargetIdentifier(i) if i.name == "pc")
@@ -236,6 +311,15 @@ struct Instruction {
     expressions_total: usize,
     literals: Vec<Span>,
     slot_writes: Vec<SlotWrite>,
+    property_writes: Vec<PropertyWrite>,
+}
+struct PropertyWrite {
+    span: Span,
+    object: Span,
+    key: Span,
+    value: Span,
+    form: &'static str,
+    helper_arguments: Vec<Span>,
 }
 struct SlotWrite {
     slot: u32,
@@ -258,12 +342,14 @@ struct SourceIndex {
     unknown: Vec<&'static str>,
     stopped: bool,
     control_work: usize,
+    reads_sorted: bool,
 }
 
 #[derive(Default)]
 struct IndexFeatures {
     expressions: bool,
     symbols: bool,
+    properties: bool,
 }
 
 #[derive(Serialize)]
@@ -317,6 +403,8 @@ struct Report {
     pc: u32,
     unknown: Vec<&'static str>,
     truncated: bool,
+    #[serde(skip)]
+    dependency_truncated: bool,
     unresolved: bool,
     blocks: usize,
     normal_edges: Vec<(u32, u32)>,
@@ -398,6 +486,7 @@ pub fn analyze_query(
         IndexFeatures {
             expressions: query.expressions,
             symbols: false,
+            properties: false,
         },
     )?;
     let (mut result, _) = query_index(source, &index, query, None, None)?;
@@ -552,6 +641,7 @@ fn index_program(
     let mut total_writes = 0;
     let mut total_literals = 0;
     let mut total_slot_writes = 0;
+    let mut total_property_writes = 0;
     let mut control_work = 0;
     let mut syntax_work = 0;
     for (case_position, case) in dispatch.cases.iter().enumerate() {
@@ -608,6 +698,7 @@ fn index_program(
                     expressions_total: 0,
                     literals: Vec::new(),
                     slot_writes: Vec::new(),
+                    property_writes: Vec::new(),
                 });
             }
             let id = current.ok_or_else(|| error("Missing exact PC annotation"))?;
@@ -623,9 +714,13 @@ fn index_program(
             }
             let mut syntax = Syntax {
                 capture_symbols: features.symbols,
+                capture_properties: features.properties,
                 ..Syntax::default()
             };
             syntax.visit_statement(s);
+            if syntax.malformed_properties {
+                return Err(error("properties requires simple property assignments and non-optional put/own calls with exact arity and no spreads; class scopes are unsupported"));
+            }
             syntax_work += syntax.work;
             if syntax_work > SYNTAX_WORK_CAP {
                 return Err(error("origins syntax indexing work cap exceeded"));
@@ -645,10 +740,12 @@ fn index_program(
             total_writes += syntax.writes.len();
             total_literals += syntax.literals.len();
             total_slot_writes += syntax.slot_writes.len();
+            total_property_writes += syntax.property_writes.len();
             if total_reads > READ_CAP
                 || total_writes > DEFINITION_CAP
                 || total_literals > DEFINITION_CAP
                 || total_slot_writes > DEFINITION_CAP
+                || total_property_writes > DEFINITION_CAP
             {
                 return Err(error("origins syntax cap exceeded"));
             }
@@ -656,6 +753,7 @@ fn index_program(
             ins.writes.extend(syntax.writes);
             ins.literals.extend(syntax.literals);
             ins.slot_writes.extend(syntax.slot_writes);
+            ins.property_writes.extend(syntax.property_writes);
             block.unknown |= syntax.unsupported;
         }
         if block.instructions.first().map(|&i| instructions[i].pc) != Some(block_pc) {
@@ -776,7 +874,13 @@ fn index_program(
         unknown.push("unsupported_control_or_write");
     }
     for instruction in &mut instructions {
+        if features.properties {
+            instruction.reads.sort_by_key(|(_, s)| (s.start, s.end));
+        }
         instruction.literals.sort_by_key(|s| (s.start, s.end));
+        instruction
+            .property_writes
+            .sort_by_key(|p| (p.span.start, p.span.end));
     }
     Ok(SourceIndex {
         instructions,
@@ -786,7 +890,18 @@ fn index_program(
         unknown,
         stopped,
         control_work,
+        reads_sorted: features.properties,
     })
+}
+
+fn scoped_reads(reads: &[(u32, Span)], scope: Span, sorted: bool) -> &[(u32, Span)] {
+    if sorted {
+        let lo = reads.partition_point(|(_, s)| s.start < scope.start);
+        let hi = reads.partition_point(|(_, s)| s.start < scope.end);
+        &reads[lo..hi]
+    } else {
+        reads
+    }
 }
 
 fn query_index(
@@ -812,6 +927,7 @@ fn query_index(
         unknown,
         stopped,
         control_work,
+        reads_sorted,
     } = index;
     let root = *pc_index
         .get(&pc)
@@ -833,7 +949,9 @@ fn query_index(
         if !expanded.insert((instruction, scope.start, scope.end)) {
             continue;
         }
-        for &(reg, read_span) in &instructions[instruction].reads {
+        for &(reg, read_span) in
+            scoped_reads(&instructions[instruction].reads, scope, *reads_sorted)
+        {
             if read_span.start < scope.start || read_span.end > scope.end {
                 continue;
             }
@@ -952,8 +1070,7 @@ fn query_index(
                         demand.candidates.push(id);
                         if level < depth {
                             queue.push_back((iid, span, Some(id), level + 1));
-                        } else if instructions[iid]
-                            .reads
+                        } else if scoped_reads(&instructions[iid].reads, span, *reads_sorted)
                             .iter()
                             .any(|(_, s)| s.start >= span.start && s.end <= span.end)
                         {
@@ -1008,6 +1125,7 @@ fn query_index(
         pc,
         unknown: unknown.clone(),
         truncated: truncated || normal_edges_truncated,
+        dependency_truncated: truncated,
         unresolved,
         blocks: blocks.len(),
         normal_edges_total,
@@ -1057,6 +1175,309 @@ pub struct SymbolOptions {
     pub scan_work: usize,
     pub slots: Vec<u32>,
     pub matches: Vec<String>,
+}
+
+#[derive(Clone)]
+pub struct PropertyOptions {
+    pub function: u32,
+    pub depth: usize,
+    pub definition_limit: usize,
+    pub limit: usize,
+    pub offset: usize,
+    pub max_bytes: usize,
+    pub scan_work: usize,
+    pub matches: Vec<String>,
+}
+
+pub const DEFAULT_PROPERTY_SCAN_WORK: usize = 1_048_576;
+pub const MAX_PROPERTY_SCAN_WORK: usize = 16_777_216;
+const PROPERTY_FILTER_WORK_CAP: usize = 33_554_432;
+
+fn property_match(
+    matcher: &regex::Regex,
+    source: &str,
+    span: Span,
+    work: &mut usize,
+) -> DecompilerResult<Option<Span>> {
+    let bytes = (span.end - span.start) as usize;
+    if bytes > PROPERTY_FILTER_WORK_CAP - *work {
+        return Err(error("properties filter work cap exceeded before stdout"));
+    }
+    *work += bytes;
+    Ok(matcher
+        .find(&source[span.start as usize..span.end as usize])
+        .map(|m| Span::new(span.start + m.start() as u32, span.start + m.end() as u32)))
+}
+
+fn property_role(
+    source: &str,
+    span: Span,
+    report: &Report,
+) -> DecompilerResult<(serde_json::Value, BTreeMap<String, serde_json::Value>)> {
+    let mut ids = BTreeMap::new();
+    let mut definitions = BTreeMap::new();
+    for d in &report.definitions {
+        let id = format!(
+            "{}:{}:{}:{}",
+            report.function, d.register, d.source.start, d.source.end
+        );
+        ids.insert(d.id, id.clone());
+        definitions.insert(
+            id,
+            serde_json::json!({"pc":d.pc,"register":d.register,"source":d.source}),
+        );
+    }
+    let lookup = |id| {
+        ids.get(&id)
+            .cloned()
+            .ok_or_else(|| error("Invalid property candidate ID"))
+    };
+    let dependencies = report
+        .demands
+        .iter()
+        .map(|d| {
+            let candidates = d
+                .candidates
+                .iter()
+                .map(|&id| lookup(id))
+                .collect::<DecompilerResult<Vec<_>>>()?;
+            let owner = d.owner_definition.map(lookup).transpose()?;
+            Ok(
+                serde_json::json!({"owner_definition":owner,"pc":d.pc,"register":d.register,
+            "read_span":[d.read.start,d.read.end],"candidates":candidates,"unresolved":d.unresolved,
+            "same_pc_ambiguity":d.same_pc_ambiguity,"cycle":d.cycle,"truncated":d.truncated}),
+            )
+        })
+        .collect::<DecompilerResult<Vec<_>>>()?;
+    Ok((
+        serde_json::json!({"source":excerpt(source,span),"queried":true,
+        "definition_ids":ids.into_values().collect::<Vec<_>>(),"dependencies":dependencies,
+        "unresolved":report.unresolved,"truncated":report.dependency_truncated,"unknown":report.unknown}),
+        definitions,
+    ))
+}
+
+/// Keep raw object/key/value roles distinct; source candidates are not field values.
+pub fn analyze_properties_source(
+    source: &str,
+    options: &PropertyOptions,
+    exceptions: &[(u32, u32, u32)],
+) -> DecompilerResult<Vec<u8>> {
+    let o = options;
+    bounds(o.depth, o.definition_limit, o.max_bytes)?;
+    if !(1..=1000).contains(&o.limit)
+        || !(1..=MAX_PROPERTY_SCAN_WORK).contains(&o.scan_work)
+        || o.matches.len() > 64
+        || o.matches.iter().any(|m| m.is_empty() || m.len() > 1024)
+    {
+        return Err(error("properties bounds: limit 1..1000, scan_work 1..16777216, at most 64 nonempty matches of 1024 bytes"));
+    }
+    if source.len() > SOURCE_CAP {
+        return Err(error("properties source byte cap exceeded"));
+    }
+    let matcher = if o.matches.is_empty() {
+        None
+    } else {
+        let pattern = o
+            .matches
+            .iter()
+            .map(|m| regex::escape(m))
+            .collect::<Vec<_>>()
+            .join("|");
+        Some(
+            RegexBuilder::new(&pattern)
+                .case_insensitive(true)
+                .size_limit(8 * 1024 * 1024)
+                .build()
+                .map_err(|e| error(e.to_string()))?,
+        )
+    };
+    let allocator = oxc_allocator::Allocator::default();
+    let parsed =
+        oxc_parser::Parser::new(&allocator, source, oxc_span::SourceType::default()).parse();
+    if !parsed.errors.is_empty() {
+        return Err(error("properties requires valid complete exporter JS"));
+    }
+    let index = index_program(
+        source,
+        o.function,
+        &parsed.program,
+        exceptions,
+        IndexFeatures {
+            properties: true,
+            ..IndexFeatures::default()
+        },
+    )?;
+    let stores_total: usize = index
+        .instructions
+        .iter()
+        .map(|i| i.property_writes.len())
+        .sum();
+    let mut ordinal = 0;
+    let mut scanned = 0;
+    let mut work = 0;
+    let mut filter_work = 0;
+    let mut unqueried_values = 0;
+    let mut skipped_keys = 0;
+    let mut incomplete_keys = 0;
+    let mut next_offset = None;
+    let mut rows = Vec::new();
+    let mut definitions = BTreeMap::<String, serde_json::Value>::new();
+    let mut serialized_records_bytes = 0usize;
+    'instructions: for instruction in &index.instructions {
+        for store in &instruction.property_writes {
+            let cursor = ordinal;
+            ordinal += 1;
+            if cursor < o.offset {
+                continue;
+            }
+            if rows.len() == o.limit || work == o.scan_work {
+                next_offset = Some(cursor);
+                break 'instructions;
+            }
+            scanned += 1;
+            let direct_match = match &matcher {
+                Some(m) => property_match(m, source, store.key, &mut filter_work)?,
+                None => None,
+            };
+            let key_read_start = instruction
+                .reads
+                .partition_point(|(_, s)| s.start < store.key.start);
+            let key_reads = instruction
+                .reads
+                .get(key_read_start)
+                .is_some_and(|(_, s)| s.start < store.key.end && s.end <= store.key.end);
+            if matcher.is_some() && direct_match.is_none() && !key_reads {
+                skipped_keys += 1;
+                continue;
+            }
+            let query = Query {
+                function: o.function,
+                pc: instruction.pc,
+                depth: o.depth,
+                limit: o.definition_limit,
+                max_bytes: o.max_bytes,
+                expressions: false,
+            };
+            let (key_result, used) = query_index(
+                source,
+                &index,
+                query,
+                Some(store.key),
+                Some(o.scan_work - work),
+            )?;
+            work += used;
+            incomplete_keys += usize::from(
+                key_result.unresolved
+                    || key_result.dependency_truncated
+                    || !key_result.unknown.is_empty(),
+            );
+            let mut evidence = Vec::new();
+            let mut evidence_count = 0usize;
+            if let Some(matcher) = &matcher {
+                let mut add_match = |pc, matched: Option<Span>, id: Option<String>| {
+                    if let Some(span) = matched {
+                        evidence_count += 1;
+                        if evidence.len() < 8 {
+                            evidence.push(serde_json::json!({"pc":pc,"definition_id":id,"source":excerpt(source,span)}));
+                        }
+                    }
+                };
+                add_match(instruction.pc, direct_match, None);
+                for d in &key_result.definitions {
+                    add_match(
+                        d.pc,
+                        property_match(
+                            matcher,
+                            source,
+                            Span::new(d.source.start, d.source.end),
+                            &mut filter_work,
+                        )?,
+                        Some(format!(
+                            "{}:{}:{}:{}",
+                            o.function, d.register, d.source.start, d.source.end
+                        )),
+                    );
+                }
+                if evidence_count == 0 {
+                    continue;
+                }
+            }
+            let (key, mut local_definitions) = property_role(source, store.key, &key_result)?;
+            let value = if work < o.scan_work {
+                let (result, used) = query_index(
+                    source,
+                    &index,
+                    query,
+                    Some(store.value),
+                    Some(o.scan_work - work),
+                )?;
+                work += used;
+                let (role, defs) = property_role(source, store.value, &result)?;
+                local_definitions.extend(defs);
+                role
+            } else {
+                unqueried_values += 1;
+                serde_json::json!({"source":excerpt(source,store.value),"queried":false,"definition_ids":[],"dependencies":[],"unresolved":true,"truncated":true,"unknown":["aggregate_query_work_exhausted_before_value"]})
+            };
+            let row = serde_json::json!({"function":o.function,"pc":instruction.pc,"store_ordinal":cursor,"form":store.form,
+                "object":excerpt(source,store.object),"key":key,"value":value,
+                "helper_arguments":store.helper_arguments.iter().map(|&s|excerpt(source,s)).collect::<Vec<_>>(),
+                "match_evidence_count":evidence_count,"match_evidence_truncated":evidence_count>evidence.len(),"match_evidence":evidence});
+            serialized_records_bytes = serialized_records_bytes.saturating_add(
+                serde_json::to_vec(&row)
+                    .map_err(|e| error(e.to_string()))?
+                    .len()
+                    + 1,
+            );
+            for (id, definition) in &local_definitions {
+                if !definitions.contains_key(id) {
+                    serialized_records_bytes = serialized_records_bytes.saturating_add(
+                        serde_json::to_vec(id)
+                            .map_err(|e| error(e.to_string()))?
+                            .len()
+                            + 2
+                            + serde_json::to_vec(definition)
+                                .map_err(|e| error(e.to_string()))?
+                                .len(),
+                    );
+                }
+            }
+            if serialized_records_bytes > o.max_bytes {
+                return Err(error(
+                    "properties output byte budget exceeded before stdout",
+                ));
+            }
+            rows.push(row);
+            definitions.extend(local_definitions);
+        }
+    }
+    let continuation_query = next_offset.map(|offset| {
+        let mut flags = vec!["--offset".to_owned(),offset.to_string(),"--depth".to_owned(),o.depth.to_string(),"--definition-limit".to_owned(),o.definition_limit.to_string(),"--limit".to_owned(),o.limit.to_string(),"--max-bytes".to_owned(),o.max_bytes.to_string(),"--scan-work".to_owned(),o.scan_work.to_string()];
+        for term in &o.matches { flags.extend(["--match".to_owned(),term.clone()]); }
+        serde_json::json!({"command":"hermes-dec-rs","subcommand":"properties","input":"INPUT","function":o.function,"flags":flags,
+        "options":{"offset":offset,"depth":o.depth,"definition_limit":o.definition_limit,"limit":o.limit,"max_bytes":o.max_bytes,"scan_work":o.scan_work,"matches":o.matches},
+        "semantics":"Continue the raw property-store scan with original input and chosen binary. Paging does not repair earlier omitted or unqueried dependencies. Options and flags are data, not shell code."})});
+    let report = serde_json::json!({"schema_version":1,"schema":"properties-v1","function":o.function,
+        "semantics":"Property-write source shapes and normal-flow candidate definitions only. Object identity, property values, helper results, getters/setters and captured frames are not resolved. No JS is evaluated.",
+        "source":"export_function_fragments","parsed_source_complete":true,"expression_source":expression_source(source),
+        "stores_total":stores_total,"offset":o.offset,"scanned":scanned,"next_offset":next_offset,"scan_complete":next_offset.is_none(),
+        "query_work_used":work,"query_work_cap":o.scan_work,"query_work_truncated":work==o.scan_work&&(next_offset.is_some()||unqueried_values>0||incomplete_keys>0),
+        "filter_work_used":filter_work,"filter_work_cap":PROPERTY_FILTER_WORK_CAP,"values_not_queried":unqueried_values,
+        "keys_skipped_without_register_reads":skipped_keys,"key_search_incomplete_rows":incomplete_keys,
+        "depth":o.depth,"definition_limit":o.definition_limit,"limit":o.limit,"matches":o.matches,
+        "match_policy":"OR escaped case-insensitive substrings in raw key expressions and candidate key definition syntax, not object/value expressions, decoded strings, runtime key names or values.",
+        "negative_result_policy":"Unscanned stores and omitted/unresolved key or value dependencies are not evidence of runtime absence. scan_complete covers stores only; queried=false means that role was not analyzed.",
+        "ordinal_policy":"Property-write source order, not runtime execution order or matched-row position.",
+        "continuation_query":continuation_query,"definitions":definitions,"rows":rows});
+    let mut bytes = serde_json::to_vec(&report).map_err(|e| error(e.to_string()))?;
+    bytes.push(b'\n');
+    if bytes.len() > o.max_bytes {
+        return Err(error(
+            "properties output byte budget exceeded before stdout",
+        ));
+    }
+    Ok(bytes)
 }
 
 pub const DEFAULT_SYMBOL_SCAN_WORK: usize = 1_048_576;
@@ -1213,6 +1634,7 @@ pub fn analyze_symbols_source(
         IndexFeatures {
             expressions: false,
             symbols: true,
+            properties: false,
         },
     )?;
     let stores_total: usize = index.instructions.iter().map(|i| i.slot_writes.len()).sum();

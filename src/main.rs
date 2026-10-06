@@ -18,6 +18,7 @@ use hermes_dec_rs::cli;
         "Cross-block registers: origins INPUT FUNCTION PC reports candidate definitions on normal JS paths; --expressions adds typed syntax.\n",
         "Opaque initializer stores: symbols INPUT FUNCTION --match NAME extracts raw literal mentions from bounded cross-block RHS candidates.\n",
         "Use symbols --slot N for a stored-slot candidate view; origins --text reduces JSON overhead without evaluating JS.\n",
+        "Property keys: properties INPUT FUNCTION --match NAME keeps key/value source candidates separate across normal blocks.\n",
         "Inspect a candidate: sites INPUT ANCESTOR --kind slot-write --slot N --depth 8 --compact.\n",
         "Use show --around-pc PC --context 250 for bounded JS, refs for static closures/calls, trace for one definition DAG.\n",
         "All matches/captures are syntactic navigation, not evaluated values or authoritative runtime bindings.\n",
@@ -34,6 +35,27 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Inspect property-write keys and values with separate bounded source provenance
+    Properties {
+        input: PathBuf,
+        function: u32,
+        /// OR case-insensitive raw key/candidate-definition syntax, not evaluated names
+        #[arg(long = "match")]
+        matches: Vec<String>,
+        #[arg(long, default_value_t = 8)]
+        depth: usize,
+        #[arg(long, default_value_t = 64)]
+        definition_limit: usize,
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        /// Raw property-store ordinal, not matched row index
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+        #[arg(long, default_value_t = 100_000)]
+        max_bytes: usize,
+        #[arg(long,default_value_t=cli::origins::DEFAULT_PROPERTY_SCAN_WORK)]
+        scan_work: usize,
+    },
     /// Experimental bounded reaching-definition candidates over exporter JS control flow
     Origins {
         input: PathBuf,
@@ -494,6 +516,30 @@ fn main() -> Result<()> {
                 cli::origins::run(&input, query).map_err(|e| miette!("{e}"))
             }
         }
+        Commands::Properties {
+            input,
+            function,
+            matches,
+            depth,
+            definition_limit,
+            limit,
+            offset,
+            max_bytes,
+            scan_work,
+        } => cli::properties::run(
+            &input,
+            function,
+            &cli::properties::Options {
+                matches,
+                depth,
+                definition_limit,
+                limit,
+                offset,
+                max_bytes,
+                scan_work,
+            },
+        )
+        .map_err(|e| miette!("{e}")),
         Commands::Symbols {
             input,
             function,

@@ -12,6 +12,27 @@ mod expression_view;
 mod origins;
 use serde_json::Value;
 
+#[test]
+fn standalone_property_index_uses_the_same_production_source_contract() {
+    let code =
+        source("case 0: {\n// HBC function 0, PC 0\nput(r[1], 'key', 7, false, true); return; }");
+    let options = origins::PropertyOptions {
+        function: 0,
+        depth: 8,
+        definition_limit: 64,
+        limit: 5,
+        offset: 0,
+        max_bytes: 100_000,
+        scan_work: origins::DEFAULT_PROPERTY_SCAN_WORK,
+        matches: vec!["key".into()],
+    };
+    let report: Value =
+        serde_json::from_slice(&origins::analyze_properties_source(&code, &options, &[]).unwrap())
+            .unwrap();
+    assert_eq!(report["rows"][0]["key"]["source"]["javascript"], "'key'");
+    assert_eq!(report["rows"][0]["value"]["source"]["javascript"], "7");
+}
+
 fn source(cases: &str) -> String {
     format!("M[0] = ['f',0,0]; F[0] = function function_0(env,self,args,newTarget,callee,state) {{ const r = objectCreate(null); let pc = 0, caught; for (;;) {{ try {{ switch (pc) {{ {cases} default: throw new ErrorCtor('bad'); }} }} catch (error) {{ throw error; }} }} }};")
 }

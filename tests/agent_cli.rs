@@ -73,6 +73,87 @@ fn workspace_summary_points_to_generated_navigation_without_running_js() {
 }
 
 #[test]
+fn source_properties_are_wired_with_continuation_and_atomic_failures() {
+    let input = fixture();
+    let path = input.to_str().unwrap();
+    let before = std::fs::read(&input).unwrap();
+    let hbc = hermes_dec_rs::HbcFile::parse(&before).unwrap();
+    let function = (0..hbc.functions.count())
+        .find(|&id| {
+            let bytes =
+                hermes_dec_rs::cli::properties::report(&input, id, &Default::default()).unwrap();
+            let report: Value = serde_json::from_slice(&bytes).unwrap();
+            report["stores_total"].as_u64().unwrap() > 1
+        })
+        .expect("fixture must exercise multiple property stores")
+        .to_string();
+    let first = json(&[
+        "properties",
+        path,
+        &function,
+        "--limit",
+        "1",
+        "--scan-work",
+        "128",
+    ]);
+    assert_eq!(first["schema"], "properties-v1");
+    assert_eq!(
+        first,
+        json(&[
+            "properties",
+            path,
+            &function,
+            "--limit",
+            "1",
+            "--scan-work",
+            "128"
+        ])
+    );
+    assert!(first["next_offset"].is_number());
+    let mut continued = vec!["properties", path, &function];
+    continued.extend(
+        first["continuation_query"]["flags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap()),
+    );
+    let next = json(&continued);
+    assert_eq!(next["offset"], first["next_offset"]);
+    assert_eq!(next["query_work_cap"], 128);
+    assert_eq!(next["limit"], 1);
+    let absent = json(&[
+        "properties",
+        path,
+        &function,
+        "--match",
+        "[literal];$(not-executed)",
+    ]);
+    assert!(absent["rows"].as_array().unwrap().is_empty());
+    assert_eq!(
+        absent["matches"],
+        serde_json::json!(["[literal];$(not-executed)"])
+    );
+    for tail in [
+        vec!["--max-bytes", "1"],
+        vec!["--scan-work", "0"],
+        vec!["--definition-limit", "0"],
+    ] {
+        let mut args = vec!["properties", path, &function];
+        args.extend(tail);
+        let output = cli(&args);
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+    }
+    let help = cli(&["properties", "--help"]);
+    assert!(help.status.success());
+    assert!(String::from_utf8(help.stdout)
+        .unwrap()
+        .contains("--definition-limit"));
+    assert_eq!(std::fs::read(&input).unwrap(), before);
+}
+
+#[test]
 fn source_symbols_and_text_provenance_are_wired_with_atomic_budgets() {
     let input = fixture();
     let path = input.to_str().unwrap();

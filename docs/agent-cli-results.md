@@ -797,3 +797,52 @@ second; small cross-round changes are not causally attributed to CLI analysis.
 The next trial must test actual use of literal locations/property-role evidence
 and complete version/control coverage, not count an empty page as a failed
 literal search. The goal remains active; no Luna promotion is established.
+
+### V16 Property Key/Value Candidates
+
+V16 is frozen separately as
+`4b61cab9aea4995a2e318afa305cef59770ac6dc541302a5e30f14f2cec6e581`.
+The generic `properties` view searches raw property-key syntax and bounded
+normal-flow key-definition candidates, with object, key, value and helper
+arguments kept separate. It reuses one complete parsed function index per page.
+Shared raw-span IDs retain alternatives and unknowns; no property values,
+object identities, helper semantics or captured frames are evaluated.
+Raw store-ordinal continuation preserves options as separate argument tokens.
+Key/value aggregate work and raw filter-byte work are separately bounded;
+unqueried values are explicit and earlier omissions are not repaired by paging.
+Dependency omissions do not inherit the unused normal-edge display cap.
+
+All 522 Rust tests pass, including helper shape/arity rejection, class-scope
+rejection, cross-block alternatives, key versus value/object filter scope,
+UTF-8 joins, paging after empty pages, explicit exhausted value roles, exact
+output budgets and filter-work exhaustion. Review found uncharged read-list
+scans and deferred class initializers leaking into enclosing-PC evidence.
+Properties-only sorted scope lookups and fail-closed class handling fix both;
+regressions exercise 20,000 same-PC skipped stores and 1,000 depth-zero dynamic
+key queries. Ordinary origins/symbols traversal and JSON remain unchanged.
+Formatting passes; Clippy has no changed-code/test diagnostics, with unrelated
+warnings retained. Telemetry tests pass 20 with one optional real-session skip.
+
+A private sequential replay of the earlier real agent query now scans all
+36,290 property stores and returns six key/value records, versus no slot-RHS
+records in symbols. Timings are 1,063.6/640.9/646.0 ms, with 50,591 output
+bytes and 729 successful source joins. All literal keys are untruncated; five
+value candidate queries remain depth-truncated and one is untruncated. These
+are source candidates, not certified protocol values or a cold-agent result.
+Positive symbols checks preserve v14 rows/definitions exactly with 70 source
+joins, taking 636.2/627.4 ms. First-run outliers are retained; no generic
+sub-second query guarantee or causal speed improvement is claimed.
+
+Ten isolated warmed full-JS exports per large input give Orbit median/worst
+426.0/462.3 ms and Modern Animal 296.9/320.3 ms. Startup/read/parse/all-function
+lowering/internal validation/write are timed; external Node syntax checks pass
+outside the timer. Both corrected output hashes remain unchanged, and RSS is
+unavailable, not zero. No Cargo/query/trial work overlaps these latency runs.
+
+A new three-arm cold experiment is dispatched with identical research prompts:
+v15 medium, v16 medium, and exploratory v16 low, all 6.1 Sol. Each has an
+independent frozen binary/output directory and a 30-minute dispatch-inclusive
+cap. No source IDs, protocol constants or grader findings are provided. Actual
+token telemetry and unchanged independent grading are required before any
+efficiency or full-protocol claim. Results are pending; the goal remains active
+and Luna remains unqualified.

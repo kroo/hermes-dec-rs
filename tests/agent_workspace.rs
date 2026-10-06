@@ -49,7 +49,7 @@ fn exports_every_complete_function_with_a_searchable_index() {
     assert_eq!(entries.len(), rows.len());
     let mut bytes = 0;
     let navigation = manifest["navigation"].as_array().unwrap();
-    assert_eq!(navigation.len(), 6);
+    assert_eq!(navigation.len(), 7);
     for query in navigation {
         assert_eq!(query["command"], "hermes-dec-rs");
         assert_eq!(query["function"], "FUNCTION");
@@ -68,6 +68,11 @@ fn exports_every_complete_function_with_a_searchable_index() {
     assert_eq!(navigation[5]["subcommand"], "origins");
     assert_eq!(navigation[5]["pc"], "PC");
     assert_eq!(navigation[5]["flags"], serde_json::json!(["--text"]));
+    assert_eq!(navigation[6]["subcommand"], "properties");
+    assert_eq!(
+        navigation[6]["flags"],
+        serde_json::json!(["--match", "KEY"])
+    );
     for id in 0..hbc.functions.count() {
         let entry = &entries[id as usize];
         let row = &rows[id as usize];

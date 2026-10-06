@@ -64,5 +64,20 @@ for syntax summaries, but text explicitly omits typed graph nodes and cannot
 resolve their local IDs. Use ordinary JSON for complete returned syntax graphs.
 Text is escaped line-oriented evidence, not evaluated JS or shell commands.
 
+For property keys and their value expressions, use properties INPUT ID --match KEY.
+Unlike symbols (slot-write RHS strings), this searches raw property-key expressions
+and their bounded normal-flow candidate definitions. It includes simple member
+assignments and exporter put/own helper shapes; object, key, value and helper
+arguments remain separate. Object identity and evaluated values are not inferred.
+Rows share source-span definition IDs, with alternatives and unknowns preserved.
+Follow next_offset/continuation_query even after an empty filtered page. The cursor
+counts raw property stores; paging does not repair earlier omitted dependencies.
+--scan-work bounds aggregate key/value query work. queried=false explicitly marks
+a role not analyzed after exhaustion; scan_complete describes stores only.
+Filtering raw JS syntax does not decode string escapes or establish runtime keys.
+The filter-work cap fails before stdout, as do output overflow and unsupported
+put/own shapes or class scopes. Deferred class initializers are not enclosing-PC
+evidence. Use complete bodies to verify each candidate and argument role.
+
 Templates are stored once in manifest.json. Replace FUNCTION with the numeric ID
 from a function entry or index row; INPUT remains the original HBC input argument.

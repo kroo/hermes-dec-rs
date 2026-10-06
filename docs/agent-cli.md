@@ -21,6 +21,7 @@ hermes-dec-rs origins INPUT.hbc 0 0 --expressions --max-bytes 1000000
 hermes-dec-rs origins INPUT.hbc 0 0 --text
 hermes-dec-rs symbols INPUT.hbc 0 --match RAW_TOKEN --limit 8
 hermes-dec-rs symbols INPUT.hbc 0 --slot 1,2 --literal-limit 16
+hermes-dec-rs properties INPUT.hbc 0 --match FIELD_NAME --limit 8
 hermes-dec-rs sites INPUT.hbc 0 --kind constructor --depth 3
 hermes-dec-rs sites INPUT.hbc 0 --kind slot-write --slot 0 --depth 8
 hermes-dec-rs sites INPUT.hbc 0 --match FIELD_NAME --depth 8 --compact
@@ -30,6 +31,24 @@ hermes-dec-rs workspace INPUT.hbc -o NEW_DIRECTORY
 ```
 
 ## Evidence and output contracts
+
+- `properties INPUT FUNCTION` separates object, key and value source expressions
+  for simple member assignments and exact exporter `put`/`own` helper shapes.
+  `--match` OR-filters raw key syntax and bounded cross-block key-definition
+  candidates, not object/value labels, decoded strings or runtime key names.
+  Value candidates use the same parsed source index but remain separate from key
+  evidence. Shared definition IDs join exact raw fragment spans. This does not
+  infer object identity, field values, helper results or captured frames.
+  `--offset` counts raw property stores; continuation arguments preserve options
+  as separate tokens. Empty pages may still need continuation. `--scan-work`
+  bounds aggregate key/value queries (default 1,048,576, maximum 16,777,216).
+  `queried: false` flags roles not analyzed after exhaustion; store-scan
+  completion is not dependency completeness, and paging cannot repair earlier
+  omissions. Regex-escaped case-insensitive filtering charges raw source bytes
+  against a separate 33,554,432 ceiling; exhaustion fails before stdout.
+  Source/output/indexing caps match `origins`. Malformed optional/spread/arity
+  helper calls, compound property assignments and class scopes fail closed. Physical-register
+  writes and numeric environment-slot writes are excluded. No JS is executed.
 
 - `inputs [ROOT]` discovers `.hbc`/`.bundle` header candidates, including hidden
   and Git-ignored files, sorted largest first so sample fixtures do not hide app
