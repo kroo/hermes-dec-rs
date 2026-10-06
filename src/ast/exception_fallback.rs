@@ -19,6 +19,28 @@ fn error(message: impl Into<String>) -> DecompilerError {
     }
 }
 
+fn negated_relational_operator(instruction: &UnifiedInstruction) -> Option<BinaryOperator> {
+    use UnifiedInstruction::*;
+    match instruction {
+        JNotLess { .. } | JNotLessLong { .. } | JNotLessN { .. } | JNotLessNLong { .. } => {
+            Some(BinaryOperator::LessThan)
+        }
+        JNotLessEqual { .. }
+        | JNotLessEqualLong { .. }
+        | JNotLessEqualN { .. }
+        | JNotLessEqualNLong { .. } => Some(BinaryOperator::LessEqualThan),
+        JNotGreater { .. }
+        | JNotGreaterLong { .. }
+        | JNotGreaterN { .. }
+        | JNotGreaterNLong { .. } => Some(BinaryOperator::GreaterThan),
+        JNotGreaterEqual { .. }
+        | JNotGreaterEqualLong { .. }
+        | JNotGreaterEqualN { .. }
+        | JNotGreaterEqualNLong { .. } => Some(BinaryOperator::GreaterEqualThan),
+        _ => None,
+    }
+}
+
 struct DispatchBuilder<'a> {
     ast: &'a AstBuilder<'a>,
 }
@@ -209,21 +231,13 @@ pub(crate) fn convert_exception_fallback<'a>(
                                 ast.expression_unary(SPAN, UnaryOperator::LogicalNot, condition);
                         }
                         // Negated relational jumps must retain NaN behavior.
-                        let name = instruction.instruction.name();
-                        if name.starts_with("JNot") {
+                        if let Some(operator) =
+                            negated_relational_operator(&instruction.instruction)
+                        {
                             let usage =
                                 crate::generated::instruction_analysis::analyze_register_usage(
                                     &instruction.instruction,
                                 );
-                            let operator = if name.starts_with("JNotLessEqual") {
-                                BinaryOperator::LessEqualThan
-                            } else if name.starts_with("JNotGreaterEqual") {
-                                BinaryOperator::GreaterEqualThan
-                            } else if name.starts_with("JNotLess") {
-                                BinaryOperator::LessThan
-                            } else {
-                                BinaryOperator::GreaterThan
-                            };
                             let comparison = ast.expression_binary(
                                 SPAN,
                                 dispatch.identifier(&format!("var{}", usage.sources[0])),
@@ -321,4 +335,61 @@ pub(crate) fn convert_exception_fallback<'a>(
         ast.statement_block(SPAN, ast.vec1(try_statement)),
     ));
     Ok(statements)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_negated_relational_variants_receive_nan_rewrite() {
+        macro_rules! check {
+            ($variant:ident, $operator:ident) => {
+                assert_eq!(
+                    negated_relational_operator(&UnifiedInstruction::$variant {
+                        operand_0: 0,
+                        operand_1: 1,
+                        operand_2: 2,
+                    }),
+                    Some(BinaryOperator::$operator)
+                );
+            };
+        }
+        check!(JNotLess, LessThan);
+        check!(JNotLessLong, LessThan);
+        check!(JNotLessN, LessThan);
+        check!(JNotLessNLong, LessThan);
+        check!(JNotLessEqual, LessEqualThan);
+        check!(JNotLessEqualLong, LessEqualThan);
+        check!(JNotLessEqualN, LessEqualThan);
+        check!(JNotLessEqualNLong, LessEqualThan);
+        check!(JNotGreater, GreaterThan);
+        check!(JNotGreaterLong, GreaterThan);
+        check!(JNotGreaterN, GreaterThan);
+        check!(JNotGreaterNLong, GreaterThan);
+        check!(JNotGreaterEqual, GreaterEqualThan);
+        check!(JNotGreaterEqualLong, GreaterEqualThan);
+        check!(JNotGreaterEqualN, GreaterEqualThan);
+        check!(JNotGreaterEqualNLong, GreaterEqualThan);
+    }
+
+    #[test]
+    fn inequality_variants_do_not_receive_relational_rewrite() {
+        macro_rules! check {
+            ($variant:ident) => {
+                assert_eq!(
+                    negated_relational_operator(&UnifiedInstruction::$variant {
+                        operand_0: 0,
+                        operand_1: 1,
+                        operand_2: 2,
+                    }),
+                    None
+                );
+            };
+        }
+        check!(JNotEqual);
+        check!(JNotEqualLong);
+        check!(JStrictNotEqual);
+        check!(JStrictNotEqualLong);
+    }
 }
