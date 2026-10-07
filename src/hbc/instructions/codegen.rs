@@ -107,6 +107,9 @@ pub fn generate_unified_instructions() -> Result<()> {
     generate_and_write_file(&out_dir.join("instruction_analysis.rs"), |f| {
         generate_instruction_analysis_module(f, &registry)
     })?;
+    generate_and_write_file(&out_dir.join("builtins.rs"), |f| {
+        generate_builtin_lookup_module(f, &fetcher, &versions)
+    })?;
 
     println!(
         "Generated unified instructions with {} unique instructions across {} versions.",
@@ -121,6 +124,7 @@ pub fn generate_unified_instructions() -> Result<()> {
     println!("  - src/generated/unified_instructions.rs");
     println!("  - src/generated/generated_traits.rs");
     println!("  - src/generated/instruction_analysis.rs");
+    println!("  - src/generated/builtins.rs");
 
     Ok(())
 }
@@ -1069,6 +1073,42 @@ fn generate_instruction_analysis_module(
     // Generate tests
     generate_instruction_analysis_tests(code)?;
 
+    Ok(())
+}
+
+/// Generates the builtin lookup table module.
+fn generate_builtin_lookup_module(
+    code: &mut String,
+    fetcher: &SourceFetcher,
+    versions: &[HbcVersion],
+) -> Result<()> {
+    writeln!(code, "// Auto-generated builtin lookup table. Do not edit.")?;
+    writeln!(
+        code,
+        "pub fn lookup_builtin_name(version: u32, id: u8) -> Option<&'static str> {{"
+    )?;
+    writeln!(code, "    match version {{")?;
+
+    for version in versions {
+        if let Ok(path) = fetcher.fetch_builtin_list(version) {
+            let content = fs::read_to_string(path)?;
+            let builtins = BytecodeDefParser::new().parse_builtin_list(&content)?;
+            writeln!(code, "        {} => match id {{", version.version)?;
+            for builtin in builtins {
+                writeln!(
+                    code,
+                    "            {} => Some(\"{}\"),",
+                    builtin.id, builtin.name
+                )?;
+            }
+            writeln!(code, "            _ => None,")?;
+            writeln!(code, "        }},")?;
+        }
+    }
+
+    writeln!(code, "        _ => None,")?;
+    writeln!(code, "    }}")?;
+    writeln!(code, "}}")?;
     Ok(())
 }
 

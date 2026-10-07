@@ -31,6 +31,17 @@ pub struct OperandDef {
     pub doc: Option<String>,
 }
 
+/// Represents a builtin function definition extracted from the Hermes
+/// repository. These map the numeric builtin ID used in the bytecode to a
+/// human readable name which may change between Hermes versions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuiltinDef {
+    /// Numeric builtin identifier as encoded in the bytecode.
+    pub id: u32,
+    /// Fully qualified builtin name, e.g. `HermesBuiltin.copyRestArgs`.
+    pub name: String,
+}
+
 /// Operand types for HBC instructions
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Copy)]
 pub enum OperandType {
@@ -844,6 +855,63 @@ impl BytecodeDefParser {
 
         println!("DEBUG: Successfully parsed jump instruction: {}", name);
         Ok(())
+    }
+
+    /// Parse builtin list definitions. Hermes stores builtin functions in
+    /// `Builtins.def` files using macro calls such as `BUILTIN_OBJECT`,
+    /// `BUILTIN_METHOD`, `PRIVATE_BUILTIN` and `JS_BUILTIN`. The builtin index is
+    /// implicitly assigned based on the order in the file. This parser performs
+    /// a simple pass over the file and assigns sequential IDs starting from 0.
+    /// Unknown lines and marker macros are ignored.
+    pub fn parse_builtin_list(&self, content: &str) -> Result<Vec<BuiltinDef>> {
+        let mut builtins = Vec::new();
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with("//") {
+                continue;
+            }
+
+            // Marker macros like MARK_FIRST_PRIVATE_BUILTIN do not correspond to
+            // actual builtins and can be skipped.
+            if line.starts_with("MARK_FIRST_") {
+                continue;
+            }
+
+            let id = builtins.len() as u32;
+
+            if let Some(rest) = line.strip_prefix("BUILTIN_OBJECT(") {
+                let name = rest.trim_end_matches(')').trim();
+                builtins.push(BuiltinDef {
+                    id,
+                    name: name.to_string(),
+                });
+            } else if let Some(rest) = line.strip_prefix("BUILTIN_METHOD(") {
+                let parts: Vec<&str> = rest
+                    .trim_end_matches(')')
+                    .split(',')
+                    .map(|s| s.trim())
+                    .collect();
+                if parts.len() >= 2 {
+                    builtins.push(BuiltinDef {
+                        id,
+                        name: format!("{}.{}", parts[0], parts[1]),
+                    });
+                }
+            } else if let Some(rest) = line.strip_prefix("PRIVATE_BUILTIN(") {
+                let name = rest.trim_end_matches(')').trim();
+                builtins.push(BuiltinDef {
+                    id,
+                    name: format!("HermesBuiltin.{}", name),
+                });
+            } else if let Some(rest) = line.strip_prefix("JS_BUILTIN(") {
+                let name = rest.trim_end_matches(')').trim();
+                builtins.push(BuiltinDef {
+                    id,
+                    name: format!("HermesBuiltin.{}", name),
+                });
+            }
+        }
+        Ok(builtins)
     }
 }
 
